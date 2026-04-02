@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manajemen User - iPos 5.0</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-container"><main class="main-content">
+<button class="btn" style="background:transparent;color:var(--text-muted);padding:0;margin-bottom:16px" onclick="location.href='/dashboard'">← Kembali</button>
+<div class="pg-header">
+  <div><h1>👤 Manajemen User</h1><p>Kelola akun kasir dan admin. Hanya admin yang bisa mengakses halaman ini.</p></div>
+  <button class="btn btn-primary" onclick="openModal('mUser')">➕ Tambah User</button>
+</div>
+
+<div id="adminOnly" style="display:none">
+  <div class="card" style="padding:20px;margin-bottom:20px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3)">
+    <b style="color:#ef4444">⚠️ Akses Ditolak</b> — Halaman ini hanya bisa diakses oleh Admin.
+  </div>
+</div>
+
+<!-- Log aktivitas -->
+<div style="display:flex;gap:8px;margin-bottom:20px">
+  <button id="tbUser" onclick="switchTab('user')" style="padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit">👤 Daftar User</button>
+  <button id="tbLog"  onclick="switchTab('log')"  style="padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit">📋 Log Aktivitas</button>
+</div>
+
+<!-- Panel User -->
+<div id="pnlUser">
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>Username</th><th>Nama Lengkap</th><th>Role</th><th>Status</th><th>Terdaftar</th><th>Aksi</th></tr></thead>
+    <tbody id="tblUser"></tbody>
+  </table></div>
+</div>
+
+<!-- Panel Log -->
+<div id="pnlLog" style="display:none">
+  <div class="filter-bar">
+    <input id="logStart" type="date" class="input-control" onchange="loadLog()">
+    <input id="logEnd"   type="date" class="input-control" onchange="loadLog()">
+    <select id="logUser" class="input-control" onchange="loadLog()"><option value="">Semua User</option></select>
+  </div>
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>Waktu</th><th>User</th><th>Aksi</th><th>Tabel</th><th>Detail</th></tr></thead>
+    <tbody id="tblLog"></tbody>
+  </table></div>
+</div>
+</main></div>
+
+<!-- Modal: Tambah/Edit User -->
+<div class="modal-overlay" id="mUser"><div class="modal-box">
+  <div class="modal-hdr"><h2 id="mUserTitle">Tambah User Baru</h2><button class="btn-x" onclick="closeModal('mUser')">×</button></div>
+  <input type="hidden" id="userId">
+  <div class="input-group"><label>Username *</label><input id="uUsername" class="input-control" placeholder="Huruf kecil tanpa spasi" autocomplete="off"></div>
+  <div class="input-group"><label>Nama Lengkap *</label><input id="uNama" class="input-control" placeholder="Nama lengkap kasir/admin"></div>
+  <div class="input-group">
+    <label>Role *</label>
+    <select id="uRole" class="input-control">
+      <option value="kasir">🧾 Kasir — Akses transaksi saja</option>
+      <option value="admin">👑 Admin — Akses penuh semua fitur</option>
+    </select>
+  </div>
+  <div class="input-group" id="pwdGroup">
+    <label>Password *</label>
+    <input id="uPwd" type="password" class="input-control" placeholder="Min. 6 karakter" autocomplete="new-password">
+  </div>
+  <div class="input-group" id="pwdGroupEdit" style="display:none">
+    <label>Password Baru <span style="color:var(--text-muted);font-weight:400">(kosongkan jika tidak ingin ubah)</span></label>
+    <input id="uPwdEdit" type="password" class="input-control" placeholder="Kosongkan jika tidak ingin diubah" autocomplete="new-password">
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <button onclick="closeModal('mUser')" class="btn" style="background:var(--bg-color);border:1px solid var(--border-color);color:var(--text-main)">Batal</button>
+    <button onclick="saveUser()" class="btn btn-primary">✓ Simpan</button>
+  </div>
+</div></div>
+
+<!-- Modal: Reset Password -->
+<div class="modal-overlay" id="mReset"><div class="modal-box">
+  <div class="modal-hdr"><h2>🔒 Reset Password</h2><button class="btn-x" onclick="closeModal('mReset')">×</button></div>
+  <input type="hidden" id="resetId">
+  <div id="resetInfo" style="background:var(--bg-color);border-radius:12px;padding:14px;margin-bottom:14px;font-size:15px"></div>
+  <div class="input-group"><label>Password Baru *</label><input id="resetPwd" type="password" class="input-control" placeholder="Min. 6 karakter"></div>
+  <div class="input-group"><label>Konfirmasi Password *</label><input id="resetPwd2" type="password" class="input-control" placeholder="Ulangi password baru"></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <button onclick="closeModal('mReset')" class="btn" style="background:var(--bg-color);border:1px solid var(--border-color);color:var(--text-main)">Batal</button>
+    <button onclick="doReset()" class="btn btn-primary">✓ Reset Password</button>
+  </div>
+</div></div>
+
+<script src="/js/api.js"></script><script src="/js/theme.js"></script>
+<script>
+requireAuth();
+let editUserId=null;
+const ON='padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit';
+const OFF='padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit';
+
+const me=getUser();
+if(me.role!=='admin'){
+  document.getElementById('adminOnly').style.display='block';
+  document.querySelector('.pg-header button').style.display='none';
+}
+
+function switchTab(t){
+  document.getElementById('pnlUser').style.display=t==='user'?'block':'none';
+  document.getElementById('pnlLog').style.display=t==='log'?'block':'none';
+  document.getElementById('tbUser').style.cssText=t==='user'?ON:OFF;
+  document.getElementById('tbLog').style.cssText=t==='log'?ON:OFF;
+  if(t==='log') loadLog();
+}
+
+async function loadUsers(){
+  try{
+    const d=await api('GET','/auth/users');
+    // Populate log user filter
+    const sel=document.getElementById('logUser');
+    sel.innerHTML='<option value="">Semua User</option>';
+    d.forEach(u=>sel.insertAdjacentHTML('beforeend',`<option value="${u.id}">${u.username}</option>`));
+
+    document.getElementById('tblUser').innerHTML=d.length?d.map(u=>`<tr>
+      <td style="font-family:monospace;font-weight:700;font-size:15px">${u.username}</td>
+      <td><b>${u.full_name||'-'}</b></td>
+      <td><span style="background:${u.role==='admin'?'rgba(249,115,22,.15)':'rgba(59,130,246,.15)'};color:${u.role==='admin'?'var(--primary)':'#3b82f6'};padding:4px 12px;border-radius:8px;font-size:13px;font-weight:700">${u.role==='admin'?'👑 Admin':'🧾 Kasir'}</span></td>
+      <td><span style="color:${u.is_active!==false?'#10b981':'#ef4444'};font-weight:700">${u.is_active!==false?'● Aktif':'✗ Nonaktif'}</span></td>
+      <td style="font-size:13px;color:var(--text-muted)">${u.created_at?new Date(u.created_at).toLocaleDateString('id-ID'):'-'}</td>
+      <td style="white-space:nowrap">
+        ${u.id!==me.id?`<button class="bsm be" onclick='editUser(${JSON.stringify(u).replace(/"/g,"&quot;")})'>Edit</button>`:'<span style="font-size:13px;color:var(--text-muted)">Ini Anda</span>'}
+        ${u.id!==me.id?`<button class="bsm bv" onclick="openReset(${u.id},'${u.username}')">Reset Pwd</button>`:''}
+        ${u.id!==me.id&&u.role!=='admin'?`<button class="bsm bd" onclick="hapusUser(${u.id},'${u.username}')">Hapus</button>`:''}
+      </td></tr>`).join(''):'<tr><td colspan="6" style="text-align:center;padding:24px">Belum ada user</td></tr>';
+  }catch(ex){
+    if(ex.message.includes('403')||ex.message.includes('401')){
+      document.getElementById('tblUser').innerHTML='<tr><td colspan="6" style="text-align:center;padding:24px;color:#ef4444">Akses ditolak — hanya admin yang bisa melihat daftar user</td></tr>';
+    }else showToast(ex.message,'error');
+  }
+}
+
+const _origOM=openModal;
+window.openModal=function(id){
+  if(id==='mUser'){
+    editUserId=null; document.getElementById('mUserTitle').textContent='Tambah User Baru';
+    document.getElementById('userId').value='';
+    ['uUsername','uNama','uPwd','uPwdEdit'].forEach(i=>document.getElementById(i).value='');
+    document.getElementById('uRole').value='kasir';
+    document.getElementById('pwdGroup').style.display='block';
+    document.getElementById('pwdGroupEdit').style.display='none';
+    document.getElementById('uUsername').readOnly=false;
+  }
+  _origOM(id);
+};
+
+async function editUser(u){
+  editUserId=u.id; document.getElementById('mUserTitle').textContent='Edit User';
+  document.getElementById('userId').value=u.id;
+  document.getElementById('uUsername').value=u.username; document.getElementById('uUsername').readOnly=true;
+  document.getElementById('uNama').value=u.full_name||'';
+  document.getElementById('uRole').value=u.role||'kasir';
+  document.getElementById('pwdGroup').style.display='none';
+  document.getElementById('pwdGroupEdit').style.display='block';
+  document.getElementById('uPwdEdit').value='';
+  _origOM('mUser');
+}
+
+async function saveUser(){
+  const username=document.getElementById('uUsername').value.trim();
+  const nama=document.getElementById('uNama').value.trim();
+  if(!username||!nama){showToast('Username dan nama wajib diisi','error');return;}
+  if(editUserId){
+    // Edit mode
+    const data={full_name:nama,role:document.getElementById('uRole').value};
+    const newPwd=document.getElementById('uPwdEdit').value;
+    if(newPwd){if(newPwd.length<6){showToast('Password minimal 6 karakter','error');return;}data.password=newPwd;}
+    try{
+      await api('PUT',`/auth/users/${editUserId}`,data);
+      showToast('User diperbarui ✓');closeModal('mUser');loadUsers();
+    }catch(ex){showToast(ex.message,'error');}
+  }else{
+    // Tambah baru
+    const pwd=document.getElementById('uPwd').value;
+    if(!pwd||pwd.length<6){showToast('Password minimal 6 karakter','error');return;}
+    try{
+      await api('POST','/auth/register',{username,password:pwd,full_name:nama,role:document.getElementById('uRole').value});
+      showToast('User berhasil ditambahkan ✓');closeModal('mUser');loadUsers();
+    }catch(ex){showToast(ex.message,'error');}
+  }
+}
+
+async function hapusUser(id,username){
+  if(!await showConfirm(`Hapus user "${username}"?\nUser ini tidak akan bisa login lagi.`))return;
+  try{await api('DELETE',`/auth/users/${id}`);showToast('User dihapus');loadUsers();}
+  catch(ex){showToast(ex.message,'error');}
+}
+
+function openReset(id,username){
+  document.getElementById('resetId').value=id;
+  document.getElementById('resetInfo').innerHTML=`Reset password untuk: <b>${username}</b>`;
+  document.getElementById('resetPwd').value='';
+  document.getElementById('resetPwd2').value='';
+  _origOM('mReset');
+}
+async function doReset(){
+  const pwd=document.getElementById('resetPwd').value;
+  const pwd2=document.getElementById('resetPwd2').value;
+  if(!pwd||pwd.length<6){showToast('Password minimal 6 karakter','error');return;}
+  if(pwd!==pwd2){showToast('Konfirmasi password tidak cocok','error');return;}
+  const id=document.getElementById('resetId').value;
+  try{
+    await api('PUT',`/auth/users/${id}`,{password:pwd});
+    showToast('Password berhasil direset ✓');closeModal('mReset');
+  }catch(ex){showToast(ex.message,'error');}
+}
+
+async function loadLog(){
+  const s=document.getElementById('logStart').value, e=document.getElementById('logEnd').value;
+  const uid=document.getElementById('logUser').value;
+  let url='/auth/audit-log?limit=200';
+  if(s)url+=`&start_date=${s}`;if(e)url+=`&end_date=${e}`;if(uid)url+=`&user_id=${uid}`;
+  try{
+    const d=await api('GET',url);
+    document.getElementById('tblLog').innerHTML=d.length?d.map(l=>`<tr>
+      <td style="font-size:12px;color:var(--text-muted);white-space:nowrap">${l.created_at?new Date(l.created_at).toLocaleString('id-ID'):'-'}</td>
+      <td style="font-weight:600">${l.username||l.user_id||'-'}</td>
+      <td><span style="background:var(--primary-light);color:var(--primary);padding:3px 10px;border-radius:6px;font-size:13px;font-weight:700">${l.action||'-'}</span></td>
+      <td style="font-family:monospace;font-size:13px;color:var(--text-muted)">${l.table_name||'-'}</td>
+      <td style="font-size:13px;color:var(--text-muted);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.description||l.detail||'-'}</td>
+    </tr>`).join(''):'<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada log aktivitas</td></tr>';
+  }catch(ex){
+    document.getElementById('tblLog').innerHTML=`<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted)">${ex.message}</td></tr>`;
+  }
+}
+
+document.getElementById('logStart').value=new Date(new Date().setDate(1)).toISOString().slice(0,10);
+document.getElementById('logEnd').value=today();
+loadUsers();
+</script>
+</body></html>

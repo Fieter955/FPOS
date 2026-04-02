@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Diskon & Promo - iPos 5.0</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-container"><main class="main-content">
+<button class="btn" style="background:transparent;color:var(--text-muted);padding:0;margin-bottom:16px" onclick="location.href='/dashboard'">← Kembali</button>
+<div class="pg-header">
+  <div><h1>🏷️ Diskon & Promo</h1><p>Atur potongan harga otomatis berdasarkan qty, nominal, atau periode.</p></div>
+  <button class="btn btn-primary" onclick="openDiskon()">➕ Tambah Diskon</button>
+</div>
+
+<div class="card" style="padding:16px;margin-bottom:20px;background:var(--primary-light);border:1px solid var(--primary)">
+  <b>💡 Cara kerja diskon otomatis:</b> Diskon akan diterapkan otomatis di kasir jika syarat terpenuhi (min. qty beli, min. nominal, atau periode aktif). Jika item/kategori dikosongkan = berlaku untuk semua barang.
+</div>
+
+<div class="tbl-wrap"><table class="tbl">
+  <thead><tr><th>Nama Diskon</th><th>Berlaku Untuk</th><th>Besar Diskon</th><th>Min. Qty</th><th>Min. Belanja</th><th>Periode</th><th>Aksi</th></tr></thead>
+  <tbody id="tblBody"></tbody>
+</table></div>
+</main></div>
+
+<!-- Modal: Diskon -->
+<div class="modal-overlay" id="mDiskon"><div class="modal-box wide">
+  <div class="modal-hdr"><h2 id="mDiskTitle">Tambah Diskon</h2><button class="btn-x" onclick="closeModal('mDiskon')">×</button></div>
+  <input type="hidden" id="dId">
+  <div class="input-group"><label>Nama Diskon *</label><input id="dNama" class="input-control" placeholder="contoh: Grosir Semen, Promo Lebaran..."></div>
+  <div class="row2" style="margin-bottom:16px">
+    <div class="input-group">
+      <label>Berlaku untuk Barang <span style="color:var(--text-muted);font-weight:400">(kosong = semua)</span></label>
+      <select id="dItem" class="input-control"><option value="">-- Semua Barang --</option></select>
+    </div>
+    <div class="input-group">
+      <label>Atau Kategori <span style="color:var(--text-muted);font-weight:400">(kosong = semua)</span></label>
+      <select id="dKat" class="input-control"><option value="">-- Semua Kategori --</option></select>
+    </div>
+  </div>
+  <div class="row3" style="margin-bottom:16px">
+    <div class="input-group"><label>Besar Diskon (%) *</label><input id="dPct" type="number" class="input-control" min="0" max="100" value="0" placeholder="0-100"></div>
+    <div class="input-group"><label>Min. Qty Beli <span style="color:var(--text-muted);font-weight:400">(0=tidak perlu)</span></label><input id="dMinQty" type="number" class="input-control" min="0" value="0"></div>
+    <div class="input-group"><label>Min. Nominal Belanja</label><input id="dMinAmt" type="number" class="input-control" min="0" value="0" placeholder="0 = tidak perlu"></div>
+  </div>
+  <div class="row2" style="margin-bottom:16px">
+    <div class="input-group"><label>Berlaku Mulai <span style="color:var(--text-muted);font-weight:400">(kosong = sekarang)</span></label><input id="dFrom" type="date" class="input-control"></div>
+    <div class="input-group"><label>Berlaku Sampai <span style="color:var(--text-muted);font-weight:400">(kosong = tanpa batas)</span></label><input id="dTo" type="date" class="input-control"></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <button onclick="closeModal('mDiskon')" class="btn" style="background:var(--bg-color);border:1px solid var(--border-color);color:var(--text-main)">Batal</button>
+    <button onclick="save()" class="btn btn-primary">✓ Simpan Diskon</button>
+  </div>
+</div></div>
+
+<script src="/js/api.js"></script><script src="/js/theme.js"></script>
+<script>
+requireAuth();
+let editId=null;
+
+async function init(){
+  const [items,cats]=await Promise.all([api('GET','/items/?limit=500'),api('GET','/items/categories')]);
+  const si=document.getElementById('dItem'), sc=document.getElementById('dKat');
+  items.forEach(i=>si.insertAdjacentHTML('beforeend',`<option value="${i.id}">${i.name}</option>`));
+  cats.forEach(c=>sc.insertAdjacentHTML('beforeend',`<option value="${c.id}">${c.name}</option>`));
+  load();
+}
+
+async function load(){
+  try{
+    const d=await api('GET','/discounts/?limit=200');
+    document.getElementById('tblBody').innerHTML=d.length?d.map(x=>`<tr>
+      <td><b style="font-size:16px">${x.name}</b></td>
+      <td style="font-size:13px;color:var(--text-muted)">${x.item?.name||x.category?.name||'<span style="color:#10b981">Semua Barang</span>'}</td>
+      <td><span style="font-size:24px;font-weight:900;color:var(--primary)">${x.discount_percent}%</span></td>
+      <td>${x.min_qty>0?`Min <b>${x.min_qty}</b> pcs`:'<span style="color:var(--text-muted)">-</span>'}</td>
+      <td>${x.min_amount>0?fmtRp(x.min_amount):'<span style="color:var(--text-muted)">-</span>'}</td>
+      <td style="font-size:13px;color:var(--text-muted)">
+        ${x.valid_from?fmtDate(x.valid_from):'Mulai sekarang'} ${x.valid_to?'s/d '+fmtDate(x.valid_to):'(tanpa batas)'}
+      </td>
+      <td style="white-space:nowrap">
+        <button class="bsm be" onclick='editDiskon(${JSON.stringify(x).replace(/"/g,"&quot;")})'>Edit</button>
+        <button class="bsm bd" onclick="hapus(${x.id},'${x.name}')">Hapus</button>
+      </td></tr>`).join(''):'<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted)">Belum ada diskon/promo aktif</td></tr>';
+  }catch(ex){showToast(ex.message,'error');}
+}
+
+function openDiskon(){
+  editId=null;document.getElementById('mDiskTitle').textContent='Tambah Diskon Baru';
+  document.getElementById('dId').value='';
+  document.getElementById('dNama').value='';
+  document.getElementById('dItem').value='';
+  document.getElementById('dKat').value='';
+  document.getElementById('dPct').value=0;
+  document.getElementById('dMinQty').value=0;
+  document.getElementById('dMinAmt').value=0;
+  document.getElementById('dFrom').value='';
+  document.getElementById('dTo').value='';
+  openModal('mDiskon');
+}
+
+async function editDiskon(x){
+  editId=x.id;document.getElementById('mDiskTitle').textContent='Edit Diskon';
+  document.getElementById('dId').value=x.id;
+  document.getElementById('dNama').value=x.name;
+  document.getElementById('dItem').value=x.item_id||'';
+  document.getElementById('dKat').value=x.category_id||'';
+  document.getElementById('dPct').value=x.discount_percent;
+  document.getElementById('dMinQty').value=x.min_qty||0;
+  document.getElementById('dMinAmt').value=x.min_amount||0;
+  document.getElementById('dFrom').value=x.valid_from||'';
+  document.getElementById('dTo').value=x.valid_to||'';
+  openModal('mDiskon');
+}
+
+async function save(){
+  const name=document.getElementById('dNama').value.trim();
+  if(!name){showToast('Nama wajib diisi','error');return;}
+  const pct=parseFloat(document.getElementById('dPct').value)||0;
+  if(pct<=0||pct>100){showToast('Besar diskon harus antara 1-100%','error');return;}
+  const data={
+    name,
+    item_id:parseInt(document.getElementById('dItem').value)||null,
+    category_id:parseInt(document.getElementById('dKat').value)||null,
+    discount_percent:pct,
+    min_qty:parseFloat(document.getElementById('dMinQty').value)||0,
+    min_amount:parseFloat(document.getElementById('dMinAmt').value)||0,
+    valid_from:document.getElementById('dFrom').value||null,
+    valid_to:document.getElementById('dTo').value||null,
+  };
+  try{
+    if(editId)await api('PUT',`/discounts/${editId}`,data);
+    else await api('POST','/discounts/',data);
+    showToast('Diskon disimpan ✓');closeModal('mDiskon');load();
+  }catch(ex){showToast(ex.message,'error');}
+}
+
+async function hapus(id,name){
+  if(!await showConfirm(`Hapus diskon "${name}"?`))return;
+  try{await api('DELETE',`/discounts/${id}`);showToast('Dihapus');load();}
+  catch(ex){showToast(ex.message,'error');}
+}
+
+init();
+</script>
+</body></html>

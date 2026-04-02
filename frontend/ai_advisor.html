@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Advisor - iPos 5.0</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+.chat-wrap{display:flex;flex-direction:column;height:calc(100vh - 200px);min-height:400px;background:var(--card-bg);border:1px solid var(--border-color);border-radius:var(--radius-lg);overflow:hidden}
+.chat-box{flex:1;padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;scroll-behavior:smooth}
+.bubble{max-width:82%;padding:14px 18px;border-radius:18px;font-size:15px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+.bubble-ai{background:var(--bg-color);border:1px solid var(--border-color);color:var(--text-main);align-self:flex-start;border-bottom-left-radius:4px}
+.bubble-user{background:var(--primary);color:#fff;align-self:flex-end;border-bottom-right-radius:4px}
+.bubble-loading{opacity:.7;font-style:italic}
+.chat-input-area{padding:14px;background:var(--card-bg);border-top:1px solid var(--border-color);display:flex;gap:10px;align-items:flex-end}
+.chat-input{flex:1;border:2px solid var(--border-color);background:var(--bg-color);padding:13px 18px;border-radius:14px;outline:none;font-size:15px;color:var(--text-main);resize:none;font-family:inherit;max-height:120px;overflow-y:auto;line-height:1.5}
+.chat-input:focus{border-color:var(--primary)}
+.send-btn{width:52px;height:52px;border-radius:14px;background:var(--primary);color:#fff;border:none;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:var(--transition)}
+.send-btn:hover{background:var(--primary-hover)}
+.send-btn:disabled{opacity:.5;cursor:not-allowed}
+.quick-btns{display:flex;flex-wrap:wrap;gap:8px;padding:0 0 10px}
+.qbtn{padding:8px 16px;border-radius:100px;border:1px solid var(--border-color);background:var(--card-bg);color:var(--text-muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:var(--transition)}
+.qbtn:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-light)}
+</style>
+</head>
+<body>
+<div class="app-container"><main class="main-content" style="max-width:900px;margin:0 auto">
+<button class="btn" style="background:transparent;color:var(--text-muted);padding:0;margin-bottom:16px" onclick="location.href='/dashboard'">← Kembali</button>
+<div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
+  <div style="font-size:48px">✨</div>
+  <div>
+    <h1 style="margin:0">iPos AI Advisor</h1>
+    <p style="margin:4px 0 0;color:var(--text-muted)">Asisten pintar yang terkoneksi langsung dengan data toko Anda</p>
+  </div>
+</div>
+
+<!-- Quick prompt buttons -->
+<div class="quick-btns" id="quickBtns">
+  <button class="qbtn" onclick="sendQuick('Barang apa yang stoknya hampir habis hari ini?')">⚠️ Stok menipis</button>
+  <button class="qbtn" onclick="sendQuick('Berapa omzet penjualan hari ini dan bulan ini?')">💰 Omzet hari ini</button>
+  <button class="qbtn" onclick="sendQuick('Barang apa yang paling laku terjual bulan ini?')">🏆 Barang terlaris</button>
+  <button class="qbtn" onclick="sendQuick('Ada berapa piutang pelanggan yang belum dibayar?')">💸 Cek piutang</button>
+  <button class="qbtn" onclick="sendQuick('Berikan analisa dan saran untuk meningkatkan penjualan toko bangunan saya')">📊 Analisa toko</button>
+  <button class="qbtn" onclick="sendQuick('Buatkan draft pesan WA untuk menagih hutang pelanggan dengan sopan')">📱 Draft tagihan WA</button>
+  <button class="qbtn" onclick="sendQuick('Transaksi apa saja yang terjadi hari ini?')">📋 Transaksi hari ini</button>
+  <button class="qbtn" onclick="sendQuick('Supplier mana yang paling sering saya beli dan berapa total hutang ke supplier?')">🏭 Info supplier</button>
+</div>
+
+<div class="chat-wrap">
+  <div class="chat-box" id="chatBox">
+    <div class="bubble bubble-ai">
+      <b>Halo, Bos! 👋</b><br><br>
+      Saya adalah AI Advisor iPos — asisten cerdas yang sudah terhubung langsung dengan data penjualan, stok, pelanggan, dan keuangan toko Anda.<br><br>
+      Silakan tanyakan apa saja, misalnya:<br>
+      • <i>"Barang apa yang stoknya mau habis?"</i><br>
+      • <i>"Berapa omzet minggu ini dibanding minggu lalu?"</i><br>
+      • <i>"Tolong buatkan draft WA tagihan untuk piutang Pak Budi."</i><br>
+      • <i>"Analisa keuntungan toko saya bulan ini."</i>
+    </div>
+  </div>
+  <div class="chat-input-area">
+    <textarea id="chatInput" class="chat-input" rows="1"
+      placeholder="Tanyakan sesuatu tentang toko Anda... (Enter = kirim, Shift+Enter = baris baru)"
+      onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+    <button class="send-btn" id="sendBtn" onclick="sendMsg()">➤</button>
+  </div>
+</div>
+</main></div>
+
+<script src="/js/api.js"></script><script src="/js/theme.js"></script>
+<script>
+requireAuth();
+let history=[], isTyping=false;
+
+function autoResize(el){
+  el.style.height='auto';
+  el.style.height=Math.min(el.scrollHeight,120)+'px';
+}
+
+function handleKey(e){
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}
+}
+
+function sendQuick(msg){
+  document.getElementById('chatInput').value=msg;
+  sendMsg();
+}
+
+function addBubble(text,role,id=''){
+  const box=document.getElementById('chatBox');
+  const div=document.createElement('div');
+  div.className=`bubble bubble-${role}${role==='ai'&&text==='...'?' bubble-loading':''}`;
+  if(id) div.id=id;
+  div.textContent=text;
+  box.appendChild(div);
+  box.scrollTop=box.scrollHeight;
+  return div;
+}
+
+async function sendMsg(){
+  const input=document.getElementById('chatInput');
+  const text=input.value.trim();
+  if(!text||isTyping) return;
+  input.value=''; input.style.height='auto';
+  isTyping=true;
+  document.getElementById('sendBtn').disabled=true;
+
+  // Sembunyikan quick buttons setelah pertama kirim
+  document.getElementById('quickBtns').style.display='none';
+
+  addBubble(text,'user');
+  history.push({role:'user',content:text});
+
+  const loadId='load_'+Date.now();
+  const loadBubble=addBubble('⏳ Menganalisa data toko...','ai',loadId);
+
+  try{
+    const r=await api('POST','/ai/chat',{message:text,history:history.slice(-8)});
+    const reply=r.response||r.message||JSON.stringify(r);
+    loadBubble.textContent=reply;
+    loadBubble.classList.remove('bubble-loading');
+    history.push({role:'assistant',content:reply});
+  }catch(ex){
+    loadBubble.textContent='⚠️ Maaf, terjadi kesalahan: '+ex.message+'\n\nCek API Key di pengaturan backend (GEMINI_API_KEY / GROQ_API_KEY).';
+    loadBubble.classList.remove('bubble-loading');
+  }
+
+  isTyping=false;
+  document.getElementById('sendBtn').disabled=false;
+  document.getElementById('chatInput').focus();
+  document.getElementById('chatBox').scrollTop=document.getElementById('chatBox').scrollHeight;
+}
+</script>
+</body></html>

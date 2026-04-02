@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pengaturan - iPos 5.0</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-container"><main class="main-content" style="max-width:900px;margin:0 auto">
+<button class="btn" style="background:transparent;color:var(--text-muted);padding:0;margin-bottom:16px" onclick="location.href='/dashboard'">← Kembali</button>
+<h1 style="margin-bottom:24px">⚙️ Pengaturan Sistem</h1>
+
+<!-- Tab -->
+<div style="display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap">
+  <button id="tbToko"    onclick="switchTab('toko')"    style="padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit">🏪 Info Toko</button>
+  <button id="tbPrinter" onclick="switchTab('printer')" style="padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit">🖨️ Printer</button>
+  <button id="tbPwd"     onclick="switchTab('pwd')"     style="padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit">🔒 Password</button>
+  <button id="tbBackup"  onclick="switchTab('backup')"  style="padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit">💾 Backup</button>
+  <button id="tbTema"    onclick="switchTab('tema')"    style="padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit">🎨 Tampilan</button>
+</div>
+
+<!-- Panel: Info Toko -->
+<div id="pnlToko">
+  <div class="card" style="padding:28px">
+    <h3 style="margin:0 0 20px">🏪 Informasi Toko</h3>
+    <div class="row2" style="margin-bottom:0">
+      <div class="input-group"><label>Nama Toko</label><input id="storeName" class="input-control" placeholder="Toko Bangunan Maju Jaya"></div>
+      <div class="input-group"><label>No. Telepon</label><input id="storePhone" class="input-control" inputmode="tel" placeholder="021-xxxxxxx"></div>
+    </div>
+    <div class="input-group"><label>Alamat Toko</label><textarea id="storeAddr" class="input-control" rows="2" placeholder="Jl. Contoh No.1, Kota..."></textarea></div>
+    <div class="input-group"><label>Teks Footer Struk</label><input id="storeFooter" class="input-control" placeholder="Terima kasih telah berbelanja!"></div>
+    <button onclick="saveToko()" class="btn btn-primary">✓ Simpan Info Toko</button>
+  </div>
+</div>
+
+<!-- Panel: Printer -->
+<div id="pnlPrinter" style="display:none">
+  <div class="card" style="padding:28px">
+    <h3 style="margin:0 0 20px">🖨️ Pengaturan Printer Struk Thermal</h3>
+    <div class="row2" style="margin-bottom:16px">
+      <div class="input-group">
+        <label>Lebar Kertas</label>
+        <select id="paperWidth" class="input-control">
+          <option value="58">58mm (Kecil)</option>
+          <option value="80" selected>80mm (Standar)</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;padding:16px;background:var(--bg-color);border-radius:12px;margin-bottom:20px;cursor:pointer" onclick="document.getElementById('autoPrint').click()">
+      <input type="checkbox" id="autoPrint" style="width:22px;height:22px;cursor:pointer">
+      <div>
+        <div style="font-weight:700;font-size:16px">Cetak Otomatis</div>
+        <div style="font-size:14px;color:var(--text-muted)">Struk langsung dicetak setelah transaksi berhasil</div>
+      </div>
+    </div>
+    <div style="margin-bottom:20px">
+      <button onclick="testPrint()" class="btn" style="background:var(--bg-color);border:1px solid var(--border-color);color:var(--text-main);margin-right:10px">🖨️ Test Print</button>
+      <span style="font-size:14px;color:var(--text-muted)">Pastikan printer thermal sudah terhubung & set sebagai printer default</span>
+    </div>
+    <button onclick="savePrinter()" class="btn btn-primary">✓ Simpan Pengaturan Printer</button>
+  </div>
+</div>
+
+<!-- Panel: Password -->
+<div id="pnlPwd" style="display:none">
+  <div class="card" style="padding:28px;max-width:480px">
+    <h3 style="margin:0 0 20px">🔒 Ganti Password</h3>
+    <div class="input-group"><label>Password Lama *</label><input id="pwdLama" type="password" class="input-control" placeholder="••••••••"></div>
+    <div class="input-group"><label>Password Baru *</label><input id="pwdBaru" type="password" class="input-control" placeholder="••••••••"></div>
+    <div class="input-group"><label>Konfirmasi Password Baru *</label><input id="pwdKonfirm" type="password" class="input-control" placeholder="••••••••"></div>
+    <button onclick="gantiPwd()" class="btn btn-primary">✓ Ganti Password</button>
+  </div>
+</div>
+
+<!-- Panel: Backup -->
+<div id="pnlBackup" style="display:none">
+  <div style="display:grid;gap:20px">
+    <div class="card" style="padding:24px">
+      <h3 style="margin:0 0 6px">⬇️ Download Backup Database</h3>
+      <p style="margin:0 0 16px;color:var(--text-muted)">Simpan salinan database ke komputer Anda sebagai backup.</p>
+      <button onclick="downloadBackup()" class="btn btn-primary">💾 Download Backup Sekarang</button>
+    </div>
+    <div class="card" style="padding:24px;border:2px solid var(--primary)">
+      <h3 style="margin:0 0 6px;color:var(--primary)">⬆️ Restore / Import Database</h3>
+      <p style="margin:0 0 4px;color:var(--text-muted)">Timpa database dengan file .db backup yang sudah ada.</p>
+      <p style="margin:0 0 16px;color:#ef4444;font-weight:700;font-size:14px">⚠️ Peringatan: Semua data saat ini akan dihapus dan diganti!</p>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <input type="file" id="dbFile" accept=".db,.sqlite" class="input-control" style="flex:1;min-width:200px;padding:12px 16px">
+        <button onclick="importBackup()" class="btn btn-primary" id="btnImport">⬆️ Import & Restore</button>
+      </div>
+    </div>
+    <div class="card" style="padding:24px">
+      <h3 style="margin:0 0 6px">📧 Backup via Email</h3>
+      <p style="margin:0 0 16px;color:var(--text-muted)">Kirim backup database ke email (memerlukan konfigurasi SMTP di backend).</p>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <input id="emailBackup" type="email" class="input-control" style="flex:1;min-width:200px" placeholder="email@contoh.com">
+        <button onclick="kirimEmailBackup()" class="btn btn-primary">📧 Kirim ke Email</button>
+      </div>
+    </div>
+    <div class="card" style="padding:24px">
+      <h3 style="margin:0 0 6px">📊 Info Sistem</h3>
+      <div id="sysInfo" style="font-size:15px;line-height:2;color:var(--text-muted)">Memuat...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Panel: Tampilan -->
+<div id="pnlTema" style="display:none">
+  <div class="card" style="padding:28px;max-width:500px">
+    <h3 style="margin:0 0 20px">🎨 Pilih Tampilan</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+      <div id="optDark" onclick="setTema('dark')" style="padding:24px;border-radius:16px;cursor:pointer;border:2px solid var(--primary);background:var(--primary-light);text-align:center">
+        <div style="font-size:40px;margin-bottom:10px">🌙</div>
+        <div style="font-weight:800;font-size:16px;color:var(--primary)">Mode Gelap</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-top:4px">Nyaman untuk malam hari</div>
+      </div>
+      <div id="optLight" onclick="setTema('light')" style="padding:24px;border-radius:16px;cursor:pointer;border:2px solid var(--border-color);text-align:center">
+        <div style="font-size:40px;margin-bottom:10px">☀️</div>
+        <div style="font-weight:800;font-size:16px">Mode Terang</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-top:4px">Nyaman untuk siang hari</div>
+      </div>
+    </div>
+    <p style="font-size:14px;color:var(--text-muted);margin:0">Tema tersimpan otomatis di browser ini.</p>
+  </div>
+</div>
+
+</main></div>
+
+<script src="/js/api.js"></script><script src="/js/theme.js"></script><script src="/js/print.js"></script>
+<script>
+requireAuth();
+const ON='padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit';
+const OFF='padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit';
+const TABS=['Toko','Printer','Pwd','Backup','Tema'];
+
+function switchTab(t){
+  TABS.forEach(x=>{
+    document.getElementById('pnl'+x).style.display=x.toLowerCase()===t?'block':'none';
+    document.getElementById('tb'+x).style.cssText=x.toLowerCase()===t?ON:OFF;
+  });
+  if(t==='backup') loadSysInfo();
+}
+
+/* ── Info Toko ── */
+function loadToko(){
+  const ps=JSON.parse(localStorage.getItem('ipos_print_settings')||'{}');
+  document.getElementById('storeName').value=ps.storeName||'';
+  document.getElementById('storePhone').value=ps.storePhone||'';
+  document.getElementById('storeAddr').value=ps.storeAddr||'';
+  document.getElementById('storeFooter').value=ps.storeFooter||'Terima kasih telah berbelanja!';
+}
+function saveToko(){
+  const ps=JSON.parse(localStorage.getItem('ipos_print_settings')||'{}');
+  ps.storeName  = document.getElementById('storeName').value;
+  ps.storePhone = document.getElementById('storePhone').value;
+  ps.storeAddr  = document.getElementById('storeAddr').value;
+  ps.storeFooter= document.getElementById('storeFooter').value;
+  localStorage.setItem('ipos_print_settings',JSON.stringify(ps));
+  showToast('Info toko disimpan ✓');
+}
+
+/* ── Printer ── */
+function loadPrinter(){
+  const ps=JSON.parse(localStorage.getItem('ipos_print_settings')||'{}');
+  document.getElementById('paperWidth').value=ps.paperWidth||'80';
+  document.getElementById('autoPrint').checked=ps.autoPrint||false;
+}
+function savePrinter(){
+  const ps=JSON.parse(localStorage.getItem('ipos_print_settings')||'{}');
+  ps.paperWidth=document.getElementById('paperWidth').value;
+  ps.autoPrint=document.getElementById('autoPrint').checked;
+  localStorage.setItem('ipos_print_settings',JSON.stringify(ps));
+  showToast('Pengaturan printer disimpan ✓');
+}
+function testPrint(){
+  const fakeSale={
+    number:'TEST-001',date:today(),
+    customer:{name:'Test Pelanggan'},
+    items:[{item:{name:'Semen Portland 50kg'},qty:2,sell_price:85000,total:170000}],
+    subtotal:170000,discount:0,tax:0,total:170000,paid:200000,change:30000,
+    payment_method:'cash'
+  };
+  printReceipt(fakeSale);
+}
+
+/* ── Password ── */
+async function gantiPwd(){
+  const lama=document.getElementById('pwdLama').value;
+  const baru=document.getElementById('pwdBaru').value;
+  const konfirm=document.getElementById('pwdKonfirm').value;
+  if(!lama||!baru){showToast('Semua field wajib diisi','error');return;}
+  if(baru!==konfirm){showToast('Password baru tidak cocok!','error');return;}
+  if(baru.length<6){showToast('Password minimal 6 karakter','error');return;}
+  try{
+    await api('PUT','/auth/change-password',{old_password:lama,new_password:baru});
+    showToast('Password berhasil diubah ✓');
+    document.getElementById('pwdLama').value='';
+    document.getElementById('pwdBaru').value='';
+    document.getElementById('pwdKonfirm').value='';
+  }catch(ex){showToast(ex.message,'error');}
+}
+
+/* ── Backup ── */
+async function downloadBackup(){
+  try{
+    showLoading('Menyiapkan backup...');
+    const resp=await fetch('/api/backup/download',{headers:{Authorization:`Bearer ${getToken()}`}});
+    if(!resp.ok) throw new Error('Gagal download backup');
+    const blob=await resp.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=`ipos_backup_${today()}.db`; a.click();
+    URL.revokeObjectURL(url);
+    hideLoading();showToast('Backup berhasil didownload ✓');
+  }catch(ex){hideLoading();showToast(ex.message,'error');}
+}
+
+async function importBackup(){
+  const file=document.getElementById('dbFile').files[0];
+  if(!file){showToast('Pilih file .db dulu','error');return;}
+  if(!await showConfirm('⚠️ PERHATIAN!\n\nSemua data saat ini akan DIHAPUS dan diganti dengan file backup ini.\n\nYakin ingin melanjutkan?'))return;
+  const btn=document.getElementById('btnImport');
+  btn.disabled=true; btn.textContent='Mengupload...';
+  try{
+    showLoading('Mengimport database...');
+    const fd=new FormData(); fd.append('file',file);
+    await apiForm('/backup/import',fd);
+    hideLoading();showToast('Import berhasil! Halaman akan dimuat ulang...');
+    setTimeout(()=>{clearToken();window.location.href='/';},2500);
+  }catch(ex){
+    hideLoading();showToast(ex.message,'error');
+    btn.disabled=false; btn.textContent='⬆️ Import & Restore';
+  }
+}
+
+async function kirimEmailBackup(){
+  const email=document.getElementById('emailBackup').value.trim();
+  if(!email){showToast('Masukkan alamat email tujuan','error');return;}
+  try{
+    showLoading('Mengirim backup ke email...');
+    await api('POST','/email-backup/send',{email});
+    hideLoading();showToast('Backup berhasil dikirim ke '+email+' ✓');
+  }catch(ex){hideLoading();showToast(ex.message,'error');}
+}
+
+async function loadSysInfo(){
+  try{
+    const d=await api('GET','/auth/system-info').catch(()=>null);
+    const user=getUser();
+    document.getElementById('sysInfo').innerHTML=`
+      <div>👤 <b>Login sebagai:</b> ${user.full_name||user.username||'-'} (${user.role||'-'})</div>
+      <div>🗄️ <b>Versi iPos:</b> 5.0</div>
+      <div>🌐 <b>Server:</b> ${window.location.origin}</div>
+      ${d?`<div>💾 <b>Ukuran DB:</b> ${d.db_size||'-'}</div>`:''}
+      <div>⏰ <b>Waktu lokal:</b> ${new Date().toLocaleString('id-ID')}</div>`;
+  }catch(e){
+    const user=getUser();
+    document.getElementById('sysInfo').innerHTML=`
+      <div>👤 <b>Login sebagai:</b> ${user.full_name||user.username||'-'} (${user.role||'-'})</div>
+      <div>🗄️ <b>Versi iPos:</b> 5.0</div>
+      <div>⏰ <b>Waktu lokal:</b> ${new Date().toLocaleString('id-ID')}</div>`;
+  }
+}
+
+/* ── Tema ── */
+function setTema(t){
+  if(t==='dark'){document.body.classList.add('dark-mode');}
+  else{document.body.classList.remove('dark-mode');}
+  localStorage.setItem('ipos_theme',t);
+  document.getElementById('optDark').style.border=t==='dark'?'2px solid var(--primary)':'2px solid var(--border-color)';
+  document.getElementById('optDark').style.background=t==='dark'?'var(--primary-light)':'transparent';
+  document.getElementById('optLight').style.border=t==='light'?'2px solid var(--primary)':'2px solid var(--border-color)';
+  document.getElementById('optLight').style.background=t==='light'?'var(--primary-light)':'transparent';
+  showToast('Tema '+(t==='dark'?'Gelap':'Terang')+' diaktifkan ✓');
+}
+
+// Init
+loadToko(); loadPrinter();
+const curTema=localStorage.getItem('ipos_theme')||'light';
+document.getElementById(curTema==='dark'?'optDark':'optLight').style.border='2px solid var(--primary)';
+document.getElementById(curTema==='dark'?'optDark':'optLight').style.background='var(--primary-light)';
+document.getElementById(curTema==='dark'?'optLight':'optDark').style.border='2px solid var(--border-color)';
+</script>
+</body></html>
