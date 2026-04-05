@@ -206,6 +206,7 @@ class PurchaseCreate(BaseModel):
     tax: float = 0
     notes: Optional[str] = None
     items: List[PurchaseItemCreate]
+    paid: float = 0
 
 class PurchaseItemOut(BaseModel):
     id: int
@@ -337,3 +338,36 @@ class DashboardStats(BaseModel):
     low_stock_count: int
     top_items: list
     recent_sales: list
+
+
+# ─── Accounting (Jurnal & COA) ────────────────────────────────────────────────
+class AccountCreate(BaseModel):
+    code: str
+    name: str
+    type: str
+
+class AccountOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    type: str
+    is_active: bool
+    model_config = {"from_attributes": True}
+
+class JournalEntryLineOut(BaseModel):
+    id: int
+    account_id: int
+    debit: float
+    credit: float
+    account: Optional[AccountOut] = None
+    model_config = {"from_attributes": True}
+
+class JournalOut(BaseModel):
+    id: int
+    number: str
+    date: date
+    description: str
+    reference: Optional[str] = None
+    # 👇👇 INI ADALAH KUNCI JAWABANNYA 👇👇
+    entries: List[JournalEntryLineOut] = [] 
+    model_config = {"from_attributes": True}

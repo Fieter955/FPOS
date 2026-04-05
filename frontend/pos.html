@@ -1123,32 +1123,92 @@
       }
 
       function showReceipt(s) {
+        // Paksa nama tokonya menjadi Eva Store jika belum disetting
         const ps = JSON.parse(
           localStorage.getItem("ipos_print_settings") || "{}",
         );
+        const storeName = ps.storeName || "Eva Store";
+        const storeFooter =
+          ps.storeFooter || "Terima kasih telah berbelanja di Eva Store!";
+
         const items = (s.items || [])
           .map(
-            (i) =>
-              `<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>${i.item?.name || "Item"} ×${i.qty}</span><span>${fmtRp(i.total)}</span></div>`,
+            (
+              i,
+            ) => `<div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                  <span>${i.item?.name || "Item"} ×${i.qty}</span>
+                  <span>${fmtRp(i.total)}</span>
+                </div>`,
           )
           .join("");
+
         document.getElementById("rcptBox").innerHTML = `
-    <div style="text-align:center;margin-bottom:12px"><b style="font-size:17px">${ps.storeName || "iPos 5.0"}</b><div style="font-size:12px;color:#666">Struk • ${fmtDate(s.date)}</div></div>
-    <div style="border-top:2px dashed #ccc;border-bottom:2px dashed #ccc;padding:8px 0;margin:8px 0">${items}</div>
-    <div style="font-size:13px">
-      <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span>Subtotal</span><span>${fmtRp(s.subtotal)}</span></div>
-      ${s.discount > 0 ? `<div style="display:flex;justify-content:space-between;margin-bottom:5px"><span>Diskon</span><span>-${fmtRp(s.discount)}</span></div>` : ""}
-      <div style="display:flex;justify-content:space-between;font-size:17px;font-weight:900;border-top:2px solid #ccc;padding-top:7px;margin-top:3px"><span>TOTAL</span><span>${fmtRp(s.total)}</span></div>
-      <div style="display:flex;justify-content:space-between;margin-top:5px"><span>Bayar (${s.payment_method})</span><span>${fmtRp(s.paid)}</span></div>
-      <div style="display:flex;justify-content:space-between;font-weight:900;color:#10b981;margin-top:3px"><span>Kembalian</span><span>${fmtRp(s.change)}</span></div>
-    </div>
-    <div style="text-align:center;margin-top:12px;font-size:11px;color:#888">${ps.storeFooter || "Terima kasih!"}</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
-      <button onclick="printReceipt(lastSale)" style="padding:11px;border-radius:9px;background:#10b981;color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer">🖨️ Cetak</button>
-      <button onclick="newTrx()" style="padding:11px;border-radius:9px;background:#1e293b;color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer">✓ Selesai</button>
-    </div>`;
+        <div style="text-align:center;margin-bottom:12px">
+            <b style="font-size:17px">${storeName}</b>
+            <div style="font-size:12px;color:#666">Struk • ${fmtDate(s.date)}</div>
+        </div>
+        <div style="border-top:2px dashed #ccc;border-bottom:2px dashed #ccc;padding:8px 0;margin:8px 0">${items}</div>
+        <div style="font-size:13px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span>Subtotal</span><span>${fmtRp(s.subtotal)}</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:17px;font-weight:900;border-top:2px solid #ccc;padding-top:7px;margin-top:3px"><span>TOTAL</span><span>${fmtRp(s.total)}</span></div>
+            <div style="display:flex;justify-content:space-between;margin-top:5px"><span>Bayar</span><span>${fmtRp(s.paid)}</span></div>
+            <div style="display:flex;justify-content:space-between;font-weight:900;color:#10b981;margin-top:3px"><span>Kembalian</span><span>${fmtRp(s.change)}</span></div>
+        </div>
+        <div style="text-align:center;margin-top:12px;font-size:11px;color:#888">${storeFooter}</div>
+        
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
+            <button onclick='printReceipt(${JSON.stringify(s)})' style="padding:11px;border-radius:9px;background:#10b981;color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer">🖨️ Cetak</button>
+            <button onclick="newTrx()" style="padding:11px;border-radius:9px;background:#1e293b;color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer">✓ Selesai</button>
+        </div>`;
+
         openModal("rcptModal");
       }
+
+      // --- TAMBAHKAN FUNGSI BARU INI ---
+      async function printReceipt(saleData) {
+        const btnCetak = event.currentTarget; // Ambil elemen tombol yang diklik
+        const teksAsli = btnCetak.innerHTML;
+
+        try {
+          btnCetak.innerHTML = "⏳ Mencetak...";
+          btnCetak.disabled = true;
+
+          const ps = JSON.parse(
+            localStorage.getItem("ipos_print_settings") || "{}",
+          );
+
+          // Menembak API Python kita yang akan mengobrol dengan Windows
+          const response = await fetch("/api/sales/print", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sale: saleData,
+              settings: {
+                storeName: ps.storeName || "Eva Store",
+                storeFooter: ps.storeFooter || "Terima kasih!",
+              },
+            }),
+          });
+
+          const result = await response.json();
+
+          if (!response.ok) {
+            throw new Error(result.detail || "Gagal mencetak");
+          }
+
+          btnCetak.innerHTML = "✅ Tercetak!";
+          setTimeout(() => {
+            btnCetak.innerHTML = teksAsli;
+            btnCetak.disabled = false;
+          }, 2000);
+        } catch (error) {
+          console.error("Print error:", error);
+          alert("Gagal terhubung ke printer:\n" + error.message);
+          btnCetak.innerHTML = teksAsli;
+          btnCetak.disabled = false;
+        }
+      }
+
       function newTrx() {
         closeModal("rcptModal");
         clearCart();

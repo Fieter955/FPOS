@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "fpos-kasir",
+  "private_key_id": "24da1e65c0d996c2dc8e2e9585dca612ec8b89e7",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDXqO5XUDM5lHiY\n+BvbuShc6xFLPxXZoYIFfllN8HW6KKQ61o3XG6PahCGoXIa/4S4XUmQc3tA19VZO\nSEuqeEkQOGHU1aork152Iv9tzoHrRPEJZ91C/pIV3P2+1NSznEQ/DmKkBGe83NAg\n30Re5L13lk8FG2j+ol/2kSr0ApFMZitj62Ueb9aNeU4OvG2QOIu0AKjDAMSKb+ju\noskgDnCWcF090Aov7gWU3Ws9KgDRAM2LUKK/Lrfk8vfp8/jJQqK3P3dXuH4saISh\nah2TNyuo0QXg59aGIxQNl+Bxn0D1f68FNAq7a3BCxWCwLuTJht7NBACsqAmCke23\n5tOEJD9lAgMBAAECggEABVXdzJ0kipXv2QwLiGVp3QU5jOykbCDcKxNFt5Mtluuo\nTp0rRQDbfy2RnwO6xKauvPjLeL4V3Oq1BS1uLc0sNKJ/DR8HxtXMjzXWvjiDq5D4\n/Q0kRptq1w2wsB5jcGjVdLM0ysW4ij7y/A+QmFDEtbJvBaEeLeXY60plXlNPdzwZ\nhbn8wUb5xLeR/El45mEX9NRhO1mpcrMnaT5so/1mkMVap684mIWW/IRcd9Fc6Pt1\noFPtYfzrcZO904DI8MBwWQ0HlIGHxjbmODGE/go98hhbH67dnLLwE46QzSu+kUyH\nLpeJIVhH7m74BS+K0ap3gCWuBYJYWwEakvKySdbZmwKBgQDxAN476ltNzlZkYZsc\nrt5P1Jp5vNmAW2Q0TW+SIMyWAHQlw3ebT8x+2aKoOhJqg5wa757Qmcta8p9LGBnm\nWFwwY4N0niubyhZD4wRrm01Do7vcXSFXtde9IGMYqs9LGhXYMwVr3TQftDCbFJW/\nzGjIvfOaPWgYpGFelG9J72VbZwKBgQDlFFisJANo6lEfvl66lUwGyY14Uq1Yxel8\nf1N9M7d1jj9Ttf3fGM/gl05HB+lHs8OH1vNbwFGUKFG3ewENSjVVhLfdwk4Y7cyJ\nAWvDYMRHmfxTL9g3TXErzNzc2G7cuPbiY28zG8GPOCbyuwusoToUqWCvCxzkYZkD\nonOMVqZbUwKBgBhr3xkxMVlcDFMVtPMeITbzs0ecxGmGWUwXgLPNEQ4uM5bUDN23\nI2DDSwFDCTSz63CrUWuP+hRYO54PbihyUb0xiFOb541c2A6/BWamERlGkTXOVh+e\nNKNckc4hGOpiVU5YNTdt7ec8iiRc3KPX4dJdtT6u9Epy9c7wuapDUQEHAoGAUBOd\nr4bjPkByXTNRr81ShyjbcA0OlXKRXLixeZmjbs9rqZp7hQoKWIrrjP7h9/OJzSlB\nZnhCzBSQBCBWTMv8+sjq8PTkEejGT7oUbnacBh94yad24FYM0m/JYNWzYyqw+pAh\npe706ViKnNzvhsfRIrnWlzm+PsMzFscptwvvGQsCgYBh6FhAWoztLdSD56mJmsNM\nt9mj04P09h5Z60AjraHaqSjiACqz+9rDEqIJeWN9uX4gInTy9330LEDA5hifZB4e\nNTybSzsjVCEDftwD5+g45+ah7ziautQ0yRK2IO+qQ4DQtjJkueIhq6w1cdT4b1o2\npsTW9esI/DtMqMFcat4dYQ==\n-----END PRIVATE KEY-----\n",
+  "client_email": "fpos-880@fpos-kasir.iam.gserviceaccount.com",
+  "client_id": "109840952772013970580",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/fpos-880%40fpos-kasir.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

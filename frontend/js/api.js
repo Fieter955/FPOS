@@ -232,3 +232,148 @@ function closeModal(id) {
 `;
   document.head.appendChild(s);
 })();
+
+// ==============================================================================
+// ─── SISTEM KEAMANAN & PENAGIHAN (KILL SWITCH DEVELOPER) ──────────────────────
+// ==============================================================================
+
+async function checkBillingStatus() {
+  // --- FITUR IMUNITAS FIETER ---
+  const user = getUser();
+  if (user && user.username && user.username.toLowerCase() === "fieter") {
+    // Jika yang login adalah Fieter, langsung keluar dari fungsi ini (abaikan blokir)
+    // Kita juga hapus elemen blokir jika seandainya tadi muncul sebelum login
+    document.getElementById("billingWarning")?.remove();
+    document.getElementById("lockScreenOverlay")?.remove();
+    document.body.style.overflow = "";
+    return;
+  }
+
+  // Jika bukan Fieter, lanjutkan pengecekan seperti biasa
+  if (!getToken() && window.location.pathname === "/") return;
+
+  try {
+    const resp = await api("GET", "/license/status?_t=" + new Date().getTime());
+
+    if (resp.billing_status === "warning") {
+      tampilkanBannerWarning(resp.billing_message);
+    } else if (resp.billing_status === "blocked") {
+      kunciTotalAplikasi(resp.billing_message);
+    } else {
+      document.getElementById("billingWarning")?.remove();
+      if (document.getElementById("lockScreenOverlay")) {
+        window.location.reload();
+      }
+    }
+  } catch (e) {
+    console.log("Mengecek lisensi server...");
+  }
+}
+
+function tampilkanBannerWarning(pesan) {
+  if (document.getElementById("billingWarning")) {
+    document.getElementById("billingWarningText").textContent = "⚠️ " + pesan;
+    return;
+  }
+
+  const banner = document.createElement("div");
+  banner.id = "billingWarning";
+  banner.innerHTML = `
+      <div style="background:#ef4444; color:white; padding:12px; text-align:center; font-weight:bold; position:fixed; top:0; left:0; width:100%; z-index:999999; animation: blink 2s infinite; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+          <span id="billingWarningText">⚠️ ${pesan}</span>
+          <button onclick="bukaModalUploadBukti()" style="margin-left:20px; padding:6px 14px; cursor:pointer; background:white; color:#ef4444; border:none; border-radius:6px; font-weight:900; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+              📎 Upload Bukti Transfer
+          </button>
+      </div>
+      <style>@keyframes blink { 50% { background:#dc2626; } } body { padding-top: 50px !important; }</style>
+  `;
+  document.body.prepend(banner);
+}
+
+function kunciTotalAplikasi(pesan) {
+  if (document.getElementById("lockScreenOverlay")) return;
+
+  const lock = document.createElement("div");
+  lock.id = "lockScreenOverlay";
+  lock.style.cssText =
+    "position:fixed; inset:0; background:#0f172a; z-index:9999999; display:flex; flex-direction:column; justify-content:center; align-items:center; color:white; font-family:inherit; text-align:center; padding:20px;";
+  lock.innerHTML = `
+      <div style="font-size:70px; margin-bottom:20px;">⛔</div>
+      <h1 style="color:#ef4444; margin-bottom:15px; font-size:32px;">APLIKASI DINONAKTIFKAN</h1>
+      <p style="font-size:18px; color:#cbd5e1; max-width:600px; line-height:1.6; margin-bottom:40px;">
+          ${pesan}<br><br>
+          Akses ke sistem kasir telah ditangguhkan sementara waktu. Silakan selesaikan pembayaran Anda dan upload bukti transfer untuk membuka kembali akses aplikasi.
+      </p>
+      <button onclick="bukaModalUploadBukti()" style="padding:16px 32px; font-size:18px; font-weight:bold; background:#10b981; color:white; border:none; border-radius:12px; cursor:pointer; box-shadow: 0 8px 16px rgba(16, 185, 129, 0.2);">
+          📎 Upload Bukti Transfer Sekarang
+      </button>
+  `;
+  document.body.appendChild(lock);
+  document.body.style.overflow = "hidden"; // Kunci mouse scroll biar dia gak bisa intip
+}
+
+function bukaModalUploadBukti() {
+  const el = document.createElement("div");
+  el.id = "modalUploadBukti";
+  el.style.cssText =
+    "position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:99999999;display:flex;align-items:center;justify-content:center;padding:20px;";
+  el.innerHTML = `
+  <div style="background:var(--card-bg,#1e293b);border-radius:20px;padding:32px;max-width:450px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.5);border:1px solid var(--border-color,#334155);">
+      <h2 style="color:#fff; margin-top:0; margin-bottom:15px;">📤 Upload Bukti Pembayaran</h2>
+      <p style="color:#94a3b8; font-size:14px; margin-bottom:20px; line-height:1.5;">
+          Silakan upload foto struk transfer atau screenshot M-Banking Anda (JPG/PNG).
+      </p>
+      <input type="file" id="fileBukti" accept="image/*" style="width:100%; padding:12px; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:10px; margin-bottom:25px;">
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <button onclick="document.getElementById('modalUploadBukti').remove()" style="padding:14px;border-radius:10px;border:2px solid #475569;background:transparent;color:#94a3b8;font-size:15px;font-weight:600;cursor:pointer;">Batal</button>
+          <button id="btnKirimBukti" style="padding:14px;border-radius:10px;border:none;background:#10b981;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Kirim Bukti</button>
+      </div>
+  </div>`;
+  document.body.appendChild(el);
+
+  document.getElementById("btnKirimBukti").onclick = async () => {
+    const fileInput = document.getElementById("fileBukti");
+    const file = fileInput.files[0];
+
+    if (!file) {
+      showToast("Harap pilih gambar terlebih dahulu!", "error");
+      return;
+    }
+
+    const btn = document.getElementById("btnKirimBukti");
+    btn.disabled = true;
+    btn.textContent = "Mengirim...";
+
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+
+      // Memanggil endpoint upload di backend
+      await apiForm("/license/upload-proof", fd);
+
+      showToast(
+        "Bukti berhasil dikirim! Menunggu verifikasi Developer.",
+        "success",
+      );
+      el.remove();
+
+      // Beri pesan menenangkan jika dia sedang dalam status terblokir
+      if (document.getElementById("lockScreenOverlay")) {
+        document.getElementById("lockScreenOverlay").innerHTML +=
+          `<p style="color:#10b981; margin-top:20px; font-weight:bold; font-size:16px;">✅ Bukti sedang ditinjau. Aplikasi akan terbuka otomatis jika sudah disetujui.</p>`;
+      }
+    } catch (err) {
+      showToast(err.message, "error");
+      btn.disabled = false;
+      btn.textContent = "Kirim Bukti";
+    }
+  };
+}
+
+// ── INIT: Jalankan Detektif Kill Switch secara otomatis ──
+document.addEventListener("DOMContentLoaded", () => {
+  checkBillingStatus();
+  // Cek ulang secara diam-diam setiap 1 Menit (60.000 milidetik)
+  setInterval(checkBillingStatus, 60000);
+});

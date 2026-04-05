@@ -11,32 +11,40 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from ..database import get_db
 from .. import models
 from ..auth import get_current_user
-
+import pytz
+from datetime import datetime, date
 router = APIRouter()
 
 # ─── 1. DASHBOARD KPI (UTAMA) ────────────────────────────────────────────────
+WITA = pytz.timezone("Asia/Makassar")
+
+def get_local_date():
+    return datetime.now(WITA).date()
+
+# --- 2. Perbaiki fungsi Dashboard ---
 @router.get("/dashboard")
 def get_dashboard_data(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    today = date.today()
-    today_str = today.isoformat() # "YYYY-MM-DD"
+    # Gunakan tanggal WITA, bukan date.today() global
+    today_local = get_local_date() 
 
-    # Perbaikan Filter Tanggal untuk SQLite (Gunakan .contains)
+    # Gunakan operator == (sama dengan), JANGAN pakai .contains()
     total_sales_today = db.query(func.sum(models.Sale.total)).filter(
-        models.Sale.date.contains(today_str),
+        models.Sale.date == today_local,
         models.Sale.status != "cancelled"
     ).scalar() or 0
 
     total_purchases_today = db.query(func.sum(models.Purchase.total)).filter(
-        models.Purchase.date.contains(today_str)
+        models.Purchase.date == today_local,
+        models.Purchase.status != "cancelled" # <-- Ini perbaikan pembatalan kita sebelumnya!
     ).scalar() or 0
 
     total_tx_today = db.query(func.count(models.Sale.id)).filter(
-        models.Sale.date.contains(today_str),
+        models.Sale.date == today_local,
         models.Sale.status != "cancelled"
     ).scalar() or 0
 
     low_stock = db.query(func.count(models.Item.id)).filter(
-        models.Item.is_active == True, 
+        models.Item.is_active == True,
         models.Item.stock <= models.Item.min_stock
     ).scalar() or 0
 
@@ -46,7 +54,7 @@ def get_dashboard_data(db: Session = Depends(get_db), _=Depends(get_current_user
         func.sum(models.SaleItem.qty).label("total_qty"),
         func.sum(models.SaleItem.total).label("total_amount")
     ).join(models.SaleItem).join(models.Sale).filter(
-        models.Sale.date.contains(today.strftime("%Y-%m")),
+        models.Sale.date.contains(today_local.strftime("%Y-%m")),
         models.Sale.status != "cancelled"
     ).group_by(models.Item.id).order_by(func.sum(models.SaleItem.qty).desc()).limit(5).all()
     
@@ -64,7 +72,7 @@ def get_dashboard_data(db: Session = Depends(get_db), _=Depends(get_current_user
     # Grafik 6 Bulan Terakhir
     monthly = []
     for i in range(5, -1, -1):
-        d = today - relativedelta(months=i)
+        d = today_local - relativedelta(months=i)
         m_str = d.strftime("%Y-%m")
         amt = db.query(func.sum(models.Sale.total)).filter(
             models.Sale.date.contains(m_str),
@@ -85,8 +93,10 @@ def get_dashboard_data(db: Session = Depends(get_db), _=Depends(get_current_user
 # ─── 2. LABA RUGI ────────────────────────────────────────────────────────────
 @router.get("/profit-loss")
 def profit_loss(start_date: Optional[date] = None, end_date: Optional[date] = None, db: Session = Depends(get_db)):
-    if not start_date: start_date = date.today().replace(day=1)
-    if not end_date: end_date = date.today()
+    # 1. Gunakan Tanggal Lokal (WITA)
+    today_local = get_local_date()
+    if not start_date: start_date = today_local.replace(day=1)
+    if not end_date: end_date = today_local
 
     sales = db.query(models.Sale).filter(
         models.Sale.date >= start_date, 
@@ -95,14 +105,13 @@ def profit_loss(start_date: Optional[date] = None, end_date: Optional[date] = No
     ).all()
 
     total_revenue = sum(s.total for s in sales)
-    total_discount = sum(s.discount for s in sales)
     
-    # Hitung HPP
+    # 2. Hitung HPP dengan Benar (Tanpa Lock, Pakai Data Historis)
     hpp = 0.0
     for sale in sales:
         for si in sale.items:
-            item = db.query(models.Item).filter(models.Item.id == si.item_id).first()
-            if item: hpp += (si.qty * (item.buy_price or 0))
+            # Ambil buy_price yang sudah dikunci dari SaleItem, bukan dari master Item!
+            hpp += (si.qty * (si.buy_price or 0))
 
     expenses = db.query(func.sum(models.CashTransaction.amount)).filter(
         models.CashTransaction.type == "out",
@@ -128,16 +137,37 @@ def receivables(db: Session = Depends(get_db)):
 
 @router.get("/payables")
 def payables(db: Session = Depends(get_db)):
-    purchases = db.query(models.Purchase).filter(models.Purchase.status.in_(["unpaid", "partial"])).all()
-    return [{"number": p.number, "supplier": p.supplier.name if p.supplier else "-", "remaining": p.total - p.paid} for p in purchases]
+    # 🛡️ LANGKAH 1: FILTER STATUS DI DATABASE
+    # Perintah .in_ ini menyeleksi HANYA faktur yang ngutang atau dicicil.
+    # Otomatis faktur yang "cancelled" (batal) dan "paid" (lunas) akan DIBUANG dari laporan.
+    purchases = db.query(models.Purchase).filter(
+        models.Purchase.status.in_(["unpaid", "partial"])
+    ).all()
+    
+    # Format data untuk tabel di Laporan Hutang
+    return [{
+        "id": p.id,
+        "date": p.date,
+        "number": p.number, 
+        "supplier": p.supplier.name if p.supplier else "-", 
+        "total": p.total,
+        "paid": p.paid,
+        "remaining": p.total - p.paid
+    } for p in purchases]
 
 # ─── 4. EXPORT EXCEL SALES ───────────────────────────────────────────────────
 @router.get("/export/sales")
 def export_sales(start_date: Optional[date] = None, end_date: Optional[date] = None, db: Session = Depends(get_db)):
-    if not start_date: start_date = date.today().replace(day=1)
-    if not end_date: end_date = date.today()
+    # Gunakan Tanggal Lokal (WITA)
+    today_local = get_local_date()
+    if not start_date: start_date = today_local.replace(day=1)
+    if not end_date: end_date = today_local
 
-    sales = db.query(models.Sale).filter(models.Sale.date >= start_date, models.Sale.date <= end_date).all()
+    sales = db.query(models.Sale).filter(
+        models.Sale.date >= start_date, 
+        models.Sale.date <= end_date,
+        models.Sale.status != "cancelled" # JANGAN LUPA: Keluarkan yang batal dari Excel!
+    ).all()
     
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -153,5 +183,5 @@ def export_sales(start_date: Optional[date] = None, end_date: Optional[date] = N
     return Response(
         content=output.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=sales_{start_date}.xlsx"}
+        headers={"Content-Disposition": f"attachment; filename=sales_{start_date}_to_{end_date}.xlsx"}
     )

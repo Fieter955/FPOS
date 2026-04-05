@@ -30,14 +30,19 @@ class Settings(BaseSettings):
     # 3. OpenRouter — https://openrouter.ai/keys (opsional, fallback)
     OPENROUTER_API_KEY: str = "your_openrouter_api_key_here"
 
-    # ── Email Backup ──────────────────────────────────────────────────────────
+    # ── Email & Drive Backup ──────────────────────────────────────────────────
+    # SMTP tetap ada sebagai cadangan jika dibutuhkan fitur email lain
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
     SMTP_PASS: str = ""
     BACKUP_EMAIL: str = ""
-    AUTO_BACKUP_HOUR: int = 21
-    EMAIL_BACKUP_ENABLED: bool = False
+    
+    # 👇 INI KUNCINYA: Variabel untuk Google Drive 👇
+    DRIVE_FOLDER_ID: str = ""
+    DRIVE_BACKUP_ENABLED: bool = True
+    AUTO_BACKUP_HOUR: int = 1  # Sudah saya set ke jam 1 pagi sesuai mau Anda
+    EMAIL_BACKUP_ENABLED: bool = False # Kita matikan yang email karena pakai Drive
 
     # ── Telegram Notifications ───────────────────────────────────────────────
     # Setup: @BotFather di Telegram → buat bot → copy token

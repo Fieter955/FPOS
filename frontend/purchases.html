@@ -330,7 +330,7 @@
       <td style="white-space:nowrap">
         <button class="bsm bv" onclick="showDetail(${p.id})">Detail</button>
         ${p.status !== "paid" ? `<button class="bsm bp" onclick="openBayar(${p.id},${p.total},${p.paid})">Bayar Hutang</button>` : ""}
-        <button class="bsm bd" onclick="hapus(${p.id})">Hapus</button>
+        <button class="bsm bd" onclick="hapus(${p.id})">Batalkan</button>
       </td></tr>`,
                 )
                 .join("")
@@ -472,7 +472,7 @@
       </div>
       <div style="margin-top:16px;display:flex;gap:10px">
         ${p.status !== "paid" ? `<button onclick="openBayar(${p.id},${p.total},${p.paid})" class="btn btn-primary">💸 Bayar Hutang</button>` : ""}
-        <button onclick="hapus(${p.id})" class="btn btn-danger">🗑 Hapus</button>
+        <button onclick="hapus(${p.id})" class="btn btn-danger">🗑 Batalkan</button>
       </div>`;
           openModal("mDetail");
         } catch (ex) {
@@ -524,15 +524,15 @@
       async function hapus(id) {
         if (
           !(await showConfirm(
-            "Hapus pembelian ini? Stok akan dikurangi kembali.",
+            "Batalkan pembelian ini? Stok akan dikurangi kembali.",
           ))
         )
           return;
         try {
           showLoading();
-          await api("DELETE", `/purchases/${id}`);
+          await api("POST", `/purchases/${id}/cancel`);
           hideLoading();
-          showToast("Dihapus");
+          showToast("Dibatalkan ✓");
           closeModal("mDetail");
           load();
         } catch (ex) {

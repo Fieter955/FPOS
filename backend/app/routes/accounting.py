@@ -12,6 +12,7 @@ Fitur:
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Response
+import pytz
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional, List
@@ -24,21 +25,86 @@ from ..auth import get_current_user, write_audit
 from .. import schemas
 
 router = APIRouter()
+WITA = pytz.timezone("Asia/Makassar")
 
+def get_local_date():
+    return datetime.now(WITA).date()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # HELPERS
 # ══════════════════════════════════════════════════════════════════════════════
 
 def next_journal_number(db: Session) -> str:
-    today = date.today()
-    prefix = f"JU{today.strftime('%Y%m%d')}"
+    from datetime import date as d
+    # Gunakan WITA juga di sini agar prefix tanggalnya akurat
+    today_str = datetime.now(WITA).strftime('%Y%m%d')
+    prefix = f"JU{today_str}"
+    
+    # KUNCI baris terakhir agar tidak ada proses lain yang mengambil nomor yang sama
     last = db.query(models.Journal).filter(
         models.Journal.number.like(f"{prefix}%")
-    ).order_by(models.Journal.id.desc()).first()
+    ).order_by(models.Journal.id.desc()).with_for_update().first() # <--- TAMBAHKAN LOCK
+    
     seq = int(last.number[-4:]) + 1 if last else 1
     return f"{prefix}{seq:04d}"
 
+
+def create_auto_journal(
+    db: Session, 
+    date_val: date, 
+    number_ref: str, 
+    description: str, 
+    entries: list,
+    user_id: int
+):
+    """Helper untuk membuat jurnal otomatis dari modul lain"""
+    # 1. Validasi Balance
+    total_debit = sum(e["debit"] for e in entries)
+    total_credit = sum(e["credit"] for e in entries)
+    if abs(total_debit - total_credit) > 0.01:
+        raise ValueError(f"Jurnal tidak balance! Debit: {total_debit}, Kredit: {total_credit}")
+
+    # 2. Buat Header Jurnal
+    journal = models.Journal(
+        number=next_journal_number(db),
+        date=date_val,
+        description=description,
+        reference=number_ref,
+        source="auto",  # <-- Penanda bahwa ini jurnal otomatis
+        created_by=user_id
+    )
+    db.add(journal)
+    db.flush() 
+
+    # 3. Buat Baris Jurnal (Sesuai struktur database iPos 5.0!)
+    for entry in entries:
+        if entry["debit"] == 0 and entry["credit"] == 0:
+            continue 
+            
+        account = db.query(models.Account).filter(models.Account.code == entry["code"]).first()
+        if not account:
+            write_audit(db, user_id, "ERROR", "journals", journal.id, f"Akun COA {entry['code']} tidak ditemukan")
+            continue
+            
+        # Jika ada Debit, simpan ke debit_account_id dan isi AMOUNT-nya!
+        if entry["debit"] > 0:
+            db.add(models.JournalEntryLine(
+                journal_id=journal.id,
+                debit_account_id=account.id,
+                credit_account_id=None,
+                amount=entry["debit"],  # <-- INI YANG KEMARIN HILANG!
+                description=description
+            ))
+            
+        # Jika ada Kredit, simpan ke credit_account_id dan isi AMOUNT-nya!
+        if entry["credit"] > 0:
+            db.add(models.JournalEntryLine(
+                journal_id=journal.id,
+                debit_account_id=None,
+                credit_account_id=account.id,
+                amount=entry["credit"], # <-- INI YANG KEMARIN HILANG!
+                description=description
+            ))
 
 def next_cash_number(db: Session) -> str:
     today = date.today()

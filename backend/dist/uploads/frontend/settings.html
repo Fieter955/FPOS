@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Pengaturan - iPos 5.0</title>
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body>
+    <div class="app-container">
+      <main class="main-content" style="max-width: 900px; margin: 0 auto">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+          "
+        >
+          <button
+            class="btn"
+            style="
+              background: transparent;
+              color: var(--text-muted);
+              padding: 0;
+            "
+            onclick="location.href = '/dashboard'"
+          >
+            ← Kembali
+          </button>
+          <button
+            onclick="logoutApp()"
+            style="
+              background: #ef4444;
+              color: white;
+              border: none;
+              padding: 8px 16px;
+              border-radius: 8px;
+              font-weight: bold;
+              cursor: pointer;
+              box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            "
+          >
+            🚪 Keluar (Logout)
+          </button>
+        </div>
+        <h1 style="margin-bottom: 24px; margin-top: 0">⚙️ Pengaturan Sistem</h1>
+
+        <div
+          id="tabContainer"
+          style="display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap"
+        >
+          <button
+            id="tbToko"
+            onclick="switchTab('toko')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--primary);
+              background: var(--primary);
+              color: #fff;
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            🏪 Info Toko
+          </button>
+          <button
+            id="tbPrinter"
+            onclick="switchTab('printer')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            🖨️ Printer
+          </button>
+          <button
+            id="tbPwd"
+            onclick="switchTab('pwd')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            🔒 Password
+          </button>
+          <button
+            id="tbBackup"
+            onclick="switchTab('backup')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            💾 Backup & Data
+          </button>
+          <button
+            id="tbTema"
+            onclick="switchTab('tema')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            🎨 Tampilan
+          </button>
+
+          <button
+            id="tbDeveloper"
+            onclick="switchTab('developer')"
+            style="
+              display: none;
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid #ef4444;
+              background: transparent;
+              color: #ef4444;
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            👑 Super Admin
+          </button>
+        </div>
+
+        <div id="pnlToko" class="tab-panel">
+          <div class="card" style="padding: 28px">
+            <h3 style="margin: 0 0 20px">🏪 Informasi Toko</h3>
+            <div class="row2" style="margin-bottom: 0">
+              <div class="input-group">
+                <label>Nama Toko</label
+                ><input
+                  id="storeName"
+                  class="input-control"
+                  placeholder="Nama Toko"
+                />
+              </div>
+              <div class="input-group">
+                <label>No. Telepon</label
+                ><input
+                  id="storePhone"
+                  class="input-control"
+                  placeholder="021-xxxx"
+                />
+              </div>
+            </div>
+            <div class="input-group">
+              <label>Alamat Toko</label
+              ><textarea
+                id="storeAddr"
+                class="input-control"
+                rows="2"
+              ></textarea>
+            </div>
+            <div class="input-group">
+              <label>Teks Footer Struk</label
+              ><input id="storeFooter" class="input-control" />
+            </div>
+            <button onclick="saveToko()" class="btn btn-primary">
+              ✓ Simpan Info Toko
+            </button>
+          </div>
+        </div>
+
+        <div id="pnlPrinter" class="tab-panel" style="display: none">
+          <div class="card" style="padding: 28px">
+            <h3 style="margin: 0 0 20px">🖨️ Pengaturan Printer Struk</h3>
+            <div class="row2" style="margin-bottom: 16px">
+              <div class="input-group">
+                <label>Lebar Kertas</label>
+                <select id="paperWidth" class="input-control">
+                  <option value="58">58mm</option>
+                  <option value="80" selected>80mm</option>
+                </select>
+              </div>
+            </div>
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                padding: 16px;
+                background: var(--bg-color);
+                border-radius: 12px;
+                margin-bottom: 20px;
+              "
+            >
+              <input
+                type="checkbox"
+                id="autoPrint"
+                style="width: 22px; height: 22px"
+              />
+              <label for="autoPrint" style="font-weight: 700; cursor: pointer"
+                >Cetak Otomatis Struk</label
+              >
+            </div>
+            <button
+              onclick="testPrint()"
+              class="btn"
+              style="margin-bottom: 10px"
+            >
+              Test Print
+            </button>
+            <button onclick="savePrinter()" class="btn btn-primary">
+              ✓ Simpan Pengaturan Printer
+            </button>
+          </div>
+        </div>
+
+        <div id="pnlPwd" class="tab-panel" style="display: none">
+          <div class="card" style="padding: 28px; max-width: 480px">
+            <h3 style="margin: 0 0 20px">🔒 Ganti Password Akun</h3>
+            <div class="input-group">
+              <label>Password Lama</label
+              ><input id="pwdLama" type="password" class="input-control" />
+            </div>
+            <div class="input-group">
+              <label>Password Baru</label
+              ><input id="pwdBaru" type="password" class="input-control" />
+            </div>
+            <div class="input-group">
+              <label>Konfirmasi Baru</label
+              ><input id="pwdKonfirm" type="password" class="input-control" />
+            </div>
+            <button onclick="gantiPwd()" class="btn btn-primary">
+              ✓ Ganti Password
+            </button>
+          </div>
+        </div>
+
+        <div id="pnlBackup" class="tab-panel" style="display: none">
+          <div style="display: grid; gap: 20px">
+            <div class="card" style="padding: 24px; border: 2px solid #10b981">
+              <h3 style="margin: 0 0 6px; color: #10b981">
+                📥 Import Data Barang (Excel/CSV)
+              </h3>
+              <p
+                style="
+                  font-size: 13px;
+                  color: var(--text-muted);
+                  margin-bottom: 12px;
+                "
+              >
+                Format Kolom:
+                <code
+                  >KODEBARCODE, NAMAITEM, JENIS, MEREK, SATUAN, HARGAPOKOK,
+                  HARGAJUAL, STOK, STOKMIN, KETERANGAN</code
+                >
+              </p>
+              <input
+                type="file"
+                id="excelFile"
+                accept=".xlsx, .xls, .csv"
+                class="input-control"
+                style="margin-bottom: 12px"
+              />
+              <button
+                onclick="importExcel()"
+                class="btn btn-primary"
+                id="btnImportExcel"
+                style="background: #10b981; border: none"
+              >
+                📄 Jalankan Import
+              </button>
+            </div>
+            <div class="card" style="padding: 24px">
+              <h3>💾 Backup & Restore Database</h3>
+              <div style="display: flex; gap: 10px; flex-wrap: wrap">
+                <button onclick="downloadBackup()" class="btn btn-primary">
+                  Download .db
+                </button>
+                <input
+                  type="file"
+                  id="dbFile"
+                  accept=".db,.sqlite"
+                  style="display: none"
+                  onchange="importBackup()"
+                />
+                <button
+                  onclick="document.getElementById('dbFile').click()"
+                  class="btn"
+                >
+                  Restore .db
+                </button>
+              </div>
+              <div
+                id="sysInfo"
+                style="
+                  margin-top: 15px;
+                  font-size: 14px;
+                  color: var(--text-muted);
+                "
+              >
+                Memuat info sistem...
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="pnlTema" class="tab-panel" style="display: none">
+          <div class="card" style="padding: 28px; max-width: 500px">
+            <h3 style="margin: 0 0 20px">🎨 Pilih Tema Aplikasi</h3>
+            <div
+              style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px"
+            >
+              <div
+                id="optDark"
+                onclick="setTema('dark')"
+                style="
+                  padding: 20px;
+                  border-radius: 12px;
+                  cursor: pointer;
+                  border: 2px solid var(--border-color);
+                  text-align: center;
+                "
+              >
+                🌙 Gelap
+              </div>
+              <div
+                id="optLight"
+                onclick="setTema('light')"
+                style="
+                  padding: 20px;
+                  border-radius: 12px;
+                  cursor: pointer;
+                  border: 2px solid var(--border-color);
+                  text-align: center;
+                "
+              >
+                ☀️ Terang
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="pnlDeveloper" class="tab-panel" style="display: none">
+          <div class="card" style="padding: 28px; border: 2px solid #ef4444">
+            <h3 style="margin: 0 0 16px; color: #ef4444">
+              👑 Kontrol Super Admin (Developer)
+            </h3>
+            <div
+              style="
+                display: flex;
+                gap: 12px;
+                flex-wrap: wrap;
+                margin-bottom: 24px;
+              "
+            >
+              <button
+                onclick="
+                  kirimSihir(
+                    'warning',
+                    'Peringatan: Segera perpanjang aplikasi!',
+                  )
+                "
+                class="btn"
+                style="background: #f59e0b; color: white; border: none"
+              >
+                ⚠️ Beri Warning
+              </button>
+              <button
+                onclick="
+                  kirimSihir('block', 'Akses diblokir! Hubungi developer.')
+                "
+                class="btn"
+                style="background: #ef4444; color: white; border: none"
+              >
+                ⛔ Aktifkan Blokir
+              </button>
+              <button
+                onclick="kirimSihir('ok', 'Akses normal')"
+                class="btn"
+                style="background: #10b981; color: white; border: none"
+              >
+                ✅ Lepas Blokir
+              </button>
+            </div>
+
+            <hr
+              style="
+                border: 0;
+                border-top: 1px dashed var(--border-color);
+                margin: 20px 0;
+              "
+            />
+            <h4 style="margin-bottom: 12px; color: #3b82f6">
+              📥 Riwayat Bukti Pembayaran
+            </h4>
+            <button
+              onclick="loadPembayaran()"
+              class="btn"
+              style="font-size: 12px; margin-bottom: 10px"
+            >
+              🔄 Refresh Daftar
+            </button>
+            <div
+              id="tempatDaftarPembayaran"
+              style="display: grid; gap: 10px"
+            ></div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/theme.js"></script>
+    <script src="/js/print.js"></script>
+    <script>
+      requireAuth();
+
+      const ON =
+        "padding: 8px 20px; border-radius: 100px; border: 2px solid var(--primary); background: var(--primary); color: #fff; font-weight: 700; cursor: pointer; font-family: inherit";
+      const OFF =
+        "padding: 8px 20px; border-radius: 100px; border: 2px solid var(--border-color); background: transparent; color: var(--text-muted); font-weight: 700; cursor: pointer; font-family: inherit";
+
+      // Definisikan Tab Aktif (Hanya tab standar di awal)
+      let ACTIVE_TABS = ["Toko", "Printer", "Pwd", "Backup", "Tema"];
+
+      // DETEKTOR FIETER: Hanya jika login sebagai "Fieter", tab developer ditambahkan
+      const currentUser = getUser();
+      if (
+        currentUser &&
+        currentUser.username &&
+        currentUser.username.toLowerCase() === "fieter"
+      ) {
+        document.getElementById("tbDeveloper").style.display = "inline-block";
+        ACTIVE_TABS.push("Developer"); // Tab rahasia didaftarkan
+      }
+
+      function switchTab(t) {
+        ACTIVE_TABS.forEach((tab) => {
+          const pnl = document.getElementById("pnl" + tab);
+          const btn = document.getElementById("tb" + tab);
+          if (pnl)
+            pnl.style.display =
+              tab.toLowerCase() === t.toLowerCase() ? "block" : "none";
+          if (btn)
+            btn.style.cssText =
+              tab.toLowerCase() === t.toLowerCase() ? ON : OFF;
+        });
+        if (t.toLowerCase() === "backup") loadSysInfo();
+        if (t.toLowerCase() === "developer") loadPembayaran();
+      }
+
+      function logoutApp() {
+        showConfirm("Yakin ingin keluar dari akun saat ini?").then((ok) => {
+          if (ok) {
+            clearToken();
+            window.location.href = "/";
+          }
+        });
+      }
+
+      /* ── CRUD Settings (Toko & Printer) ── */
+      function loadToko() {
+        const ps = JSON.parse(
+          localStorage.getItem("ipos_print_settings") || "{}",
+        );
+        document.getElementById("storeName").value = ps.storeName || "";
+        document.getElementById("storePhone").value = ps.storePhone || "";
+        document.getElementById("storeAddr").value = ps.storeAddr || "";
+        document.getElementById("storeFooter").value =
+          ps.storeFooter || "Terima kasih telah berbelanja!";
+      }
+      function saveToko() {
+        const ps = JSON.parse(
+          localStorage.getItem("ipos_print_settings") || "{}",
+        );
+        ps.storeName = document.getElementById("storeName").value;
+        ps.storePhone = document.getElementById("storePhone").value;
+        ps.storeAddr = document.getElementById("storeAddr").value;
+        ps.storeFooter = document.getElementById("storeFooter").value;
+        localStorage.setItem("ipos_print_settings", JSON.stringify(ps));
+        showToast("Info Toko disimpan ✓");
+      }
+      function loadPrinter() {
+        const ps = JSON.parse(
+          localStorage.getItem("ipos_print_settings") || "{}",
+        );
+        document.getElementById("paperWidth").value = ps.paperWidth || "80";
+        document.getElementById("autoPrint").checked = ps.autoPrint || false;
+      }
+      function savePrinter() {
+        const ps = JSON.parse(
+          localStorage.getItem("ipos_print_settings") || "{}",
+        );
+        ps.paperWidth = document.getElementById("paperWidth").value;
+        ps.autoPrint = document.getElementById("autoPrint").checked;
+        localStorage.setItem("ipos_print_settings", JSON.stringify(ps));
+        showToast("Pengaturan Printer disimpan ✓");
+      }
+      function testPrint() {
+        const fakeSale = {
+          number: "TEST-01",
+          date: today(),
+          items: [
+            {
+              item: { name: "Test Barang" },
+              qty: 1,
+              sell_price: 1000,
+              total: 1000,
+            },
+          ],
+          subtotal: 1000,
+          total: 1000,
+          paid: 1000,
+          change: 0,
+        };
+        if (typeof printReceipt === "function") printReceipt(fakeSale);
+      }
+
+      /* ── Akun & Data ── */
+      async function gantiPwd() {
+        const old_p = document.getElementById("pwdLama").value;
+        const new_p = document.getElementById("pwdBaru").value;
+        const conf_p = document.getElementById("pwdKonfirm").value;
+        if (new_p !== conf_p)
+          return showToast("Konfirmasi password tidak cocok", "error");
+        try {
+          await api("PUT", "/auth/change-password", {
+            old_password: old_p,
+            new_password: new_p,
+          });
+          showToast("Password berhasil diubah ✓");
+          document.getElementById("pwdLama").value = "";
+          document.getElementById("pwdBaru").value = "";
+          document.getElementById("pwdKonfirm").value = "";
+        } catch (e) {
+          showToast(e.message, "error");
+        }
+      }
+
+      async function importExcel() {
+        const fInput = document.getElementById("excelFile");
+        if (!fInput.files[0])
+          return showToast("Pilih file Excel/CSV dulu", "error");
+        const fd = new FormData();
+        fd.append("file", fInput.files[0]);
+        try {
+          showLoading("Sedang mengimport data...");
+          const res = await apiForm("/items/import", fd);
+          hideLoading();
+          showToast(res.message);
+          fInput.value = "";
+        } catch (e) {
+          hideLoading();
+          showToast(e.message, "error");
+        }
+      }
+
+      async function downloadBackup() {
+        try {
+          showLoading("Menyiapkan backup...");
+          const resp = await fetch("/api/backup/download", {
+            headers: { Authorization: `Bearer ${getToken()}` },
+          });
+          const blob = await resp.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `backup_${today()}.db`;
+          a.click();
+          hideLoading();
+        } catch (e) {
+          hideLoading();
+          showToast("Gagal download backup", "error");
+        }
+      }
+
+      async function importBackup() {
+        const file = document.getElementById("dbFile").files[0];
+        if (!file) return;
+        if (
+          !(await showConfirm(
+            "PERINGATAN! Semua data akan ditimpa. Lanjutkan?",
+          ))
+        )
+          return;
+        const fd = new FormData();
+        fd.append("file", file);
+        try {
+          showLoading("Restoring...");
+          await apiForm("/backup/import", fd);
+          hideLoading();
+          showToast("Berhasil! Aplikasi akan logout...");
+          setTimeout(() => {
+            clearToken();
+            window.location.href = "/";
+          }, 2000);
+        } catch (e) {
+          hideLoading();
+          showToast(e.message, "error");
+        }
+      }
+
+      async function loadSysInfo() {
+        try {
+          const d = await api("GET", "/auth/system-info").catch(() => null);
+          const user = getUser();
+          document.getElementById("sysInfo").innerHTML = `
+      <div>👤 Login: <b>${user.username}</b></div>
+      <div>💾 DB Size: <b>${d ? d.db_size : "-"}</b></div>
+      <div>⏰ Waktu: <b>${new Date().toLocaleString()}</b></div>`;
+        } catch (e) {}
+      }
+
+      /* ── Super Admin (Fieter Only) ── */
+      async function kirimSihir(aksi, pesan) {
+        if (
+          !(await showConfirm(`Kirim perintah ${aksi.toUpperCase()} ke klien?`))
+        )
+          return;
+        try {
+          showLoading();
+          await api("POST", "/license/developer/kill-switch", {
+            action: aksi,
+            message: pesan,
+          });
+          hideLoading();
+          showToast("Perintah Berhasil Dikirim ✓");
+        } catch (e) {
+          hideLoading();
+          showToast(e.message, "error");
+        }
+      }
+
+      async function loadPembayaran() {
+        const container = document.getElementById("tempatDaftarPembayaran");
+        container.innerHTML =
+          '<div style="color:var(--text-muted)">Memuat data...</div>';
+        try {
+          const data = await api("GET", "/license/developer/payments");
+          container.innerHTML =
+            data.length === 0
+              ? '<div style="font-style:italic; color:var(--text-muted)">Belum ada pembayaran.</div>'
+              : "";
+          data.forEach((p, idx) => {
+            const isPending = p.status === "pending";
+            const div = document.createElement("div");
+            div.style.cssText =
+              "background:var(--card-bg); padding:15px; border-radius:12px; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;";
+            div.innerHTML = `
+        <div>
+          <div style="font-weight:bold;">Pembayaran #${data.length - idx} ${isPending ? "⏳" : "✅"}</div>
+          <div style="font-size:12px; color:var(--text-muted);">${p.upload_date}</div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button onclick="window.open('${p.proof_image_path}', '_blank')" class="btn" style="padding:6px 12px; font-size:12px;">👁️ Foto</button>
+          ${isPending ? `<button onclick="verifBayar(${p.id})" class="btn btn-primary" style="padding:6px 12px; font-size:12px; background:#10b981; border:none;">Verifikasi</button>` : ""}
+        </div>`;
+            container.appendChild(div);
+          });
+        } catch (e) {
+          container.innerHTML =
+            '<div style="color:#ef4444">Gagal memuat data.</div>';
+        }
+      }
+
+      async function verifBayar(id) {
+        if (
+          !(await showConfirm(
+            "Verifikasi pembayaran ini? Klien akan kembali NORMAL.",
+          ))
+        )
+          return;
+        try {
+          showLoading();
+          await api("POST", `/license/developer/verify-payment/${id}`);
+          hideLoading();
+          showToast("Berhasil Diverifikasi! ✓");
+          loadPembayaran();
+        } catch (e) {
+          hideLoading();
+          showToast(e.message, "error");
+        }
+      }
+
+      // Init
+      loadToko();
+      loadPrinter();
+      const curTheme = localStorage.getItem("ipos_theme") || "light";
+      document.getElementById(
+        curTheme === "dark" ? "optDark" : "optLight",
+      ).style.border = "2px solid var(--primary)";
+      document.getElementById(
+        curTheme === "dark" ? "optDark" : "optLight",
+      ).style.background = "var(--primary-light)";
+    </script>
+  </body>
+</html>

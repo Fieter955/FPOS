@@ -247,6 +247,7 @@ class SaleItem(Base):
     sale_id = Column(Integer, ForeignKey("sales.id"), nullable=False)
     item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
     qty = Column(Float, nullable=False)
+    buy_price = Column(Float, default=0)
     sell_price = Column(Float, nullable=False)
     discount = Column(Float, default=0)
     total = Column(Float, nullable=False)
@@ -476,19 +477,36 @@ class JournalEntryLine(Base):
 
 # ─── Sistem Lisensi ────────────────────────────────────────────────────────────
 
+# ─── Sistem Lisensi & Penagihan (KILL SWITCH) ──────────────────────────────────
+
 class License(Base):
     __tablename__ = "licenses"
     id = Column(Integer, primary_key=True, index=True)
     license_key = Column(String(64), unique=True, nullable=False)
-    hardware_id = Column(String(128))           # MAC+disk hash
+    hardware_id = Column(String(128))           
     owner_name = Column(String(200))
     owner_email = Column(String(200))
-    plan = Column(String(20), default="trial")  # trial | basic | pro | ultimate
-    status = Column(String(20), default="active") # active | expired | revoked
+    plan = Column(String(20), default="trial")  
+    status = Column(String(20), default="active") 
+    
+    # 👇 TAMBAHAN UNTUK KILL SWITCH 👇
+    billing_status = Column(String(20), default="ok") # ok | warning | blocked
+    billing_message = Column(Text, default="Aplikasi berjalan normal.")
+    
     activated_at = Column(DateTime(timezone=True), server_default=func.now())
     expires_at = Column(DateTime(timezone=True), nullable=True)
     max_users = Column(Integer, default=3)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+# 👇 TABEL BARU UNTUK BUKTI TRANSFER 👇
+class LicensePayment(Base):
+    __tablename__ = "license_payments"
+    id = Column(Integer, primary_key=True, index=True)
+    license_id = Column(Integer, ForeignKey("licenses.id"), nullable=False)
+    upload_date = Column(DateTime(timezone=True), server_default=func.now())
+    proof_image_path = Column(String(255), nullable=False) # Path foto struk
+    status = Column(String(20), default="pending") # pending | verified
+    notes = Column(Text)
 
 
 # ─── Diskon Bertingkat ─────────────────────────────────────────────────────────

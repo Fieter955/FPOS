@@ -123,6 +123,9 @@ add("sale_returns", "reason", "TEXT")
 print("\n=== purchase_returns ===")
 add("purchase_returns", "reason", "TEXT")
 
+print("\n=== sale_items ===")
+add("sale_items", "buy_price", "REAL DEFAULT 0")
 conn.commit()
 conn.close()
 print("\n✅ Selesai! Semua kolom sudah lengkap. Restart server FastAPI sekarang.\n")
+

@@ -1,16 +1,21 @@
-{
-  "name": "FPOS - Kasir",
-  "short_name": "FPOS",
-  "start_url": "/dashboard",
-  "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#0ea5e9",
-  "orientation": "portrait",
-  "icons": [
-    {
-      "src": "https://cdn-icons-png.flaticon.com/512/2424/2424869.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
-  ]
-}
+@echo off
+title Mesin Server iPos 5.0
+color 0A
+cd /d "%~dp0"
+
+echo ====================================================
+echo    MENYALAKAN GUDANG iPOS 5.0...
+echo    MOHON JANGAN TUTUP KOTAK HITAM INI SELAMA BUKA!
+echo ====================================================
+echo.
+
+:: 1. Aktifkan Conda
+call conda activate ipos
+
+:: 2. Perintahkan Windows untuk membuka Chrome 4 detik dari sekarang
+start cmd /c "timeout /t 4 /nobreak > NUL & start chrome --app=http://127.0.0.1:8008"
+
+:: 3. Jalankan server secara langsung di kotak ini (agar kalau ada error langsung terbaca)
+uvicorn app.main:app --host 127.0.0.1 --port 8008
+
+pause

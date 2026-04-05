@@ -335,8 +335,16 @@
         }
       }
 
-      // INI DIA TERSANGKA UTAMANYA! Fungsi ini harus dipanggil agar berjalan
+      // Panggilan pertama saat halaman dimuat
       loadKPI();
+
+      // ==========================================
+      // TAMBAHKAN KODE INI DI BAWAHNYA
+      // ==========================================
+      window.addEventListener("focus", () => {
+        console.log("Tab aktif kembali, memperbarui data dashboard...");
+        loadKPI();
+      });
     </script>
   </body>
 </html>

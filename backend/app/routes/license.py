@@ -67,7 +67,6 @@ def get_or_create_trial(db: Session) -> models.License:
 
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
-
 @router.get("/status")
 def get_license_status(db: Session = Depends(get_db)):
     """Cek status lisensi — bisa diakses tanpa auth untuk gatekeeping"""
@@ -96,6 +95,10 @@ def get_license_status(db: Session = Depends(get_db)):
         "hardware_id": lic.hardware_id,
         "license_key": lic.license_key if lic.plan != "trial" else None,
         "activated_at": lic.activated_at.isoformat() if lic.activated_at else None,
+        
+        # 👇 INI KUNCI JAWABANNYA: TAMBAHKAN 2 BARIS INI 👇
+        "billing_status": getattr(lic, 'billing_status', 'ok'),
+        "billing_message": getattr(lic, 'billing_message', 'Aplikasi berjalan normal.')
     }
 
 
@@ -210,3 +213,77 @@ def generate_key(data: dict, _=Depends(require_admin)):
         "max_users": PLANS[plan]["max_users"],
         "note": "Berikan key ini ke pembeli untuk aktivasi"
     }
+
+
+from fastapi import UploadFile, File
+import os
+import shutil
+
+# ... (Biarkan kode lama Anda tetap di atas) ...
+
+# ─── ENDPOINT UNTUK FIETER MENGUPLOAD BUKTI TRANSFER ───
+@router.post("/upload-proof")
+async def upload_payment_proof(
+    file: UploadFile = File(...), 
+    db: Session = Depends(get_db)
+):
+    """Menerima foto bukti transfer dari pemilik toko"""
+    lic = get_or_create_trial(db)
+    
+    # Buat folder khusus untuk menyimpan bukti transfer
+    upload_dir = "dist/uploads/billing"
+    os.makedirs(upload_dir, exist_ok=True)
+    
+    # Simpan file gambar
+    file_extension = file.filename.split(".")[-1]
+    safe_filename = f"proof_{datetime.now().strftime('%Y%m%d%H%M%S')}.{file_extension}"
+    file_path = os.path.join(upload_dir, safe_filename)
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    # Catat di database
+    payment = models.LicensePayment(
+        license_id=lic.id,
+        proof_image_path=f"/uploads/billing/{safe_filename}",
+        status="pending",
+        notes="Di-upload oleh sistem"
+    )
+    db.add(payment)
+    
+    # Ubah status billing menjadi "menunggu verifikasi" agar tidak diblokir sementara
+    lic.billing_message = "Bukti transfer sedang diproses oleh Developer."
+    db.commit()
+    
+    return {"success": True, "message": "Bukti pembayaran berhasil diupload!"}
+
+# ─── ENDPOINT RAHASIA UNTUK ANDA (DEVELOPER) ───
+@router.post("/developer/kill-switch")
+def trigger_kill_switch(data: dict, db: Session = Depends(get_db), user: models.User = Depends(require_admin)):
+    """
+    Tombol dewa untuk mengubah status aplikasi klien.
+    Hanya bisa diakses jika role user adalah 'superadmin'
+    """
+   
+# 👇 UBAH BAGIAN INI 👇
+    if user.username.lower() != "fieter":
+        raise HTTPException(403, "Akses ditolak! Hanya Pemilik Sistem yang bisa melakukan ini.")
+    # 👆 SAMPAI SINI 👆
+        
+    action = data.get("action") # "warning" atau "block" atau "ok"
+    pesan = data.get("message", "Silakan selesaikan pembayaran Anda.")
+    
+    lic = get_or_create_trial(db)
+    
+    if action == "warning":
+        lic.billing_status = "warning"
+        lic.billing_message = pesan
+    elif action == "block":
+        lic.billing_status = "blocked"
+        lic.billing_message = pesan
+    elif action == "ok":
+        lic.billing_status = "ok"
+        lic.billing_message = "Aplikasi berjalan normal."
+        
+    db.commit()
+    return {"success": True, "message": f"Kill Switch diset ke: {action.upper()}"}
