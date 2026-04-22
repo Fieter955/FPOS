@@ -30,15 +30,47 @@ def get_onboarding_status(db: Session = Depends(get_db),
         models.User.role == "admin"
     ).first() or db.query(models.Category).count() > 0)
 
+    # 👇 FIX: Sesuaikan kata kunci dengan yang diminta oleh HTML (title, description, completed, url)
     steps = [
-        {"id": "store",    "label": "Info Toko",           "done": has_category or has_item},
-        {"id": "category", "label": "Tambah Kategori",     "done": has_category},
-        {"id": "item",     "label": "Tambah Barang",       "done": has_item},
-        {"id": "customer", "label": "Tambah Pelanggan",    "done": has_customer},
-        {"id": "sale",     "label": "Transaksi Pertama",   "done": has_sale},
+        {
+            "id": "store",    
+            "title": "Info Toko & Pengaturan",           
+            "description": "Lengkapi nama toko, alamat, dan kontak untuk di struk.",
+            "completed": has_store_setting,
+            "url": "/settings"
+        },
+        {
+            "id": "category", 
+            "title": "Tambah Kategori",     
+            "description": "Kelompokkan barang Anda (misal: Semen, Cat, Besi).",
+            "completed": has_category,
+            "url": "/items"
+        },
+        {
+            "id": "item",     
+            "title": "Tambah Data Barang",       
+            "description": "Masukkan data stok awal, harga beli, dan harga jual.",
+            "completed": has_item,
+            "url": "/items"
+        },
+        {
+            "id": "customer", 
+            "title": "Tambah Pelanggan",    
+            "description": "Catat data pelanggan setia untuk kemudahan piutang.",
+            "completed": has_customer,
+            "url": "/customers"
+        },
+        {
+            "id": "sale",     
+            "title": "Transaksi Pertama",   
+            "description": "Selesaikan percobaan 1 transaksi penjualan di POS.",
+            "completed": has_sale,
+            "url": "/pos"
+        },
     ]
 
-    done_count = sum(1 for s in steps if s["done"])
+    # FIX: Hitung berdasarkan kata kunci 'completed'
+    done_count = sum(1 for s in steps if s["completed"])
     completed = done_count == len(steps)
 
     return {
@@ -46,7 +78,7 @@ def get_onboarding_status(db: Session = Depends(get_db),
         "done_count": done_count,
         "total_steps": len(steps),
         "completed": completed,
-        "percent": int(done_count / len(steps) * 100)
+        "percent": int(done_count / len(steps) * 100) if len(steps) > 0 else 0
     }
 
 

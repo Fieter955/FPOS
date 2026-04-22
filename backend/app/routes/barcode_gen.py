@@ -61,22 +61,21 @@ def _render_barcode(barcode_value: str, barcode_type: str,
         bc.write(buf, options={
             "module_width": 0.4,
             "module_height": 12,
-            "font_size": 8,
-            "text_distance": 3,
             "quiet_zone": 2,
-            "write_text": True,
-            "text": label_text or barcode_value,
+            "write_text": False,
         })
         buf.seek(0)
         return base64.b64encode(buf.read()).decode()
 
     except ImportError:
-        # Fallback: generate SVG barcode sederhana jika python-barcode tidak ada
-        return _render_svg_barcode(barcode_value, label_text)
+        raise RuntimeError(
+            "python-barcode tidak terinstall. "
+            "Jalankan: pip install python-barcode[images]"
+        )
 
 
 def _render_svg_barcode(value: str, label: str = "") -> str:
-    """Fallback SVG barcode — simple visual representation"""
+    """Fallback SVG barcode — simple visual representation (tanpa teks, ditampilkan via .st-bot di HTML)"""
     bars = []
     x = 10
     # Simple pattern from value characters
@@ -87,11 +86,9 @@ def _render_svg_barcode(value: str, label: str = "") -> str:
         x += width + 1
 
     total_width = x + 10
-    label_text = label or value
     svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{total_width}" height="65">
   <rect width="{total_width}" height="65" fill="white"/>
   {"".join(bars)}
-  <text x="{total_width//2}" y="60" text-anchor="middle" font-size="8" font-family="monospace">{label_text}</text>
 </svg>'''
     return base64.b64encode(svg.encode()).decode()
 

@@ -1,114 +1,212 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 from typing import Optional
 from datetime import date
+import pytz
+from datetime import datetime, date
 from ..database import get_db
-from .. import models, schemas
-from ..auth import get_current_user
+from .. import models
+from ..auth import get_current_user, get_query 
+from ..schemas import AdjustmentCreate
+from sqlalchemy import func 
 
 router = APIRouter()
 
+WITA = pytz.timezone("Asia/Makassar")
+def get_local_date(): return datetime.now(WITA).date()
+def get_local_datetime(): return datetime.now(WITA)
 
+# ─── 1. DAFTAR MUTASI STOK ──────────────────────────────────────────────────
 @router.get("/movements")
 def get_movements(
     item_id: Optional[int] = None,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
+    type: Optional[str] = None,
     skip: int = 0, limit: int = 100,
-    db: Session = Depends(get_db), _=Depends(get_current_user)
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(get_current_user) 
 ):
-    q = db.query(models.StockMovement)
+    q = get_query(db, models.StockMovement, current_user)
+    
     if item_id: q = q.filter(models.StockMovement.item_id == item_id)
     if start_date: q = q.filter(models.StockMovement.date >= start_date)
     if end_date: q = q.filter(models.StockMovement.date <= end_date)
+    if type: q = q.filter(models.StockMovement.type == type)
+    
     movements = q.order_by(models.StockMovement.id.desc()).offset(skip).limit(limit).all()
+    
     result = []
     for m in movements:
         item = db.query(models.Item).get(m.item_id)
         result.append({
-            "id": m.id, "date": str(m.date),
-            "item_id": m.item_id, "item_name": item.name if item else "-",
-            "item_code": item.code if item else "-",
-            "type": m.type, "qty": m.qty,
-            "qty_before": m.qty_before, "qty_after": m.qty_after,
-            "reference": m.reference, "notes": m.notes
+            "id": m.id, 
+            "date": str(m.date),
+            "item": {
+                "id": m.item_id,
+                "name": item.name if item else "Item Dihapus",
+                "code": item.code if item else "-"
+            },
+            "type": m.type, 
+            "qty": m.qty,
+            "qty_before": m.qty_before, 
+            "qty_after": m.qty_after,
+            "reference": m.reference, 
+            "notes": m.notes
         })
     return result
 
 
+# ─── 2. STOK MENIPIS (VERSI MULTI-CABANG) ──────────────────────────────────
 @router.get("/low-stock")
-def get_low_stock(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    items = db.query(models.Item).filter(
-        models.Item.is_active == True,
-        models.Item.stock <= models.Item.min_stock
+def get_low_stock(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    gudang_cabang = db.query(models.Warehouse.id).filter(
+        models.Warehouse.branch_id == current_user.active_branch_id
     ).all()
-    return [{"id": i.id, "code": i.code, "name": i.name, "stock": i.stock, "min_stock": i.min_stock} for i in items]
+    warehouse_ids = [g[0] for g in gudang_cabang]
+
+    items = db.query(models.Item).filter(models.Item.is_active == True).all()
+    
+    results = []
+    for item in items:
+        stok_lokal = 0.0
+        if warehouse_ids:
+            stok_lokal = db.query(func.sum(models.WarehouseStock.stock)).filter(
+                models.WarehouseStock.item_id == item.id,
+                models.WarehouseStock.warehouse_id.in_(warehouse_ids)
+            ).scalar() or 0.0
+
+        if stok_lokal <= item.min_stock:
+            results.append({
+                "id": item.id, 
+                "code": item.code, 
+                "name": item.name, 
+                "stock": stok_lokal, 
+                "min_stock": item.min_stock
+            })
+            
+    return results
 
 
-@router.post("/adjustment")
+# ─── 3. PENYESUAIAN STOK MANUAL / OPNAME BARU DENGAN JURNAL ─────────────────
+# ─── 3. PENYESUAIAN STOK MANUAL / OPNAME BARU DENGAN JURNAL ─────────────────
+@router.post("/adjust")
 def stock_adjustment(
-    item_id: int, qty: float, notes: Optional[str] = None,
-    adj_date: Optional[date] = None,
-    db: Session = Depends(get_db), _=Depends(get_current_user)
+    data: AdjustmentCreate,
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(get_current_user) 
 ):
-    item = db.query(models.Item).get(item_id)
-    if not item: raise HTTPException(404, "Item tidak ditemukan")
-    before = item.stock
-    item.stock += qty
-    d = adj_date or date.today()
+    item = db.query(models.Item).with_for_update().get(data.item_id) 
+    if not item: 
+        raise HTTPException(404, "Item tidak ditemukan")
+        
+    global_before = item.stock
+    diff = 0
+    
+    # Cari gudang default dari cabang ini untuk memotong stoknya
+    gudang_aktif = db.query(models.Warehouse).filter(
+        models.Warehouse.branch_id == current_user.active_branch_id,
+        models.Warehouse.is_default == True
+    ).first()
+    
+    if not gudang_aktif:
+        gudang_aktif = db.query(models.Warehouse).filter(
+            models.Warehouse.branch_id == current_user.active_branch_id
+        ).first()
+    
+    from .warehouse import get_warehouse_stock, adjust_warehouse_stock, get_total_branch_stock
+    
+    local_before = 0.0
+    if gudang_aktif:
+        local_before = get_warehouse_stock(db, gudang_aktif.id, item.id)
+
+    # Ambil Total Aset Fisik Cabang LOKAL
+    branch_before = get_total_branch_stock(db, current_user.active_branch_id, item.id)
+
+    # Logika mencari selisih (diff) berdasarkan tipe
+    if data.type == 'in':
+        diff = data.qty
+    elif data.type == 'out':
+        diff = -data.qty
+    elif data.type == 'adjust':
+        if gudang_aktif:
+            diff = data.qty - local_before
+        else:
+            diff = data.qty - global_before
+    else:
+        raise HTTPException(400, "Tipe penyesuaian tidak dikenali")
+
+    # Terapkan perubahan fisik
+    item.stock += diff
+    
+    if gudang_aktif:
+        adjust_warehouse_stock(db, gudang_aktif.id, item.id, diff)
+
+    # 1. 🛡️ GENERATE REFERENSI TUNGGAL 🛡️
+    ref_jurnal = f"OPN-{get_local_datetime().strftime('%Y%m%d%H%M%S')}"
+
+    branch_id_untuk_simpan = (
+        gudang_aktif.branch_id
+        if gudang_aktif
+        else (current_user.active_branch_id or 1)
+    )
+
     db.add(models.StockMovement(
-        date=d, item_id=item_id, type="adjustment",
-        qty=qty, qty_before=before, qty_after=item.stock,
-        reference="ADJ", notes=notes or "Penyesuaian stok"
+        date=get_local_date(), 
+        created_at=get_local_datetime(),
+        item_id=item.id, 
+        branch_id=branch_id_untuk_simpan,  # ← Pakai ini, bukan current_user.active_branch_id
+        type='in' if diff >= 0 else 'out',
+        qty=abs(diff), 
+        qty_before=branch_before, 
+        qty_after=branch_before + diff, 
+        reference=ref_jurnal, 
+        notes=data.description
     ))
+
+    # 3. Flush dulu StockMovement ke session (SEBELUM coba jurnal)
+    db.flush()  # ← Ini mengunci StockMovement di session, tapi belum commit ke DB
+
+    # 4. Jurnal akuntansi pakai SAVEPOINT agar rollback-nya terisolasi
+    if diff != 0:
+        nilai_penyesuaian = abs(diff) * (item.buy_price or 0)
+        
+        if nilai_penyesuaian > 0:
+            try:
+                savepoint = db.begin_nested()  # ← Buat savepoint
+                from .accounting import create_auto_journal
+                
+                if diff > 0:
+                    entries = [
+                        {"code": "1-1400", "debit": nilai_penyesuaian, "credit": 0},
+                        {"code": "4-1300", "debit": 0, "credit": nilai_penyesuaian}
+                    ]
+                    desc = f"Opname Surplus: {item.name} (+{abs(diff)}) - {data.description}"
+                else:
+                    entries = [
+                        {"code": "5-2700", "debit": nilai_penyesuaian, "credit": 0},
+                        {"code": "1-1400", "debit": 0, "credit": nilai_penyesuaian}
+                    ]
+                    desc = f"Opname Susut: {item.name} (-{abs(diff)}) - {data.description}"
+
+                create_auto_journal(
+                    db=db,
+                    date_val=get_local_date(),
+                    number_ref=ref_jurnal,
+                    description=desc,
+                    entries=entries,
+                    user_id=current_user.id,
+                    branch_id=current_user.active_branch_id
+                )
+                savepoint.commit()  # ← Commit savepoint jurnal saja
+                
+            except Exception as e:
+                savepoint.rollback()  # ← Hanya rollback jurnal, StockMovement AMAN
+                print(f"⚠️ Jurnal akuntansi dilewati: {e}")
+
+    # 5. Commit semua (StockMovement pasti tersimpan)
     db.commit()
-    return {"message": "Stok disesuaikan", "new_stock": item.stock}
-
-
-# ─── Stock Opname ─────────────────────────────────────────────────────────────
-@router.get("/opname", response_model=list[schemas.StockOpnameOut])
-def get_opnames(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    return db.query(models.StockOpname).order_by(models.StockOpname.id.desc()).all()
-
-@router.post("/opname", response_model=schemas.StockOpnameOut)
-def create_opname(data: schemas.StockOpnameCreate, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    from datetime import date as _date
-    today = _date.today()
-    prefix = f"OP{today.strftime('%Y%m%d')}"
-    last = db.query(models.StockOpname).filter(models.StockOpname.number.like(f"{prefix}%")).order_by(models.StockOpname.id.desc()).first()
-    number = data.number or f"{prefix}{(int(last.number[-4:])+1 if last else 1):04d}"
-
-    opname = models.StockOpname(number=number, date=data.date, notes=data.notes)
-    db.add(opname); db.flush()
-
-    for it in data.items:
-        item = db.query(models.Item).get(it.item_id)
-        if not item: raise HTTPException(404, f"Item {it.item_id} tidak ditemukan")
-        diff = it.actual_qty - item.stock
-        db.add(models.StockOpnameItem(
-            opname_id=opname.id, item_id=it.item_id,
-            system_qty=item.stock, actual_qty=it.actual_qty, difference=diff
-        ))
-
-    db.commit(); db.refresh(opname); return opname
-
-@router.post("/opname/{oid}/confirm")
-def confirm_opname(oid: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    opname = db.query(models.StockOpname).get(oid)
-    if not opname: raise HTTPException(404, "Opname tidak ditemukan")
-    if opname.status == "confirmed": raise HTTPException(400, "Sudah dikonfirmasi")
-
-    for oi in opname.items:
-        item = db.query(models.Item).get(oi.item_id)
-        if item:
-            before = item.stock
-            item.stock = oi.actual_qty
-            db.add(models.StockMovement(
-                date=opname.date, item_id=item.id,
-                type="opname", qty=oi.difference,
-                qty_before=before, qty_after=item.stock,
-                reference=opname.number, notes="Stock Opname"
-            ))
-    opname.status = "confirmed"
-    db.commit()
-    return {"message": "Opname dikonfirmasi"}
+    
+    new_local_stock = get_warehouse_stock(db, gudang_aktif.id, item.id) if gudang_aktif else item.stock
+    return {"success": True, "message": "Opname berhasil dicatat di Mutasi Stok!", "new_stock": new_local_stock}

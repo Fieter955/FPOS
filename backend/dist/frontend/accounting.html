@@ -1,0 +1,768 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>FPOS</title>
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body>
+    <div class="app-container">
+      <main class="main-content">
+        <button
+          class="btn"
+          style="
+            background: transparent;
+            color: var(--text-muted);
+            padding: 0;
+            margin-bottom: 16px;
+          "
+          onclick="location.href = '/dashboard'"
+        >
+          ← Kembali
+        </button>
+        <div class="pg-header">
+          <div>
+            <h1>📒 Akuntansi</h1>
+            <p>
+              Buku kas, jurnal double-entry, chart of accounts, dan arus kas.
+            </p>
+          </div>
+          <button class="btn btn-primary" onclick="openModal('mKas')">
+            ➕ Catat Kas
+          </button>
+        </div>
+
+        <div
+          style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap"
+        >
+          <button
+            id="tbKas"
+            onclick="switchTab('kas')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--primary);
+              background: var(--primary);
+              color: #fff;
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            💵 Buku Kas
+          </button>
+          <button
+            id="tbJurnal"
+            onclick="switchTab('jurnal')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            📓 Jurnal
+          </button>
+          <button
+            id="tbCoa"
+            onclick="switchTab('coa')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            📋 Akun (CoA)
+          </button>
+          <button
+            id="tbCashflow"
+            onclick="switchTab('cashflow')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            🌊 Arus Kas
+          </button>
+        </div>
+
+        <div id="pnlKas">
+          <div class="filter-bar">
+            <input
+              id="kasStart"
+              type="date"
+              class="input-control"
+              onchange="loadKas()"
+            />
+            <input
+              id="kasEnd"
+              type="date"
+              class="input-control"
+              onchange="loadKas()"
+            />
+            <select id="kasType" class="input-control" onchange="loadKas()">
+              <option value="">Semua Tipe</option>
+              <option value="income">Kas Masuk</option>
+              <option value="expense">Kas Keluar</option>
+            </select>
+          </div>
+          <div
+            id="kasSummary"
+            style="
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+              gap: 14px;
+              margin-bottom: 20px;
+            "
+          ></div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Tanggal</th>
+                  <th>Keterangan</th>
+                  <th>Tipe</th>
+                  <th>Jumlah</th>
+                  <th>Akun</th>
+                  <th>Hapus</th>
+                </tr>
+              </thead>
+              <tbody id="tblKas"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="pnlJurnal" style="display: none">
+          <div class="filter-bar">
+            <input
+              id="jStart"
+              type="date"
+              class="input-control"
+              onchange="loadJurnal()"
+            />
+            <input
+              id="jEnd"
+              type="date"
+              class="input-control"
+              onchange="loadJurnal()"
+            />
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Tanggal</th>
+                  <th>Deskripsi</th>
+                  <th>Referensi</th>
+                  <th>Total Debet</th>
+                  <th>Total Kredit</th>
+                </tr>
+              </thead>
+              <tbody id="tblJurnal"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="pnlCoa" style="display: none">
+          <div
+            style="
+              display: flex;
+              justify-content: flex-end;
+              gap: 10px; /* Tambahkan gap agar tombol tidak nempel */
+              margin-bottom: 14px;
+            "
+          >
+            <button
+              class="btn"
+              style="
+                background: #10b981;
+                color: white;
+                border: none;
+                font-weight: bold;
+              "
+              onclick="seedCoa()"
+            >
+              🌱 Generate Akun Standar
+            </button>
+
+            <button class="btn btn-primary" onclick="openCoaModal()">
+              ➕ Tambah Akun
+            </button>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Kode Akun</th>
+                  <th>Nama Akun</th>
+                  <th>Tipe</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="tblCoa"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="pnlCashflow" style="display: none">
+          <div class="filter-bar">
+            <input
+              id="cfStart"
+              type="date"
+              class="input-control"
+              onchange="loadCashFlow()"
+            />
+            <input
+              id="cfEnd"
+              type="date"
+              class="input-control"
+              onchange="loadCashFlow()"
+            />
+          </div>
+          <div
+            class="card"
+            style="
+              padding: 24px;
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              border-radius: 12px;
+            "
+          >
+            <h2 style="text-align: center; margin-bottom: 8px">
+              Laporan Arus Kas (Cash Flow)
+            </h2>
+            <p
+              style="
+                text-align: center;
+                color: var(--text-muted);
+                margin-bottom: 24px;
+                font-size: 14px;
+              "
+            >
+              Metode Langsung (Berdasarkan Mutasi Kas & Bank)
+            </p>
+            <div id="cfContent"></div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <div class="modal-overlay" id="mKas">
+      <div class="modal-box">
+        <div class="modal-hdr">
+          <h2>💵 Catat Transaksi Kas</h2>
+          <button class="btn-x" onclick="closeModal('mKas')">×</button>
+        </div>
+        <div class="row2" style="margin-bottom: 16px">
+          <div class="input-group">
+            <label>Tipe *</label>
+            <select id="kTipe" class="input-control">
+              <option value="income">💰 Kas Masuk</option>
+              <option value="expense">💸 Kas Keluar</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label>Tanggal *</label>
+            <input id="kTgl" type="date" class="input-control" />
+          </div>
+        </div>
+        <div class="input-group">
+          <label>Keterangan *</label>
+          <input
+            id="kKet"
+            class="input-control"
+            placeholder="Sumber atau tujuan kas..."
+          />
+        </div>
+        <div class="row2" style="margin-bottom: 16px">
+          <div class="input-group">
+            <label>Jumlah (Rp) *</label>
+            <input
+              id="kJumlah"
+              type="number"
+              class="input-control"
+              min="0"
+              inputmode="numeric"
+              placeholder="0"
+              style="font-size: 20px; font-weight: 700"
+            />
+          </div>
+          <div class="input-group">
+            <label>Akun *</label>
+            <select id="kAkun" class="input-control">
+              <option value="">-- Pilih Akun --</option>
+            </select>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+          <button
+            onclick="closeModal('mKas')"
+            class="btn"
+            style="
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              color: var(--text-main);
+            "
+          >
+            Batal
+          </button>
+          <button onclick="saveKas()" class="btn btn-primary">✓ Simpan</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="mCoa">
+      <div class="modal-box">
+        <div class="modal-hdr">
+          <h2 id="mCoaTitle">Tambah Akun</h2>
+          <button class="btn-x" onclick="closeModal('mCoa')">×</button>
+        </div>
+        <input type="hidden" id="coaId" />
+        <div class="row2" style="margin-bottom: 16px">
+          <div class="input-group">
+            <label>Kode Akun *</label>
+            <input id="coaKode" class="input-control" placeholder="1-0001" />
+          </div>
+          <div class="input-group">
+            <label>Tipe Akun *</label>
+            <select id="coaTipe" class="input-control">
+              <option value="asset">Aset</option>
+              <option value="liability">Kewajiban</option>
+              <option value="equity">Ekuitas</option>
+              <option value="revenue">Pendapatan</option>
+              <option value="expense">Beban</option>
+            </select>
+          </div>
+        </div>
+        <div class="input-group">
+          <label>Nama Akun *</label>
+          <input
+            id="coaNama"
+            class="input-control"
+            placeholder="Nama akun..."
+          />
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+          <button
+            onclick="closeModal('mCoa')"
+            class="btn"
+            style="
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              color: var(--text-main);
+            "
+          >
+            Batal
+          </button>
+          <button onclick="saveCoa()" class="btn btn-primary">✓ Simpan</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/theme.js"></script>
+    <script>
+      requireAuth();
+      let editCoaId = null;
+      const ON =
+        "padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit";
+      const OFF =
+        "padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit";
+
+      function switchTab(t) {
+        // 👇 TAMBAHKAN 'Cashflow' ke dalam list tab
+        ["Kas", "Jurnal", "Coa", "Cashflow"].forEach((x) => {
+          document.getElementById("pnl" + x).style.display =
+            x.toLowerCase() === t ? "block" : "none";
+          document.getElementById("tb" + x).style.cssText =
+            x.toLowerCase() === t ? ON : OFF;
+        });
+        if (t === "kas") loadKas();
+        if (t === "jurnal") loadJurnal();
+        if (t === "coa") loadCoa();
+        if (t === "cashflow") loadCashFlow();
+      }
+
+      async function loadAkunSelect() {
+        try {
+          const accs = await api("GET", "/accounting/accounts");
+          const sel = document.getElementById("kAkun");
+          const prev = sel.value;
+          sel.innerHTML =
+            '<option value="">-- Pilih Akun --</option>' +
+            accs
+              .map(
+                (a) => `<option value="${a.id}">${a.code} - ${a.name}</option>`,
+              )
+              .join("");
+          sel.value = prev;
+        } catch (e) {}
+      }
+
+      async function loadKas() {
+        const s = document.getElementById("kasStart").value,
+          e = document.getElementById("kasEnd").value,
+          t = document.getElementById("kasType").value;
+        let url = "/accounting/cash-transactions?limit=300";
+        if (s) url += `&start_date=${s}`;
+        if (e) url += `&end_date=${e}`;
+        if (t) url += `&type=${t}`;
+        try {
+          const d = await api("GET", url);
+          const masuk = d
+            .filter((x) => x.type === "income")
+            .reduce((a, x) => a + x.amount, 0);
+          const keluar = d
+            .filter((x) => x.type === "expense")
+            .reduce((a, x) => a + x.amount, 0);
+          document.getElementById("kasSummary").innerHTML = `
+        <div class="card" style="padding:18px;border:1px solid #10b981"><div style="font-size:13px;color:var(--text-muted);margin-bottom:4px">💰 Total Kas Masuk</div><div style="font-size:24px;font-weight:900;color:#10b981">${fmtRp(masuk)}</div></div>
+        <div class="card" style="padding:18px;border:1px solid #ef4444"><div style="font-size:13px;color:var(--text-muted);margin-bottom:4px">💸 Total Kas Keluar</div><div style="font-size:24px;font-weight:900;color:#ef4444">${fmtRp(keluar)}</div></div>
+        <div class="card" style="padding:18px;border:2px solid var(--primary)"><div style="font-size:13px;color:var(--text-muted);margin-bottom:4px">📊 Saldo Bersih</div><div style="font-size:24px;font-weight:900;color:${masuk - keluar >= 0 ? "#10b981" : "#ef4444"}">${fmtRp(masuk - keluar)}</div></div>`;
+          document.getElementById("tblKas").innerHTML = d.length
+            ? d
+                .map(
+                  (x) => `<tr>
+        <td style="font-size:13px;color:var(--text-muted)">${fmtDate(x.date)}</td>
+        <td><b>${x.description}</b></td>
+        <td>${x.type === "income" ? '<span class="bl">💰 Masuk</span>' : '<span class="br">💸 Keluar</span>'}</td>
+        <td style="font-size:18px;font-weight:800;color:${x.type === "income" ? "#10b981" : "#ef4444"}">${x.type === "income" ? "+" : "-"} ${fmtRp(x.amount)}</td>
+        <td style="font-size:13px;color:var(--text-muted)">${x.account?.name || "-"}</td>
+        <td><button class="bsm bd" onclick="hapusKas(${x.id})">Hapus</button></td>
+      </tr>`,
+                )
+                .join("")
+            : '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada transaksi kas</td></tr>';
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function saveKas() {
+        const ket = document.getElementById("kKet").value.trim();
+        if (!ket) {
+          showToast("Keterangan wajib diisi", "error");
+          return;
+        }
+
+        const jml = parseFloat(document.getElementById("kJumlah").value) || 0;
+        if (!jml) {
+          showToast("Jumlah tidak boleh 0", "error");
+          return;
+        }
+
+        const akunId = document.getElementById("kAkun").value;
+        if (!akunId) {
+          showToast("❌ Gagal: Akun (CoA) wajib dipilih!", "error");
+          return;
+        }
+
+        try {
+          await api("POST", "/accounting/cash-transactions", {
+            type: document.getElementById("kTipe").value,
+            date: document.getElementById("kTgl").value,
+            description: ket,
+            amount: jml,
+            account_id: parseInt(akunId),
+          });
+
+          showToast("Transaksi kas dicatat ✓", "success");
+          closeModal("mKas");
+          loadKas();
+
+          if (typeof loadJurnal === "function") loadJurnal();
+        } catch (ex) {
+          showToast("Gagal menyimpan: " + ex.message, "error");
+        }
+      }
+      async function hapusKas(id) {
+        if (!(await showConfirm("Hapus transaksi kas ini?"))) return;
+        try {
+          await api("DELETE", `/accounting/cash-transactions/${id}`);
+          showToast("Dihapus");
+          loadKas();
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      const _origOM = openModal;
+      window.openModal = function (id) {
+        if (id === "mKas") {
+          document.getElementById("kTgl").value = today();
+          document.getElementById("kKet").value = "";
+          document.getElementById("kJumlah").value = "";
+          document.getElementById("kTipe").value = "income";
+          loadAkunSelect();
+        }
+        _origOM(id);
+      };
+
+      async function loadJurnal() {
+        const s = document.getElementById("jStart").value;
+        const e = document.getElementById("jEnd").value;
+        let url = "/accounting/journals?limit=100";
+
+        if (s) url += `&start_date=${s}`;
+        if (e) url += `&end_date=${e}`;
+
+        try {
+          const d = await api("GET", url);
+
+          document.getElementById("tblJurnal").innerHTML = d.length
+            ? d
+                .map((j) => {
+                  const detailHtml = (j.lines || [])
+                    .map((l) => {
+                      const isDebit = l.debit_account != null;
+                      const accName = isDebit
+                        ? l.debit_account
+                        : l.credit_account;
+                      return `<tr>
+                      <td style="padding:4px 8px; color:var(--text-muted)">${accName}</td>
+                      <td style="padding:4px 8px; color:#3b82f6; text-align:right">${isDebit ? fmtRp(l.amount) : "-"}</td>
+                      <td style="padding:4px 8px; color:#ef4444; text-align:right">${!isDebit ? fmtRp(l.amount) : "-"}</td>
+                  </tr>`;
+                    })
+                    .join("");
+
+                  return `<tr>
+                <td style="font-size:13px">${fmtDate(j.date)}</td>
+                <td>
+                  <b>${j.description}</b><br>
+                  <button style="background:none; border:none; color:var(--primary); cursor:pointer; font-size:12px; padding:0; margin-top:4px;"
+                          onclick="const el = document.getElementById('detail_${j.id}'); el.style.display = el.style.display === 'none' ? 'table-row' : 'none'">
+                    Lihat Rincian Akun ▾
+                  </button>
+                </td>
+                <td style="font-family:monospace;font-size:13px;color:var(--primary)">${j.reference || "-"}</td>
+                <td style="color:#3b82f6;font-weight:700">${j.total_debit ? fmtRp(j.total_debit) : "-"}</td>
+                <td style="color:#ef4444;font-weight:700">${j.total_credit ? fmtRp(j.total_credit) : "-"}</td>
+              </tr>
+
+              <tr id="detail_${j.id}" style="display:none; background: rgba(0,0,0,0.2);">
+                <td colspan="5" style="padding: 12px 24px; border-bottom: 1px solid var(--border-color);">
+                   <table style="width:100%; font-size:13px; border-collapse:collapse; background: var(--bg-color); border-radius: 8px; overflow: hidden;">
+                      <tr style="border-bottom:1px solid var(--border-color); background: rgba(255,255,255,0.05);">
+                         <th style="text-align:left; padding:8px;">Nama Akun COA</th>
+                         <th style="text-align:right; padding:8px;">Debit</th>
+                         <th style="text-align:right; padding:8px;">Kredit</th>
+                      </tr>
+                      ${detailHtml}
+                   </table>
+                </td>
+              </tr>`;
+                })
+                .join("")
+            : '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada jurnal</td></tr>';
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function loadCoa() {
+        try {
+          const d = await api("GET", "/accounting/accounts");
+          document.getElementById("tblCoa").innerHTML = d.length
+            ? d
+                .map(
+                  (a) => `<tr>
+        <td style="font-family:monospace;font-size:14px;font-weight:700;color:var(--primary)">${a.code}</td>
+        <td><b>${a.name}</b></td>
+        <td style="text-transform:capitalize;color:var(--text-muted)">${{ asset: "Aset", liability: "Kewajiban", equity: "Ekuitas", revenue: "Pendapatan", expense: "Beban" }[a.type] || a.type}</td>
+        <td style="white-space:nowrap">
+          <button class="bsm be" onclick='editCoa(${JSON.stringify(a).replace(/"/g, "&quot;")})'>Edit</button>
+          <button class="bsm bd" onclick="hapusCoa(${a.id},'${a.name}')">Hapus</button>
+        </td></tr>`,
+                )
+                .join("")
+            : '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada akun</td></tr>';
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      function openCoaModal() {
+        editCoaId = null;
+        document.getElementById("mCoaTitle").textContent = "Tambah Akun";
+        document.getElementById("coaId").value = "";
+        document.getElementById("coaKode").value = "";
+        document.getElementById("coaNama").value = "";
+        document.getElementById("coaTipe").value = "asset";
+        openModal("mCoa");
+      }
+      async function seedCoa() {
+        if (
+          !(await showConfirm(
+            "Generate akun standar UMKM sekarang? Ini akan mengisi tabel CoA Anda otomatis.",
+          ))
+        )
+          return;
+
+        try {
+          if (typeof showLoading === "function") showLoading("Membuat akun...");
+          await api("POST", "/accounting/accounts/seed-default");
+
+          if (typeof hideLoading === "function") hideLoading();
+          showToast("Berhasil! Akun standar telah dibuat ✓", "success");
+
+          loadCoa();
+          if (typeof loadAkunSelect === "function") loadAkunSelect();
+        } catch (ex) {
+          if (typeof hideLoading === "function") hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+      async function editCoa(a) {
+        editCoaId = a.id;
+        document.getElementById("mCoaTitle").textContent = "Edit Akun";
+        document.getElementById("coaId").value = a.id;
+        document.getElementById("coaKode").value = a.code;
+        document.getElementById("coaNama").value = a.name;
+        document.getElementById("coaTipe").value = a.type;
+        openModal("mCoa");
+      }
+      async function saveCoa() {
+        const code = document.getElementById("coaKode").value.trim(),
+          name = document.getElementById("coaNama").value.trim();
+        if (!code || !name) {
+          showToast("Kode dan nama wajib diisi", "error");
+          return;
+        }
+        const data = {
+          code,
+          name,
+          type: document.getElementById("coaTipe").value,
+        };
+        try {
+          if (editCoaId)
+            await api("PUT", `/accounting/accounts/${editCoaId}`, data);
+          else await api("POST", "/accounting/accounts", data);
+          showToast("Akun disimpan ✓");
+          closeModal("mCoa");
+          loadCoa();
+          loadAkunSelect();
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+      async function hapusCoa(id, name) {
+        if (!(await showConfirm(`Hapus akun "${name}"?`))) return;
+        try {
+          await api("DELETE", `/accounting/accounts/${id}`);
+          showToast("Dihapus");
+          loadCoa();
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      // 👇 FUNGSI BARU UNTUK RENDER ARUS KAS 👇
+      async function loadCashFlow() {
+        const s =
+          document.getElementById("cfStart").value ||
+          document.getElementById("kasStart").value;
+        const e =
+          document.getElementById("cfEnd").value ||
+          document.getElementById("kasEnd").value;
+        document.getElementById("cfStart").value = s;
+        document.getElementById("cfEnd").value = e;
+
+        try {
+          document.getElementById("cfContent").innerHTML =
+            '<div style="text-align:center; padding:40px; color:var(--text-muted)">🔄 Memuat data arus kas...</div>';
+
+          const d = await api(
+            "GET",
+            `/accounting/cash-flow?start_date=${s}&end_date=${e}`,
+          );
+
+          const formatRow = (arr) =>
+            arr
+              .map(
+                (r) => `
+                <div style="display:flex; justify-content:space-between; padding:8px 16px; border-bottom:1px solid rgba(255,255,255,0.05);">
+                    <span style="color:var(--text-muted)">${r.code} - ${r.name}</span>
+                    <strong style="color:${r.amount >= 0 ? "#10b981" : "#ef4444"}">${r.amount >= 0 ? "+" : ""}${fmtRp(r.amount)}</strong>
+                </div>
+            `,
+              )
+              .join("");
+
+          document.getElementById("cfContent").innerHTML = `
+                <div style="display:flex; justify-content:space-between; padding:16px; background:rgba(59, 130, 246, 0.1); border-radius:8px; margin-bottom:20px;">
+                    <strong style="font-size:16px;">Saldo Awal Kas & Bank</strong>
+                    <strong style="font-size:16px; color:var(--primary);">${fmtRp(d.opening_balance)}</strong>
+                </div>
+
+                <h4 style="color:var(--primary); border-bottom:2px solid var(--primary); padding-bottom:8px; margin-top:0;">1. Arus Kas dari Aktivitas Operasi</h4>
+                ${formatRow(d.operating.inflows)}
+                ${formatRow(d.operating.outflows)}
+                ${!d.operating.inflows.length && !d.operating.outflows.length ? '<div style="padding:8px 16px; color:var(--text-muted); font-style:italic;">Tidak ada aktivitas</div>' : ""}
+                <div style="display:flex; justify-content:space-between; padding:12px 16px; background:var(--card-bg); font-weight:bold; margin-bottom:24px;">
+                    <span>Kas Bersih dari Aktivitas Operasi</span>
+                    <span style="color:${d.operating.net >= 0 ? "#10b981" : "#ef4444"}">${fmtRp(d.operating.net)}</span>
+                </div>
+
+                <h4 style="color:#f59e0b; border-bottom:2px solid #f59e0b; padding-bottom:8px;">2. Arus Kas dari Aktivitas Investasi</h4>
+                ${d.investing.items.length ? formatRow(d.investing.items) : '<div style="padding:8px 16px; color:var(--text-muted); font-style:italic;">Tidak ada aktivitas</div>'}
+                <div style="display:flex; justify-content:space-between; padding:12px 16px; background:var(--card-bg); font-weight:bold; margin-bottom:24px;">
+                    <span>Kas Bersih dari Aktivitas Investasi</span>
+                    <span style="color:${d.investing.net >= 0 ? "#10b981" : "#ef4444"}">${fmtRp(d.investing.net)}</span>
+                </div>
+
+                <h4 style="color:#8b5cf6; border-bottom:2px solid #8b5cf6; padding-bottom:8px;">3. Arus Kas dari Aktivitas Pendanaan</h4>
+                ${d.financing.items.length ? formatRow(d.financing.items) : '<div style="padding:8px 16px; color:var(--text-muted); font-style:italic;">Tidak ada aktivitas</div>'}
+                <div style="display:flex; justify-content:space-between; padding:12px 16px; background:var(--card-bg); font-weight:bold; margin-bottom:24px;">
+                    <span>Kas Bersih dari Aktivitas Pendanaan</span>
+                    <span style="color:${d.financing.net >= 0 ? "#10b981" : "#ef4444"}">${fmtRp(d.financing.net)}</span>
+                </div>
+
+                <div style="display:flex; justify-content:space-between; padding:16px; background:var(--bg-color); border:2px dashed var(--border-color); margin-bottom:12px;">
+                    <span style="font-size:15px; font-weight:bold;">Kenaikan / (Penurunan) Kas Bersih</span>
+                    <strong style="font-size:16px; color:${d.net_cash_flow >= 0 ? "#10b981" : "#ef4444"}">${d.net_cash_flow >= 0 ? "+" : ""}${fmtRp(d.net_cash_flow)}</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding:20px 16px; background:var(--card-bg); border-radius:8px; border-left:6px solid #10b981; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
+                    <strong style="font-size:18px;">Saldo Akhir Kas & Bank</strong>
+                    <strong style="font-size:20px; color:#10b981;">${fmtRp(d.closing_balance)}</strong>
+                </div>
+            `;
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      const m = new Date();
+      const y = m.getFullYear(),
+        mo = String(m.getMonth() + 1).padStart(2, "0");
+      // 👇 Tambahkan id cfStart dan cfEnd ke sini
+      ["kasStart", "jStart", "cfStart"].forEach((id) => {
+        if (document.getElementById(id))
+          document.getElementById(id).value = `${y}-${mo}-01`;
+      });
+      ["kasEnd", "jEnd", "cfEnd"].forEach((id) => {
+        if (document.getElementById(id))
+          document.getElementById(id).value = today();
+      });
+
+      loadKas();
+      loadAkunSelect();
+    </script>
+  </body>
+</html>

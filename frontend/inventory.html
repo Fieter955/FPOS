@@ -1,228 +1,657 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="id">
-<head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Persediaan Stok - iPos 5.0</title>
-<link rel="stylesheet" href="/css/style.css">
-</head>
-<body>
-<div class="app-container"><main class="main-content">
-<button class="btn" style="background:transparent;color:var(--text-muted);padding:0;margin-bottom:16px" onclick="location.href='/dashboard'">← Kembali</button>
-<div class="pg-header">
-  <div><h1>📋 Persediaan Stok</h1><p>Mutasi stok, stok menipis, dan penyesuaian manual.</p></div>
-  <div style="display:flex;gap:10px">
-    <button class="btn" style="background:var(--bg-color);border:1px solid var(--border-color);color:var(--text-main)" onclick="switchTab('low')">⚠️ Stok Menipis</button>
-    <button class="btn btn-primary" onclick="openModal('mAdjust')">± Sesuaikan Stok</button>
-  </div>
-</div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Persediaan Stok - FPOS</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <style>
+      .autocomplete-container {
+        position: relative;
+        flex: 1;
+        margin: 0;
+      }
+      .autocomplete-list {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        z-index: 99;
+        background: var(--card-bg, #fff);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        max-height: 300px;
+        overflow-y: auto;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+        display: none;
+        margin-top: 4px;
+      }
+      .ac-item {
+        padding: 12px 16px;
+        cursor: pointer;
+        border-bottom: 1px solid var(--border-color);
+        font-size: 14px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: var(--bg-color);
+      }
+      .ac-item:last-child {
+        border-bottom: none;
+      }
+      .ac-item:hover {
+        background: var(--border-color);
+      }
+      .ac-active {
+        background: var(--primary) !important;
+        color: white !important;
+      }
+      .ac-active .sub-text {
+        color: rgba(255, 255, 255, 0.8) !important;
+      }
+      .ac-active .stok-text {
+        color: white !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-container">
+      <main class="main-content">
+        <button
+          class="btn"
+          style="
+            background: transparent;
+            color: var(--text-muted);
+            padding: 0;
+            margin-bottom: 16px;
+          "
+          onclick="location.href = '/dashboard'"
+        >
+          ← Kembali
+        </button>
+        <div class="pg-header">
+          <div>
+            <h1>📋 Persediaan Stok</h1>
+            <p>Mutasi stok, stok menipis, dan penyesuaian / opname.</p>
+          </div>
+        </div>
 
-<!-- Tab -->
-<div style="display:flex;gap:8px;margin-bottom:20px">
-  <button id="tbMutasi" onclick="switchTab('mutasi')" style="padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit">📜 Mutasi Stok</button>
-  <button id="tbLow" onclick="switchTab('low')" style="padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit">⚠️ Stok Menipis</button>
-  <button id="tbOpname" onclick="switchTab('opname')" style="padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit">📊 Stock Opname</button>
-</div>
+        <div style="display: flex; gap: 8px; margin-bottom: 20px">
+          <button
+            id="tbMutasi"
+            onclick="switchTab('mutasi')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--primary);
+              background: var(--primary);
+              color: #fff;
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            📜 Mutasi Stok
+          </button>
+          <button
+            id="tbLow"
+            onclick="switchTab('low')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            ⚠️ Stok Menipis
+          </button>
+          <button
+            id="tbOpname"
+            onclick="switchTab('opname')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            📊 Penyesuaian & Opname
+          </button>
+        </div>
 
-<!-- Panel Mutasi -->
-<div id="pnlMutasi">
-  <div class="filter-bar">
-    <input id="mStart" type="date" class="input-control" onchange="loadMutasi()">
-    <input id="mEnd"   type="date" class="input-control" onchange="loadMutasi()">
-    <select id="mType" class="input-control" onchange="loadMutasi()">
-      <option value="">Semua Tipe</option>
-      <option value="in">Masuk</option>
-      <option value="out">Keluar</option>
-      <option value="adjust">Penyesuaian</option>
-    </select>
-  </div>
-  <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>Tanggal</th><th>Barang</th><th>Tipe</th><th>Qty</th><th>Keterangan</th></tr></thead>
-    <tbody id="tblMutasi"></tbody>
-  </table></div>
-</div>
+        <div id="pnlMutasi">
+          <div class="filter-bar">
+            <input
+              id="mStart"
+              type="date"
+              class="input-control"
+              onchange="loadMutasi()"
+            />
+            <input
+              id="mEnd"
+              type="date"
+              class="input-control"
+              onchange="loadMutasi()"
+            />
+            <select id="mType" class="input-control" onchange="loadMutasi()">
+              <option value="">Semua Tipe</option>
+              <option value="in">Masuk</option>
+              <option value="out">Keluar</option>
+              <option value="transfer_in">Transfer Masuk</option>
+              <option value="transfer_out">Transfer Keluar</option>
+              <option value="internal_transfer">Pindah Rak (Internal)</option>
+              <option value="sale">Penjualan Kasir</option>
+            </select>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Tanggal</th>
+                  <th>Referensi</th>
+                  <th>Nama Barang</th>
+                  <th>Tipe Mutasi</th>
+                  <th style="text-align: right; width: 160px">
+                    Perubahan Stok Cabang
+                  </th>
+                  <th>Keterangan</th>
+                </tr>
+              </thead>
+              <tbody id="tblMutasi"></tbody>
+            </table>
+          </div>
+        </div>
 
-<!-- Panel Stok Menipis -->
-<div id="pnlLow" style="display:none">
-  <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>Kode</th><th>Nama Barang</th><th>Stok Saat Ini</th><th>Stok Minimum</th><th>Status</th><th>Aksi</th></tr></thead>
-    <tbody id="tblLow"></tbody>
-  </table></div>
-</div>
+        <div id="pnlLow" style="display: none">
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Kode</th>
+                  <th>Nama Barang</th>
+                  <th>Stok Saat Ini</th>
+                  <th>Stok Minimum</th>
+                  <th>Status</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="tblLow"></tbody>
+            </table>
+          </div>
+        </div>
 
-<!-- Panel Stock Opname -->
-<div id="pnlOpname" style="display:none">
-  <div class="card" style="padding:24px;margin-bottom:16px">
-    <h3 style="margin:0 0 16px">📊 Buat Stock Opname Baru</h3>
-    <div class="row2" style="margin-bottom:16px">
-      <div class="input-group"><label>Tanggal Opname</label><input id="opDate" type="date" class="input-control"></div>
-      <div class="input-group"><label>Catatan</label><input id="opNotes" class="input-control" placeholder="Keterangan opname..."></div>
+        <div id="pnlOpname" style="display: none">
+          <div class="card" style="padding: 24px; margin-bottom: 16px">
+            <h3 style="margin: 0 0 8px">📊 Form Penyesuaian Stok Massal</h3>
+            <p
+              style="
+                color: var(--text-muted);
+                margin-bottom: 20px;
+                font-size: 14px;
+              "
+            >
+              Cari dan kumpulkan barang yang ingin disesuaikan stoknya ke dalam
+              daftar di bawah ini. Atur perubahannya, lalu klik simpan
+              sekaligus.
+            </p>
+
+            <div
+              style="
+                display: flex;
+                gap: 12px;
+                align-items: flex-end;
+                margin-bottom: 24px;
+              "
+            >
+              <div class="autocomplete-container">
+                <label>🔍 Cari Barang (Ketik Nama / Kode / Barcode)</label>
+                <input
+                  type="text"
+                  id="adjSearch"
+                  class="input-control"
+                  placeholder="Mulai ketik nama atau kode barang disini..."
+                  autocomplete="off"
+                />
+                <div id="autocomplete-list" class="autocomplete-list"></div>
+              </div>
+              <button
+                class="btn btn-primary"
+                onclick="tambahKeDaftarManual()"
+                style="padding: 12px 24px; font-weight: bold"
+              >
+                ➕ Tambah
+              </button>
+            </div>
+
+            <div
+              class="tbl-wrap"
+              style="
+                margin-bottom: 20px;
+                border: 1px solid var(--border-color);
+                border-radius: 12px;
+              "
+            >
+              <table class="tbl">
+                <thead>
+                  <tr>
+                    <th>Nama Barang</th>
+                    <th>Stok Sistem</th>
+                    <th style="width: 160px">Tipe Penyesuaian</th>
+                    <th style="width: 100px">Jumlah</th>
+                    <th>Keterangan</th>
+                    <th style="width: 60px; text-align: center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="tblAdjustList">
+                  <tr>
+                    <td
+                      colspan="6"
+                      style="
+                        text-align: center;
+                        padding: 30px;
+                        color: var(--text-muted);
+                        font-style: italic;
+                      "
+                    >
+                      Belum ada barang di dalam daftar. Silakan cari dan tambah
+                      barang di atas.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <button
+              class="btn btn-primary"
+              onclick="simpanSemuaPenyesuaian()"
+              style="
+                width: 100%;
+                padding: 14px;
+                font-size: 16px;
+                box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2);
+              "
+            >
+              ✓ Simpan Semua Penyesuaian ke Database
+            </button>
+          </div>
+        </div>
+      </main>
     </div>
-    <div id="opItems" style="max-height:400px;overflow-y:auto;border:1px solid var(--border-color);border-radius:12px;margin-bottom:16px">
-      <table class="tbl">
-        <thead><tr><th>Barang</th><th>Stok Sistem</th><th>Stok Fisik (Isi)</th><th>Selisih</th></tr></thead>
-        <tbody id="tblOpname"></tbody>
-      </table>
-    </div>
-    <button class="btn btn-primary" onclick="simpanOpname()">✓ Simpan Hasil Opname</button>
-  </div>
-  <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>Tanggal</th><th>Catatan</th><th>Jumlah Item</th><th>Status</th></tr></thead>
-    <tbody id="tblOpnameHistory"></tbody>
-  </table></div>
-</div>
-</main></div>
 
-<!-- Modal: Sesuaikan Stok -->
-<div class="modal-overlay" id="mAdjust"><div class="modal-box">
-  <div class="modal-hdr"><h2>± Sesuaikan Stok Manual</h2><button class="btn-x" onclick="closeModal('mAdjust')">×</button></div>
-  <div class="input-group"><label>Pilih Barang *</label><select id="adjItem" class="input-control"><option value="">-- Pilih Barang --</option></select></div>
-  <div id="adjStokInfo" style="background:var(--bg-color);border-radius:10px;padding:12px;margin-bottom:16px;font-size:15px;font-weight:600;display:none"></div>
-  <div class="row2" style="margin-bottom:16px">
-    <div class="input-group">
-      <label>Tipe Penyesuaian</label>
-      <select id="adjType" class="input-control">
-        <option value="in">Masuk (Tambah stok)</option>
-        <option value="out">Keluar (Kurangi stok)</option>
-        <option value="adjust">Set Ulang (Langsung ke angka)</option>
-      </select>
-    </div>
-    <div class="input-group"><label>Jumlah</label><input type="number" id="adjQty" class="input-control" min="0" value="1" inputmode="numeric"></div>
-  </div>
-  <div class="input-group"><label>Keterangan *</label><input id="adjNote" class="input-control" placeholder="Alasan penyesuaian stok..."></div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-    <button onclick="closeModal('mAdjust')" class="btn" style="background:var(--bg-color);border:1px solid var(--border-color);color:var(--text-main)">Batal</button>
-    <button onclick="doAdjust()" class="btn btn-primary">✓ Simpan</button>
-  </div>
-</div></div>
+    <script src="/js/api.js"></script>
+    <script src="/js/theme.js"></script>
+    <script>
+      requireAuth();
+      let allItems = [];
+      let adjustList = [];
 
-<script src="/js/api.js"></script><script src="/js/theme.js"></script>
-<script>
-requireAuth();
-let allItems=[];
+      // HELPER: Format Angka
+      function formatNum(n) {
+        return new Intl.NumberFormat("id-ID").format(n || 0);
+      }
+      // HELPER: Format Tanggal Aman
+      function amanFmtDate(d) {
+        try {
+          return typeof fmtDate === "function" ? fmtDate(d) : d;
+        } catch (e) {
+          return d;
+        }
+      }
 
-function switchTab(t){
-  ['mutasi','low','opname'].forEach(x=>{
-    document.getElementById('pnl'+x.charAt(0).toUpperCase()+x.slice(1)).style.display=x===t?'block':'none';
-    const btn=document.getElementById('tb'+x.charAt(0).toUpperCase()+x.slice(1));
-    const on='padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit';
-    const off='padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit';
-    btn.style.cssText=x===t?on:off;
-  });
-  if(t==='mutasi')loadMutasi();
-  if(t==='low')loadLow();
-  if(t==='opname')loadOpname();
-}
+      // --- NAVIGASI TAB ---
+      function switchTab(t) {
+        ["mutasi", "low", "opname"].forEach((x) => {
+          document.getElementById(
+            "pnl" + x.charAt(0).toUpperCase() + x.slice(1),
+          ).style.display = x === t ? "block" : "none";
+          const btn = document.getElementById(
+            "tb" + x.charAt(0).toUpperCase() + x.slice(1),
+          );
+          const on =
+            "padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit";
+          const off =
+            "padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit";
+          btn.style.cssText = x === t ? on : off;
+        });
 
-async function init(){
-  allItems=await api('GET','/items/?limit=500');
-  const sel=document.getElementById('adjItem');
-  allItems.forEach(i=>sel.insertAdjacentHTML('beforeend',`<option value="${i.id}" data-stok="${i.stock}">${i.name} (Stok: ${i.stock})</option>`));
-  document.getElementById('adjItem').onchange=function(){
-    const opt=this.options[this.selectedIndex];
-    const info=document.getElementById('adjStokInfo');
-    if(this.value){info.style.display='block';info.textContent=`Stok saat ini: ${opt.dataset.stok}`;}
-    else info.style.display='none';
-  };
-  loadMutasi();
-}
+        if (t === "mutasi") loadMutasi();
+        if (t === "low") loadLow();
+        if (t === "opname") {
+          setTimeout(() => {
+            document.getElementById("adjSearch").focus();
+          }, 100);
+        }
+      }
 
-async function loadMutasi(){
-  const s=document.getElementById('mStart').value, e=document.getElementById('mEnd').value, t=document.getElementById('mType').value;
-  let url='/inventory/movements?limit=200';
-  if(s)url+=`&start_date=${s}`;if(e)url+=`&end_date=${e}`;if(t)url+=`&type=${t}`;
-  try{
-    const d=await api('GET',url);
-    const typeBadge=t=>({in:'<span class="bl">⬇ Masuk</span>',out:'<span class="br">⬆ Keluar</span>',adjust:'<span class="bo">↕ Sesuaikan</span>'}[t]||t);
-    document.getElementById('tblMutasi').innerHTML=d.length?d.map(m=>`<tr>
-      <td style="font-size:13px;color:var(--text-muted)">${fmtDate(m.date)}</td>
-      <td><b>${m.item?.name||'-'}</b></td>
-      <td>${typeBadge(m.type)}</td>
-      <td style="font-size:18px;font-weight:900;color:${m.qty>0?'#10b981':'#ef4444'}">${m.qty>0?'+':''}${m.qty}</td>
-      <td style="color:var(--text-muted)">${m.description||m.notes||'-'}</td>
-    </tr>`).join(''):'<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada mutasi stok</td></tr>';
-  }catch(ex){showToast(ex.message,'error');}
-}
+      // --- INISIALISASI ---
+      async function init() {
+        allItems = await api("GET", "/items/?limit=2000");
+        setupAutocomplete(document.getElementById("adjSearch"));
 
-async function loadLow(){
-  try{
-    const d=await api('GET','/inventory/low-stock');
-    document.getElementById('tblLow').innerHTML=d.length?d.map(i=>`<tr>
-      <td style="font-family:monospace;font-size:13px;color:var(--text-muted)">${i.code||'-'}</td>
-      <td><b>${i.name}</b></td>
-      <td style="font-size:22px;font-weight:900;color:${i.stock<=0?'#ef4444':'#f59e0b'}">${i.stock}</td>
-      <td style="color:var(--text-muted)">${i.min_stock}</td>
-      <td>${i.stock<=0?'<span class="br">⛔ Habis</span>':'<span class="bo">⚠️ Menipis</span>'}</td>
-      <td><button class="bsm be" onclick="quickAdjust(${i.id},'${i.name}',${i.stock})">Tambah Stok</button></td>
-    </tr>`).join(''):'<tr><td colspan="6" style="text-align:center;padding:24px;color:#10b981;font-weight:700">✓ Semua stok aman</td></tr>';
-  }catch(ex){showToast(ex.message,'error');}
-}
+        // Tambahkan fungsi today() yang aman
+        function today() {
+          const d = new Date();
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        }
 
-function quickAdjust(id,name,stok){
-  document.getElementById('adjItem').value=id;
-  document.getElementById('adjStokInfo').style.display='block';
-  document.getElementById('adjStokInfo').textContent=`Stok saat ini: ${stok}`;
-  document.getElementById('adjType').value='in';
-  document.getElementById('adjNote').value=`Tambah stok ${name}`;
-  document.getElementById('adjQty').value=1;
-  openModal('mAdjust');
-}
+        // Atur filter dari tanggal 1 sampai hari ini
+        document.getElementById("mStart").value = today().slice(0, 7) + "-01"; // ✅ AMAN
+        document.getElementById("mEnd").value = today(); // ✅ AMAN
 
-async function doAdjust(){
-  const item_id=parseInt(document.getElementById('adjItem').value);
-  if(!item_id){showToast('Pilih barang dulu','error');return;}
-  const note=document.getElementById('adjNote').value.trim();
-  if(!note){showToast('Keterangan wajib diisi','error');return;}
-  try{
-    showLoading('Menyimpan...');
-    await api('POST','/inventory/adjust',{item_id,type:document.getElementById('adjType').value,qty:parseFloat(document.getElementById('adjQty').value)||1,description:note});
-    hideLoading();showToast('Stok disesuaikan ✓');closeModal('mAdjust');
-    // Refresh item list di dropdown
-    const d=await api('GET','/items/?limit=500');allItems=d;
-    loadMutasi();
-  }catch(ex){hideLoading();showToast(ex.message,'error');}
-}
+        loadMutasi();
+      }
 
-async function loadOpname(){
-  document.getElementById('opDate').value=today();
-  // Isi tabel opname dengan semua barang
-  if(!allItems.length) allItems=await api('GET','/items/?limit=500');
-  document.getElementById('tblOpname').innerHTML=allItems.map((i,idx)=>`<tr>
-    <td><b>${i.name}</b> <span style="font-size:12px;color:var(--text-muted)">(${i.code||''})</span></td>
-    <td style="font-weight:700;font-size:16px">${i.stock}</td>
-    <td><input type="number" id="op_${i.id}" value="${i.stock}" min="0" class="input-control" style="margin:0;padding:8px 12px;width:100px;text-align:center" oninput="hitungSelisih(${i.id},${i.stock})"></td>
-    <td id="opSel_${i.id}" style="font-weight:700;font-size:16px;color:var(--text-muted)">0</td>
-  </tr>`).join('');
-  // Load history
-  try{
-    const h=await api('GET','/inventory/opname?limit=20');
-    document.getElementById('tblOpnameHistory').innerHTML=(h||[]).map(o=>`<tr>
-      <td>${fmtDate(o.date)}</td><td>${o.notes||'-'}</td>
-      <td>${o.items?.length||0} item</td>
-      <td><span class="bl">${o.status||'Selesai'}</span></td>
-    </tr>`).join('')||'<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted)">Belum ada riwayat</td></tr>';
-  }catch(e){}
-}
+      // --- AUTOCOMPLETE ---
+      function setupAutocomplete(inp) {
+        let currentFocus;
+        const listContainer = document.getElementById("autocomplete-list");
 
-function hitungSelisih(id,stok){
-  const fisik=parseFloat(document.getElementById(`op_${id}`).value)||0;
-  const sel=fisik-stok;
-  const el=document.getElementById(`opSel_${id}`);
-  el.textContent=(sel>=0?'+':'')+sel;
-  el.style.color=sel===0?'var(--text-muted)':sel>0?'#10b981':'#ef4444';
-}
+        inp.addEventListener("input", function (e) {
+          let val = this.value;
+          closeAllLists();
+          if (!val) return false;
+          currentFocus = -1;
 
-async function simpanOpname(){
-  const date=document.getElementById('opDate').value, notes=document.getElementById('opNotes').value;
-  const items=allItems.map(i=>({item_id:i.id,system_qty:i.stock,physical_qty:parseFloat(document.getElementById(`op_${i.id}`)?.value)||i.stock}));
-  try{
-    showLoading('Menyimpan opname...');
-    await api('POST','/inventory/opname',{date,notes:notes||null,items});
-    hideLoading();showToast('Stock opname disimpan ✓');loadOpname();
-  }catch(ex){hideLoading();showToast(ex.message,'error');}
-}
+          listContainer.style.display = "block";
+          listContainer.innerHTML = "";
 
-document.getElementById('mStart').value=new Date(new Date().setDate(1)).toISOString().slice(0,10);
-document.getElementById('mEnd').value=today();
-init();
-</script>
-</body></html>
+          let matches = allItems
+            .filter(
+              (item) =>
+                item.name.toLowerCase().includes(val.toLowerCase()) ||
+                (item.code &&
+                  item.code.toLowerCase().includes(val.toLowerCase())) ||
+                (item.barcode &&
+                  item.barcode.toLowerCase().includes(val.toLowerCase())),
+            )
+            .slice(0, 50);
+
+          if (matches.length === 0) {
+            listContainer.innerHTML =
+              '<div style="padding:12px 16px; color:var(--text-muted); font-style:italic;">Barang tidak ditemukan...</div>';
+            return;
+          }
+
+          matches.forEach((item) => {
+            let b = document.createElement("div");
+            b.setAttribute("class", "ac-item");
+            b.innerHTML = `<div><strong>${item.name}</strong> <span class="sub-text" style="color:var(--text-muted);font-size:12px;margin-left:8px;">[${item.code}]</span></div><div class="stok-text" style="font-weight:bold; color:var(--primary);">Stok: ${formatNum(item.stock)}</div>`;
+            b.addEventListener("click", function (e) {
+              tambahKeDaftarLangsung(item);
+              closeAllLists();
+            });
+            listContainer.appendChild(b);
+          });
+        });
+
+        inp.addEventListener("keydown", function (e) {
+          let x = listContainer.getElementsByClassName("ac-item");
+          if (e.keyCode == 40) {
+            currentFocus++;
+            addActive(x);
+          } else if (e.keyCode == 38) {
+            currentFocus--;
+            addActive(x);
+          } else if (e.keyCode == 13) {
+            e.preventDefault();
+            if (currentFocus > -1) {
+              if (x) x[currentFocus].click();
+            } else {
+              tambahKeDaftarManual();
+            }
+          }
+        });
+
+        function addActive(x) {
+          if (!x) return false;
+          removeActive(x);
+          if (currentFocus >= x.length) currentFocus = 0;
+          if (currentFocus < 0) currentFocus = x.length - 1;
+          x[currentFocus].classList.add("ac-active");
+          x[currentFocus].scrollIntoView({
+            behavior: "smooth",
+            block: "nearest",
+          });
+        }
+        function removeActive(x) {
+          for (let i = 0; i < x.length; i++) x[i].classList.remove("ac-active");
+        }
+        function closeAllLists(elmnt) {
+          if (elmnt != inp && elmnt != listContainer)
+            listContainer.style.display = "none";
+        }
+        document.addEventListener("click", function (e) {
+          closeAllLists(e.target);
+        });
+      }
+
+      // --- FUNGSI OPNAME ---
+      function tambahKeDaftarLangsung(item) {
+        if (adjustList.find((x) => x.id === item.id)) {
+          document.getElementById("adjSearch").value = "";
+          document.getElementById("adjSearch").focus();
+          return showToast("Barang ini sudah ada di dalam daftar", "warning");
+        }
+        adjustList.unshift({
+          id: item.id,
+          name: item.name,
+          code: item.code,
+          stock: item.stock,
+          type: "in",
+          qty: 1,
+          note: "Penyesuaian manual",
+        });
+        document.getElementById("adjSearch").value = "";
+        document.getElementById("adjSearch").focus();
+        renderAdjustList();
+      }
+
+      function tambahKeDaftarManual() {
+        const searchInput = document.getElementById("adjSearch");
+        const searchVal = searchInput.value.trim().toLowerCase();
+        if (!searchVal) {
+          searchInput.focus();
+          return;
+        }
+        const item = allItems.find(
+          (x) =>
+            x.code.toLowerCase() === searchVal ||
+            (x.barcode && x.barcode.toLowerCase() === searchVal),
+        );
+        if (!item) {
+          searchInput.select();
+          return showToast("Pilih dari daftar dropdown!", "error");
+        }
+        tambahKeDaftarLangsung(item);
+      }
+
+      function renderAdjustList() {
+        const tbody = document.getElementById("tblAdjustList");
+        if (adjustList.length === 0) {
+          tbody.innerHTML =
+            '<tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted); font-style:italic;">Belum ada barang di dalam daftar. Silakan cari dan tambah barang di atas.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = adjustList
+          .map(
+            (item, index) => `
+          <tr style="animation: fadeIn 0.3s ease;">
+            <td><b>${item.name}</b><br><small style="color:var(--text-muted)">${item.code}</small></td>
+            <td style="font-size:16px; font-weight:bold;">${formatNum(item.stock)}</td>
+            <td><select class="input-control" style="margin:0; padding:8px;" onchange="updateAdjItem(${index}, 'type', this.value)"><option value="in" ${item.type === "in" ? "selected" : ""}>⬇ Masuk (+)</option><option value="out" ${item.type === "out" ? "selected" : ""}>⬆ Keluar (-)</option><option value="adjust" ${item.type === "adjust" ? "selected" : ""}>↕ Set Ulang (=)</option></select></td>
+            <td><input type="number" class="input-control" style="margin:0; padding:8px; text-align:center;" min="0" value="${item.qty}" oninput="updateAdjItem(${index}, 'qty', this.value)"></td>
+            <td><input type="text" class="input-control" style="margin:0; padding:8px;" value="${item.note}" placeholder="Alasan penyesuaian..." oninput="updateAdjItem(${index}, 'note', this.value)"></td>
+            <td style="text-align:center;"><button class="btn" style="background:#ef4444; color:white; padding:6px 10px; border-radius:6px; border:none;" onclick="removeAdjItem(${index})">✕</button></td>
+          </tr>
+        `,
+          )
+          .join("");
+      }
+
+      function updateAdjItem(index, field, value) {
+        if (field === "qty") value = parseFloat(value) || 0;
+        adjustList[index][field] = value;
+      }
+      function removeAdjItem(index) {
+        adjustList.splice(index, 1);
+        renderAdjustList();
+      }
+
+      async function simpanSemuaPenyesuaian() {
+        if (adjustList.length === 0)
+          return showToast("Daftar masih kosong", "warning");
+        for (let item of adjustList) {
+          if (item.qty < 0)
+            return showToast(`Jumlah untuk ${item.name} tidak valid`, "error");
+          if (!item.note.trim())
+            return showToast(
+              `Keterangan untuk ${item.name} wajib diisi`,
+              "error",
+            );
+        }
+        if (
+          !(await showConfirm(
+            `Yakin ingin menyimpan ${adjustList.length} penyesuaian?`,
+          ))
+        )
+          return;
+        try {
+          if (typeof showLoading === "function")
+            showLoading("Memproses penyesuaian...");
+          for (let item of adjustList) {
+            await api("POST", "/inventory/adjust", {
+              item_id: item.id,
+              type: item.type,
+              qty: item.qty,
+              description: item.note,
+            });
+          }
+          if (typeof hideLoading === "function") hideLoading();
+          showToast("Semua penyesuaian berhasil disimpan ✓", "success");
+          adjustList = [];
+          renderAdjustList();
+          allItems = await api("GET", "/items/?limit=2000");
+          loadMutasi();
+        } catch (ex) {
+          if (typeof hideLoading === "function") hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      function quickAdjust(id, name, stok) {
+        switchTab("opname");
+        if (!adjustList.find((x) => x.id === id)) {
+          const item = allItems.find((x) => x.id === id) || { code: "" };
+          adjustList.unshift({
+            id: id,
+            name: name,
+            code: item.code,
+            stock: stok,
+            type: "in",
+            qty: 1,
+            note: "Tambah stok menipis",
+          });
+          renderAdjustList();
+        }
+        showToast(name + " ditambahkan ke form penyesuaian", "success");
+      }
+
+      // --- LOGIKA UTAMA RENDER TABEL MUTASI ---
+      async function loadMutasi() {
+        const s = document.getElementById("mStart").value,
+          e = document.getElementById("mEnd").value,
+          t = document.getElementById("mType").value;
+        let url = "/inventory/movements?limit=200";
+        if (s) url += `&start_date=${s}`;
+        if (e) url += `&end_date=${e}`;
+        if (t) url += `&type=${t}`;
+
+        try {
+          const d = await api("GET", url);
+
+          document.getElementById("tblMutasi").innerHTML = d.length
+            ? d
+                .map((m) => {
+                  let color = "var(--text-main)";
+                  let sign = "";
+                  let badge = "";
+
+                  // 🔥 LOGIKA WARNA & TANDA YANG BENAR 🔥
+                  if (["in", "transfer_in", "return"].includes(m.type)) {
+                    color = "#10b981"; // Hijau (Naik)
+                    sign = "+";
+                    badge =
+                      '<span style="background:rgba(16,185,129,0.15);color:#10b981;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:bold">MASUK</span>';
+                  } else if (["out", "transfer_out", "sale"].includes(m.type)) {
+                    color = "#ef4444"; // Merah (Turun)
+                    sign = "-";
+                    badge =
+                      '<span style="background:rgba(239,68,68,0.15);color:#ef4444;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:bold">KELUAR</span>';
+                  } else if (m.type === "internal_transfer") {
+                    color = "#94a3b8"; // Abu-abu (Tetap)
+                    sign = "⇄";
+                    badge =
+                      '<span style="background:rgba(148,163,184,0.15);color:#94a3b8;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:bold">PINDAH RAK</span>';
+                  } else {
+                    color = "#94a3b8";
+                    badge = `<span class="bo">${m.type}</span>`;
+                  }
+
+                  return `
+              <tr>
+                <td style="font-size:13px;color:var(--text-muted)">${amanFmtDate(m.date)}</td>
+                <td style="font-family:monospace; color:var(--primary); font-size:12px;">${m.reference || "-"}</td>
+                <td><b>${m.item?.name || "-"}</b></td>
+                <td>${badge}</td>
+                <td style="text-align:right">
+                   <div style="font-size:11px; color:var(--text-muted)">Sebelum: ${formatNum(m.qty_before)}</div>
+                   <div style="font-size:18px; font-weight:900; color:${color}; margin: 2px 0;">${sign} ${formatNum(m.qty)}</div>
+                   <div style="font-size:11px; color:var(--text-muted)">Sesudah: ${formatNum(m.qty_after)}</div>
+                </td>
+                <td style="font-size:12px; color:var(--text-muted)">${m.notes || "-"}</td>
+              </tr>
+            `;
+                })
+                .join("")
+            : '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada mutasi stok</td></tr>';
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function loadLow() {
+        try {
+          const d = await api("GET", "/inventory/low-stock");
+          document.getElementById("tblLow").innerHTML = d.length
+            ? d
+                .map(
+                  (i) => `
+              <tr>
+                <td style="font-family:monospace;font-size:13px;color:var(--text-muted)">${i.code || "-"}</td>
+                <td><b>${i.name}</b></td>
+                <td style="font-size:22px;font-weight:900;color:${i.stock <= 0 ? "#ef4444" : "#f59e0b"}">${formatNum(i.stock)}</td>
+                <td style="color:var(--text-muted)">${formatNum(i.min_stock)}</td>
+                <td>${i.stock <= 0 ? '<span class="br">⛔ Habis</span>' : '<span class="bo">⚠️ Menipis</span>'}</td>
+                <td><button class="bsm be" onclick="quickAdjust(${i.id},'${i.name.replace(/'/g, "\\'")}',${i.stock})">Tambah Stok</button></td>
+              </tr>
+            `,
+                )
+                .join("")
+            : '<tr><td colspan="6" style="text-align:center;padding:24px;color:#10b981;font-weight:700">✓ Semua stok aman</td></tr>';
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      init();
+    </script>
+  </body>
+</html>

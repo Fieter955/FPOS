@@ -2,12 +2,18 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from datetime import date, datetime
 
-
 # ─── Auth ─────────────────────────────────────────────────────────────────────
 class Token(BaseModel):
     access_token: str
     token_type: str
     user: dict
+
+class RoleCreate(BaseModel):
+    name: str
+
+class RoleOut(RoleCreate):
+    id: int
+    model_config = {"from_attributes": True}
 
 class UserCreate(BaseModel):
     username: str
@@ -15,6 +21,14 @@ class UserCreate(BaseModel):
     full_name: Optional[str] = None
     password: str
     role: str = "kasir"
+    branch_id: Optional[int] = None
+
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = None
+    role: Optional[str] = None
+    branch_id: Optional[int] = None
+    is_active: Optional[bool] = None
+    password: Optional[str] = None
 
 class UserOut(BaseModel):
     id: int
@@ -22,6 +36,7 @@ class UserOut(BaseModel):
     email: Optional[str]
     full_name: Optional[str]
     role: str
+    branch_id: Optional[int]
     is_active: bool
     model_config = {"from_attributes": True}
 
@@ -146,15 +161,17 @@ class CustomerOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ─── Supplier ─────────────────────────────────────────────────────────────────
+# ── Supplier ─────────────────────────────────────────────────────────────────
 class SupplierCreate(BaseModel):
-    code: str
+    code: Optional[str] = None  # 👈 DIUBAH: Tidak wajib diisi user
     name: str
     address: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
     contact_person: Optional[str] = None
     credit_limit: float = 0
+    item_ids: Optional[List[int]] = None
+    model_config = {"from_attributes": True}
 
 class SupplierUpdate(BaseModel):
     name: Optional[str] = None
@@ -164,6 +181,8 @@ class SupplierUpdate(BaseModel):
     contact_person: Optional[str] = None
     credit_limit: Optional[float] = None
     is_active: Optional[bool] = None
+    item_ids: Optional[List[int]] = None
+    model_config = {"from_attributes": True}
 
 class SupplierOut(BaseModel):
     id: int
@@ -175,8 +194,8 @@ class SupplierOut(BaseModel):
     contact_person: Optional[str]
     credit_limit: float
     is_active: bool
+    items: List[ItemOut] = []
     model_config = {"from_attributes": True}
-
 
 # ─── SalesPerson ──────────────────────────────────────────────────────────────
 class SalesPersonCreate(BaseModel):
@@ -288,32 +307,11 @@ class SaleOut(BaseModel):
 
 
 # ─── Stock Opname ─────────────────────────────────────────────────────────────
-class StockOpnameItemCreate(BaseModel):
+class AdjustmentCreate(BaseModel):
     item_id: int
-    actual_qty: float
-
-class StockOpnameCreate(BaseModel):
-    number: Optional[str] = None
-    date: date
-    notes: Optional[str] = None
-    items: List[StockOpnameItemCreate]
-
-class StockOpnameItemOut(BaseModel):
-    id: int
-    item_id: int
-    system_qty: float
-    actual_qty: float
-    difference: float
-    model_config = {"from_attributes": True}
-
-class StockOpnameOut(BaseModel):
-    id: int
-    number: str
-    date: date
-    status: str
-    notes: Optional[str]
-    items: List[StockOpnameItemOut] = []
-    model_config = {"from_attributes": True}
+    type: str          # 'in', 'out', 'adjust'
+    qty: float
+    description: str
 
 
 # ─── Cash Transaction ─────────────────────────────────────────────────────────
@@ -324,10 +322,13 @@ class CashTransactionCreate(BaseModel):
     amount: float
     description: Optional[str] = None
     reference: Optional[str] = None
+    account_id: int
+    
 
 class CashTransactionOut(CashTransactionCreate):
     id: int
     model_config = {"from_attributes": True}
+
 
 
 # ─── Dashboard Stats ──────────────────────────────────────────────────────────
@@ -370,4 +371,27 @@ class JournalOut(BaseModel):
     reference: Optional[str] = None
     # 👇👇 INI ADALAH KUNCI JAWABANNYA 👇👇
     entries: List[JournalEntryLineOut] = [] 
+    model_config = {"from_attributes": True}
+
+
+    # ─── Branch / Cabang ──────────────────────────────────────────────────────────
+class BranchCreate(BaseModel):
+    code: str
+    name: str
+    address: Optional[str] = None
+    phone: Optional[str] = None
+
+class BranchUpdate(BaseModel):
+    name: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class BranchOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    address: Optional[str]
+    phone: Optional[str]
+    is_active: bool
     model_config = {"from_attributes": True}

@@ -3,18 +3,32 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timedelta
+import pytz # 👈 TAMBAHAN IMPORT
+
 from ..database import get_db
 from .. import models, schemas, auth as auth_utils
 from ..config import settings
 
 router = APIRouter()
 
+# --- Setup Zona Waktu Lokal (WITA / Bali) ---
+WITA = pytz.timezone("Asia/Makassar")
+
+def get_local_date():
+    """Mengambil tanggal akurat berdasarkan zona waktu toko"""
+    return datetime.now(WITA).date()
+
+def get_local_datetime():
+    """Mengambil tanggal & jam akurat berdasarkan zona waktu toko"""
+    return datetime.now(WITA)
+
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_MINUTES = 15
 
 def check_brute_force(db: Session, username: str, ip: str):
     """Block login jika terlalu banyak percobaan gagal"""
-    window = datetime.utcnow() - timedelta(minutes=LOCKOUT_MINUTES)
+    # 👇 UBAH: Gunakan get_local_datetime() bukan datetime.utcnow()
+    window = get_local_datetime() - timedelta(minutes=LOCKOUT_MINUTES)
     failed = db.query(func.count(models.LoginAttempt.id)).filter(
         models.LoginAttempt.username == username,
         models.LoginAttempt.success == False,
@@ -36,8 +50,13 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(),
     user = db.query(models.User).filter(models.User.username == form_data.username).first()
     success = user and auth_utils.verify_password(form_data.password, user.hashed_password)
 
-    # Catat percobaan login
-    db.add(models.LoginAttempt(username=form_data.username, ip_address=ip, success=success))
+    # Catat percobaan login (Paksa menggunakan waktu WITA)
+    db.add(models.LoginAttempt(
+        username=form_data.username, 
+        ip_address=ip, 
+        success=success,
+        created_at=get_local_datetime() # 👈 TAMBAHAN: Paksa pakai WITA
+    ))
     db.commit()
 
     if not success:

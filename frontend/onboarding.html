@@ -1,165 +1,688 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="id">
-<head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Onboarding - iPos 5.0</title>
-<link rel="stylesheet" href="/css/style.css">
-</head>
-<body>
-<div class="app-container"><main class="main-content" style="max-width:800px;margin:0 auto">
-<button class="btn" style="background:transparent;color:var(--text-muted);padding:0;margin-bottom:16px" onclick="location.href='/dashboard'">← Kembali</button>
-<div style="text-align:center;margin-bottom:28px">
-  <div style="font-size:56px;margin-bottom:12px">🚀</div>
-  <h1 style="margin:0">Setup & Onboarding</h1>
-  <p style="margin:8px 0 0;color:var(--text-muted)">Panduan setup awal dan data demo untuk memulai</p>
-</div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Onboarding - FPOS</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <style>
+      body {
+        background-color: var(--bg-color);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      .wizard-container {
+        max-width: 800px;
+        margin: 40px auto;
+        width: 100%;
+        padding: 0 20px;
+      }
 
-<!-- Progress -->
-<div class="card" style="padding:24px;margin-bottom:20px">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-    <h3 style="margin:0">📋 Progress Setup</h3>
-    <span id="pctLabel" style="font-size:18px;font-weight:800;color:var(--primary)">0%</span>
-  </div>
-  <div style="height:14px;background:var(--bg-color);border-radius:99px;overflow:hidden;margin-bottom:6px">
-    <div id="progressBar" style="height:100%;background:var(--primary);border-radius:99px;transition:width .5s;width:0%"></div>
-  </div>
-  <div id="progressSub" style="font-size:14px;color:var(--text-muted)">Memuat...</div>
-</div>
+      /* Stepper UI */
+      .stepper {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 40px;
+        position: relative;
+        padding: 0 40px;
+      }
+      .stepper::before {
+        content: "";
+        position: absolute;
+        top: 20px;
+        left: 60px;
+        right: 60px;
+        height: 3px;
+        background: var(--border-color);
+        z-index: 1;
+      }
+      .step {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+      .step-circle {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: var(--card-bg);
+        border: 3px solid var(--border-color);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 900;
+        font-size: 18px;
+        color: var(--text-muted);
+        transition: 0.3s;
+      }
+      .step.active .step-circle {
+        border-color: var(--primary);
+        background: var(--primary);
+        color: white;
+        box-shadow: 0 0 15px var(--primary-light);
+      }
+      .step.completed .step-circle {
+        border-color: #10b981;
+        background: #10b981;
+        color: white;
+      }
+      .step-label {
+        font-size: 14px;
+        font-weight: bold;
+        color: var(--text-muted);
+      }
+      .step.active .step-label {
+        color: var(--primary);
+      }
 
-<!-- Checklist -->
-<div class="card" style="padding:24px;margin-bottom:20px">
-  <h3 style="margin:0 0 16px">✅ Checklist Setup</h3>
-  <div id="checklistEl"></div>
-</div>
+      /* Panels */
+      .step-panel {
+        display: none;
+        animation: fadeIn 0.4s ease-in-out;
+      }
+      .step-panel.active {
+        display: block;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
 
-<!-- Aksi Data Demo -->
-<div class="card" style="padding:24px;margin-bottom:20px">
-  <h3 style="margin:0 0 8px">🎮 Data Demo</h3>
-  <p style="margin:0 0 16px;color:var(--text-muted)">Generate data contoh (barang, pelanggan, supplier, dan transaksi) untuk mencoba fitur tanpa data nyata.</p>
-  <div style="display:flex;gap:12px;flex-wrap:wrap">
-    <button onclick="buatDemo()" class="btn btn-primary">✨ Buat Data Demo</button>
-    <button onclick="hapusDemo()" class="btn" style="background:rgba(239,68,68,.1);color:#ef4444;border:1px solid rgba(239,68,68,.3)">🗑️ Hapus Semua Data Demo</button>
-  </div>
-</div>
+      /* Card & Inputs */
+      .onboard-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        padding: 30px;
+        margin-bottom: 20px;
+        box-shadow: var(--shadow-sm);
+      }
+      .input-group label {
+        display: block;
+        font-size: 13px;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+      }
+      .val-input {
+        font-size: 20px;
+        font-weight: 900;
+        color: var(--text-main);
+        background: rgba(0, 0, 0, 0.1);
+      }
+      .val-input:focus {
+        background: var(--bg-color);
+        border-color: var(--primary);
+      }
 
-<!-- Setup Cepat -->
-<div class="card" style="padding:24px;margin-bottom:20px">
-  <h3 style="margin:0 0 16px">⚡ Setup Cepat Toko Bangunan</h3>
-  <p style="margin:0 0 16px;color:var(--text-muted)">Klik tombol di bawah untuk membuat kategori dan satuan standar toko bangunan secara otomatis.</p>
-  <button onclick="setupCepat()" class="btn btn-primary">🧱 Buat Kategori & Satuan Standar</button>
-  <div id="setupResult" style="margin-top:14px"></div>
-</div>
+      .btn-nav {
+        padding: 14px 28px;
+        font-size: 16px;
+        font-weight: 900;
+        border-radius: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wizard-container">
+      <div style="text-align: center; margin-bottom: 40px">
+        <div style="font-size: 48px; margin-bottom: 10px">🚀</div>
+        <h1 style="margin: 0; color: var(--text-main)">Setup Awal FPOS</h1>
+        <p style="color: var(--text-muted); margin-top: 8px">
+          Selesaikan 2 langkah mudah ini untuk mulai menggunakan aplikasi.
+        </p>
+      </div>
 
-<!-- Panduan -->
-<div class="card" style="padding:24px">
-  <h3 style="margin:0 0 16px">📖 Panduan Memulai</h3>
-  <div style="display:grid;gap:12px">
-    <div onclick="location.href='/settings'" style="display:flex;align-items:center;gap:14px;padding:14px;background:var(--bg-color);border-radius:12px;cursor:pointer;border:1px solid var(--border-color)" class="step-item">
-      <div style="font-size:32px;flex-shrink:0">1️⃣</div>
-      <div><b>Isi Info Toko</b><div style="font-size:13px;color:var(--text-muted)">Nama toko, alamat, telepon untuk tampil di struk → Pengaturan</div></div>
-      <div style="margin-left:auto;color:var(--primary)">→</div>
-    </div>
-    <div onclick="location.href='/items'" style="display:flex;align-items:center;gap:14px;padding:14px;background:var(--bg-color);border-radius:12px;cursor:pointer;border:1px solid var(--border-color)" class="step-item">
-      <div style="font-size:32px;flex-shrink:0">2️⃣</div>
-      <div><b>Input Data Barang</b><div style="font-size:13px;color:var(--text-muted)">Tambahkan barang, harga beli, harga jual, dan stok awal → Data Barang</div></div>
-      <div style="margin-left:auto;color:var(--primary)">→</div>
-    </div>
-    <div onclick="location.href='/suppliers'" style="display:flex;align-items:center;gap:14px;padding:14px;background:var(--bg-color);border-radius:12px;cursor:pointer;border:1px solid var(--border-color)" class="step-item">
-      <div style="font-size:32px;flex-shrink:0">3️⃣</div>
-      <div><b>Daftarkan Supplier</b><div style="font-size:13px;color:var(--text-muted)">Tambahkan nama distributor/pabrik untuk catat pembelian → Supplier</div></div>
-      <div style="margin-left:auto;color:var(--primary)">→</div>
-    </div>
-    <div onclick="location.href='/shifts'" style="display:flex;align-items:center;gap:14px;padding:14px;background:var(--bg-color);border-radius:12px;cursor:pointer;border:1px solid var(--border-color)" class="step-item">
-      <div style="font-size:32px;flex-shrink:0">4️⃣</div>
-      <div><b>Buka Shift Kasir</b><div style="font-size:13px;color:var(--text-muted)">Sebelum mulai berjualan, buka shift terlebih dahulu → Shift Kasir</div></div>
-      <div style="margin-left:auto;color:var(--primary)">→</div>
-    </div>
-    <div onclick="location.href='/pos'" style="display:flex;align-items:center;gap:14px;padding:14px;background:var(--primary-light);border-radius:12px;cursor:pointer;border:2px solid var(--primary)" class="step-item">
-      <div style="font-size:32px;flex-shrink:0">5️⃣</div>
-      <div><b style="color:var(--primary)">Mulai Jualan!</b><div style="font-size:13px;color:var(--text-muted)">Buka halaman Kasir (POS) dan mulai transaksi pertama Anda → Kasir</div></div>
-      <div style="margin-left:auto;color:var(--primary)">→</div>
-    </div>
-  </div>
-</div>
-</main></div>
-
-<script src="/js/api.js"></script><script src="/js/theme.js"></script>
-<script>
-requireAuth();
-
-async function loadProgress(){
-  try{
-    const d=await api('GET','/onboarding/status');
-    const pct=d.progress_percent||0;
-    document.getElementById('progressBar').style.width=pct+'%';
-    document.getElementById('pctLabel').textContent=pct+'%';
-    document.getElementById('progressSub').textContent=`${d.completed_steps||0} dari ${d.total_steps||0} langkah selesai`;
-    document.getElementById('checklistEl').innerHTML=(d.steps||[]).map(s=>`
-      <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border-color)">
-        <div style="font-size:22px;flex-shrink:0">${s.completed?'✅':'⭕'}</div>
-        <div style="flex:1">
-          <div style="font-size:15px;font-weight:700;color:${s.completed?'var(--success,#10b981)':'var(--text-main)'}">${s.title}</div>
-          ${s.description?`<div style="font-size:13px;color:var(--text-muted);margin-top:2px">${s.description}</div>`:''}
+      <div class="stepper">
+        <div class="step active" id="indicator-1">
+          <div class="step-circle">1</div>
+          <div class="step-label">Data Barang</div>
         </div>
-        ${s.url&&!s.completed?`<a href="${s.url}" style="color:var(--primary);font-size:13px;font-weight:700;text-decoration:none;white-space:nowrap">Kerjakan →</a>`:''}
-      </div>`).join('');
-  }catch(e){
-    // Fallback jika endpoint tidak ada
-    document.getElementById('progressSub').textContent='Sistem siap digunakan';
-    document.getElementById('checklistEl').innerHTML=`
-      <div style="padding:12px 0;color:var(--text-muted);font-size:15px">
-        ✅ Sistem berhasil diinstal dan siap digunakan.<br>
-        Ikuti panduan memulai di bawah untuk setup awal.
-      </div>`;
-  }
-}
+        <div class="step" id="indicator-2">
+          <div class="step-circle">2</div>
+          <div class="step-label">Saldo Awal</div>
+        </div>
+      </div>
 
-async function buatDemo(){
-  if(!await showConfirm('Buat data demo?\n\nData contoh (barang, pelanggan, transaksi) akan ditambahkan ke sistem.'))return;
-  try{
-    showLoading('Membuat data demo...');
-    await api('POST','/onboarding/create-demo');
-    hideLoading();showToast('Data demo berhasil dibuat ✓');loadProgress();
-  }catch(ex){hideLoading();showToast(ex.message,'error');}
-}
+      <div id="step-1" class="step-panel active">
+        <div class="onboard-card" style="border: 2px solid #10b981">
+          <h2 style="margin: 0 0 10px; color: #10b981">
+            📥 Cara Cepat: Import Excel
+          </h2>
+          <p
+            style="
+              color: var(--text-muted);
+              font-size: 14px;
+              margin-bottom: 16px;
+            "
+          >
+            Punya ratusan barang? Jangan input manual! Gunakan file Excel/CSV
+            untuk memasukkan semua data barang, harga, dan stok Anda sekaligus.
+          </p>
+          <div
+            style="
+              background: var(--bg-color);
+              padding: 16px;
+              border-radius: 8px;
+              margin-bottom: 20px;
+            "
+          >
+            <div
+              style="
+                font-size: 12px;
+                color: var(--text-muted);
+                margin-bottom: 6px;
+              "
+            >
+              Format Kolom Header (Baris 1) Wajib:
+            </div>
+            <code
+              style="color: #10b981; font-size: 13px; word-break: break-all"
+            >
+              KODEBARCODE, NAMAITEM, JENIS, MEREK, SATUAN, HARGAPOKOK,
+              HARGAJUAL, STOK, STOKMIN, KETERANGAN, SUPPLIER
+            </code>
+          </div>
 
-async function hapusDemo(){
-  if(!await showConfirm('⚠️ HAPUS SEMUA DATA?\n\nSemua data (kecuali akun admin) akan dihapus permanen.\nTindakan ini tidak bisa dibatalkan!'))return;
-  if(!await showConfirm('Konfirmasi sekali lagi — yakin ingin hapus semua data?'))return;
-  try{
-    showLoading('Menghapus semua data...');
-    await api('POST','/onboarding/clear');
-    hideLoading();showToast('Semua data berhasil dihapus ✓');loadProgress();
-  }catch(ex){hideLoading();showToast(ex.message,'error');}
-}
+          <input
+            type="file"
+            id="excelFile"
+            accept=".xlsx, .xls, .csv"
+            class="input-control"
+            style="margin-bottom: 16px"
+          />
+          <button
+            onclick="importExcel()"
+            class="btn btn-primary"
+            style="
+              background: #10b981;
+              border: none;
+              font-weight: bold;
+              width: 100%;
+            "
+          >
+            📄 Upload & Jalankan Import
+          </button>
+        </div>
 
-async function setupCepat(){
-  const kategori=['Semen & Bahan Pengikat','Bata & Batako','Pasir & Kerikil','Besi & Baja','Kayu & Triplek','Cat & Finishing','Pipa & Sanitasi','Keramik & Granit','Atap & Genteng','Alat & Perkakas'];
-  const satuan=[{name:'Sak',abbreviation:'sak'},{name:'Kilogram',abbreviation:'kg'},{name:'Meter',abbreviation:'m'},{name:'Meter Persegi',abbreviation:'m²'},{name:'Batang',abbreviation:'btg'},{name:'Lembar',abbreviation:'lbr'},{name:'Dus',abbreviation:'dus'},{name:'Pcs',abbreviation:'pcs'},{name:'Liter',abbreviation:'ltr'},{name:'Kubik',abbreviation:'m³'}];
-  try{
-    showLoading('Membuat kategori dan satuan...');
-    let okKat=0, okSat=0;
-    for(const nama of kategori){
-      try{await api('POST','/items/categories',{name:nama});okKat++;}catch(e){}
-    }
-    for(const s of satuan){
-      try{await api('POST','/items/units',s);okSat++;}catch(e){}
-    }
-    hideLoading();
-    document.getElementById('setupResult').innerHTML=`
-      <div style="background:rgba(16,185,129,.1);border:1px solid #10b981;border-radius:12px;padding:14px;font-size:15px">
-        ✅ Berhasil membuat <b>${okKat} kategori</b> dan <b>${okSat} satuan</b> standar toko bangunan.
-      </div>`;
-    showToast(`Berhasil: ${okKat} kategori & ${okSat} satuan dibuat ✓`);
-  }catch(ex){hideLoading();showToast(ex.message,'error');}
-}
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px">
+          <div class="onboard-card">
+            <h3 style="margin: 0 0 10px">🧱 Setup Otomatis</h3>
+            <p
+              style="
+                color: var(--text-muted);
+                font-size: 13px;
+                margin-bottom: 16px;
+              "
+            >
+              Buatkan kategori dan satuan standar toko bangunan.
+            </p>
+            <button
+              onclick="setupCepat()"
+              class="btn"
+              style="
+                width: 100%;
+                border: 1px solid var(--primary);
+                color: var(--primary);
+              "
+            >
+              Buat Standar
+            </button>
+          </div>
 
-// Hover effect step items
-document.querySelectorAll('.step-item').forEach(el=>{
-  el.addEventListener('mouseenter',()=>el.style.borderColor='var(--primary)');
-  el.addEventListener('mouseleave',()=>el.style.borderColor=el.style.border==='2px solid var(--primary)'?'var(--primary)':'var(--border-color)');
-});
+          <div class="onboard-card">
+            <h3 style="margin: 0 0 10px">🎮 Coba-coba (Demo)</h3>
+            <p
+              style="
+                color: var(--text-muted);
+                font-size: 13px;
+                margin-bottom: 16px;
+              "
+            >
+              Isi aplikasi dengan data contoh untuk sekadar tes fitur.
+            </p>
+            <button
+              onclick="buatDemo()"
+              class="btn"
+              style="
+                width: 100%;
+                background: var(--bg-color);
+                border: 1px solid var(--border-color);
+              "
+            >
+              Generate Data Demo
+            </button>
+          </div>
+        </div>
 
-loadProgress();
-</script>
-</body></html>
+        <div style="text-align: right; margin-top: 30px">
+          <button onclick="goToStep(2)" class="btn btn-primary btn-nav">
+            Lanjut ke Saldo Awal ➔
+          </button>
+          <div
+            style="font-size: 12px; color: var(--text-muted); margin-top: 8px"
+          >
+            (Anda bisa melewati langkah ini dan mengisinya nanti di menu
+            Pengaturan)
+          </div>
+        </div>
+      </div>
+
+      <div id="step-2" class="step-panel">
+        <div class="onboard-card" style="border: 2px solid var(--primary)">
+          <h2 style="margin: 0 0 10px; color: var(--primary)">
+            ⚖️ Setup Saldo Awal (Wajib)
+          </h2>
+          <p
+            style="
+              color: var(--text-muted);
+              margin-bottom: 24px;
+              line-height: 1.5;
+            "
+          >
+            Masukkan nilai kekayaan Zona Kerja Anda saat ini. Sistem akan
+            otomatis memproses data ini menjadi jurnal akuntansi agar
+            <b>Neraca Anda seimbang</b> sejak hari pertama.
+          </p>
+
+          <h3
+            style="
+              font-size: 15px;
+              margin-bottom: 12px;
+              border-bottom: 1px solid var(--border-color);
+              padding-bottom: 8px;
+            "
+          >
+            💰 HARTA & ASET
+          </h3>
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 16px;
+              margin-bottom: 16px;
+            "
+          >
+            <div class="input-group">
+              <label>Uang Tunai di Laci Kasir (Rp)</label>
+              <input
+                type="text"
+                inputmode="numeric"
+                id="vCash"
+                class="input-control val-input"
+                placeholder="0"
+                oninput="formatRupiahInput(event)"
+              />
+            </div>
+            <div class="input-group">
+              <label>Saldo di Rekening Bank (Rp)</label>
+              <input
+                type="text"
+                inputmode="numeric"
+                id="vBank"
+                class="input-control val-input"
+                placeholder="0"
+                oninput="formatRupiahInput(event)"
+              />
+            </div>
+          </div>
+
+          <div class="input-group" style="margin-bottom: 16px">
+            <label>Total Nilai Fisik Barang di Gudang (Rp)</label>
+            <input
+              type="text"
+              inputmode="numeric"
+              id="vInv"
+              class="input-control val-input"
+              placeholder="0"
+              oninput="formatRupiahInput(event)"
+            />
+          </div>
+
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 16px;
+              margin-bottom: 24px;
+            "
+          >
+            <div class="input-group">
+              <label>Nilai Peralatan / Kendaraan (Rp)</label>
+              <input
+                type="text"
+                inputmode="numeric"
+                id="vEq"
+                class="input-control val-input"
+                placeholder="0"
+                oninput="formatRupiahInput(event)"
+              />
+            </div>
+            <div class="input-group">
+              <label>Nilai Bangunan Toko (Rp)</label>
+              <input
+                type="text"
+                inputmode="numeric"
+                id="vBld"
+                class="input-control val-input"
+                placeholder="0"
+                oninput="formatRupiahInput(event)"
+              />
+            </div>
+          </div>
+
+          <h3
+            style="
+              font-size: 15px;
+              margin-bottom: 12px;
+              border-bottom: 1px solid var(--border-color);
+              padding-bottom: 8px;
+              color: #ef4444;
+            "
+          >
+            💳 HUTANG / KEWAJIBAN
+          </h3>
+          <div class="input-group" style="margin-bottom: 24px">
+            <label style="color: #ef4444"
+              >Total Hutang ke Pihak Lain / Supplier / Bank (Rp)</label
+            >
+            <input
+              type="text"
+              inputmode="numeric"
+              id="vPay"
+              class="input-control val-input"
+              placeholder="0"
+              oninput="formatRupiahInput(event)"
+              style="color: #ef4444; border-color: rgba(239, 68, 68, 0.3)"
+            />
+          </div>
+
+          <div
+            style="
+              background: rgba(59, 130, 246, 0.1);
+              border: 1px dashed rgba(59, 130, 246, 0.4);
+              padding: 20px;
+              border-radius: 12px;
+              text-align: center;
+              margin-bottom: 24px;
+            "
+          >
+            <div
+              style="
+                font-size: 13px;
+                color: var(--text-muted);
+                font-weight: bold;
+              "
+            >
+              Kekayaan Bersih / Modal Awal Toko:
+            </div>
+            <div
+              id="lblModal"
+              style="
+                font-size: 32px;
+                font-weight: 900;
+                color: #10b981;
+                margin-top: 4px;
+              "
+            >
+              Rp 0
+            </div>
+            <div
+              style="font-size: 12px; color: var(--text-muted); margin-top: 8px"
+            >
+              (Harta dikurangi Hutang)
+            </div>
+          </div>
+        </div>
+
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 30px;
+          "
+        >
+          <button
+            onclick="goToStep(1)"
+            class="btn btn-nav"
+            style="
+              background: transparent;
+              border: 1px solid var(--border-color);
+            "
+          >
+            ← Kembali
+          </button>
+          <button
+            onclick="submitSaldoAwal()"
+            id="btnSubmitSaldo"
+            class="btn btn-primary btn-nav"
+          >
+            Simpan & Selesaikan Setup ✓
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/theme.js"></script>
+    <script>
+      requireAuth();
+
+      // ==========================================
+      // LOGIKA NAVIGASI WIZARD
+      // ==========================================
+      function goToStep(step) {
+        // Update Panels
+        document
+          .querySelectorAll(".step-panel")
+          .forEach((el) => el.classList.remove("active"));
+        document.getElementById(`step-${step}`).classList.add("active");
+
+        // Update Steppers
+        if (step === 1) {
+          document.getElementById("indicator-1").classList.add("active");
+          document.getElementById("indicator-2").classList.remove("active");
+          document.getElementById("indicator-1").classList.remove("completed");
+        } else if (step === 2) {
+          document.getElementById("indicator-1").classList.remove("active");
+          document.getElementById("indicator-1").classList.add("completed");
+          document.getElementById("indicator-2").classList.add("active");
+        }
+        window.scrollTo(0, 0);
+      }
+
+      // ==========================================
+      // LOGIKA FORMAT RUPIAH OTOMATIS
+      // ==========================================
+      function formatRupiahInput(e) {
+        // 1. Ambil nilai, hapus semua karakter selain angka
+        let val = e.target.value.replace(/[^0-9]/g, "");
+
+        // 2. Jika tidak kosong, format dengan titik pemisah ribuan
+        if (val !== "") {
+          e.target.value = new Intl.NumberFormat("id-ID").format(val);
+        } else {
+          e.target.value = "";
+        }
+
+        // 3. Panggil hitungKekayaan setiap kali selesai memformat
+        hitungKekayaan();
+      }
+
+      // Helper untuk mengambil nilai angka murni (tanpa titik)
+      const getRawVal = (id) => {
+        let rawStr = document.getElementById(id).value.replace(/\./g, "");
+        return parseFloat(rawStr) || 0;
+      };
+
+      // ==========================================
+      // LOGIKA LANGKAH 1 (IMPORT EXCEL & DEMO)
+      // ==========================================
+      async function importExcel() {
+        const fInput = document.getElementById("excelFile");
+        if (!fInput.files[0])
+          return showToast(
+            "Harap pilih file Excel atau CSV terlebih dahulu!",
+            "error",
+          );
+
+        const fd = new FormData();
+        fd.append("file", fInput.files[0]);
+
+        try {
+          showLoading("Sedang memproses ribuan data...");
+          // Menggunakan fungsi apiForm yang sudah ada di js/api.js Anda
+          const res = await apiForm("/items/import", fd);
+          hideLoading();
+          showToast(res.message || "Import Berhasil!");
+          fInput.value = "";
+
+          // Tanya user apakah mau lanjut
+          if (
+            confirm(
+              "Import berhasil! Apakah Anda ingin lanjut mengatur Saldo Awal Neraca sekarang?",
+            )
+          ) {
+            goToStep(2);
+          }
+        } catch (e) {
+          hideLoading();
+          showToast(e.message, "error");
+        }
+      }
+
+      async function buatDemo() {
+        if (
+          !(await showConfirm(
+            "Buat data demo?\n\nData barang dan transaksi contoh akan ditambahkan ke sistem.",
+          ))
+        )
+          return;
+        try {
+          showLoading("Menyusun data demo...");
+          await api("POST", "/onboarding/create-demo");
+          hideLoading();
+          showToast("Data demo berhasil dibuat ✓");
+          goToStep(2); // Otomatis lanjut ke step 2
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function setupCepat() {
+        const kategori = [
+          "Semen & Bahan Pengikat",
+          "Bata & Batako",
+          "Pasir & Kerikil",
+          "Besi & Baja",
+          "Kayu & Triplek",
+          "Cat & Finishing",
+          "Pipa & Sanitasi",
+          "Keramik & Granit",
+          "Atap & Genteng",
+          "Alat & Perkakas",
+        ];
+        const satuan = [
+          { name: "Sak", abbreviation: "sak" },
+          { name: "Kilogram", abbreviation: "kg" },
+          { name: "Meter", abbreviation: "m" },
+          { name: "Meter Persegi", abbreviation: "m²" },
+          { name: "Batang", abbreviation: "btg" },
+          { name: "Lembar", abbreviation: "lbr" },
+          { name: "Dus", abbreviation: "dus" },
+          { name: "Pcs", abbreviation: "pcs" },
+        ];
+        try {
+          showLoading("Membuat kategori dan satuan standar...");
+          for (const nama of kategori) {
+            try {
+              await api("POST", "/items/categories", { name: nama });
+            } catch (e) {}
+          }
+          for (const s of satuan) {
+            try {
+              await api("POST", "/items/units", s);
+            } catch (e) {}
+          }
+          hideLoading();
+          showToast("Kategori & Satuan Toko Bangunan berhasil dibuat ✓");
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      // ==========================================
+      // LOGIKA LANGKAH 2 (SALDO AWAL)
+      // ==========================================
+      function hitungKekayaan() {
+        // Gunakan getRawVal yang membersihkan titik sebelum dijumlahkan
+        const totalHarta =
+          getRawVal("vCash") +
+          getRawVal("vBank") +
+          getRawVal("vInv") +
+          getRawVal("vEq") +
+          getRawVal("vBld");
+        const totalHutang = getRawVal("vPay");
+        const modal = totalHarta - totalHutang;
+
+        const lblModal = document.getElementById("lblModal");
+        lblModal.innerText = new Intl.NumberFormat("id-ID", {
+          style: "currency",
+          currency: "IDR",
+          maximumFractionDigits: 0,
+        }).format(modal);
+        lblModal.style.color = modal < 0 ? "#ef4444" : "#10b981";
+      }
+
+      async function submitSaldoAwal() {
+        const btn = document.getElementById("btnSubmitSaldo");
+        btn.disabled = true;
+        btn.innerText = "Menyusun Neraca...";
+
+        const payload = {
+          cash: getRawVal("vCash"),
+          bank: getRawVal("vBank"),
+          inventory: getRawVal("vInv"),
+          equipment: getRawVal("vEq"),
+          building: getRawVal("vBld"),
+          payable: getRawVal("vPay"),
+        };
+
+        try {
+          await api("POST", "/accounting/setup-initial-balance", payload);
+          showToast("Setup Selesai! Neraca Anda Seimbang ✓");
+
+          // Animasi sukses sebelum tendang ke dashboard
+          document.getElementById("step-2").innerHTML = `
+            <div style="text-align:center; padding: 60px 20px;">
+              <div style="font-size: 80px; margin-bottom: 20px;">🎉</div>
+              <h1 style="color: #10b981;">Setup Selesai!</h1>
+              <p style="color: var(--text-muted); font-size: 16px;">Sistem akuntansi Anda telah diinisialisasi dan siap digunakan.</p>
+              <div style="margin-top: 30px; color: var(--primary); font-weight: bold;">Mengarahkan ke Dashboard...</div>
+            </div>
+          `;
+
+          setTimeout(() => {
+            window.location.replace("/dashboard");
+          }, 2000);
+        } catch (e) {
+          showToast(e.message, "error");
+          btn.disabled = false;
+          btn.innerText = "Simpan & Selesaikan Setup ✓";
+        }
+      }
+    </script>
+  </body>
+</html>

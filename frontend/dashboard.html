@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Dashboard - iPos 5.0</title>
+    <title>Dashboard - FPOS</title>
     <link rel="stylesheet" href="/css/style.css" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#0f172a" />
@@ -259,39 +259,23 @@
             <h3>Diskon & Promo</h3>
             <p>Harga grosir otomatis</p>
           </div>
-          <div
-            class="menu-card"
-            onclick="location.href = '/ai_bangunan'"
-            style="border-color: var(--success)"
-          >
-            <div
-              class="icon-w"
-              style="
-                background: rgba(16, 185, 129, 0.15);
-                color: var(--success);
-              "
-            >
-              🤖
-            </div>
-            <h3>Kalkulator AI</h3>
-            <p>Hitung kebutuhan material</p>
+
+          <div class="menu-card" onclick="location.href = '/branches'">
+            <div class="icon-w">🏪</div>
+            <h3>Cabang Toko</h3>
+            <p>Manajemen multi cabang</p>
           </div>
-          <div
-            class="menu-card"
-            onclick="location.href = '/ai_advisor'"
-            style="border-color: var(--success)"
-          >
-            <div
-              class="icon-w"
-              style="
-                background: rgba(16, 185, 129, 0.15);
-                color: var(--success);
-              "
-            >
-              💬
-            </div>
-            <h3>AI Advisor</h3>
-            <p>Asisten pintar toko</p>
+
+          <div class="menu-card" onclick="location.href = '/users'">
+            <div class="icon-w">👥</div>
+            <h3>Manajemen User</h3>
+            <p>Kelola akun & hak akses</p>
+          </div>
+
+          <div class="menu-card" onclick="location.href = '/barcode'">
+            <div class="icon-w">🏷️</div>
+            <h3>Barcode</h3>
+            <p>Buat & kelola barcode produk</p>
           </div>
         </div>
       </main>
@@ -337,6 +321,24 @@
 
       // Panggilan pertama saat halaman dimuat
       loadKPI();
+      // ==========================================
+      // FITUR PENJAGA GERBANG (GATEKEEPER)
+      // ==========================================
+      async function checkGatekeeper() {
+        try {
+          // Asumsi prefix untuk accounting.py di main.py Anda adalah /accounting
+          const res = await api("GET", "/accounting/setup-status");
+          if (res.is_setup_completed === false) {
+            // Belum setup? Tendang ke halaman onboarding!
+            window.location.replace("/onboarding.html");
+          }
+        } catch (e) {
+          console.error("Gagal mengecek status setup", e);
+        }
+      }
+
+      // Jalankan pengecekan
+      checkGatekeeper();
 
       // ==========================================
       // TAMBAHKAN KODE INI DI BAWAHNYA

@@ -1,12 +1,26 @@
+import os
+import sys
+
+# 👇 PENAWAR ANTI-ERROR WINDOWS STARTUP 👇
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+os.chdir(BASE_DIR)
+# 👆 BATAS PENAWAR 👆
 import subprocess
 import os, threading, time, sys
+import winreg
+import tkinter as tk
+from tkinter import messagebox
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from sqlalchemy import func
 import uvicorn
+from contextlib import asynccontextmanager
 
 from app.database import Base, engine, SessionLocal
 from app.auth import get_password_hash
@@ -18,18 +32,16 @@ from app.routes import (
     shifts, returns, backup, ai_advisor,
     email_backup, updater,
     license, warehouse, assembly, notification, discounts, onboarding,
-    unit_conversion, barcode_gen, delivery, trade_in, ai_bangunan
+    unit_conversion, barcode_gen, delivery, trade_in, ai_bangunan, branches, employees, print_queue
 )
 
 # ─── Create all DB tables ──────────────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
 
-# ─── Seed admin ───────────────────────────────────────────────────────────────
 # ─── Seed admin & Super Admin Fieter ──────────────────────────────────────────
 def seed_admin():
     db = SessionLocal()
     try:
-        # 1. Buat/Reset Akun Admin Biasa
         admin = db.query(models.User).filter(models.User.username == "admin").first()
         if not admin:
             db.add(models.User(
@@ -40,7 +52,6 @@ def seed_admin():
         else:
             admin.hashed_password = get_password_hash("admin123")
             
-        # 2. Buat/Reset Akun DEWA (Fieter)
         fieter = db.query(models.User).filter(models.User.username == "Fieter").first()
         if not fieter:
             db.add(models.User(
@@ -63,7 +74,6 @@ seed_admin()
 
 # ─── Safe Migration ───────────────────────────────────────────────────────────
 def run_migrations():
-    """Tambah kolom baru ke tabel yang sudah ada tanpa hapus data."""
     import sqlite3
     db_path = "ipos.db"
     if not os.path.exists(db_path):
@@ -116,12 +126,18 @@ def run_migrations():
     add_col("licenses", "owner_email",  "TEXT")
     add_col("licenses", "billing_status", "TEXT DEFAULT 'ok'")
     add_col("licenses", "billing_message", "TEXT DEFAULT 'Aplikasi berjalan normal.'")
+    add_col("users", "branch_id", "INTEGER")
+    add_col("sales", "branch_id", "INTEGER DEFAULT 1") 
+    add_col("purchases", "branch_id", "INTEGER DEFAULT 1")
+    add_col("shifts", "branch_id", "INTEGER DEFAULT 1")
+    add_col("warehouses", "branch_id", "INTEGER DEFAULT 1")
+    add_col("print_jobs", "content_type", "TEXT DEFAULT 'text'")
+
 
     conn.commit()
     conn.close()
 
 run_migrations()
-
 
 # ─── Background Tasks ─────────────────────────────────────────────────────────
 def local_backup_loop():
@@ -155,9 +171,50 @@ def email_backup_scheduler():
 threading.Thread(target=local_backup_loop, daemon=True).start()
 threading.Thread(target=email_backup_scheduler, daemon=True).start()
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    db = SessionLocal()
+    try:
+        cek_cabang = db.query(models.Branch).first()
+        if not cek_cabang:
+            print("⏳ Menyiapkan 'Toko Pusat' perdana...")
+            cabang_utama = models.Branch(
+                code="HQ-01",         
+                name="Toko Pusat (HQ)", 
+                address="Kantor Pusat",
+                is_active=True
+            )
+            db.add(cabang_utama)
+            db.commit()
+            db.refresh(cabang_utama)
+            
+            gudang_pusat = models.Warehouse(
+                code="WH-HQ-01",
+                name="Gudang Utama Pusat",
+                branch_id=cabang_utama.id,
+                is_active=True,
+                is_default=True
+            )
+            db.add(gudang_pusat)
+            db.commit()
+            
+            users_tanpa_cabang = db.query(models.User).filter(models.User.active_branch_id == None).all()
+            for user in users_tanpa_cabang:
+                user.active_branch_id = cabang_utama.id
+                if hasattr(user, 'branch_id'):
+                    user.branch_id = cabang_utama.id
+                
+            db.commit()
+            print(f"✅ 'Toko Pusat' dan Gudangnya berhasil dibuat. Akun Admin telah ditetapkan!")
+    except Exception as e:
+        print(f"⚠️ Gagal inisialisasi data awal: {e}")
+    finally:
+        db.close()
+        
+    yield 
+    print("Server mematikan proses...")
 
-# ─── FastAPI Setup ────────────────────────────────────────────────────────────
-app = FastAPI(title=settings.APP_NAME, version=settings.APP_VERSION)
+app = FastAPI(title=settings.APP_NAME, version=settings.APP_VERSION, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -167,7 +224,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ─── Register Routes ──────────────────────────────────────────────────────────
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(items.router, prefix="/api/items", tags=["Items"])
 app.include_router(customers.router, prefix="/api/customers", tags=["Customers"])
@@ -185,7 +241,7 @@ app.include_router(ai_advisor.router, prefix="/api/ai", tags=["AI Advisor"])
 app.include_router(email_backup.router, prefix="/api/email-backup", tags=["Email Backup"])
 app.include_router(updater.router, prefix="/api/updater", tags=["Updater"])
 app.include_router(license.router, prefix="/api/license", tags=["License"])
-app.include_router(warehouse.router, prefix="/api/warehouse", tags=["Warehouse"])
+app.include_router(warehouse.router, prefix="/api/warehouses", tags=["Warehouse"])
 app.include_router(assembly.router, prefix="/api/assembly", tags=["Assembly"])
 app.include_router(notification.router, prefix="/api/notification", tags=["Notification"])
 app.include_router(discounts.router, prefix="/api/discounts", tags=["Discounts"])
@@ -195,94 +251,12 @@ app.include_router(barcode_gen.router, prefix="/api/barcode", tags=["Barcode"])
 app.include_router(delivery.router, prefix="/api/delivery", tags=["Delivery"])
 app.include_router(trade_in.router, prefix="/api/trade-in", tags=["Trade In"])
 app.include_router(ai_bangunan.router, prefix="/api/ai-bangunan", tags=["AI Bangunan"])
+app.include_router(branches.router, prefix="/api/branches", tags=["Branches"])
+app.include_router(employees.router, prefix="/api/employees", tags=["Employees"])
+app.include_router(print_queue.router, prefix="/api/print", tags=["Print Queue"])
 
 
-# ==============================================================================
-# 🖨️ FITUR AUTO-DETECT PRINTER & CETAK STRUK (WIN32RAW)
-# ==============================================================================
-def cari_printer_kasir_otomatis():
-    """Mencari nama printer kasir secara otomatis dengan membuang printer virtual."""
-    try:
-        import win32print
-    except ImportError:
-        return "Microsoft Print to PDF"
 
-    try:
-        printers = win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL)
-        printer_names = [p[2] for p in printers]
-
-        virtual_keywords = ["pdf", "fax", "xps", "onenote", "snagit", "webex", "send to", "microsoft"]
-        printer_fisik = [nama for nama in printer_names if not any(vk in nama.lower() for vk in virtual_keywords)]
-
-        pos_keywords = ["pos", "thermal", "receipt", "58", "80", "epson", "xprinter", "xp-", "tm-", "printer"]
-        for nama in printer_fisik:
-            if any(pk in nama.lower() for pk in pos_keywords):
-                return nama
-
-        if len(printer_fisik) > 0:
-            return printer_fisik[0]
-
-        return win32print.GetDefaultPrinter()
-    except Exception:
-        return "Microsoft Print to PDF"
-
-@app.post("/api/sales/print")
-async def print_receipt_api(request: Request):
-    try:
-        data = await request.json()
-        sale = data.get("sale", {})
-        settings_toko = data.get("settings", {})
-
-        nama_toko = settings_toko.get("storeName", "Eva Store")
-        footer = settings_toko.get("storeFooter", "Terima kasih atas kunjungan Anda!")
-
-        NAMA_PRINTER_WINDOWS = cari_printer_kasir_otomatis()
-        print(f"🖨️ Target Printer: {NAMA_PRINTER_WINDOWS}")
-
-        from escpos.printer import Win32Raw
-        p = Win32Raw(NAMA_PRINTER_WINDOWS)
-
-        p.set(align='center', font='a', width=2, height=2)
-        p.text(f"{nama_toko}\n")
-        p.set(align='center', font='a', width=1, height=1)
-        p.text("================================\n")
-
-        p.set(align='left')
-        for item in sale.get('items', []):
-            nama_barang = item.get('item', {}).get('name', 'Barang')[:15]
-            qty = item.get('qty', 1)
-            total = item.get('total', 0)
-            baris = f"{nama_barang:<15} x{qty:<3} Rp{total:>8}\n"
-            p.text(baris)
-
-        p.text("--------------------------------\n")
-
-        p.set(align='right')
-        p.text(f"TOTAL   : Rp {sale.get('total', 0)}\n")
-        p.text(f"DIBAYAR : Rp {sale.get('paid', 0)}\n")
-        p.text(f"KEMBALI : Rp {sale.get('change', 0)}\n")
-
-        p.set(align='center')
-        p.text("--------------------------------\n")
-        p.text(f"{footer}\n")
-        p.text("\n\n\n")
-
-        try:
-            p.cut()
-        except:
-            pass
-
-        return {"status": "success", "message": f"Tercetak otomatis di: {NAMA_PRINTER_WINDOWS}"}
-
-    except Exception as e:
-        print(f"PRINT ERROR: {e}")
-        return JSONResponse(status_code=500, content={"detail": f"Gagal mencetak: {str(e)}"})
-# ==============================================================================
-
-
-# ==============================================================================
-# ─── SENSOR PENCARI FOLDER PINTAR ─────────────────────────────────────────────
-# ==============================================================================
 if getattr(sys, 'frozen', False):
     ROOT_DIR = Path(sys.executable).parent
 else:
@@ -291,12 +265,9 @@ else:
 FRONTEND_DIR = ROOT_DIR / "frontend"
 MANIFEST_PATH = FRONTEND_DIR / "manifest.json"
 
-
-# 👇 TAMBAHKAN 3 BARIS INI UNTUK FOLDER UPLOADS 👇
 UPLOADS_DIR = ROOT_DIR / "uploads"
-os.makedirs(UPLOADS_DIR, exist_ok=True) # Buat foldernya otomatis jika belum ada
+os.makedirs(UPLOADS_DIR, exist_ok=True) 
 app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
-# 👆 SAMPAI SINI 👆
 
 @app.get("/manifest.json", tags=["PWA"])
 def get_manifest():
@@ -323,7 +294,7 @@ if FRONTEND_DIR.exists():
         "items", "customers", "suppliers", "inventory", "reports",
         "accounting", "shifts", "konsinyasi", "ai_advisor",
         "settings", "warehouse", "assembly", "discounts", "onboarding",
-        "unit_conversion", "delivery", "trade_in", "ai_bangunan"
+        "unit_conversion", "delivery", "trade_in", "ai_bangunan", "branches", "users", "barcode",
     ]
 
     for page in HTML_PAGES:
@@ -336,14 +307,8 @@ if FRONTEND_DIR.exists():
                 return handler
             app.add_api_route(f"/{page}", make_handler(page), methods=["GET"])
             app.add_api_route(f"/{page}.html", make_handler(page), methods=["GET"])
-else:
-    print(f"⚠ WARNING: Folder Frontend tidak ditemukan di {FRONTEND_DIR}!")
 
-# ==============================================================================
-# ─── HELPER: TAILSCALE EXECUTION ──────────────────────────────────────────────
-# ==============================================================================
 def cari_tailscale_exe() -> str | None:
-    """Cari tailscale.exe langsung, tidak andalkan PATH"""
     kandidat = [
         r"C:\Program Files\Tailscale\tailscale.exe",
         r"C:\Program Files (x86)\Tailscale\tailscale.exe",
@@ -355,7 +320,6 @@ def cari_tailscale_exe() -> str | None:
     return None
 
 def run_cmd(args: list[str]) -> tuple[int, str, str]:
-    # Ganti 'tailscale' dengan path penuh jika ketemu
     ts_exe = cari_tailscale_exe()
     if args and args[0] == "tailscale" and ts_exe:
         args = [ts_exe] + args[1:]
@@ -378,11 +342,9 @@ def reset_serve(publik: bool):
 def jalankan_tailscale(port: int, publik: bool) -> bool:
     ts_exe = cari_tailscale_exe()
     if not ts_exe:
-        print("TAILSCALE: tailscale.exe tidak ditemukan!")
         return False
     
     if not cek_tailscale_status():
-        print("TAILSCALE: Status tidak connected. Pastikan Tailscale menyala.")
         return False
     
     reset_serve(publik)
@@ -395,13 +357,47 @@ def jalankan_tailscale(port: int, publik: bool) -> bool:
         args.append(str(port))
         
     code, out, err = run_cmd(args)
-    print(f"TAILSCALE: code={code} out={out} err={err}")
     return code == 0 or "already exists" in err
 
 
-# ==============================================================================
-# ─── MAIN EXECUTION ───────────────────────────────────────────────────────────
-# ==============================================================================
+# 👇 SENSOR POP-UP AUTO-START (Hanya jalan 1x) 👇
+def cek_dan_tanya_autostart():
+    flag_file = os.path.join(ROOT_DIR, ".autostart_configured")
+    if not os.path.exists(flag_file):
+        root = tk.Tk()
+        root.attributes('-topmost', True) # Pastikan popup muncul di depan
+        root.withdraw()
+        
+        ans = messagebox.askyesno(
+            "Auto-Start Windows", 
+            "Apakah Anda ingin Sistem Utama FPOS ini otomatis terbuka setiap kali komputer dinyalakan?",
+            parent=root
+        )
+        
+        if getattr(sys, 'frozen', False):
+            exe_path = sys.executable
+        else:
+            exe_path = os.path.abspath(sys.argv[0])
+            
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_ALL_ACCESS)
+            if ans:
+                winreg.SetValueEx(key, "EvaStore_FPOS", 0, winreg.REG_SZ, f'"{exe_path}"')
+            else:
+                try:
+                    winreg.DeleteValue(key, "EvaStore_FPOS")
+                except Exception:
+                    pass
+            winreg.CloseKey(key)
+        except Exception:
+            pass
+            
+        # Tandai bahwa sudah pernah ditanya
+        with open(flag_file, "w") as f:
+            f.write("done")
+
+
 if __name__ == "__main__":
     import multiprocessing
     import socket
@@ -410,12 +406,14 @@ if __name__ == "__main__":
 
     multiprocessing.freeze_support()
 
-    # ─── OBAT ANTI CRASH UNTUK MODE --noconsole ───
     if sys.stdout is None or sys.stderr is None:
         log_path = os.path.join(ROOT_DIR, "error_log.txt")
         log_file = open(log_path, "w", encoding="utf-8")
         sys.stdout = log_file
         sys.stderr = log_file
+
+    # Jalankan sensor pop-up autostart sebelum server menyala
+    cek_dan_tanya_autostart()
 
     PORT = 8010
     DOMAIN_TS = "desktop-b0e6dv6.balinese-alhena.ts.net"
@@ -426,47 +424,37 @@ if __name__ == "__main__":
             return s.connect_ex(('127.0.0.1', port)) == 0
 
     def jalankan_server():
-        # Jalankan tailscale sebelum uvicorn start di background thread
         jalankan_tailscale(PORT, PUBLIK)
         uvicorn.run(app, host="0.0.0.0", port=PORT)
 
     def maximize_benar(window):
-        # Tunggu UI render sebentar
         time.sleep(0.5) 
         hwnd = ctypes.windll.user32.FindWindowW(None, "Eva Store")
         if hwnd:
-            # SW_MAXIMIZE = 3
             ctypes.windll.user32.ShowWindow(hwnd, 3)
 
     if is_server_running(PORT):
-        # Server sudah jalan, langsung buka jendela baru
         window = webview.create_window(
             title="Eva Store",
             url=f"http://127.0.0.1:{PORT}",
-            fullscreen=False, # Set false, kita pakai maximize_benar
+            fullscreen=False, 
             text_select=False,
             confirm_close=True,
         )
         webview.start(maximize_benar, window)
     else:
-        # Jalankan server & tailscale di background thread
         server_thread = threading.Thread(target=jalankan_server, daemon=True)
         server_thread.start()
 
-        # Tunggu server siap merespon
-        print("Menunggu server siap...")
-        for _ in range(20):  # maksimal 10 detik
+        for _ in range(20):  
             if is_server_running(PORT):
                 break
             time.sleep(0.5)
 
-        print("Server siap! Membuka aplikasi...")
-
-        # Buka jendela — ini blocking, jadi taruh paling akhir
         window = webview.create_window(
             title="Eva Store",
             url=f"http://127.0.0.1:{PORT}",
-            fullscreen=False, # Set false, kita pakai maximize_benar
+            fullscreen=False, 
             text_select=False,
             confirm_close=True,
         )

@@ -1,4 +1,7 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text, Date
+from datetime import datetime
+
+import pytz
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Table, Text, Date
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
@@ -15,6 +18,13 @@ class User(Base):
     role = Column(String(20), default="kasir")
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Cabang asal karyawan
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
+    branch = relationship("Branch", back_populates="users")
+    
+    # 👇 TAMBAHKAN BARIS INI (Cabang aktif saat login) 👇
+    active_branch_id = Column(Integer, nullable=True)
 
 
 class AuditLog(Base):
@@ -37,6 +47,32 @@ class LoginAttempt(Base):
     success = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+class Role(Base):
+    __tablename__ = "roles"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(50), unique=True, nullable=False)
+    description = Column(Text)
+
+    # ─── Data Cabang ─────────────────────────────────────────────────────────────
+class Branch(Base):
+    __tablename__ = "branches"
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(20), unique=True, nullable=False) # Misal: CBG-01
+    name = Column(String(100), nullable=False)             # Misal: Eva Store - Pusat
+    address = Column(Text)
+    phone = Column(String(20))
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    is_setup_complete = Column(Boolean, default=False)
+    
+    # Relasi ke tabel lain
+    users = relationship("User", back_populates="branch")
+    warehouses = relationship("Warehouse", back_populates="branch")
+    sales = relationship("Sale", back_populates="branch")
+    purchases = relationship("Purchase", back_populates="branch")
+    shifts = relationship("Shift", back_populates="branch")
+
 
 # ─── Shift / Tutup Kasir ──────────────────────────────────────────────────────
 class Shift(Base):
@@ -52,9 +88,19 @@ class Shift(Base):
     status = Column(String(10), default="open")   # open | closed
     notes = Column(Text)
     user = relationship("User")
-
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
+    branch = relationship("Branch", back_populates="shifts")
 
 # ─── Master Data ──────────────────────────────────────────────────────────────
+
+
+# 👇 1. TAMBAHKAN TABEL PERANTARA item dan supplier untuk relasi many-to-many 👇
+item_supplier_link = Table(
+    'item_supplier_link', Base.metadata,
+    Column('item_id', Integer, ForeignKey('items.id'), primary_key=True),
+    Column('supplier_id', Integer, ForeignKey('suppliers.id'), primary_key=True)
+)
+
 class Category(Base):
     __tablename__ = "categories"
     id = Column(Integer, primary_key=True, index=True)
@@ -94,6 +140,7 @@ class Item(Base):
     sale_items = relationship("SaleItem", back_populates="item")
     purchase_items = relationship("PurchaseItem", back_populates="item")
     stock_movements = relationship("StockMovement", back_populates="item")
+    suppliers = relationship("Supplier", secondary=item_supplier_link, back_populates="items")
 
 
 class ItemPrice(Base):
@@ -135,7 +182,7 @@ class Supplier(Base):
     __tablename__ = "suppliers"
     id = Column(Integer, primary_key=True, index=True)
     code = Column(String(50), unique=True, nullable=False)
-    name = Column(String(200), nullable=False)
+    name = Column(String(200), unique=True, nullable=False)
     address = Column(Text)
     phone = Column(String(20))
     email = Column(String(100))
@@ -144,6 +191,7 @@ class Supplier(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     purchases = relationship("Purchase", back_populates="supplier")
+    items = relationship("Item", secondary=item_supplier_link, back_populates="suppliers")
 
 
 class SalesPerson(Base):
@@ -176,6 +224,8 @@ class Purchase(Base):
     supplier = relationship("Supplier", back_populates="purchases")
     items = relationship("PurchaseItem", back_populates="purchase", cascade="all, delete-orphan")
     returns = relationship("PurchaseReturn", back_populates="purchase")
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
+    branch = relationship("Branch", back_populates="purchases")
 
 
 class PurchaseItem(Base):
@@ -239,6 +289,8 @@ class Sale(Base):
     customer = relationship("Customer", back_populates="sales")
     items = relationship("SaleItem", back_populates="sale", cascade="all, delete-orphan")
     returns = relationship("SaleReturn", back_populates="sale")
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
+    branch = relationship("Branch", back_populates="sales")
 
 
 class SaleItem(Base):
@@ -284,6 +336,7 @@ class SaleReturnItem(Base):
 class StockMovement(Base):
     __tablename__ = "stock_movements"
     id = Column(Integer, primary_key=True, index=True)
+    branch_id = Column(Integer, nullable=True)
     date = Column(Date, nullable=False)
     item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
     type = Column(String(20), nullable=False)
@@ -295,30 +348,6 @@ class StockMovement(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     item = relationship("Item", back_populates="stock_movements")
 
-
-class StockOpname(Base):
-    __tablename__ = "stock_opnames"
-    id = Column(Integer, primary_key=True, index=True)
-    number = Column(String(50), unique=True, nullable=False)
-    date = Column(Date, nullable=False)
-    status = Column(String(20), default="draft")
-    notes = Column(Text)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    items = relationship("StockOpnameItem", back_populates="opname", cascade="all, delete-orphan")
-
-
-class StockOpnameItem(Base):
-    __tablename__ = "stock_opname_items"
-    id = Column(Integer, primary_key=True, index=True)
-    opname_id = Column(Integer, ForeignKey("stock_opnames.id"), nullable=False)
-    item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
-    system_qty = Column(Float, nullable=False)
-    actual_qty = Column(Float, nullable=False)
-    difference = Column(Float, nullable=False)
-    opname = relationship("StockOpname", back_populates="items")
-
-
-
 class CashTransaction(Base):
     __tablename__ = "cash_transactions"
     id = Column(Integer, primary_key=True, index=True)
@@ -329,6 +358,9 @@ class CashTransaction(Base):
     description = Column(Text)
     reference = Column(String(100))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False) 
+    branch_id = Column(Integer, nullable=True) # Tambahkan ini di model Kas
+    account = relationship("Account")
 
 
 # ─── Konsinyasi ───────────────────────────────────────────────────────────────
@@ -447,6 +479,7 @@ class Journal(Base):
     number = Column(String(50), unique=True, nullable=False)
     date = Column(Date, nullable=False)
     description = Column(Text, nullable=False)
+    branch_id = Column(Integer, nullable=True)
     reference = Column(String(100))   # nomor faktur/PO yang terkait
     source = Column(String(20), default="manual")  # manual | sale | purchase | cash
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -547,6 +580,8 @@ class Warehouse(Base):
     transfers_to = relationship("WarehouseTransfer",
                                 foreign_keys="WarehouseTransfer.to_warehouse_id",
                                 back_populates="to_warehouse")
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    branch = relationship("Branch", back_populates="warehouses")
 
 
 class WarehouseStock(Base):
@@ -878,3 +913,26 @@ class MaterialEstimate(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     customer = relationship("Customer")
+
+
+
+## ─── Print Job Queue ───────────────────────────────────────────────────────────
+from datetime import datetime
+import pytz
+from sqlalchemy import Column, Integer, String, Text, DateTime
+
+def get_local_datetime():
+    WITA = pytz.timezone("Asia/Makassar")
+    return datetime.now(WITA)
+
+class PrintJob(Base):
+    __tablename__ = "print_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    branch_id = Column(Integer)
+    content = Column(Text)
+    status = Column(String, default="pending")  
+    content_type = Column(String, default="raw")
+    
+    # 👇 PERBAIKAN: Hilangkan tanda () di get_local_datetime
+    created_at = Column(DateTime, default=get_local_datetime)

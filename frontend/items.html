@@ -1,309 +1,931 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="id">
-<head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Data Barang - iPos 5.0</title>
-<link rel="stylesheet" href="/css/style.css">
-</head>
-<body>
-<div class="app-container"><main class="main-content">
-<button class="btn" style="background:transparent;color:var(--text-muted);padding:0;margin-bottom:16px" onclick="location.href='/dashboard'">← Kembali</button>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Data Barang - FPOS</title>
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body>
+    <div class="app-container">
+      <main class="main-content">
+        <button
+          class="btn"
+          style="
+            background: transparent;
+            color: var(--text-muted);
+            padding: 0;
+            margin-bottom: 16px;
+          "
+          onclick="location.href = '/dashboard'"
+        >
+          ← Kembali
+        </button>
 
-<div class="pg-header">
-  <div><h1>📦 Data Barang</h1><p>Kelola produk, kategori, dan satuan.</p></div>
-  <div style="display:flex;gap:10px">
-    <button class="btn" style="background:var(--bg-color);border:1px solid var(--border-color)" onclick="switchTab('kat')">🏷️ Kategori</button>
-    <button class="btn" style="background:var(--bg-color);border:1px solid var(--border-color)" onclick="switchTab('sat')">📐 Satuan</button>
-    <button class="btn btn-primary" onclick="openItemModal()">➕ Tambah Barang</button>
-  </div>
-</div>
+        <div class="pg-header">
+          <div>
+            <h1>📦 Data Barang</h1>
+            <p>Kelola produk, harga normal/diskon, kategori, dan satuan.</p>
+          </div>
+          <div style="display: flex; gap: 10px">
+            <button
+              class="btn"
+              style="
+                background: var(--bg-color);
+                border: 1px solid var(--border-color);
+              "
+              onclick="switchTab('kat')"
+            >
+              🏷️ Kategori
+            </button>
+            <button
+              class="btn"
+              style="
+                background: var(--bg-color);
+                border: 1px solid var(--border-color);
+              "
+              onclick="switchTab('sat')"
+            >
+              📐 Satuan
+            </button>
+            <button class="btn btn-primary" onclick="openItemModal()">
+              ➕ Tambah Barang
+            </button>
+          </div>
+        </div>
 
-<!-- Tab nav (simple state) -->
-<div id="tabBar" style="display:flex;gap:8px;margin-bottom:20px">
-  <button id="tbBarang" class="cat-btn active" onclick="switchTab('brg')" style="padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit">Barang</button>
-  <button id="tbKat" class="cat-btn" onclick="switchTab('kat')" style="padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit">Kategori</button>
-  <button id="tbSat" class="cat-btn" onclick="switchTab('sat')" style="padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit">Satuan</button>
-</div>
+        <div id="tabBar" style="display: flex; gap: 8px; margin-bottom: 20px">
+          <button
+            id="tbBarang"
+            class="cat-btn active"
+            onclick="switchTab('brg')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--primary);
+              background: var(--primary);
+              color: #fff;
+              font-weight: 700;
+              cursor: pointer;
+            "
+          >
+            Barang
+          </button>
+          <button
+            id="tbKat"
+            class="cat-btn"
+            onclick="switchTab('kat')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+            "
+          >
+            Kategori
+          </button>
+          <button
+            id="tbSat"
+            class="cat-btn"
+            onclick="switchTab('sat')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+            "
+          >
+            Satuan
+          </button>
+        </div>
 
-<!-- BARANG PANEL -->
-<div id="pnlBrg">
-  <div class="filter-bar">
-    <input id="srchBarang" type="text" class="input-control" placeholder="🔍 Cari kode / nama / barcode..." oninput="loadItems()">
-    <select id="filterKat" class="input-control" onchange="loadItems()"><option value="">Semua Kategori</option></select>
-    <label style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--text-muted);white-space:nowrap">
-      <input type="checkbox" id="showInaktif" onchange="loadItems()" style="width:16px;height:16px"> Tampilkan Nonaktif
-    </label>
-  </div>
-  <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>Kode</th><th>Nama Barang</th><th>Kategori</th><th>Satuan</th><th>H.Beli</th><th>H.Jual</th><th>Stok</th><th>Aksi</th></tr></thead>
-    <tbody id="tblBarang"></tbody>
-  </table></div>
-</div>
+        <div id="pnlBrg">
+          <div class="filter-bar">
+            <input
+              id="srchBarang"
+              type="text"
+              class="input-control"
+              placeholder="🔍 Cari kode / nama / barcode..."
+              oninput="loadItems()"
+            />
+            <select id="filterKat" class="input-control" onchange="loadItems()">
+              <option value="">Semua Kategori</option>
+            </select>
+            <label
+              style="
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 14px;
+                font-weight: 600;
+                color: var(--text-muted);
+                white-space: nowrap;
+              "
+            >
+              <input
+                type="checkbox"
+                id="showInaktif"
+                onchange="loadItems()"
+                style="width: 16px; height: 16px"
+              />
+              Tampilkan Nonaktif
+            </label>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Nama Barang & Barcode</th>
+                  <th>Kategori</th>
+                  <th>Satuan</th>
+                  <th>H.Beli</th>
+                  <th>H.Jual Normal</th>
+                  <th>H.Jual Diskon</th>
+                  <th>Stok</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="tblBarang"></tbody>
+            </table>
+          </div>
+        </div>
 
-<!-- KATEGORI PANEL -->
-<div id="pnlKat" style="display:none">
-  <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
-    <button class="btn btn-primary" onclick="openKatModal()">➕ Tambah Kategori</button>
-  </div>
-  <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>Nama Kategori</th><th>Deskripsi</th><th>Aksi</th></tr></thead>
-    <tbody id="tblKat"></tbody>
-  </table></div>
-</div>
+        <div id="pnlKat" style="display: none">
+          <div
+            style="
+              display: flex;
+              justify-content: flex-end;
+              margin-bottom: 14px;
+            "
+          >
+            <button class="btn btn-primary" onclick="openKatModal()">
+              ➕ Tambah Kategori
+            </button>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Nama Kategori</th>
+                  <th>Deskripsi</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="tblKat"></tbody>
+            </table>
+          </div>
+        </div>
 
-<!-- SATUAN PANEL -->
-<div id="pnlSat" style="display:none">
-  <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
-    <button class="btn btn-primary" onclick="openSatModal()">➕ Tambah Satuan</button>
-  </div>
-  <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>Nama Satuan</th><th>Singkatan</th><th>Aksi</th></tr></thead>
-    <tbody id="tblSat"></tbody>
-  </table></div>
-</div>
-
-</main></div>
-
-<!-- MODAL: Barang -->
-<div class="modal-overlay" id="mBarang"><div class="modal-box wide">
-  <div class="modal-hdr"><h2 id="mBarangTitle">Tambah Barang</h2><button class="btn-x" onclick="closeModal('mBarang')">×</button></div>
-  <form id="fBarang" onsubmit="saveItem(event)">
-    <input type="hidden" id="fId">
-    <div class="row2" style="margin-bottom:16px">
-      <div class="input-group"><label>Kode *</label><input id="fKode" class="input-control" required placeholder="ITM001"></div>
-      <div class="input-group"><label>Barcode</label><input id="fBarcode" class="input-control" placeholder="Opsional" inputmode="numeric"></div>
+        <div id="pnlSat" style="display: none">
+          <div
+            style="
+              display: flex;
+              justify-content: flex-end;
+              margin-bottom: 14px;
+            "
+          >
+            <button class="btn btn-primary" onclick="openSatModal()">
+              ➕ Tambah Satuan
+            </button>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Nama Satuan</th>
+                  <th>Singkatan</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="tblSat"></tbody>
+            </table>
+          </div>
+        </div>
+      </main>
     </div>
-    <div class="input-group"><label>Nama Barang *</label><input id="fNama" class="input-control" required placeholder="Nama produk"></div>
-    <div class="row2" style="margin-bottom:16px">
-      <div class="input-group">
-        <label>Kategori</label>
-        <div style="display:flex;gap:8px">
-          <select id="fKat" class="input-control" style="flex:1;margin:0"><option value="">-- Pilih --</option></select>
-          <button type="button" onclick="quickAddKat()" class="btn" style="padding:12px 16px;background:var(--primary-light);color:var(--primary);border:none;border-radius:12px;font-size:18px;font-weight:700">+</button>
+
+    <div class="modal-overlay" id="mBarang">
+      <div class="modal-box wide">
+        <div class="modal-hdr">
+          <h2 id="mBarangTitle">Tambah Barang</h2>
+          <button class="btn-x" onclick="closeModal('mBarang')">×</button>
+        </div>
+        <form id="fBarang" onsubmit="saveItem(event)">
+          <input type="hidden" id="fId" />
+
+          <div class="row2" style="margin-bottom: 16px">
+            <div class="input-group">
+              <label>Nama Barang *</label>
+              <input
+                id="fNama"
+                class="input-control"
+                required
+                placeholder="Contoh: Semen Gresik 50kg"
+              />
+            </div>
+            <div class="input-group">
+              <label>Sistem Barcode</label>
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 8px;
+                  margin-bottom: 6px;
+                "
+              >
+                <input
+                  type="checkbox"
+                  id="autoBarcode"
+                  onchange="toggleBarcodeUI()"
+                  checked
+                  style="width: 16px; height: 16px"
+                />
+                <label
+                  for="autoBarcode"
+                  style="
+                    margin: 0;
+                    cursor: pointer;
+                    color: var(--text-main);
+                    font-weight: bold;
+                  "
+                  >Sistem Buatkan Otomatis</label
+                >
+              </div>
+              <input
+                id="fBarcode"
+                class="input-control"
+                placeholder="Tembak Scanner / Ketik Manual"
+                style="display: none"
+              />
+              <div
+                id="lblScanner"
+                style="
+                  font-size: 11px;
+                  color: #10b981;
+                  margin-top: 4px;
+                  font-weight: bold;
+                "
+              >
+                (Atau Anda bisa langsung tembak Scanner Anda)
+              </div>
+            </div>
+          </div>
+
+          <div class="row2" style="margin-bottom: 16px">
+            <div class="input-group">
+              <label>Kategori</label>
+              <div style="display: flex; gap: 8px">
+                <select
+                  id="fKat"
+                  class="input-control"
+                  style="flex: 1; margin: 0"
+                >
+                  <option value="">-- Pilih --</option>
+                </select>
+                <button
+                  type="button"
+                  onclick="quickAddKat()"
+                  class="btn"
+                  style="
+                    padding: 12px 16px;
+                    background: var(--primary-light);
+                    color: var(--primary);
+                    border: none;
+                    border-radius: 12px;
+                    font-weight: 700;
+                  "
+                >
+                  +
+                </button>
+              </div>
+            </div>
+            <div class="input-group">
+              <label>Satuan</label>
+              <div style="display: flex; gap: 8px">
+                <select
+                  id="fSat"
+                  class="input-control"
+                  style="flex: 1; margin: 0"
+                >
+                  <option value="">-- Pilih --</option>
+                </select>
+                <button
+                  type="button"
+                  onclick="quickAddSat()"
+                  class="btn"
+                  style="
+                    padding: 12px 16px;
+                    background: var(--primary-light);
+                    color: var(--primary);
+                    border: none;
+                    border-radius: 12px;
+                    font-weight: 700;
+                  "
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="row3" style="margin-bottom: 16px">
+            <div class="input-group">
+              <label>Harga Modal (Beli)</label>
+              <input
+                id="fHBeli"
+                type="text"
+                inputmode="numeric"
+                class="input-control"
+                value="0"
+                oninput="formatInputRibuan(this)"
+              />
+            </div>
+            <div class="input-group">
+              <label style="color: var(--primary); font-weight: bold"
+                >Harga Jual (Normal) *</label
+              >
+              <input
+                id="fHJual"
+                type="text"
+                inputmode="numeric"
+                class="input-control"
+                value="0"
+                required
+                oninput="formatInputRibuan(this)"
+              />
+            </div>
+            <div class="input-group">
+              <label style="color: #f59e0b; font-weight: bold"
+                >Harga Diskon / Grosir</label
+              >
+              <input
+                id="fHJualDiskon"
+                type="text"
+                inputmode="numeric"
+                class="input-control"
+                value="0"
+                oninput="formatInputRibuan(this)"
+              />
+            </div>
+          </div>
+
+          <div class="row2" style="margin-bottom: 16px">
+            <div class="input-group">
+              <label>Peringatan Stok Menipis</label>
+              <input
+                id="fStokMin"
+                type="text"
+                inputmode="numeric"
+                class="input-control"
+                value="0"
+                oninput="formatInputRibuan(this)"
+              />
+            </div>
+            <div class="input-group">
+              <label>Catatan Tambahan</label>
+              <textarea
+                id="fDesk"
+                class="input-control"
+                rows="1"
+                style="resize: vertical"
+              ></textarea>
+            </div>
+          </div>
+
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 12px;
+              margin-top: 8px;
+            "
+          >
+            <button
+              type="button"
+              onclick="closeModal('mBarang')"
+              class="btn"
+              style="
+                background: var(--bg-color);
+                border: 1px solid var(--border-color);
+                color: var(--text-main);
+              "
+            >
+              Batal
+            </button>
+            <button type="submit" class="btn btn-primary">Simpan Barang</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="mKat">
+      <div class="modal-box">
+        <div class="modal-hdr">
+          <h2 id="mKatTitle">Tambah Kategori</h2>
+          <button class="btn-x" onclick="closeModal('mKat')">×</button>
+        </div>
+        <div class="input-group">
+          <label>Nama *</label
+          ><input
+            id="kNama"
+            class="input-control"
+            placeholder="contoh: Semen & Pasir"
+          />
+        </div>
+        <div class="input-group">
+          <label>Deskripsi</label
+          ><textarea id="kDesk" class="input-control" rows="2"></textarea>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+          <button
+            onclick="closeModal('mKat')"
+            class="btn"
+            style="
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+            "
+          >
+            Batal
+          </button>
+          <button onclick="saveKat()" class="btn btn-primary">Simpan</button>
         </div>
       </div>
-      <div class="input-group">
-        <label>Satuan</label>
-        <div style="display:flex;gap:8px">
-          <select id="fSat" class="input-control" style="flex:1;margin:0"><option value="">-- Pilih --</option></select>
-          <button type="button" onclick="quickAddSat()" class="btn" style="padding:12px 16px;background:var(--primary-light);color:var(--primary);border:none;border-radius:12px;font-size:18px;font-weight:700">+</button>
+    </div>
+
+    <div class="modal-overlay" id="mSat">
+      <div class="modal-box">
+        <div class="modal-hdr">
+          <h2 id="mSatTitle">Tambah Satuan</h2>
+          <button class="btn-x" onclick="closeModal('mSat')">×</button>
+        </div>
+        <div class="input-group">
+          <label>Nama *</label
+          ><input
+            id="sNama"
+            class="input-control"
+            placeholder="contoh: Kilogram"
+          />
+        </div>
+        <div class="input-group">
+          <label>Singkatan</label
+          ><input id="sAbr" class="input-control" placeholder="kg" />
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+          <button
+            onclick="closeModal('mSat')"
+            class="btn"
+            style="
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+            "
+          >
+            Batal
+          </button>
+          <button onclick="saveSat()" class="btn btn-primary">Simpan</button>
         </div>
       </div>
     </div>
-    <div class="row3" style="margin-bottom:16px">
-      <div class="input-group"><label>Harga Beli</label><input id="fHBeli" type="number" class="input-control" value="0" min="0"></div>
-      <div class="input-group"><label>Harga Jual</label><input id="fHJual" type="number" class="input-control" value="0" min="0"></div>
-      <div class="input-group"><label>Stok Min</label><input id="fStokMin" type="number" class="input-control" value="0" min="0"></div>
-    </div>
-    <div class="input-group"><label>Deskripsi</label><textarea id="fDesk" class="input-control" rows="2" style="resize:vertical"></textarea></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px">
-      <button type="button" onclick="closeModal('mBarang')" class="btn" style="background:var(--bg-color);border:1px solid var(--border-color);color:var(--text-main)">Batal</button>
-      <button type="submit" class="btn btn-primary">Simpan Barang</button>
-    </div>
-  </form>
-</div></div>
 
-<!-- MODAL: Kategori -->
-<div class="modal-overlay" id="mKat"><div class="modal-box">
-  <div class="modal-hdr"><h2 id="mKatTitle">Tambah Kategori</h2><button class="btn-x" onclick="closeModal('mKat')">×</button></div>
-  <div class="input-group"><label>Nama *</label><input id="kNama" class="input-control" placeholder="contoh: Semen & Pasir"></div>
-  <div class="input-group"><label>Deskripsi</label><textarea id="kDesk" class="input-control" rows="2"></textarea></div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-    <button onclick="closeModal('mKat')" class="btn" style="background:var(--bg-color);border:1px solid var(--border-color);color:var(--text-main)">Batal</button>
-    <button onclick="saveKat()" class="btn btn-primary">Simpan</button>
-  </div>
-</div></div>
+    <script src="/js/api.js"></script>
+    <script src="/js/theme.js"></script>
+    <script>
+      requireAuth();
+      let editItemId = null,
+        editKatId = null,
+        editSatId = null,
+        fromItemModal = false,
+        curTab = "brg";
 
-<!-- MODAL: Satuan -->
-<div class="modal-overlay" id="mSat"><div class="modal-box">
-  <div class="modal-hdr"><h2 id="mSatTitle">Tambah Satuan</h2><button class="btn-x" onclick="closeModal('mSat')">×</button></div>
-  <div class="input-group"><label>Nama *</label><input id="sNama" class="input-control" placeholder="contoh: Kilogram"></div>
-  <div class="input-group"><label>Singkatan</label><input id="sAbr" class="input-control" placeholder="kg"></div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-    <button onclick="closeModal('mSat')" class="btn" style="background:var(--bg-color);border:1px solid var(--border-color);color:var(--text-main)">Batal</button>
-    <button onclick="saveSat()" class="btn btn-primary">Simpan</button>
-  </div>
-</div></div>
+      // =======================================================================
+      // 🛠️ FUNGSI FORMATTING ANGKA (TITIK RIBUAN)
+      // =======================================================================
 
-<script src="/js/api.js"></script><script src="/js/theme.js"></script>
-<script>
-requireAuth();
-let editItemId=null,editKatId=null,editSatId=null,fromItemModal=false,curTab="brg";
+      // Dipakai saat user mengetik (input oninput)
+      function formatInputRibuan(input) {
+        let val = input.value.replace(/[^0-9]/g, ""); // Hapus selain angka
+        if (val === "") {
+          input.value = "0";
+          return;
+        }
+        input.value = parseInt(val).toLocaleString("id-ID");
+      }
 
-function switchTab(t){
-  curTab=t;
-  ["pnlBrg","pnlKat","pnlSat"].forEach(id=>document.getElementById(id).style.display="none");
-  const map={brg:"pnlBrg",kat:"pnlKat",sat:"pnlSat"};
-  document.getElementById(map[t]).style.display="block";
-  ["tbBarang","tbKat","tbSat"].forEach(id=>{
-    const el=document.getElementById(id);
-    const active=id==="tb"+{brg:"Barang",kat:"Kat",sat:"Sat"}[t];
-    el.style.background=active?"var(--primary)":"transparent";
-    el.style.borderColor=active?"var(--primary)":"var(--border-color)";
-    el.style.color=active?"#fff":"var(--text-muted)";
-  });
-  if(t==="kat")loadKat();
-  if(t==="sat")loadSat();
-}
+      // Dipakai saat memproses angka murni (misal dari DB) ke format titik
+      function toRibuan(num) {
+        if (!num) return "0";
+        return parseInt(num).toLocaleString("id-ID");
+      }
 
-async function refreshSelects(){
-  const [cats,units]=await Promise.all([api("GET","/items/categories"),api("GET","/items/units")]);
-  // filter dropdown
-  const fk=document.getElementById("filterKat");const prev=fk.value;
-  fk.innerHTML='<option value="">Semua Kategori</option>'+cats.map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
-  fk.value=prev;
-  // form dropdowns
-  const fKat=document.getElementById("fKat");const fKatPrev=fKat.value;
-  fKat.innerHTML='<option value="">-- Pilih Kategori --</option>'+cats.map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
-  fKat.value=fKatPrev;
-  const fSat=document.getElementById("fSat");const fSatPrev=fSat.value;
-  fSat.innerHTML='<option value="">-- Pilih Satuan --</option>'+units.map(u=>`<option value="${u.id}">${u.name}${u.abbreviation?" ("+u.abbreviation+")":""}</option>`).join("");
-  fSat.value=fSatPrev;
-}
+      // Dipakai sebelum kirim ke API (hapus titik agar jadi angka murni)
+      function toAngka(str) {
+        if (!str) return 0;
+        return parseFloat(str.toString().replace(/\./g, "")) || 0;
+      }
 
-async function loadItems(){
-  const q=document.getElementById("srchBarang").value;
-  const kat=document.getElementById("filterKat").value;
-  const inaktif=document.getElementById("showInaktif").checked;
-  let url=`/items/?limit=500&active_only=${!inaktif}`;
-  if(q)url+=`&search=${encodeURIComponent(q)}`;
-  if(kat)url+=`&category_id=${kat}`;
-  try{
-    const items=await api("GET",url);
-    document.getElementById("tblBarang").innerHTML=items.length?items.map(i=>`<tr>
-      <td style="font-family:monospace;font-size:13px;color:var(--text-muted)">${i.code||"-"}</td>
-      <td><b>${i.name}</b>${i.barcode?`<div style="font-size:12px;color:var(--text-muted)">${i.barcode}</div>`:""}</td>
-      <td style="font-size:14px">${i.category?.name||"-"}</td>
-      <td style="font-size:14px">${i.unit?.name||"-"}</td>
-      <td>${fmtRp(i.buy_price)}</td>
-      <td style="color:var(--primary);font-weight:700">${fmtRp(i.sell_price)}</td>
-      <td><span style="font-weight:700;color:${i.stock<=i.min_stock?"#f59e0b":"var(--text-main)"}">${i.stock}</span></td>
-      <td style="white-space:nowrap">
-        <button class="bsm be" onclick='editItem(${JSON.stringify(i).replace(/"/g,"&quot;")})'>Edit</button>
-        <button class="bsm bd" onclick="toggleItem(${i.id},${i.is_active})">${i.is_active?"Nonaktif":"Aktifkan"}</button>
-      </td></tr>`).join(""):'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-muted)">Tidak ada barang</td></tr>';
-  }catch(e){showToast(e.message,"error");}
-}
+      // =======================================================================
+      // 📡 SENSOR BARCODE SCANNER
+      // =======================================================================
+      let barcodeBuffer = "";
+      let lastKeyTime = Date.now();
 
-function openItemModal(item=null){
-  editItemId=null;document.getElementById("mBarangTitle").textContent="Tambah Barang";
-  document.getElementById("fBarang").reset();document.getElementById("fId").value="";
-  document.getElementById("fKode").readOnly=false;
-  if(item){
-    editItemId=item.id;document.getElementById("mBarangTitle").textContent="Edit Barang";
-    document.getElementById("fId").value=item.id;
-    document.getElementById("fKode").value=item.code||"";document.getElementById("fKode").readOnly=true;
-    document.getElementById("fBarcode").value=item.barcode||"";
-    document.getElementById("fNama").value=item.name;
-    document.getElementById("fKat").value=item.category_id||"";
-    document.getElementById("fSat").value=item.unit_id||"";
-    document.getElementById("fHBeli").value=item.buy_price;
-    document.getElementById("fHJual").value=item.sell_price;
-    document.getElementById("fStokMin").value=item.min_stock;
-    document.getElementById("fDesk").value=item.description||"";
-  }
-  openModal("mBarang");
-}
-function editItem(i){openItemModal(i);}
+      document.addEventListener("keydown", (e) => {
+        const modal = document.getElementById("mBarang");
+        if (modal && modal.style.display === "flex") {
+          const currentTime = Date.now();
+          if (currentTime - lastKeyTime > 50) {
+            barcodeBuffer = "";
+          }
+          if (e.key === "Enter" && barcodeBuffer.length > 2) {
+            e.preventDefault();
+            document.getElementById("autoBarcode").checked = false;
+            toggleBarcodeUI();
+            document.getElementById("fBarcode").value = barcodeBuffer;
+            showToast("Barcode terscan otomatis: " + barcodeBuffer, "success");
+            barcodeBuffer = "";
+            return;
+          } else if (e.key.length === 1) {
+            barcodeBuffer += e.key;
+          }
+          lastKeyTime = currentTime;
+        }
+      });
 
-async function saveItem(e){
-  e.preventDefault();
-  const p={code:document.getElementById("fKode").value,barcode:document.getElementById("fBarcode").value||null,
-    name:document.getElementById("fNama").value,
-    category_id:parseInt(document.getElementById("fKat").value)||null,
-    unit_id:parseInt(document.getElementById("fSat").value)||null,
-    buy_price:parseFloat(document.getElementById("fHBeli").value)||0,
-    sell_price:parseFloat(document.getElementById("fHJual").value)||0,
-    min_stock:parseFloat(document.getElementById("fStokMin").value)||0,
-    description:document.getElementById("fDesk").value||null};
-  try{
-    if(editItemId)await api("PUT",`/items/${editItemId}`,p);
-    else await api("POST","/items/",p);
-    showToast("Barang disimpan ✓");closeModal("mBarang");loadItems();
-  }catch(ex){showToast(ex.message,"error");}
-}
+      function toggleBarcodeUI() {
+        const auto = document.getElementById("autoBarcode").checked;
+        document.getElementById("fBarcode").style.display = auto
+          ? "none"
+          : "block";
+        document.getElementById("lblScanner").style.display = auto
+          ? "block"
+          : "none";
+      }
 
-async function toggleItem(id,isActive){
-  if(!await showConfirm(isActive?"Nonaktifkan barang ini?":"Aktifkan barang ini?"))return;
-  try{
-    if(isActive)await api("DELETE",`/items/${id}`);
-    else await api("PUT",`/items/${id}`,{is_active:true});
-    showToast("Status diperbarui");loadItems();
-  }catch(ex){showToast(ex.message,"error");}
-}
+      function switchTab(t) {
+        curTab = t;
+        ["pnlBrg", "pnlKat", "pnlSat"].forEach(
+          (id) => (document.getElementById(id).style.display = "none"),
+        );
+        const map = { brg: "pnlBrg", kat: "pnlKat", sat: "pnlSat" };
+        document.getElementById(map[t]).style.display = "block";
+        ["tbBarang", "tbKat", "tbSat"].forEach((id) => {
+          const el = document.getElementById(id);
+          const active =
+            id === "tb" + { brg: "Barang", kat: "Kat", sat: "Sat" }[t];
+          el.style.background = active ? "var(--primary)" : "transparent";
+          el.style.borderColor = active
+            ? "var(--primary)"
+            : "var(--border-color)";
+          el.style.color = active ? "#fff" : "var(--text-muted)";
+        });
+        if (t === "kat") loadKat();
+        if (t === "sat") loadSat();
+      }
 
-// Kategori
-async function loadKat(){
-  const cats=await api("GET","/items/categories");
-  document.getElementById("tblKat").innerHTML=cats.map(c=>`<tr>
-    <td><b>${c.name}</b></td><td style="color:var(--text-muted)">${c.description||"-"}</td>
-    <td style="white-space:nowrap">
-      <button class="bsm be" onclick='editKat(${JSON.stringify(c).replace(/"/g,"&quot;")})'>Edit</button>
-      <button class="bsm bd" onclick="delKat(${c.id},'${c.name}')">Hapus</button>
-    </td></tr>`).join("")||'<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text-muted)">Belum ada kategori</td></tr>';
-}
-function openKatModal(item=null){
-  editKatId=null;document.getElementById("mKatTitle").textContent="Tambah Kategori";
-  document.getElementById("kNama").value="";document.getElementById("kDesk").value="";
-  if(item){editKatId=item.id;document.getElementById("mKatTitle").textContent="Edit Kategori";document.getElementById("kNama").value=item.name;document.getElementById("kDesk").value=item.description||"";}
-  openModal("mKat");
-}
-function editKat(c){openKatModal(c);}
-async function saveKat(){
-  const name=document.getElementById("kNama").value.trim();
-  if(!name){showToast("Nama wajib diisi","error");return;}
-  try{
-    let saved;
-    if(editKatId)saved=await api("PUT",`/items/categories/${editKatId}`,{name,description:document.getElementById("kDesk").value||null});
-    else saved=await api("POST","/items/categories",{name,description:document.getElementById("kDesk").value||null});
-    showToast("Kategori disimpan ✓");await refreshSelects();
-    if(fromItemModal){document.getElementById("fKat").value=saved.id;openModal("mBarang");}
-    closeModal("mKat");fromItemModal=false;loadKat();
-  }catch(ex){showToast(ex.message,"error");}
-}
-async function delKat(id,name){
-  if(!await showConfirm(`Hapus kategori "${name}"?`))return;
-  try{await api("DELETE",`/items/categories/${id}`);showToast("Dihapus");loadKat();refreshSelects();}
-  catch(ex){showToast(ex.message,"error");}
-}
-function quickAddKat(){fromItemModal=true;closeModal("mBarang");openKatModal();}
+      async function refreshSelects() {
+        const [cats, units] = await Promise.all([
+          api("GET", "/items/categories"),
+          api("GET", "/items/units"),
+        ]);
+        const fk = document.getElementById("filterKat");
+        const prev = fk.value;
+        fk.innerHTML =
+          '<option value="">Semua Kategori</option>' +
+          cats
+            .map((c) => `<option value="${c.id}">${c.name}</option>`)
+            .join("");
+        fk.value = prev;
 
-// Satuan
-async function loadSat(){
-  const units=await api("GET","/items/units");
-  document.getElementById("tblSat").innerHTML=units.map(u=>`<tr>
-    <td><b>${u.name}</b></td><td style="color:var(--text-muted)">${u.abbreviation||"-"}</td>
-    <td style="white-space:nowrap">
-      <button class="bsm be" onclick='editSat(${JSON.stringify(u).replace(/"/g,"&quot;")})'>Edit</button>
-      <button class="bsm bd" onclick="delSat(${u.id},'${u.name}')">Hapus</button>
-    </td></tr>`).join("")||'<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text-muted)">Belum ada satuan</td></tr>';
-}
-function openSatModal(item=null){
-  editSatId=null;document.getElementById("mSatTitle").textContent="Tambah Satuan";
-  document.getElementById("sNama").value="";document.getElementById("sAbr").value="";
-  if(item){editSatId=item.id;document.getElementById("mSatTitle").textContent="Edit Satuan";document.getElementById("sNama").value=item.name;document.getElementById("sAbr").value=item.abbreviation||"";}
-  openModal("mSat");
-}
-function editSat(u){openSatModal(u);}
-async function saveSat(){
-  const name=document.getElementById("sNama").value.trim();
-  if(!name){showToast("Nama wajib diisi","error");return;}
-  try{
-    let saved;
-    if(editSatId)saved=await api("PUT",`/items/units/${editSatId}`,{name,abbreviation:document.getElementById("sAbr").value||null});
-    else saved=await api("POST","/items/units",{name,abbreviation:document.getElementById("sAbr").value||null});
-    showToast("Satuan disimpan ✓");await refreshSelects();
-    if(fromItemModal){document.getElementById("fSat").value=saved.id;openModal("mBarang");}
-    closeModal("mSat");fromItemModal=false;loadSat();
-  }catch(ex){showToast(ex.message,"error");}
-}
-async function delSat(id,name){
-  if(!await showConfirm(`Hapus satuan "${name}"?`))return;
-  try{await api("DELETE",`/items/units/${id}`);showToast("Dihapus");loadSat();refreshSelects();}
-  catch(ex){showToast(ex.message,"error");}
-}
-function quickAddSat(){fromItemModal=true;closeModal("mBarang");openSatModal();}
+        const fKat = document.getElementById("fKat");
+        const fKatPrev = fKat.value;
+        fKat.innerHTML =
+          '<option value="">-- Pilih Kategori --</option>' +
+          cats
+            .map((c) => `<option value="${c.id}">${c.name}</option>`)
+            .join("");
+        fKat.value = fKatPrev;
 
-refreshSelects();loadItems();
-</script>
-</body></html>
+        const fSat = document.getElementById("fSat");
+        const fSatPrev = fSat.value;
+        fSat.innerHTML =
+          '<option value="">-- Pilih Satuan --</option>' +
+          units
+            .map(
+              (u) =>
+                `<option value="${u.id}">${u.name}${u.abbreviation ? " (" + u.abbreviation + ")" : ""}</option>`,
+            )
+            .join("");
+        fSat.value = fSatPrev;
+      }
+
+      async function loadItems() {
+        const q = document.getElementById("srchBarang").value;
+        const kat = document.getElementById("filterKat").value;
+        const inaktif = document.getElementById("showInaktif").checked;
+        let url = `/items/?limit=500&active_only=${!inaktif}`;
+        if (q) url += `&search=${encodeURIComponent(q)}`;
+        if (kat) url += `&category_id=${kat}`;
+        try {
+          const items = await api("GET", url);
+          document.getElementById("tblBarang").innerHTML = items.length
+            ? items
+                .map((i) => {
+                  let diskon = "-";
+                  if (i.prices && i.prices.length > 0) {
+                    const dPrice = i.prices.find(
+                      (p) => p.name === "Harga Diskon",
+                    );
+                    if (dPrice) diskon = fmtRp(dPrice.price);
+                  }
+                  return `<tr>
+                  <td><b>${i.name}</b>${i.barcode ? `<div style="font-family:monospace;font-size:12px;color:var(--text-muted)">${i.barcode}</div>` : ""}</td>
+                  <td style="font-size:14px">${i.category?.name || "-"}</td>
+                  <td style="font-size:14px">${i.unit?.name || "-"}</td>
+                  <td>${fmtRp(i.buy_price)}</td>
+                  <td style="color:var(--primary);font-weight:700">${fmtRp(i.sell_price)}</td>
+                  <td style="color:#f59e0b;font-weight:700">${diskon}</td>
+                  <td><span style="font-weight:700;color:${i.stock <= i.min_stock ? "#f59e0b" : "var(--text-main)"}">${i.stock}</span></td>
+                  <td style="white-space:nowrap">
+                    <button class="bsm be" onclick='editItem(${JSON.stringify(i).replace(/"/g, "&quot;")})'>Edit</button>
+                    <button class="bsm bd" onclick="toggleItem(${i.id},${i.is_active})">${i.is_active ? "Nonaktif" : "Aktifkan"}</button>
+                  </td></tr>`;
+                })
+                .join("")
+            : '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-muted)">Tidak ada barang</td></tr>';
+        } catch (e) {
+          showToast(e.message, "error");
+        }
+      }
+
+      function openItemModal(item = null) {
+        editItemId = null;
+        document.getElementById("mBarangTitle").textContent = "Tambah Barang";
+        document.getElementById("fBarang").reset();
+        document.getElementById("autoBarcode").checked = true;
+        toggleBarcodeUI();
+
+        // Default value dengan format titik
+        document.getElementById("fHBeli").value = "0";
+        document.getElementById("fHJual").value = "0";
+        document.getElementById("fHJualDiskon").value = "0";
+        document.getElementById("fStokMin").value = "0";
+
+        if (item) {
+          editItemId = item.id;
+          document.getElementById("mBarangTitle").textContent = "Edit Barang";
+          document.getElementById("fNama").value = item.name;
+          document.getElementById("fKat").value = item.category_id || "";
+          document.getElementById("fSat").value = item.unit_id || "";
+
+          // Masukkan data dengan format titik
+          document.getElementById("fHBeli").value = toRibuan(item.buy_price);
+          document.getElementById("fHJual").value = toRibuan(item.sell_price);
+          document.getElementById("fStokMin").value = toRibuan(item.min_stock);
+          document.getElementById("fDesk").value = item.description || "";
+
+          if (item.barcode && item.barcode.trim() !== "") {
+            document.getElementById("autoBarcode").checked = false;
+            toggleBarcodeUI();
+            document.getElementById("fBarcode").value = item.barcode;
+          }
+
+          if (item.prices && item.prices.length > 0) {
+            const dPrice = item.prices.find((p) => p.name === "Harga Diskon");
+            if (dPrice)
+              document.getElementById("fHJualDiskon").value = toRibuan(
+                dPrice.price,
+              );
+          }
+        }
+        openModal("mBarang");
+        setTimeout(() => document.getElementById("fNama").focus(), 100);
+      }
+
+      function editItem(i) {
+        openItemModal(i);
+      }
+
+      async function saveItem(e) {
+        e.preventDefault();
+        let multi_prices = [];
+
+        // Hapus titik sebelum simpan ke database
+        const valDiskon = toAngka(
+          document.getElementById("fHJualDiskon").value,
+        );
+
+        if (valDiskon > 0) {
+          multi_prices.push({
+            name: "Harga Diskon",
+            price: valDiskon,
+            min_qty: 1,
+          });
+        }
+
+        const p = {
+          code: "AUTO",
+          barcode: document.getElementById("autoBarcode").checked
+            ? "AUTO"
+            : document.getElementById("fBarcode").value.trim(),
+          name: document.getElementById("fNama").value,
+          category_id: parseInt(document.getElementById("fKat").value) || null,
+          unit_id: parseInt(document.getElementById("fSat").value) || null,
+          buy_price: toAngka(document.getElementById("fHBeli").value),
+          sell_price: toAngka(document.getElementById("fHJual").value),
+          min_stock: toAngka(document.getElementById("fStokMin").value),
+          description: document.getElementById("fDesk").value || null,
+          prices: multi_prices,
+        };
+
+        try {
+          if (editItemId) await api("PUT", `/items/${editItemId}`, p);
+          else await api("POST", "/items/", p);
+          showToast("Barang disimpan ✓", "success");
+          closeModal("mBarang");
+          loadItems();
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function toggleItem(id, isActive) {
+        if (
+          !(await showConfirm(
+            isActive ? "Nonaktifkan barang ini?" : "Aktifkan barang ini?",
+          ))
+        )
+          return;
+        try {
+          if (isActive) await api("DELETE", `/items/${id}`);
+          else await api("PUT", `/items/${id}`, { is_active: true });
+          showToast("Status diperbarui");
+          loadItems();
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function loadKat() {
+        const cats = await api("GET", "/items/categories");
+        document.getElementById("tblKat").innerHTML =
+          cats
+            .map(
+              (c) => `<tr>
+            <td><b>${c.name}</b></td><td style="color:var(--text-muted)">${c.description || "-"}</td>
+            <td style="white-space:nowrap"><button class="bsm be" onclick='editKat(${JSON.stringify(c).replace(/"/g, "&quot;")})'>Edit</button> <button class="bsm bd" onclick="delKat(${c.id},'${c.name}')">Hapus</button></td>
+          </tr>`,
+            )
+            .join("") ||
+          '<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text-muted)">Belum ada kategori</td></tr>';
+      }
+      function openKatModal(item = null) {
+        editKatId = null;
+        document.getElementById("mKatTitle").textContent = "Tambah Kategori";
+        document.getElementById("kNama").value = "";
+        document.getElementById("kDesk").value = "";
+        if (item) {
+          editKatId = item.id;
+          document.getElementById("mKatTitle").textContent = "Edit Kategori";
+          document.getElementById("kNama").value = item.name;
+          document.getElementById("kDesk").value = item.description || "";
+        }
+        openModal("mKat");
+      }
+      function editKat(c) {
+        openKatModal(c);
+      }
+      async function saveKat() {
+        const name = document.getElementById("kNama").value.trim();
+        if (!name) {
+          showToast("Nama wajib diisi", "error");
+          return;
+        }
+        try {
+          let saved;
+          if (editKatId)
+            saved = await api("PUT", `/items/categories/${editKatId}`, {
+              name,
+              description: document.getElementById("kDesk").value || null,
+            });
+          else
+            saved = await api("POST", "/items/categories", {
+              name,
+              description: document.getElementById("kDesk").value || null,
+            });
+          showToast("Kategori disimpan ✓");
+          await refreshSelects();
+          if (fromItemModal) {
+            document.getElementById("fKat").value = saved.id;
+            openModal("mBarang");
+          }
+          closeModal("mKat");
+          fromItemModal = false;
+          loadKat();
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+      async function delKat(id, name) {
+        if (!(await showConfirm(`Hapus kategori "${name}"?`))) return;
+        try {
+          await api("DELETE", `/items/categories/${id}`);
+          showToast("Dihapus");
+          loadKat();
+          refreshSelects();
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+      function quickAddKat() {
+        fromItemModal = true;
+        closeModal("mBarang");
+        openKatModal();
+      }
+
+      async function loadSat() {
+        const units = await api("GET", "/items/units");
+        document.getElementById("tblSat").innerHTML =
+          units
+            .map(
+              (u) => `<tr>
+            <td><b>${u.name}</b></td><td style="color:var(--text-muted)">${u.abbreviation || "-"}</td>
+            <td style="white-space:nowrap"><button class="bsm be" onclick='editSat(${JSON.stringify(u).replace(/"/g, "&quot;")})'>Edit</button> <button class="bsm bd" onclick="delSat(${u.id},'${u.name}')">Hapus</button></td>
+          </tr>`,
+            )
+            .join("") ||
+          '<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text-muted)">Belum ada satuan</td></tr>';
+      }
+      function openSatModal(item = null) {
+        editSatId = null;
+        document.getElementById("mSatTitle").textContent = "Tambah Satuan";
+        document.getElementById("sNama").value = "";
+        document.getElementById("sAbr").value = "";
+        if (item) {
+          editSatId = item.id;
+          document.getElementById("mSatTitle").textContent = "Edit Satuan";
+          document.getElementById("sNama").value = item.name;
+          document.getElementById("sAbr").value = item.abbreviation || "";
+        }
+        openModal("mSat");
+      }
+      function editSat(u) {
+        openSatModal(u);
+      }
+      async function saveSat() {
+        const name = document.getElementById("sNama").value.trim();
+        if (!name) {
+          showToast("Nama wajib diisi", "error");
+          return;
+        }
+        try {
+          let saved;
+          if (editSatId)
+            saved = await api("PUT", `/items/units/${editSatId}`, {
+              name,
+              abbreviation: document.getElementById("sAbr").value || null,
+            });
+          else
+            saved = await api("POST", "/items/units", {
+              name,
+              abbreviation: document.getElementById("sAbr").value || null,
+            });
+          showToast("Satuan disimpan ✓");
+          await refreshSelects();
+          if (fromItemModal) {
+            document.getElementById("fSat").value = saved.id;
+            openModal("mBarang");
+          }
+          closeModal("mSat");
+          fromItemModal = false;
+          loadSat();
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+      async function delSat(id, name) {
+        if (!(await showConfirm(`Hapus satuan "${name}"?`))) return;
+        try {
+          await api("DELETE", `/items/units/${id}`);
+          showToast("Dihapus");
+          loadSat();
+          refreshSelects();
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+      function quickAddSat() {
+        fromItemModal = true;
+        closeModal("mBarang");
+        openSatModal();
+      }
+
+      refreshSelects();
+      loadItems();
+    </script>
+  </body>
+</html>

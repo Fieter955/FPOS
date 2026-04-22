@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cetak Barcode - iPos 5.0</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <style>
+      .barcode-container {
+        display: flex;
+        gap: 24px;
+        padding: 32px;
+        height: 100vh;
+        overflow: hidden;
+      }
+      .panel-left,
+      .panel-right {
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+      }
+      .panel-left {
+        flex: 1.2;
+      }
+      .panel-right {
+        flex: 1;
+      }
+
+      .radio-group {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+      .radio-group label {
+        flex: 1;
+        text-align: center;
+        padding: 12px;
+        border: 2px solid var(--border-color);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        font-weight: 600;
+        color: var(--text-muted);
+        transition: var(--transition);
+      }
+      .radio-group input[type="radio"] {
+        display: none;
+      }
+      .radio-group input[type="radio"]:checked + label {
+        border-color: var(--primary);
+        background: var(--primary-light);
+        color: var(--primary);
+      }
+
+      .slider-group {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-sm);
+        padding: 16px;
+        margin-bottom: 24px;
+      }
+      .slider-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .slider-row:last-child {
+        margin-bottom: 0;
+      }
+      .slider-label {
+        width: 120px;
+        font-size: 12px;
+        color: var(--text-muted);
+        font-weight: 600;
+      }
+      .slider-input {
+        flex: 1;
+        cursor: ew-resize;
+        accent-color: var(--primary);
+      }
+      .slider-val {
+        width: 45px;
+        font-size: 12px;
+        font-weight: bold;
+        text-align: right;
+        color: var(--text-main);
+      }
+
+      .preview-wrapper {
+        background: #cbd5e1;
+        padding: 40px;
+        border-radius: 16px;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        min-height: 400px;
+        overflow: auto;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+      }
+      .paper-strip {
+        background: #ffffff;
+        box-shadow:
+          10px 0 20px rgba(0, 0, 0, 0.1),
+          -2px 0 5px rgba(0, 0, 0, 0.05);
+        display: flex; /* Ganti Grid jadi Flex untuk preview yang aman */
+        border-left: 4px solid #e2e8f0;
+        transition:
+          width 0.4s ease,
+          height 0.4s ease;
+      }
+
+      :root {
+        --fz-price: 14px;
+        --bc-scale: 100%;
+        --fz-name: 12px;
+      }
+
+      .sticker-label {
+        background: #fff;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        box-sizing: border-box;
+        overflow: hidden;
+        padding: 0 !important;
+        margin: 0 !important;
+        border: 1px dotted #ccc;
+        flex: 1;
+        min-width: 0; /* MANTRA KUNCI PREVIEW */
+      }
+
+      .st-top {
+        font-size: var(--fz-price);
+        font-weight: 900;
+        text-align: center;
+        color: #000;
+        line-height: 1;
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+
+      .st-mid {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 1;
+        min-height: 0;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+
+      .st-mid img {
+        height: var(--bc-scale);
+        width: 100%;
+        max-width: 100%;
+        object-fit: fill;
+      }
+
+      .st-bot {
+        font-size: var(--fz-name);
+        font-weight: 700;
+        text-align: center;
+        color: #000;
+        line-height: 1;
+        margin: 0;
+        padding: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body class="dark-mode">
+    <div class="barcode-container">
+      <div class="panel-left card">
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 16px;
+          "
+        >
+          <button
+            class="btn"
+            style="background: var(--border-color); color: var(--text-main)"
+            onclick="location.href = '/dashboard'"
+          >
+            &larr; Kembali
+          </button>
+          <h1 style="margin: 0; font-size: 22px">🖨️ Cetak Barcode</h1>
+        </div>
+
+        <div class="input-group" style="margin-bottom: 16px">
+          <input
+            type="text"
+            id="itemSearch"
+            class="input-control"
+            list="itemList"
+            placeholder="Cari barang..."
+            autocomplete="off"
+          />
+          <datalist id="itemList"></datalist>
+        </div>
+
+        <div class="slider-group">
+          <div
+            style="
+              font-size: 13px;
+              font-weight: 700;
+              margin-bottom: 12px;
+              color: var(--text-main);
+            "
+          >
+            Kustomisasi Ukuran Visual
+          </div>
+          <div class="slider-row">
+            <div class="slider-label">Teks Harga (Atas)</div>
+            <input
+              type="range"
+              class="slider-input"
+              id="slPrice"
+              min="6"
+              max="40"
+              value="14"
+              oninput="updateSliderVars()"
+            />
+            <div class="slider-val" id="valPrice">14px</div>
+          </div>
+          <div class="slider-row">
+            <div class="slider-label">Tinggi Barcode (%)</div>
+            <input
+              type="range"
+              class="slider-input"
+              id="slBarcode"
+              min="50"
+              max="100"
+              value="100"
+              oninput="updateSliderVars()"
+            />
+            <div class="slider-val" id="valBarcode">100%</div>
+          </div>
+          <div class="slider-row">
+            <div class="slider-label">Teks Nama (Bawah)</div>
+            <input
+              type="range"
+              class="slider-input"
+              id="slName"
+              min="6"
+              max="30"
+              value="12"
+              oninput="updateSliderVars()"
+            />
+            <div class="slider-val" id="valName">12px</div>
+          </div>
+        </div>
+
+        <div class="radio-group" style="margin-bottom: 16px">
+          <input type="radio" name="colLayout" id="col1" value="1" />
+          <label for="col1">1 Lin</label>
+          <input type="radio" name="colLayout" id="col2" value="2" checked />
+          <label for="col2">2 Lin</label>
+          <input type="radio" name="colLayout" id="col3" value="3" />
+          <label for="col3">3 Lin</label>
+        </div>
+
+        <div
+          style="
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 16px;
+          "
+        >
+          <div class="input-group">
+            <label>Lebar 1 Stiker (mm)</label>
+            <input type="number" id="paperW" class="input-control" value="33" />
+          </div>
+          <div class="input-group">
+            <label>Tinggi Stiker (mm)</label>
+            <input type="number" id="paperH" class="input-control" value="15" />
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label style="color: #ef4444; font-weight: bold"
+            >Jumlah Baris Kertas Cetak</label
+          >
+          <input
+            type="number"
+            id="printQty"
+            class="input-control"
+            value="1"
+            min="1"
+          />
+        </div>
+
+        <button
+          class="btn btn-primary"
+          style="width: 100%; margin-top: auto"
+          onclick="printStiker()"
+        >
+          🚀 CETAK SEKARANG
+        </button>
+      </div>
+
+      <div class="panel-right card">
+        <h2 style="font-size: 18px; margin-bottom: 8px">
+          👀 Live Preview (Zero Margin)
+        </h2>
+        <div class="preview-wrapper">
+          <div class="paper-strip" id="previewArea"></div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/js/theme.js"></script>
+    <script src="/js/api.js"></script>
+    <script>
+      requireAuth();
+      let allItems = [],
+        selectedItem = null,
+        barcodeBase64 = "";
+
+      async function loadItems() {
+        try {
+          allItems = await api("GET", "/items/?limit=5000");
+          const list = document.getElementById("itemList");
+          allItems.forEach((i) => {
+            const opt = document.createElement("option");
+            opt.value = i.name;
+            list.appendChild(opt);
+          });
+        } catch (e) {
+          showToast("Gagal muat data", "error");
+        }
+      }
+
+      document
+        .getElementById("itemSearch")
+        .addEventListener("input", function () {
+          selectedItem = allItems.find(
+            (i) => i.name === this.value || i.code === this.value,
+          );
+          if (selectedItem) generateBarcode();
+        });
+
+      function updateSliderVars() {
+        const valP = document.getElementById("slPrice").value;
+        const valB = document.getElementById("slBarcode").value;
+        const valN = document.getElementById("slName").value;
+        document.getElementById("valPrice").textContent = valP + "px";
+        document.getElementById("valBarcode").textContent = valB + "%";
+        document.getElementById("valName").textContent = valN + "px";
+        const root = document.documentElement;
+        root.style.setProperty("--fz-price", valP + "px");
+        root.style.setProperty("--bc-scale", valB + "%");
+        root.style.setProperty("--fz-name", valN + "px");
+      }
+
+      ["paperW", "paperH", "printQty"].forEach((id) => {
+        document
+          .getElementById(id)
+          .addEventListener("input", updatePreviewGrid);
+      });
+      document.querySelectorAll('input[name="colLayout"]').forEach((r) => {
+        r.addEventListener("change", updatePreviewGrid);
+      });
+
+      async function generateBarcode() {
+        if (!selectedItem) return;
+        try {
+          const req = await api("POST", "/barcode/generate", {
+            item_id: selectedItem.id,
+            barcode_type: "CODE128",
+          });
+          barcodeBase64 = req.image_base64;
+          updatePreviewGrid();
+        } catch (e) {
+          showToast("Gagal buat barcode", "error");
+        }
+      }
+
+      function updatePreviewGrid() {
+        const area = document.getElementById("previewArea");
+        const cols = parseInt(
+          document.querySelector('input[name="colLayout"]:checked').value,
+        );
+        const w = parseFloat(document.getElementById("paperW").value) || 33;
+        const h = parseFloat(document.getElementById("paperH").value) || 15;
+
+        if (!barcodeBase64) {
+          area.innerHTML =
+            '<div style="padding:40px; color:#94a3b8; width: 100%;">Pilih barang dulu</div>';
+          return;
+        }
+
+        const scale = 3.8;
+        area.style.width = w * cols * scale + "px";
+
+        let html = "";
+        for (let i = 0; i < cols; i++) {
+          html += `
+                <div class="sticker-label" style="height: ${h * scale}px;">
+                    <div class="st-top">${fmtRp(selectedItem.sell_price)}</div>
+                    <div class="st-mid"><img src="data:image/png;base64,${barcodeBase64}"></div>
+                    <div class="st-bot">${selectedItem.name}</div>
+                </div>`;
+        }
+        area.innerHTML = html;
+      }
+
+      async function printStiker() {
+        if (!barcodeBase64) return showToast("Pilih barang!", "warning");
+
+        const cols = parseInt(
+          document.querySelector('input[name="colLayout"]:checked').value,
+        );
+        const w = parseFloat(document.getElementById("paperW").value) || 33;
+        const h = parseFloat(document.getElementById("paperH").value) || 15;
+        const baris = parseInt(document.getElementById("printQty").value) || 1;
+
+        const totalStickers = baris * cols;
+        const totalW = w * cols;
+
+        const fzPrice = document.getElementById("slPrice").value * 0.75 + "pt";
+        const bcHeight = document.getElementById("slBarcode").value + "%";
+        const fzName = document.getElementById("slName").value * 0.75 + "pt";
+
+        // ════════════════════════════════════════════════════════════════
+        // BANGUN HTML CETAK (DENGAN FIX CSS UNTUK CHROME HEADLESS)
+        // ════════════════════════════════════════════════════════════════
+        let content = `<html><head><style>
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body { 
+                background: #fff; 
+                font-family: sans-serif; 
+                color: #000; 
+                width: ${totalW}mm; 
+                margin: 0mm; 
+            }
+            
+            /* 👇 MANTRA ANTI ABOUT:BLANK & HEADER BROWSER 👇 */
+            @page { 
+                size: ${totalW}mm ${h}mm; 
+                margin: 0mm !important; 
+            }
+            @media print { 
+                @page { margin: 0mm !important; } 
+                /* Opsional: Memaksa Chrome merender hitam-putih pekat */
+                body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            }
+            /* ☝️ ---------------------------------------- ☝️ */
+
+            .row { display: flex; width: ${totalW}mm; height: ${h}mm; page-break-after: always; page-break-inside: avoid; }
+            
+            /* Catatan: Padding diset 0.5mm agar tulisan tidak rawan terpotong tepi fisik stiker */
+            .s { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; height: 100%; overflow: hidden; padding: 0.5mm; margin: 0; text-align: center; }
+            
+            .st { font-size: ${fzPrice}; font-weight: bold; line-height: 1; padding: 0; margin: 0; white-space: nowrap; overflow: hidden; }
+            .sm { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; padding: 0; margin: 0; overflow: hidden; }
+            .sm img { height: ${bcHeight}; width: 100%; max-width: 100%; object-fit: fill; }
+            .sb { font-size: ${fzName}; font-weight: bold; line-height: 1; white-space: nowrap; overflow: hidden; padding: 0; margin: 0; }
+        </style></head><body>`;
+
+        let curr = 0;
+        while (curr < totalStickers) {
+          content += `<div class="row">`;
+          for (let i = 0; i < cols; i++) {
+            if (curr < totalStickers) {
+              content += `<div class="s">
+                <div class="st">${fmtRp(selectedItem.sell_price)}</div>
+                <div class="sm"><img src="data:image/png;base64,${barcodeBase64}"></div>
+                <div class="sb">${selectedItem.name}</div>
+              </div>`;
+              curr++;
+            } else {
+              content += `<div class="s"></div>`;
+            }
+          }
+          content += `</div>`;
+        }
+        content += `</body></html>`;
+
+        // ════════════════════════════════════════════════════════════════
+        // KIRIM KE API QUEUE (Tipe konten: HTML)
+        // ════════════════════════════════════════════════════════════════
+        try {
+          await api("POST", "/print/", {
+            content: content,
+            content_type: "html",
+            paper_width_mm: totalW,
+            paper_height_mm: h,
+            // branch_id: 1 -> Tidak perlu dikirim karena di backend PrintJobCreate sudah ada default = 1
+          });
+          showToast(`✅ Job Barcode dikirim ke antrean!`, "success");
+        } catch (e) {
+          showToast("❌ Gagal kirim ke printer agent", "error");
+        }
+      }
+
+      updateSliderVars();
+      loadItems();
+    </script>
+  </body>
+</html>

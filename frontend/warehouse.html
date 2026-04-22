@@ -1,241 +1,1166 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="id">
-<head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Multi Gudang - iPos 5.0</title>
-<link rel="stylesheet" href="/css/style.css">
-</head>
-<body>
-<div class="app-container"><main class="main-content">
-<button class="btn" style="background:transparent;color:var(--text-muted);padding:0;margin-bottom:16px" onclick="location.href='/dashboard'">← Kembali</button>
-<div class="pg-header">
-  <div><h1>🏢 Multi Gudang</h1><p>Kelola stok per gudang dan transfer antar gudang.</p></div>
-  <div style="display:flex;gap:10px">
-    <button class="btn" style="background:var(--bg-color);border:1px solid var(--border-color);color:var(--text-main)" onclick="openTransfer()">⇄ Transfer Stok</button>
-    <button class="btn btn-primary" onclick="openGudangModal()">➕ Tambah Gudang</button>
-  </div>
-</div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Multi Gudang - FPOS</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <style>
+      /* Styling khusus baris transfer multi-barang */
+      .tf-row {
+        display: grid;
+        grid-template-columns: 2fr 1fr 40px;
+        gap: 10px;
+        align-items: end;
+        margin-bottom: 10px;
+        padding: 10px;
+        background: rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        border: 1px solid var(--border-color);
+      }
+      .tf-row label {
+        display: block;
+        font-size: 12px;
+        margin-bottom: 4px;
+        color: var(--text-muted);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-container">
+      <main class="main-content">
+        <button
+          class="btn"
+          style="
+            background: transparent;
+            color: var(--text-muted);
+            padding: 0;
+            margin-bottom: 16px;
+          "
+          onclick="location.href = '/dashboard'"
+        >
+          ← Kembali
+        </button>
 
-<!-- Tab -->
-<div style="display:flex;gap:8px;margin-bottom:20px">
-  <button id="tbGudang" onclick="switchTab('gudang')" style="padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit">🏢 Daftar Gudang</button>
-  <button id="tbTransfer" onclick="switchTab('transfer')" style="padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit">⇄ Riwayat Transfer</button>
-  <button id="tbStok" onclick="switchTab('stok')" style="padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit">📦 Stok per Gudang</button>
-</div>
+        <div class="pg-header">
+          <div>
+            <h1>🏢 Multi Gudang</h1>
+            <p>Kelola stok per gudang dan transfer antar gudang.</p>
+          </div>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap">
+            <button
+              class="btn"
+              style="
+                background: var(--bg-color);
+                border: 1px solid var(--border-color);
+                color: var(--text-main);
+              "
+              onclick="openTransfer()"
+            >
+              ⇄ Transfer Stok
+            </button>
+            <button class="btn btn-primary" onclick="openGudangModal()">
+              ➕ Tambah Gudang
+            </button>
+          </div>
+        </div>
 
-<!-- Panel Gudang -->
-<div id="pnlGudang">
-  <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>Nama Gudang</th><th>Lokasi</th><th>Default</th><th>Status</th><th>Aksi</th></tr></thead>
-    <tbody id="tblGudang"></tbody>
-  </table></div>
-</div>
+        <div
+          style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap"
+        >
+          <button
+            id="tbGudang"
+            onclick="switchTab('gudang')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--primary);
+              background: var(--primary);
+              color: #fff;
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            🏢 Daftar Gudang
+          </button>
+          <button
+            id="tbTransfer"
+            onclick="switchTab('transfer')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            ⇄ Riwayat Transfer
+          </button>
+          <button
+            id="tbStok"
+            onclick="switchTab('stok')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            📦 Stok per Gudang
+          </button>
+          <button
+            id="tbSemuaBarang"
+            onclick="switchTab('semuabarang')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            🌐 Semua Barang di Cabang
+          </button>
+          <button
+            id="tbMutasi"
+            onclick="switchTab('mutasi')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            📊 Laporan Mutasi Detail
+          </button>
+        </div>
 
-<!-- Panel Transfer -->
-<div id="pnlTransfer" style="display:none">
-  <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>No. Transfer</th><th>Tanggal</th><th>Barang</th><th>Dari</th><th>Ke</th><th>Qty</th><th>Status</th></tr></thead>
-    <tbody id="tblTransfer"></tbody>
-  </table></div>
-</div>
+        <div id="pnlGudang">
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Nama Gudang</th>
+                  <th>Pemilik Cabang</th>
+                  <th>Alamat</th>
+                  <th>Default</th>
+                  <th>Status</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="tblGudang"></tbody>
+            </table>
+          </div>
+        </div>
 
-<!-- Panel Stok per Gudang -->
-<div id="pnlStok" style="display:none">
-  <div class="filter-bar">
-    <select id="filterGudang" class="input-control" onchange="loadStokGudang()"><option value="">-- Pilih Gudang --</option></select>
-  </div>
-  <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>Kode</th><th>Nama Barang</th><th>Stok di Gudang Ini</th></tr></thead>
-    <tbody id="tblStokGudang"></tbody>
-  </table></div>
-</div>
+        <div id="pnlTransfer" style="display: none">
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>No. Transfer</th>
+                  <th>Tanggal</th>
+                  <th>Dari</th>
+                  <th>Ke</th>
+                  <th>Jml Item</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="tblTransfer"></tbody>
+            </table>
+          </div>
+        </div>
 
-</main></div>
+        <div id="pnlStok" style="display: none">
+          <div class="filter-bar">
+            <select
+              id="filterGudang"
+              class="input-control"
+              onchange="loadStokGudang()"
+            >
+              <option value="">-- Pilih Gudang --</option>
+            </select>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Kode</th>
+                  <th>Nama Barang</th>
+                  <th style="text-align: right">Stok di Gudang Ini</th>
+                </tr>
+              </thead>
+              <tbody id="tblStokGudang"></tbody>
+            </table>
+          </div>
+        </div>
 
-<!-- Modal: Gudang -->
-<div class="modal-overlay" id="mGudang"><div class="modal-box">
-  <div class="modal-hdr"><h2 id="mGTitle">Tambah Gudang</h2><button class="btn-x" onclick="closeModal('mGudang')">×</button></div>
-  <input type="hidden" id="gId">
-  <div class="input-group"><label>Nama Gudang *</label><input id="gNama" class="input-control" placeholder="contoh: Gudang Utama, Gudang B"></div>
-  <div class="input-group"><label>Lokasi / Alamat</label><input id="gLokasi" class="input-control" placeholder="Alamat atau keterangan lokasi"></div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-    <button onclick="closeModal('mGudang')" class="btn" style="background:var(--bg-color);border:1px solid var(--border-color);color:var(--text-main)">Batal</button>
-    <button onclick="saveGudang()" class="btn btn-primary">✓ Simpan</button>
-  </div>
-</div></div>
+        <div id="pnlSemuaBarang" style="display: none">
+          <div
+            style="
+              margin-bottom: 12px;
+              color: var(--text-muted);
+              font-size: 14px;
+            "
+          >
+            💡 Menampilkan total gabungan fisik barang dari
+            <b>seluruh gudang</b> yang ada di cabang ini.
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Kode</th>
+                  <th>Nama Barang</th>
+                  <th style="text-align: right">Total Stok Cabang</th>
+                </tr>
+              </thead>
+              <tbody id="tblSemuaBarang"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="pnlMutasi" style="display: none">
+          <div
+            class="filter-bar"
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 16px;
+              margin-bottom: 16px;
+            "
+          >
+            <div
+              style="
+                background: rgba(0, 0, 0, 0.02);
+                padding: 12px;
+                border-radius: 8px;
+                border: 1px solid var(--border-color);
+              "
+            >
+              <div
+                style="
+                  font-weight: bold;
+                  margin-bottom: 8px;
+                  color: var(--text-main);
+                "
+              >
+                📤 Sumber / Asal
+              </div>
+              <select
+                id="fMutasiFromBranch"
+                class="input-control"
+                style="margin-bottom: 8px"
+                onchange="updateMutasiGudangDropdown('From')"
+              >
+                <option value="">Semua Cabang Asal</option>
+              </select>
+              <select id="fMutasiFromWarehouse" class="input-control">
+                <option value="">Semua Gudang di Cabang Ini</option>
+              </select>
+            </div>
 
-<!-- Modal: Transfer Stok -->
-<div class="modal-overlay" id="mTransfer"><div class="modal-box wide">
-  <div class="modal-hdr"><h2>⇄ Transfer Stok Antar Gudang</h2><button class="btn-x" onclick="closeModal('mTransfer')">×</button></div>
-  <div class="row2" style="margin-bottom:16px">
-    <div class="input-group"><label>Dari Gudang *</label><select id="tfFrom" class="input-control"><option value="">-- Pilih Gudang Asal --</option></select></div>
-    <div class="input-group"><label>Ke Gudang *</label><select id="tfTo" class="input-control"><option value="">-- Pilih Gudang Tujuan --</option></select></div>
-  </div>
-  <div class="row2" style="margin-bottom:16px">
-    <div class="input-group"><label>Barang *</label><select id="tfItem" class="input-control" onchange="cekStokGudangAsal()"><option value="">-- Pilih Barang --</option></select></div>
-    <div class="input-group"><label>Jumlah *</label>
-      <input id="tfQty" type="number" class="input-control" min="1" value="1" inputmode="numeric">
-      <div id="tfStokInfo" style="font-size:13px;color:var(--text-muted);margin-top:4px"></div>
+            <div
+              style="
+                background: rgba(0, 0, 0, 0.02);
+                padding: 12px;
+                border-radius: 8px;
+                border: 1px solid var(--border-color);
+              "
+            >
+              <div
+                style="
+                  font-weight: bold;
+                  margin-bottom: 8px;
+                  color: var(--text-main);
+                "
+              >
+                📥 Penerima / Tujuan
+              </div>
+              <select
+                id="fMutasiToBranch"
+                class="input-control"
+                style="margin-bottom: 8px"
+                onchange="updateMutasiGudangDropdown('To')"
+              >
+                <option value="">Semua Cabang Tujuan</option>
+              </select>
+              <select id="fMutasiToWarehouse" class="input-control">
+                <option value="">Semua Gudang di Cabang Ini</option>
+              </select>
+            </div>
+          </div>
+
+          <div
+            class="filter-bar"
+            style="
+              display: flex;
+              gap: 12px;
+              align-items: flex-end;
+              margin-bottom: 16px;
+            "
+          >
+            <div style="flex: 1">
+              <label
+                style="
+                  font-size: 12px;
+                  color: var(--text-muted);
+                  display: block;
+                  margin-bottom: 4px;
+                "
+                >Dari Tanggal</label
+              >
+              <input type="date" id="fMutasiStartDate" class="input-control" />
+            </div>
+            <div style="flex: 1">
+              <label
+                style="
+                  font-size: 12px;
+                  color: var(--text-muted);
+                  display: block;
+                  margin-bottom: 4px;
+                "
+                >Sampai Tanggal</label
+              >
+              <input type="date" id="fMutasiEndDate" class="input-control" />
+            </div>
+            <button
+              class="btn btn-primary"
+              style="height: 42px"
+              onclick="loadMutasiDetail()"
+            >
+              🔍 Terapkan Filter
+            </button>
+          </div>
+
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Tanggal</th>
+                  <th>No. Transfer</th>
+                  <th>Dari (Cabang - Gudang)</th>
+                  <th>Ke (Cabang - Gudang)</th>
+                  <th>Barang</th>
+                  <th style="text-align: right">Qty</th>
+                </tr>
+              </thead>
+              <tbody id="tblMutasi">
+                <tr>
+                  <td
+                    colspan="6"
+                    style="
+                      text-align: center;
+                      padding: 24px;
+                      color: var(--text-muted);
+                    "
+                  >
+                    Silakan terapkan filter untuk melihat data mutasi.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </main>
     </div>
-  </div>
-  <div class="input-group"><label>Keterangan</label><input id="tfNote" class="input-control" placeholder="Keterangan transfer..."></div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-    <button onclick="closeModal('mTransfer')" class="btn" style="background:var(--bg-color);border:1px solid var(--border-color);color:var(--text-main)">Batal</button>
-    <button onclick="doTransfer()" class="btn btn-primary">✓ Transfer Sekarang</button>
-  </div>
-</div></div>
 
-<!-- Modal: Detail Stok Gudang -->
-<div class="modal-overlay" id="mStokDetail"><div class="modal-box wide">
-  <div class="modal-hdr"><h2 id="mStokTitle">Stok Gudang</h2><button class="btn-x" onclick="closeModal('mStokDetail')">×</button></div>
-  <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>Kode</th><th>Nama Barang</th><th>Stok</th></tr></thead>
-    <tbody id="tblStokDetail"></tbody>
-  </table></div>
-</div></div>
+    <div class="modal-overlay" id="mGudang">
+      <div class="modal-box">
+        <div class="modal-hdr">
+          <h2 id="mGTitle">Tambah Gudang</h2>
+          <button class="btn-x" onclick="closeModal('mGudang')">×</button>
+        </div>
+        <input type="hidden" id="gId" />
+        <div class="input-group" id="gBranchGroup">
+          <label>Ditugaskan Ke Cabang *</label>
+          <select id="gBranch" class="input-control">
+            <option value="">-- Pilih Cabang --</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label>Nama Gudang *</label
+          ><input
+            id="gNama"
+            class="input-control"
+            placeholder="contoh: Gudang B"
+          />
+        </div>
+        <div class="input-group">
+          <label>Lokasi / Alamat</label
+          ><input
+            id="gLokasi"
+            class="input-control"
+            placeholder="Alamat lengkap gudang"
+          />
+        </div>
+        <div
+          style="
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 16px;
+          "
+        >
+          <button
+            onclick="closeModal('mGudang')"
+            class="btn"
+            style="
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              color: var(--text-main);
+            "
+          >
+            Batal
+          </button>
+          <button onclick="saveGudang()" class="btn btn-primary">
+            ✓ Simpan
+          </button>
+        </div>
+      </div>
+    </div>
 
-<script src="/js/api.js"></script><script src="/js/theme.js"></script>
-<script>
-requireAuth();
-let allGudang=[], allItems=[];
-const ON='padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit';
-const OFF='padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit';
+    <div class="modal-overlay" id="mTransfer">
+      <div class="modal-box wide" style="max-width: 700px">
+        <div class="modal-hdr">
+          <h2>⇄ Transfer Stok Antar Gudang</h2>
+          <button class="btn-x" onclick="closeModal('mTransfer')">×</button>
+        </div>
+        <div class="row2" style="margin-bottom: 16px">
+          <div class="input-group">
+            <label>Dari Gudang *</label
+            ><select
+              id="tfFrom"
+              class="input-control"
+              onchange="onFromWarehouseChange()"
+            >
+              <option value="">-- Pilih Gudang Asal --</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label>Ke Gudang *</label
+            ><select id="tfTo" class="input-control">
+              <option value="">-- Pilih Gudang Tujuan --</option>
+            </select>
+          </div>
+        </div>
 
-function switchTab(t){
-  ['Gudang','Transfer','Stok'].forEach(x=>{
-    document.getElementById('pnl'+x).style.display=x.toLowerCase()===t?'block':'none';
-    document.getElementById('tb'+x).style.cssText=x.toLowerCase()===t?ON:OFF;
-  });
-  if(t==='gudang')loadGudang();
-  if(t==='transfer')loadTransfer();
-}
+        <div style="margin-bottom: 16px">
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 8px;
+            "
+          >
+            <label style="font-weight: bold; color: var(--text-muted)"
+              >Daftar Barang yang Ditransfer</label
+            >
+            <button
+              class="btn"
+              style="
+                padding: 4px 12px;
+                background: var(--primary-light);
+                color: var(--primary);
+                border: none;
+                font-weight: bold;
+              "
+              onclick="addTransferRow()"
+            >
+              + Tambah Barang
+            </button>
+          </div>
+          <div id="tfItemsContainer"></div>
+        </div>
 
-async function init(){
-  [allGudang,allItems]=await Promise.all([api('GET','/warehouses/'),api('GET','/items/?limit=500')]);
-  // Populate selects
-  ['tfFrom','tfTo','filterGudang'].forEach(id=>{
-    const sel=document.getElementById(id);
-    sel.innerHTML=id==='filterGudang'?'<option value="">-- Pilih Gudang --</option>':'<option value="">-- Pilih Gudang --</option>';
-    allGudang.forEach(g=>sel.insertAdjacentHTML('beforeend',`<option value="${g.id}">${g.name}</option>`));
-  });
-  const si=document.getElementById('tfItem');
-  allItems.forEach(i=>si.insertAdjacentHTML('beforeend',`<option value="${i.id}" data-stok="${i.stock}">${i.name} (Stok: ${i.stock})</option>`));
-  loadGudang();
-}
+        <div class="row2" style="margin-bottom: 16px">
+          <div class="input-group">
+            <label>Tanggal Transfer *</label>
+            <input type="date" id="tfDate" class="input-control" required />
+          </div>
+          <div class="input-group">
+            <label>Keterangan Transfer</label>
+            <input
+              id="tfNote"
+              class="input-control"
+              placeholder="Tujuan transfer, nomor surat jalan, dll..."
+            />
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+          <button
+            onclick="closeModal('mTransfer')"
+            class="btn"
+            style="
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              color: var(--text-main);
+            "
+          >
+            Batal
+          </button>
+          <button onclick="doTransfer()" class="btn btn-primary">
+            ✓ Transfer Semua Barang
+          </button>
+        </div>
+      </div>
+    </div>
 
-async function loadGudang(){
-  try{
-    allGudang=await api('GET','/warehouses/');
-    document.getElementById('tblGudang').innerHTML=allGudang.length?allGudang.map(g=>`<tr>
-      <td><b style="font-size:16px">${g.name}</b></td>
-      <td style="color:var(--text-muted)">${g.location||'-'}</td>
-      <td>${g.is_default?'<span class="bl">✓ Default</span>':'—'}</td>
-      <td><span style="color:${g.is_active!==false?'#10b981':'#ef4444'};font-weight:700">${g.is_active!==false?'● Aktif':'✗ Nonaktif'}</span></td>
+    <div class="modal-overlay" id="mStokDetail">
+      <div class="modal-box wide">
+        <div class="modal-hdr">
+          <h2 id="mStokTitle">Stok Gudang</h2>
+          <button class="btn-x" onclick="closeModal('mStokDetail')">×</button>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Kode</th>
+                <th>Nama Barang</th>
+                <th style="text-align: right">Stok Fisik</th>
+              </tr>
+            </thead>
+            <tbody id="tblStokDetail"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/theme.js"></script>
+    <script>
+      requireAuth();
+      let allGudang = [],
+        allItems = [],
+        allBranches = [];
+      let tfRowCounter = 0;
+      let currentFromStock = [];
+
+      const ON =
+        "padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit";
+      const OFF =
+        "padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit";
+
+      function formatNum(n) {
+        return new Intl.NumberFormat("id-ID").format(n || 0);
+      }
+
+      // 👇 FITUR BARU: MENCEGAH INPUT BARANG GANDA 👇
+      function cegahBarangGanda(selectElement) {
+        const selectedItemId = selectElement.value;
+        if (!selectedItemId) return;
+
+        const allSelects = document.querySelectorAll(".tf-item-select");
+        let kemunculan = 0;
+
+        allSelects.forEach((sel) => {
+          if (sel.value === selectedItemId) {
+            kemunculan++;
+          }
+        });
+
+        if (kemunculan > 1) {
+          showToast(
+            "Anda sudah memilih barang yang sama di baris lain!",
+            "error",
+          );
+          selectElement.value = ""; // Langsung reset jadi kosong
+        }
+      }
+      // 👆 BATAS FITUR BARU 👆
+
+      function switchTab(t) {
+        ["Gudang", "Transfer", "Stok", "SemuaBarang", "Mutasi"].forEach((x) => {
+          document.getElementById("pnl" + x).style.display =
+            x.toLowerCase() === t ? "block" : "none";
+          document.getElementById("tb" + x).style.cssText =
+            x.toLowerCase() === t ? ON : OFF;
+        });
+        if (t === "gudang") loadGudang();
+        if (t === "transfer") loadTransfer();
+        if (t === "semuabarang") loadInventorySummary();
+        if (t === "mutasi") setupMutasiFilters(); // Inisiasi dropdown cabang
+      }
+
+      function setupMutasiFilters() {
+        const selFromB = document.getElementById("fMutasiFromBranch");
+        const selToB = document.getElementById("fMutasiToBranch");
+
+        // Kosongkan lalu isi ulang opsi cabang
+        selFromB.innerHTML = '<option value="">Semua Cabang Asal</option>';
+        selToB.innerHTML = '<option value="">Semua Cabang Tujuan</option>';
+
+        allBranches.forEach((b) => {
+          selFromB.insertAdjacentHTML(
+            "beforeend",
+            `<option value="${b.id}">${b.name}</option>`,
+          );
+          selToB.insertAdjacentHTML(
+            "beforeend",
+            `<option value="${b.id}">${b.name}</option>`,
+          );
+        });
+      }
+
+      function updateMutasiGudangDropdown(type) {
+        const branchId = document.getElementById(`fMutasi${type}Branch`).value;
+        const selWarehouse = document.getElementById(`fMutasi${type}Warehouse`);
+
+        selWarehouse.innerHTML =
+          '<option value="">Semua Gudang di Cabang Ini</option>';
+
+        if (branchId) {
+          // Filter gudang yang hanya ada di cabang terpilih
+          const filteredGudang = allGudang.filter(
+            (g) => g.branch_id == branchId,
+          );
+          filteredGudang.forEach((g) => {
+            selWarehouse.insertAdjacentHTML(
+              "beforeend",
+              `<option value="${g.id}">${g.name}</option>`,
+            );
+          });
+        }
+      }
+
+      async function loadMutasiDetail() {
+        const fromB = document.getElementById("fMutasiFromBranch").value;
+        const fromW = document.getElementById("fMutasiFromWarehouse").value;
+        const toB = document.getElementById("fMutasiToBranch").value;
+        const toW = document.getElementById("fMutasiToWarehouse").value;
+        const startD = document.getElementById("fMutasiStartDate").value;
+        const endD = document.getElementById("fMutasiEndDate").value;
+
+        let queryParams = [];
+        if (fromB) queryParams.push(`from_branch_id=${fromB}`);
+        if (fromW) queryParams.push(`from_warehouse_id=${fromW}`);
+        if (toB) queryParams.push(`to_branch_id=${toB}`);
+        if (toW) queryParams.push(`to_warehouse_id=${toW}`);
+        if (startD) queryParams.push(`start_date=${startD}`);
+        if (endD) queryParams.push(`end_date=${endD}`);
+
+        const queryString =
+          queryParams.length > 0 ? "?" + queryParams.join("&") : "";
+
+        try {
+          showLoading("Memuat data mutasi...");
+          const d = await api(
+            "GET",
+            `/warehouses/transfers/detailed${queryString}`,
+          );
+          hideLoading();
+
+          document.getElementById("tblMutasi").innerHTML = d.length
+            ? d
+                .map(
+                  (t) => `
+      <tr>
+        <td style="font-size:13px">${t.date}</td>
+        <td style="font-family:monospace;font-size:13px;color:var(--primary)">${t.number}</td>
+        <td>
+          <b style="color:var(--text-main)">${t.from_branch}</b><br>
+          <small style="color:var(--text-muted)">${t.from_warehouse}</small>
+        </td>
+        <td>
+          <b style="color:var(--text-main)">${t.to_branch}</b><br>
+          <small style="color:var(--text-muted)">${t.to_warehouse}</small>
+        </td>
+        <td>
+          <b>${t.item_name}</b><br>
+          <small style="font-family:monospace; color:var(--text-muted)">${t.item_code}</small>
+        </td>
+        <td style="text-align:right;font-size:16px;font-weight:900;color:var(--primary)">${formatNum(t.qty)}</td>
+      </tr>
+    `,
+                )
+                .join("")
+            : '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Tidak ada riwayat mutasi yang cocok dengan filter.</td></tr>';
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function init() {
+        try {
+          // Mengambil semua data gudang lintas cabang untuk keperluan filter mutasi dan transfer
+          allGudang = await api("GET", "/warehouses/?all_branches=true");
+
+          // Menggunakan data yang sama untuk dropdown transfer agar tidak melakukan fetch ulang
+          const gudangUntukTransfer = allGudang;
+
+          allItems = await api("GET", "/items/?limit=1000");
+          allBranches = await api("GET", "/branches/");
+
+          // Inisialisasi dropdown Transfer Stok (Asal & Tujuan)
+          const selFrom = document.getElementById("tfFrom");
+          const selTo = document.getElementById("tfTo");
+
+          selFrom.innerHTML =
+            '<option value="">-- Pilih Gudang Asal --</option>';
+          selTo.innerHTML =
+            '<option value="">-- Pilih Gudang Tujuan --</option>';
+
+          gudangUntukTransfer.forEach((g) => {
+            selFrom.insertAdjacentHTML(
+              "beforeend",
+              `<option value="${g.id}">${g.name} (${g.branch_name})</option>`,
+            );
+            selTo.insertAdjacentHTML(
+              "beforeend",
+              `<option value="${g.id}">${g.name} (${g.branch_name})</option>`,
+            );
+          });
+
+          // Inisialisasi dropdown Filter Stok per Gudang
+          const selFilter = document.getElementById("filterGudang");
+          selFilter.innerHTML = '<option value="">-- Pilih Gudang --</option>';
+
+          // Filter hanya gudang yang aktif untuk tampilan stok per gudang
+          allGudang.forEach((g) => {
+            selFilter.insertAdjacentHTML(
+              "beforeend",
+              `<option value="${g.id}">${g.name}</option>`,
+            );
+          });
+
+          // Inisialisasi dropdown Cabang pada Modal Tambah Gudang
+          const selBranch = document.getElementById("gBranch");
+          selBranch.innerHTML = '<option value="">-- Pilih Cabang --</option>';
+          allBranches.forEach((b) =>
+            selBranch.insertAdjacentHTML(
+              "beforeend",
+              `<option value="${b.id}">${b.name}</option>`,
+            ),
+          );
+
+          // Memuat daftar gudang utama
+          loadGudang();
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function loadGudang() {
+        try {
+          allGudang = await api("GET", "/warehouses/");
+          document.getElementById("tblGudang").innerHTML = allGudang.length
+            ? allGudang
+                .map(
+                  (g) => `<tr>
+      <td><b style="font-size:16px">${g.name}</b><br><small style="color:var(--primary);font-family:monospace">${g.code}</small></td>
+      <td style="font-weight:bold; color:var(--text-main)">${g.branch_name}</td>
+      <td style="color:var(--text-muted)">${g.address || "-"}</td>
+      <td>${g.is_default ? '<span class="bl" style="background:rgba(59,130,246,0.15);color:#3b82f6;padding:4px 8px;border-radius:6px;font-size:12px;font-weight:bold">✓ Etalase Toko</span>' : "—"}</td>
+      <td><span style="color:${g.is_active !== false ? "#10b981" : "#ef4444"};font-weight:700">${g.is_active !== false ? "● Aktif" : "✗ Nonaktif"}</span></td>
       <td style="white-space:nowrap">
-        <button class="bsm be" onclick='editGudang(${JSON.stringify(g).replace(/"/g,"&quot;")})'>Edit</button>
+        <button class="bsm be" onclick='editGudang(${JSON.stringify(g).replace(/"/g, "&quot;")})'>Edit</button>
         <button class="bsm bv" onclick="lihatStok(${g.id},'${g.name}')">Cek Stok</button>
-        <button class="bsm bd" onclick="hapusGudang(${g.id},'${g.name}')">Hapus</button>
-      </td></tr>`).join(''):'<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada gudang</td></tr>';
-  }catch(ex){showToast(ex.message,'error');}
-}
+        ${!g.is_default ? `<button class="bsm bd" onclick="hapusGudang(${g.id},'${g.name}')">Hapus</button>` : ""}
+      </td></tr>`,
+                )
+                .join("")
+            : '<tr><td colspan=\"6\" style=\"text-align:center;padding:24px;color:var(--text-muted)\">Belum ada gudang</td></tr>';
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
 
-function openGudangModal(){
-  document.getElementById('gId').value='';document.getElementById('mGTitle').textContent='Tambah Gudang';
-  document.getElementById('gNama').value='';document.getElementById('gLokasi').value='';
-  openModal('mGudang');
-}
-async function editGudang(g){
-  document.getElementById('gId').value=g.id;document.getElementById('mGTitle').textContent='Edit Gudang';
-  document.getElementById('gNama').value=g.name;document.getElementById('gLokasi').value=g.location||'';
-  openModal('mGudang');
-}
-async function saveGudang(){
-  const name=document.getElementById('gNama').value.trim();
-  if(!name){showToast('Nama gudang wajib diisi','error');return;}
-  const id=document.getElementById('gId').value;
-  const data={name,location:document.getElementById('gLokasi').value||null};
-  try{
-    if(id)await api('PUT',`/warehouses/${id}`,data);
-    else await api('POST','/warehouses/',data);
-    showToast('Gudang disimpan ✓');closeModal('mGudang');init();
-  }catch(ex){showToast(ex.message,'error');}
-}
-async function hapusGudang(id,name){
-  if(!await showConfirm(`Hapus gudang "${name}"?`))return;
-  try{await api('DELETE',`/warehouses/${id}`);showToast('Dihapus');loadGudang();}
-  catch(ex){showToast(ex.message,'error');}
-}
-async function lihatStok(id,name){
-  try{
-    showLoading('Memuat stok...');
-    const d=await api('GET',`/warehouses/${id}/stock`);
-    hideLoading();
-    document.getElementById('mStokTitle').textContent=`📦 Stok: ${name}`;
-    document.getElementById('tblStokDetail').innerHTML=d.length?d.map(s=>`<tr>
-      <td style="font-family:monospace;font-size:13px;color:var(--text-muted)">${s.item?.code||'-'}</td>
-      <td><b>${s.item?.name||'-'}</b></td>
-      <td style="font-size:22px;font-weight:900;color:var(--primary)">${s.quantity}</td>
-    </tr>`).join(''):'<tr><td colspan="3" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada stok di gudang ini</td></tr>';
-    openModal('mStokDetail');
-  }catch(ex){hideLoading();showToast(ex.message,'error');}
-}
+      function openGudangModal() {
+        document.getElementById("gId").value = "";
+        document.getElementById("mGTitle").textContent = "Tambah Gudang";
+        document.getElementById("gBranch").value = "";
+        document.getElementById("gBranch").disabled = false;
+        document.getElementById("gNama").value = "";
+        document.getElementById("gLokasi").value = "";
+        openModal("mGudang");
+      }
 
-function openTransfer(){
-  document.getElementById('tfFrom').value='';document.getElementById('tfTo').value='';
-  document.getElementById('tfItem').value='';document.getElementById('tfQty').value=1;
-  document.getElementById('tfNote').value='';document.getElementById('tfStokInfo').textContent='';
-  openModal('mTransfer');
-}
-function cekStokGudangAsal(){
-  const fromId=document.getElementById('tfFrom').value;
-  const itemId=document.getElementById('tfItem').value;
-  const opt=document.querySelector(`#tfItem option[value="${itemId}"]`);
-  if(opt)document.getElementById('tfStokInfo').textContent=`Stok total: ${opt.dataset.stok}`;
-}
-async function doTransfer(){
-  const from_id=parseInt(document.getElementById('tfFrom').value);
-  const to_id=parseInt(document.getElementById('tfTo').value);
-  const item_id=parseInt(document.getElementById('tfItem').value);
-  const qty=parseFloat(document.getElementById('tfQty').value)||0;
-  if(!from_id||!to_id){showToast('Pilih gudang asal dan tujuan','error');return;}
-  if(from_id===to_id){showToast('Gudang asal dan tujuan tidak boleh sama','error');return;}
-  if(!item_id){showToast('Pilih barang','error');return;}
-  if(qty<=0){showToast('Jumlah harus lebih dari 0','error');return;}
-  try{
-    showLoading('Mentransfer stok...');
-    await api('POST','/warehouses/transfer',{from_warehouse_id:from_id,to_warehouse_id:to_id,item_id,quantity:qty,notes:document.getElementById('tfNote').value||null});
-    hideLoading();showToast('Transfer berhasil ✓');closeModal('mTransfer');loadTransfer();
-  }catch(ex){hideLoading();showToast(ex.message,'error');}
-}
+      async function editGudang(g) {
+        document.getElementById("gId").value = g.id;
+        document.getElementById("mGTitle").textContent = "Edit Gudang";
+        document.getElementById("gBranch").disabled = true;
+        document.getElementById("gNama").value = g.name;
+        document.getElementById("gLokasi").value = g.address || "";
+        openModal("mGudang");
+      }
 
-async function loadTransfer(){
-  try{
-    const d=await api('GET','/warehouses/transfers?limit=100');
-    document.getElementById('tblTransfer').innerHTML=d.length?d.map(t=>`<tr>
-      <td style="font-family:monospace;font-size:13px;color:var(--primary)">${t.number||'-'}</td>
-      <td style="font-size:13px">${fmtDate(t.date)}</td>
-      <td><b>${t.item?.name||'-'}</b></td>
-      <td style="color:var(--text-muted)">${t.from_warehouse?.name||'-'}</td>
-      <td style="color:var(--text-muted)">${t.to_warehouse?.name||'-'}</td>
-      <td style="font-size:18px;font-weight:800">${t.quantity}</td>
-      <td><span class="bl">✓ Selesai</span></td>
-    </tr>`).join(''):'<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada riwayat transfer</td></tr>';
-  }catch(ex){showToast(ex.message,'error');}
-}
+      async function saveGudang() {
+        const name = document.getElementById("gNama").value.trim();
+        const branch_id = document.getElementById("gBranch").value;
+        if (!name) {
+          showToast("Nama gudang wajib diisi", "error");
+          return;
+        }
+        const id = document.getElementById("gId").value;
+        const data = {
+          name: name,
+          address: document.getElementById("gLokasi").value || null,
+          branch_id: branch_id ? parseInt(branch_id) : null,
+        };
+        try {
+          if (id) await api("PUT", `/warehouses/${id}`, data);
+          else await api("POST", "/warehouses/", data);
+          showToast("Gudang disimpan ✓");
+          closeModal("mGudang");
+          init();
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
 
-async function loadStokGudang(){
-  const id=document.getElementById('filterGudang').value;
-  if(!id)return;
-  try{
-    const d=await api('GET',`/warehouses/${id}/stock`);
-    document.getElementById('tblStokGudang').innerHTML=d.length?d.map(s=>`<tr>
-      <td style="font-family:monospace;font-size:13px;color:var(--text-muted)">${s.item?.code||'-'}</td>
-      <td><b>${s.item?.name||'-'}</b></td>
-      <td style="font-size:20px;font-weight:900;color:var(--primary)">${s.quantity}</td>
-    </tr>`).join(''):'<tr><td colspan="3" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada stok</td></tr>';
-  }catch(ex){showToast(ex.message,'error');}
-}
+      async function hapusGudang(id, name) {
+        if (
+          !(await showConfirm(
+            `Nonaktifkan gudang "${name}"?\\nPastikan stok sudah dipindahkan ke gudang lain.`,
+          ))
+        )
+          return;
+        try {
+          await api("DELETE", `/warehouses/${id}`);
+          showToast("Gudang dinonaktifkan ✓");
+          loadGudang();
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
 
-init();
-</script>
-</body></html>
+      async function lihatStok(id, name) {
+        try {
+          showLoading("Memuat stok...");
+          const res = await api("GET", `/warehouses/${id}/stock`);
+          const d = res.items;
+          hideLoading();
+          document.getElementById("mStokTitle").textContent =
+            `📦 Stok Rak: ${name}`;
+          document.getElementById("tblStokDetail").innerHTML = d.length
+            ? d
+                .map(
+                  (s) => `<tr>
+      <td style="font-family:monospace;font-size:13px;color:var(--text-muted)">${s.item_code || "-"}</td>
+      <td><b>${s.item_name || "-"}</b></td>
+      <td style="text-align:right;font-size:22px;font-weight:900;color:var(--primary)">${formatNum(s.stock)}</td> 
+    </tr>`,
+                )
+                .join("")
+            : '<tr><td colspan=\"3\" style=\"text-align:center;padding:24px;color:var(--text-muted)\">Gudang kosong</td></tr>';
+          openModal("mStokDetail");
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      // ─── FITUR MULTI BARANG TRANSFER (PERBAIKAN UI) ───
+
+      function openTransfer() {
+        document.getElementById("tfFrom").value = "";
+        document.getElementById("tfTo").value = "";
+        document.getElementById("tfNote").value = "";
+
+        // Ambil tanggal lokal perangkat tanpa konversi UTC
+        const d = new Date();
+        const localDate =
+          d.getFullYear() +
+          "-" +
+          String(d.getMonth() + 1).padStart(2, "0") +
+          "-" +
+          String(d.getDate()).padStart(2, "0");
+        document.getElementById("tfDate").value = localDate;
+
+        document.getElementById("tfItemsContainer").innerHTML = "";
+        tfRowCounter = 0;
+        currentFromStock = [];
+        addTransferRow();
+        openModal("mTransfer");
+      }
+
+      async function onFromWarehouseChange() {
+        const fromId = document.getElementById("tfFrom").value;
+        if (!fromId) {
+          currentFromStock = [];
+          rebuildAllDropdowns();
+          return;
+        }
+        try {
+          const res = await api("GET", `/warehouses/${fromId}/stock`);
+          currentFromStock = res.items || [];
+          rebuildAllDropdowns();
+        } catch (e) {
+          showToast(e.message, "error");
+        }
+      }
+
+      function buildOptionsHtml() {
+        const fromId = document.getElementById("tfFrom").value;
+
+        if (!fromId) {
+          return '<option value="">🔒 Pilih Gudang Asal Dulu</option>';
+        }
+
+        let html = '<option value="">-- Pilih Barang --</option>';
+        allItems.forEach((i) => {
+          const stockItem = currentFromStock.find((s) => s.item_id == i.id);
+          const qty = stockItem ? stockItem.stock : 0;
+          const disabledAttr = qty <= 0 ? "disabled" : "";
+          html += `<option value="${i.id}" ${disabledAttr}>${i.name} (Di Rak: ${formatNum(qty)})</option>`;
+        });
+        return html;
+      }
+
+      function rebuildAllDropdowns() {
+        const rows = document.querySelectorAll(".tf-row");
+        const newHtml = buildOptionsHtml();
+
+        rows.forEach((row) => {
+          const select = row.querySelector(".tf-item-select");
+          const currentVal = select.value;
+          select.innerHTML = newHtml;
+
+          if (currentVal) {
+            const opt = select.querySelector(`option[value="${currentVal}"]`);
+            if (opt && !opt.disabled) {
+              select.value = currentVal;
+            } else {
+              select.value = "";
+            }
+          }
+
+          const idStr = row.id.replace("tfRow_", "");
+          updateStokInfoRowLocal(idStr);
+        });
+      }
+
+      // 👇 FITUR BARU: onchange memanggil cegahBarangGanda(this) 👇
+      function addTransferRow() {
+        const rowId = tfRowCounter++;
+        const container = document.getElementById("tfItemsContainer");
+        const optionsHtml = buildOptionsHtml();
+        const fromId = document.getElementById("tfFrom").value;
+        const isDisabled = fromId ? "" : "disabled";
+
+        const html = `
+    <div class="tf-row" id="tfRow_${rowId}">
+      <div>
+        <label>Nama Barang</label>
+        <select class="input-control tf-item-select" onchange="cegahBarangGanda(this); updateStokInfoRowLocal(${rowId})" ${isDisabled}>
+          ${optionsHtml}
+        </select>
+        <div class="tf-stok-info" style="font-size:12px;color:var(--text-muted);margin-top:4px;height:16px;"></div>
+      </div>
+      <div>
+        <label>Jumlah Transfer</label>
+        <input type="number" class="input-control tf-item-qty" min="1" value="1" inputmode="numeric" ${isDisabled}
+               oninput="if(this.max !== '' && parseFloat(this.value) > parseFloat(this.max)) this.value = this.max;">
+        <div style="height:16px; margin-top:4px;"></div>
+      </div>
+      <button class="btn" style="background:rgba(239,68,68,0.15);color:#ef4444;height:42px;padding:0;border:none;font-weight:bold;margin-bottom:20px;" onclick="removeTransferRow(${rowId})">✕</button>
+    </div>
+  `;
+        container.insertAdjacentHTML("beforeend", html);
+        updateStokInfoRowLocal(rowId);
+      }
+      // 👆 BATAS FITUR BARU 👆
+
+      function removeTransferRow(rowId) {
+        const row = document.getElementById(`tfRow_${rowId}`);
+        if (row) row.remove();
+      }
+
+      function updateStokInfoRowLocal(rowId) {
+        const row = document.getElementById(`tfRow_${rowId}`);
+        if (!row) return;
+
+        const fromId = document.getElementById("tfFrom").value;
+        const itemSelect = row.querySelector(".tf-item-select");
+        const qtyInput = row.querySelector(".tf-item-qty");
+        const infoEl = row.querySelector(".tf-stok-info");
+
+        const itemId = itemSelect.value;
+
+        if (!fromId) {
+          infoEl.textContent = "";
+          itemSelect.disabled = true;
+          qtyInput.disabled = true;
+          qtyInput.max = "";
+          return;
+        }
+
+        itemSelect.disabled = false;
+        if (!itemId) {
+          infoEl.textContent = "";
+          qtyInput.disabled = true;
+          qtyInput.max = "";
+          return;
+        }
+
+        const stockItem = currentFromStock.find((s) => s.item_id == itemId);
+        const stokTersedia = stockItem ? stockItem.stock : 0;
+
+        qtyInput.max = stokTersedia;
+
+        if (stokTersedia === 0) {
+          qtyInput.value = 0;
+          qtyInput.disabled = true;
+        } else {
+          qtyInput.disabled = false;
+          let currentQty = parseFloat(qtyInput.value) || 0;
+          if (currentQty > stokTersedia) {
+            qtyInput.value = stokTersedia;
+          } else if (currentQty === 0) {
+            qtyInput.value = 1;
+          }
+        }
+
+        infoEl.textContent = `Tersedia di Rak: ${formatNum(stokTersedia)}`;
+        infoEl.style.color = stokTersedia == 0 ? "#ef4444" : "#10b981";
+      }
+
+      async function doTransfer() {
+        const from_id = parseInt(document.getElementById("tfFrom").value);
+        const to_id = parseInt(document.getElementById("tfTo").value);
+        if (!from_id || !to_id) {
+          showToast("Pilih gudang asal dan tujuan", "error");
+          return;
+        }
+        if (from_id === to_id) {
+          showToast("Gudang asal dan tujuan tidak boleh sama", "error");
+          return;
+        }
+
+        const rows = document.querySelectorAll(".tf-row");
+        const transferItems = [];
+        for (let row of rows) {
+          const item_id = parseInt(row.querySelector(".tf-item-select").value);
+          const qty = parseFloat(row.querySelector(".tf-item-qty").value);
+          if (item_id && qty > 0) {
+            transferItems.push({ item_id: item_id, qty: qty });
+          }
+        }
+
+        if (transferItems.length === 0) {
+          showToast(
+            "Tambahkan minimal 1 barang dengan jumlah lebih dari 0",
+            "error",
+          );
+          return;
+        }
+        const d = new Date();
+        const localDate =
+          d.getFullYear() +
+          "-" +
+          String(d.getMonth() + 1).padStart(2, "0") +
+          "-" +
+          String(d.getDate()).padStart(2, "0");
+        const payload = {
+          date: localDate,
+          from_warehouse_id: from_id,
+          to_warehouse_id: to_id,
+          notes: document.getElementById("tfNote").value || null,
+          items: transferItems,
+        };
+
+        try {
+          showLoading("Memindahkan Fisik & Mencatat Mutasi...");
+          await api("POST", "/warehouses/transfers", payload);
+          hideLoading();
+          showToast("Transfer selesai & Mutasi berhasil dicatat ✓");
+          closeModal("mTransfer");
+          loadTransfer();
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function loadTransfer() {
+        try {
+          const d = await api("GET", "/warehouses/transfers/all");
+          document.getElementById("tblTransfer").innerHTML = d.length
+            ? d
+                .map(
+                  (t) => `<tr>
+      <td style="font-family:monospace;font-size:13px;color:var(--primary)">${t.number || "-"}</td>
+      <td style="font-size:13px">${t.date}</td>
+      <td style="color:var(--text-muted)">${t.from_warehouse || "-"}</td>
+      <td style="color:var(--text-muted)">${t.to_warehouse || "-"}</td>
+      <td style="font-size:16px;font-weight:800">${formatNum(t.items_count)} Jenis</td>
+      <td><span class="bl" style="background:rgba(16,185,129,0.15);color:#10b981;padding:4px 8px;border-radius:6px;font-weight:bold;font-size:12px">✓ Selesai</span></td>
+    </tr>`,
+                )
+                .join("")
+            : '<tr><td colspan=\"6\" style=\"text-align:center;padding:24px;color:var(--text-muted)\">Belum ada riwayat transfer</td></tr>';
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function loadStokGudang() {
+        const id = document.getElementById("filterGudang").value;
+        if (!id) {
+          document.getElementById("tblStokGudang").innerHTML = "";
+          return;
+        }
+        try {
+          const res = await api("GET", `/warehouses/${id}/stock`);
+          const d = res.items;
+          document.getElementById("tblStokGudang").innerHTML = d.length
+            ? d
+                .map(
+                  (s) => `<tr>
+      <td style="font-family:monospace;font-size:13px;color:var(--text-muted)">${s.item_code || "-"}</td>
+      <td><b>${s.item_name || "-"}</b></td>
+      <td style="text-align:right;font-size:20px;font-weight:900;color:var(--primary)">${formatNum(s.stock)}</td>
+    </tr>`,
+                )
+                .join("")
+            : '<tr><td colspan=\"3\" style=\"text-align:center;padding:24px;color:var(--text-muted)\">Gudang ini kosong</td></tr>';
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function loadInventorySummary() {
+        try {
+          showLoading("Menghitung inventaris cabang...");
+          const d = await api("GET", "/warehouses/branch-inventory-summary");
+          hideLoading();
+          document.getElementById("tblSemuaBarang").innerHTML = d.length
+            ? d
+                .map(
+                  (i) => `
+      <tr>
+        <td style="font-family:monospace;font-size:13px;color:var(--text-muted)">${i.code}</td>
+        <td><b>${i.name}</b></td>
+        <td style="text-align:right; font-size:18px; font-weight:900; color:var(--primary)">${formatNum(i.total_stock)}</td>
+      </tr>
+    `,
+                )
+                .join("")
+            : '<tr><td colspan=\"3\" style=\"text-align:center;padding:24px;color:var(--text-muted)\">Tidak ada stok fisik di seluruh cabang ini</td></tr>';
+        } catch (e) {
+          hideLoading();
+          showToast(e.message, "error");
+        }
+      }
+
+      init();
+    </script>
+  </body>
+</html>
