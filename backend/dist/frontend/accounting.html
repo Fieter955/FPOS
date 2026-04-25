@@ -100,6 +100,22 @@
           >
             🌊 Arus Kas
           </button>
+          <button
+            id="tbTutup"
+            onclick="switchTab('tutup')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            🔒 Tutup Buku
+          </button>
         </div>
 
         <div id="pnlKas">
@@ -260,6 +276,111 @@
             <div id="cfContent"></div>
           </div>
         </div>
+
+        <div id="pnlTutup" style="display: none">
+          <div
+            class="card"
+            style="
+              padding: 24px;
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              border-radius: 12px;
+              margin-bottom: 16px;
+            "
+          >
+            <h2 style="margin: 0 0 8px">ðŸ”’ Tutup Buku</h2>
+            <p style="color: var(--text-muted); margin: 0 0 16px; font-size: 14px">
+              Mengunci periode akuntansi yang sudah selesai agar laporan tidak berubah.
+              Setelah ditutup, transaksi dengan tanggal
+              <b>â‰¤ tanggal tutup buku</b> akan ditolak (jurnal manual, kas, pembelian, dll).
+            </p>
+
+            <div
+              style="
+                background: rgba(249, 115, 22, 0.08);
+                border: 1px dashed rgba(249, 115, 22, 0.35);
+                border-radius: 12px;
+                padding: 14px;
+                margin-bottom: 16px;
+              "
+            >
+              <div style="display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap">
+                <div>
+                  <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px">
+                    Terkunci Sampai
+                  </div>
+                  <div id="bkLockedUntil" style="font-weight: 900; font-size: 18px">-</div>
+                </div>
+                <div style="flex: 1; min-width: 220px">
+                  <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px">
+                    Catatan
+                  </div>
+                  <div id="bkLockedNote" style="font-size: 13px; color: var(--text-main)">-</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="row2" style="margin-bottom: 12px">
+              <div class="input-group">
+                <label>Jenis Tutup Buku *</label>
+                <select
+                  id="bkCloseType"
+                  class="input-control"
+                  onchange="normalizeCloseEndDate()"
+                >
+                  <option value="month">Bulanan (Akhir Bulan)</option>
+                  <option value="year">Tahunan (31 Desember)</option>
+                </select>
+              </div>
+              <div class="input-group">
+                <label>Tanggal Tutup Buku (Akhir Periode) *</label>
+                <input
+                  id="bkEndDate"
+                  type="date"
+                  class="input-control"
+                  onchange="normalizeCloseEndDate()"
+                />
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label>Catatan (Opsional)</label>
+              <input
+                id="bkNotes"
+                class="input-control"
+                placeholder="Contoh: Tutup buku April 2026"
+              />
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px">
+              <button class="btn btn-primary" onclick="doCloseBooks()">âœ“ Tutup Buku</button>
+              <button
+                class="btn"
+                style="
+                  background: var(--bg-color);
+                  border: 1px solid var(--border-color);
+                  color: var(--text-main);
+                "
+                onclick="reopenLatestClose()"
+              >
+                â†© Buka Tutup Buku Terakhir
+              </button>
+            </div>
+          </div>
+
+          <div
+            class="card"
+            style="
+              padding: 24px;
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              border-radius: 12px;
+            "
+          >
+            <h3 style="margin: 0 0 12px">Riwayat Tutup Buku</h3>
+            <div id="bkHistory" style="color: var(--text-muted)">Memuat...</div>
+          </div>
+        </div>
       </main>
     </div>
 
@@ -387,7 +508,7 @@
 
       function switchTab(t) {
         // 👇 TAMBAHKAN 'Cashflow' ke dalam list tab
-        ["Kas", "Jurnal", "Coa", "Cashflow"].forEach((x) => {
+        ["Kas", "Jurnal", "Coa", "Cashflow", "Tutup"].forEach((x) => {
           document.getElementById("pnl" + x).style.display =
             x.toLowerCase() === t ? "block" : "none";
           document.getElementById("tb" + x).style.cssText =
@@ -397,6 +518,7 @@
         if (t === "jurnal") loadJurnal();
         if (t === "coa") loadCoa();
         if (t === "cashflow") loadCashFlow();
+        if (t === "tutup") loadBookClose();
       }
 
       async function loadAkunSelect() {
@@ -748,6 +870,141 @@
         }
       }
 
+      function escHtml(s) {
+        return String(s || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function normalizeCloseEndDate() {
+        const type = document.getElementById("bkCloseType")?.value || "month";
+        const el = document.getElementById("bkEndDate");
+        if (!el || !el.value) return;
+        const d = new Date(el.value + "T00:00:00");
+        if (Number.isNaN(d.getTime())) return;
+
+        const out =
+          type === "year"
+            ? new Date(d.getFullYear(), 11, 31)
+            : new Date(d.getFullYear(), d.getMonth() + 1, 0);
+
+        el.value = out.toLocaleDateString("en-CA");
+      }
+
+      async function loadBookClose() {
+        const lockedEl = document.getElementById("bkLockedUntil");
+        const noteEl = document.getElementById("bkLockedNote");
+        const histEl = document.getElementById("bkHistory");
+
+        if (lockedEl) lockedEl.textContent = "â€¦";
+        if (noteEl) noteEl.textContent = "Memuat...";
+        try {
+          const st = await api("GET", "/accounting/book-close/status");
+          const locked = st.locked_until || null;
+          if (lockedEl) lockedEl.textContent = locked || "-";
+          if (noteEl)
+            noteEl.textContent = locked
+              ? `Transaksi tanggal â‰¤ ${locked} tidak bisa dibuat/dihapus.`
+              : "Belum ada tutup buku.";
+        } catch (ex) {
+          if (lockedEl) lockedEl.textContent = "-";
+          if (noteEl) noteEl.textContent = "Gagal memuat status.";
+          showToast(ex.message, "error");
+        }
+
+        try {
+          const h = await api("GET", "/accounting/book-close/history?limit=24");
+          if (!histEl) return;
+          if (!Array.isArray(h) || h.length === 0) {
+            histEl.innerHTML =
+              '<div style="text-align:center;padding:16px;color:var(--text-muted)">Belum ada riwayat</div>';
+            return;
+          }
+
+          histEl.innerHTML = `
+            <div class="tbl-wrap">
+              <table class="tbl">
+                <thead>
+                  <tr>
+                    <th>Periode</th>
+                    <th>Tipe</th>
+                    <th>Status</th>
+                    <th>Catatan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${h
+                    .map(
+                      (x) => `
+                    <tr>
+                      <td style="font-family:monospace;font-size:13px">${escHtml(x.period_start)} â†’ ${escHtml(x.period_end)}</td>
+                      <td>${escHtml(x.close_type)}</td>
+                      <td>${x.is_active ? '<span class="bl">AKTIF</span>' : '<span class="bg">DIBUKA</span>'}</td>
+                      <td style="color:var(--text-muted)">${escHtml(x.notes || "-")}</td>
+                    </tr>`,
+                    )
+                    .join("")}
+                </tbody>
+              </table>
+            </div>
+          `;
+        } catch (ex) {
+          if (histEl) histEl.textContent = "Gagal memuat riwayat.";
+        }
+      }
+
+      async function doCloseBooks() {
+        const type = document.getElementById("bkCloseType")?.value || "month";
+        const dateEl = document.getElementById("bkEndDate");
+        const notes = document.getElementById("bkNotes")?.value || "";
+        if (!dateEl || !dateEl.value)
+          return showToast("Tanggal tutup buku wajib diisi", "error");
+
+        normalizeCloseEndDate();
+        const endDate = dateEl.value;
+        const msg =
+          `TUTUP BUKU (${type.toUpperCase()}) sampai ${endDate}?\n\n` +
+          `Setelah ditutup, transaksi tanggal â‰¤ ${endDate} akan ditolak.\n\n` +
+          `Lanjutkan?`;
+        if (!(await showConfirm(msg))) return;
+
+        try {
+          if (typeof showLoading === "function") showLoading("Memproses...");
+          const res = await api("POST", "/accounting/book-close/close", {
+            close_type: type,
+            end_date: endDate,
+            notes: notes,
+          });
+          if (typeof hideLoading === "function") hideLoading();
+          showToast(res.message || "Berhasil âœ“", "success");
+          await loadBookClose();
+        } catch (ex) {
+          if (typeof hideLoading === "function") hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function reopenLatestClose() {
+        const msg =
+          "Buka tutup buku terakhir?\n\n" +
+          "Ini akan membuka kembali periode yang sebelumnya terkunci. " +
+          "Gunakan hanya jika ada kesalahan dan Anda paham dampaknya.";
+        if (!(await showConfirm(msg))) return;
+        try {
+          if (typeof showLoading === "function") showLoading("Memproses...");
+          const res = await api("POST", "/accounting/book-close/reopen-latest", {});
+          if (typeof hideLoading === "function") hideLoading();
+          showToast(res.message || "Berhasil âœ“", "success");
+          await loadBookClose();
+        } catch (ex) {
+          if (typeof hideLoading === "function") hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
       const m = new Date();
       const y = m.getFullYear(),
         mo = String(m.getMonth() + 1).padStart(2, "0");
@@ -760,6 +1017,12 @@
         if (document.getElementById(id))
           document.getElementById(id).value = today();
       });
+
+      const bkEnd = document.getElementById("bkEndDate");
+      if (bkEnd && !bkEnd.value) {
+        const lastPrevMonth = new Date(y, m.getMonth(), 0);
+        bkEnd.value = lastPrevMonth.toLocaleDateString("en-CA");
+      }
 
       loadKas();
       loadAkunSelect();

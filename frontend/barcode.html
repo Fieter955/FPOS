@@ -102,7 +102,7 @@
         box-shadow:
           10px 0 20px rgba(0, 0, 0, 0.1),
           -2px 0 5px rgba(0, 0, 0, 0.05);
-        display: flex; /* Ganti Grid jadi Flex untuk preview yang aman */
+        display: block;
         border-left: 4px solid #e2e8f0;
         transition:
           width 0.4s ease,
@@ -115,63 +115,19 @@
         --fz-name: 12px;
       }
 
-      .sticker-label {
+      .preview-sheet-image {
+        display: block;
+        width: 100%;
+        height: auto;
         background: #fff;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        box-sizing: border-box;
-        overflow: hidden;
-        padding: 0 !important;
-        margin: 0 !important;
-        border: 1px dotted #ccc;
-        flex: 1;
-        min-width: 0; /* MANTRA KUNCI PREVIEW */
+        image-rendering: pixelated;
       }
 
-      .st-top {
-        font-size: var(--fz-price);
-        font-weight: 900;
+      .preview-placeholder {
+        width: 100%;
+        padding: 40px;
         text-align: center;
-        color: #000;
-        line-height: 1;
-        margin: 0;
-        padding: 0;
-        width: 100%;
-        white-space: nowrap;
-        overflow: hidden;
-      }
-
-      .st-mid {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex: 1;
-        min-height: 0;
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-      }
-
-      .st-mid img {
-        height: var(--bc-scale);
-        width: 100%;
-        max-width: 100%;
-        object-fit: fill;
-      }
-
-      .st-bot {
-        font-size: var(--fz-name);
-        font-weight: 700;
-        text-align: center;
-        color: #000;
-        line-height: 1;
-        margin: 0;
-        padding: 0;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        width: 100%;
+        color: #64748b;
       }
     </style>
   </head>
@@ -287,9 +243,52 @@
           </div>
         </div>
 
+        <div
+          style="
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 16px;
+          "
+        >
+          <div class="input-group">
+            <label>Jarak Antar Kolom (mm)</label>
+            <input
+              type="number"
+              id="gapX"
+              class="input-control"
+              value="2"
+              min="0"
+              step="0.1"
+            />
+          </div>
+          <div class="input-group">
+            <label>Jarak Antar Baris (mm)</label>
+            <input
+              type="number"
+              id="gapY"
+              class="input-control"
+              value="0"
+              min="0"
+              step="0.1"
+            />
+            <div
+              style="
+                margin-top: 6px;
+                font-size: 11px;
+                color: var(--text-muted);
+                line-height: 1.35;
+              "
+            >
+              Berlaku antar row stiker di kertas. Efeknya baru terlihat kalau
+              total label yang dicetak membuat hasilnya lebih dari 1 baris.
+            </div>
+          </div>
+        </div>
+
         <div class="input-group">
           <label style="color: #ef4444; font-weight: bold"
-            >Jumlah Baris Kertas Cetak</label
+            >Jumlah Barcode Dicetak</label
           >
           <input
             type="number"
@@ -298,6 +297,17 @@
             value="1"
             min="1"
           />
+          <div
+            style="
+              margin-top: 6px;
+              font-size: 11px;
+              color: var(--text-muted);
+              line-height: 1.35;
+            "
+          >
+            Contoh: pilih 3 Lin lalu isi 5, maka tercetak 2 baris dan slot
+            terakhir kosong.
+          </div>
         </div>
 
         <button
@@ -325,7 +335,25 @@
       requireAuth();
       let allItems = [],
         selectedItem = null,
-        barcodeBase64 = "";
+        previewBlobUrl = "",
+        previewRenderTimer = null,
+        previewAbortController = null,
+        previewRenderSeq = 0;
+
+      function cleanupPreviewBlob() {
+        if (previewBlobUrl) {
+          URL.revokeObjectURL(previewBlobUrl);
+          previewBlobUrl = "";
+        }
+      }
+
+      function setPreviewPlaceholder(text) {
+        const area = document.getElementById("previewArea");
+        cleanupPreviewBlob();
+        area.style.width = "100%";
+        area.style.height = "";
+        area.innerHTML = `<div class="preview-placeholder">${text}</div>`;
+      }
 
       async function loadItems() {
         try {
@@ -344,10 +372,23 @@
       document
         .getElementById("itemSearch")
         .addEventListener("input", function () {
-          selectedItem = allItems.find(
-            (i) => i.name === this.value || i.code === this.value,
-          );
-          if (selectedItem) generateBarcode();
+          selectedItem =
+            allItems.find(
+              (i) =>
+                i.name === this.value ||
+                i.code === this.value ||
+                i.barcode === this.value,
+            ) || null;
+
+          if (!selectedItem) {
+            if (previewAbortController) {
+              previewAbortController.abort();
+            }
+            setPreviewPlaceholder("Pilih barang dulu");
+            return;
+          }
+
+          generateBarcode();
         });
 
       function updateSliderVars() {
@@ -361,15 +402,16 @@
         root.style.setProperty("--fz-price", valP + "px");
         root.style.setProperty("--bc-scale", valB + "%");
         root.style.setProperty("--fz-name", valN + "px");
+        schedulePreviewRender();
       }
 
-      ["paperW", "paperH", "printQty"].forEach((id) => {
+      ["paperW", "paperH", "printQty", "gapX", "gapY"].forEach((id) => {
         document
           .getElementById(id)
-          .addEventListener("input", updatePreviewGrid);
+          .addEventListener("input", schedulePreviewRender);
       });
       document.querySelectorAll('input[name="colLayout"]').forEach((r) => {
-        r.addEventListener("change", updatePreviewGrid);
+        r.addEventListener("change", schedulePreviewRender);
       });
 
       async function generateBarcode() {
@@ -379,131 +421,203 @@
             item_id: selectedItem.id,
             barcode_type: "CODE128",
           });
-          barcodeBase64 = req.image_base64;
-          updatePreviewGrid();
+          selectedItem.barcode = req.barcode_value;
+          const itemIndex = allItems.findIndex((i) => i.id === selectedItem.id);
+          if (itemIndex >= 0) {
+            allItems[itemIndex].barcode = req.barcode_value;
+          }
+          schedulePreviewRender();
         } catch (e) {
           showToast("Gagal buat barcode", "error");
         }
       }
 
-      function updatePreviewGrid() {
-        const area = document.getElementById("previewArea");
+      function getKategoriLabel(item) {
+        if (!item) return "UMUM";
+        if (typeof item.kategori === "string" && item.kategori.trim()) {
+          return item.kategori.trim();
+        }
+        if (item.category?.name) {
+          return item.category.name;
+        }
+        return "UMUM";
+      }
+
+      function getStickerPayload() {
         const cols = parseInt(
           document.querySelector('input[name="colLayout"]:checked').value,
         );
         const w = parseFloat(document.getElementById("paperW").value) || 33;
         const h = parseFloat(document.getElementById("paperH").value) || 15;
+        const totalLabels = Math.max(
+          1,
+          parseInt(document.getElementById("printQty").value, 10) || 1,
+        );
+        const gapX = Math.max(
+          0,
+          parseFloat(document.getElementById("gapX").value) || 0,
+        );
+        const gapY = Math.max(
+          0,
+          parseFloat(document.getElementById("gapY").value) || 0,
+        );
 
-        if (!barcodeBase64) {
-          area.innerHTML =
-            '<div style="padding:40px; color:#94a3b8; width: 100%;">Pilih barang dulu</div>';
+        const data_produk = [];
+        for (let i = 0; i < totalLabels; i++) {
+          data_produk.push({
+            nama: selectedItem?.name || "-",
+            kategori: getKategoriLabel(selectedItem),
+            barcode: selectedItem?.barcode || selectedItem?.code || "",
+            harga: selectedItem?.sell_price || 0,
+          });
+        }
+
+        return {
+          data_produk,
+          jumlah_kolom: cols,
+          gap_mm: gapX,
+          gap_vertical_mm: gapY,
+          lebar_mm: w,
+          tinggi_mm: h,
+          dpi_printer: 203,
+          font_harga_px: parseInt(document.getElementById("slPrice").value, 10),
+          font_nama_px: parseInt(document.getElementById("slName").value, 10),
+          barcode_scale_pct: parseInt(
+            document.getElementById("slBarcode").value,
+            10,
+          ),
+        };
+      }
+
+      function getSheetSizeMm(payload) {
+        const cols = payload.jumlah_kolom;
+        const rows = Math.ceil(payload.data_produk.length / cols);
+        return {
+          width:
+            payload.lebar_mm * cols + payload.gap_mm * Math.max(0, cols - 1),
+          height:
+            payload.tinggi_mm * rows +
+            payload.gap_vertical_mm * Math.max(0, rows - 1),
+        };
+      }
+
+      async function requestStickerSheet(payload, signal) {
+        const token = localStorage.getItem("token");
+        const res = await fetch("/api/sticker/render-sheet", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: "Bearer " + token } : {}),
+          },
+          body: JSON.stringify(payload),
+          signal,
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(errText || "Gagal render stiker");
+        }
+
+        const fallbackSize = getSheetSizeMm(payload);
+        const widthMm =
+          parseFloat(res.headers.get("X-Sheet-Width-Mm")) || fallbackSize.width;
+        const heightMm =
+          parseFloat(res.headers.get("X-Sheet-Height-Mm")) ||
+          fallbackSize.height;
+        const blob = await res.blob();
+
+        return { blob, widthMm, heightMm };
+      }
+
+      function blobToBase64(blob) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const result = String(reader.result || "");
+            const base64 = result.includes(",") ? result.split(",", 2)[1] : "";
+            if (!base64) {
+              reject(new Error("Gagal konversi gambar cetak"));
+              return;
+            }
+            resolve(base64);
+          };
+          reader.onerror = () => reject(new Error("Gagal membaca gambar cetak"));
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      function schedulePreviewRender() {
+        clearTimeout(previewRenderTimer);
+        previewRenderTimer = setTimeout(updatePreviewGrid, 120);
+      }
+
+      async function updatePreviewGrid() {
+        const area = document.getElementById("previewArea");
+        if (!selectedItem) {
+          setPreviewPlaceholder("Pilih barang dulu");
           return;
         }
 
-        const scale = 3.8;
-        area.style.width = w * cols * scale + "px";
-
-        let html = "";
-        for (let i = 0; i < cols; i++) {
-          html += `
-                <div class="sticker-label" style="height: ${h * scale}px;">
-                    <div class="st-top">${fmtRp(selectedItem.sell_price)}</div>
-                    <div class="st-mid"><img src="data:image/png;base64,${barcodeBase64}"></div>
-                    <div class="st-bot">${selectedItem.name}</div>
-                </div>`;
+        if (previewAbortController) {
+          previewAbortController.abort();
         }
-        area.innerHTML = html;
+        previewAbortController = new AbortController();
+        const renderSeq = ++previewRenderSeq;
+
+        setPreviewPlaceholder("Menyiapkan preview...");
+
+        try {
+          const payload = getStickerPayload();
+          const { blob, widthMm, heightMm } = await requestStickerSheet(
+            payload,
+            previewAbortController.signal,
+          );
+          if (renderSeq !== previewRenderSeq || !selectedItem) {
+            return;
+          }
+          cleanupPreviewBlob();
+          previewBlobUrl = URL.createObjectURL(blob);
+
+          const previewScale = 3.7795;
+          area.style.width = Math.max(120, widthMm * previewScale) + "px";
+          area.style.height = Math.max(60, heightMm * previewScale) + "px";
+          area.innerHTML = `<img class="preview-sheet-image" src="${previewBlobUrl}" alt="Preview barcode" />`;
+        } catch (e) {
+          if (e.name === "AbortError") return;
+          area.style.height = "";
+          setPreviewPlaceholder("Preview gagal dibuat");
+          console.error(e);
+        }
       }
 
       async function printStiker() {
-        if (!barcodeBase64) return showToast("Pilih barang!", "warning");
-
-        const cols = parseInt(
-          document.querySelector('input[name="colLayout"]:checked').value,
-        );
-        const w = parseFloat(document.getElementById("paperW").value) || 33;
-        const h = parseFloat(document.getElementById("paperH").value) || 15;
-        const baris = parseInt(document.getElementById("printQty").value) || 1;
-
-        const totalStickers = baris * cols;
-        const totalW = w * cols;
-
-        const fzPrice = document.getElementById("slPrice").value * 0.75 + "pt";
-        const bcHeight = document.getElementById("slBarcode").value + "%";
-        const fzName = document.getElementById("slName").value * 0.75 + "pt";
-
-        // ════════════════════════════════════════════════════════════════
-        // BANGUN HTML CETAK (DENGAN FIX CSS UNTUK CHROME HEADLESS)
-        // ════════════════════════════════════════════════════════════════
-        let content = `<html><head><style>
-            * { box-sizing: border-box; margin: 0; padding: 0; }
-            body { 
-                background: #fff; 
-                font-family: sans-serif; 
-                color: #000; 
-                width: ${totalW}mm; 
-                margin: 0mm; 
-            }
-            
-            /* 👇 MANTRA ANTI ABOUT:BLANK & HEADER BROWSER 👇 */
-            @page { 
-                size: ${totalW}mm ${h}mm; 
-                margin: 0mm !important; 
-            }
-            @media print { 
-                @page { margin: 0mm !important; } 
-                /* Opsional: Memaksa Chrome merender hitam-putih pekat */
-                body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            }
-            /* ☝️ ---------------------------------------- ☝️ */
-
-            .row { display: flex; width: ${totalW}mm; height: ${h}mm; page-break-after: always; page-break-inside: avoid; }
-            
-            /* Catatan: Padding diset 0.5mm agar tulisan tidak rawan terpotong tepi fisik stiker */
-            .s { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; height: 100%; overflow: hidden; padding: 0.5mm; margin: 0; text-align: center; }
-            
-            .st { font-size: ${fzPrice}; font-weight: bold; line-height: 1; padding: 0; margin: 0; white-space: nowrap; overflow: hidden; }
-            .sm { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; padding: 0; margin: 0; overflow: hidden; }
-            .sm img { height: ${bcHeight}; width: 100%; max-width: 100%; object-fit: fill; }
-            .sb { font-size: ${fzName}; font-weight: bold; line-height: 1; white-space: nowrap; overflow: hidden; padding: 0; margin: 0; }
-        </style></head><body>`;
-
-        let curr = 0;
-        while (curr < totalStickers) {
-          content += `<div class="row">`;
-          for (let i = 0; i < cols; i++) {
-            if (curr < totalStickers) {
-              content += `<div class="s">
-                <div class="st">${fmtRp(selectedItem.sell_price)}</div>
-                <div class="sm"><img src="data:image/png;base64,${barcodeBase64}"></div>
-                <div class="sb">${selectedItem.name}</div>
-              </div>`;
-              curr++;
-            } else {
-              content += `<div class="s"></div>`;
-            }
-          }
-          content += `</div>`;
+        if (!selectedItem) {
+          showToast("Pilih barang dulu!", "warning");
+          return;
         }
-        content += `</body></html>`;
 
-        // ════════════════════════════════════════════════════════════════
-        // KIRIM KE API QUEUE (Tipe konten: HTML)
-        // ════════════════════════════════════════════════════════════════
         try {
+          const payload = getStickerPayload();
+          const { blob, widthMm, heightMm } =
+            await requestStickerSheet(payload);
+          const imageBase64 = await blobToBase64(blob);
+
           await api("POST", "/print/", {
-            content: content,
-            content_type: "html",
-            paper_width_mm: totalW,
-            paper_height_mm: h,
-            // branch_id: 1 -> Tidak perlu dikirim karena di backend PrintJobCreate sudah ada default = 1
+            content: JSON.stringify({
+              image_base64: imageBase64,
+              width_mm: widthMm,
+              height_mm: heightMm,
+            }),
+            content_type: "label_image",
           });
-          showToast(`✅ Job Barcode dikirim ke antrean!`, "success");
+
+          showToast("Job barcode dikirim ke antrean printer", "success");
         } catch (e) {
-          showToast("❌ Gagal kirim ke printer agent", "error");
+          console.error(e);
+          showToast("Kesalahan cetak: " + e.message, "error");
         }
       }
-
+      setPreviewPlaceholder("Pilih barang dulu");
       updateSliderVars();
       loadItems();
     </script>

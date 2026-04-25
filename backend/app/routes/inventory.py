@@ -168,6 +168,24 @@ def stock_adjustment(
     # 3. Flush dulu StockMovement ke session (SEBELUM coba jurnal)
     db.flush()  # ← Ini mengunci StockMovement di session, tapi belum commit ke DB
 
+    opname_mode = (data.opname_mode or "running").strip().lower()
+    is_opening = opname_mode in ("opening", "setup", "awal", "saldo_awal", "initial")
+    if is_opening:
+        # Pastikan akun Modal Transisi tersedia agar jurnal tidak gagal
+        acc = db.query(models.Account).filter(models.Account.code == "3-1999").first()
+        if not acc:
+            db.add(
+                models.Account(
+                    code="3-1999",
+                    name="Modal Transisi (Setup Awal Stok)",
+                    type="equity",
+                    subtype="capital",
+                    normal_balance="credit",
+                    is_active=True,
+                )
+            )
+            db.flush()
+
     # 4. Jurnal akuntansi pakai SAVEPOINT agar rollback-nya terisolasi
     if diff != 0:
         nilai_penyesuaian = abs(diff) * (item.buy_price or 0)
@@ -178,17 +196,26 @@ def stock_adjustment(
                 from .accounting import create_auto_journal
                 
                 if diff > 0:
+                    credit_code = "3-1999" if is_opening else "4-1300"
                     entries = [
                         {"code": "1-1400", "debit": nilai_penyesuaian, "credit": 0},
-                        {"code": "4-1300", "debit": 0, "credit": nilai_penyesuaian}
+                        {"code": credit_code, "debit": 0, "credit": nilai_penyesuaian},
                     ]
-                    desc = f"Opname Surplus: {item.name} (+{abs(diff)}) - {data.description}"
+                    desc_prefix = "Setup Stok Awal" if is_opening else "Opname Surplus"
+                    desc = f"{desc_prefix}: {item.name} (+{abs(diff)}) - {data.description}"
                 else:
-                    entries = [
-                        {"code": "5-2700", "debit": nilai_penyesuaian, "credit": 0},
-                        {"code": "1-1400", "debit": 0, "credit": nilai_penyesuaian}
-                    ]
-                    desc = f"Opname Susut: {item.name} (-{abs(diff)}) - {data.description}"
+                    if is_opening:
+                        entries = [
+                            {"code": "3-1999", "debit": nilai_penyesuaian, "credit": 0},
+                            {"code": "1-1400", "debit": 0, "credit": nilai_penyesuaian},
+                        ]
+                        desc = f"Setup Stok Awal: {item.name} (-{abs(diff)}) - {data.description}"
+                    else:
+                        entries = [
+                            {"code": "5-2700", "debit": nilai_penyesuaian, "credit": 0},
+                            {"code": "1-1400", "debit": 0, "credit": nilai_penyesuaian},
+                        ]
+                        desc = f"Opname Susut: {item.name} (-{abs(diff)}) - {data.description}"
 
                 create_auto_journal(
                     db=db,

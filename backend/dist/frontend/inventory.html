@@ -203,6 +203,22 @@
               sekaligus.
             </p>
 
+            <div class="input-group" style="margin-bottom: 16px">
+              <label>Jenis Opname (Jurnal) *</label>
+              <select id="adjOpnameMode" class="input-control">
+                <option value="running">
+                  Opname Berjalan (Selisih → Pendapatan/Beban)
+                </option>
+                <option value="opening">
+                  Setup Awal Stok (Masuk ke Modal Transisi, bukan laba rugi)
+                </option>
+              </select>
+              <div style="margin-top: 6px; font-size: 12px; color: var(--text-muted)">
+                Gunakan <b>Setup Awal</b> hanya saat pertama kali input stok awal,
+                agar tidak terlihat seperti “untung besar” di laporan laba rugi.
+              </div>
+            </div>
+
             <div
               style="
                 display: flex;
@@ -506,6 +522,8 @@
       async function simpanSemuaPenyesuaian() {
         if (adjustList.length === 0)
           return showToast("Daftar masih kosong", "warning");
+        const opnameMode =
+          document.getElementById("adjOpnameMode")?.value || "running";
         for (let item of adjustList) {
           if (item.qty < 0)
             return showToast(`Jumlah untuk ${item.name} tidak valid`, "error");
@@ -515,12 +533,11 @@
               "error",
             );
         }
-        if (
-          !(await showConfirm(
-            `Yakin ingin menyimpan ${adjustList.length} penyesuaian?`,
-          ))
-        )
-          return;
+        const confirmMsg =
+          opnameMode === "opening"
+            ? `Mode SETUP AWAL: jurnal surplus stok akan masuk ke akun 3-1999 (Modal Transisi), bukan Pendapatan, jadi tidak mempengaruhi laba rugi.\n\nLanjutkan simpan ${adjustList.length} penyesuaian?`
+            : `Yakin ingin menyimpan ${adjustList.length} penyesuaian?`;
+        if (!(await showConfirm(confirmMsg))) return;
         try {
           if (typeof showLoading === "function")
             showLoading("Memproses penyesuaian...");
@@ -530,6 +547,7 @@
               type: item.type,
               qty: item.qty,
               description: item.note,
+              opname_mode: opnameMode,
             });
           }
           if (typeof hideLoading === "function") hideLoading();

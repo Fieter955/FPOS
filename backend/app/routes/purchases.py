@@ -93,7 +93,10 @@ def create_purchase(
 ):
     tanggal_faktur = data.date if data.date else get_local_date()
     local_datetime = get_local_datetime()
-    
+
+    from .accounting import assert_books_open
+    assert_books_open(db, current_user.active_branch_id, tanggal_faktur, "Pembelian")
+     
     number = data.number or _next_number(db, "PUR", models.Purchase, current_user)
 
     subtotal = sum(it.buy_price * it.qty for it in data.items)
@@ -209,23 +212,62 @@ def pay_purchase(
     if obj.status == "paid":
         raise HTTPException(status_code=400, detail="DITOLAK: Faktur ini sudah lunas sepenuhnya!")
         
+    cash_amount = float(payment.cash_amount or 0)
+    bank_amount = float(payment.bank_amount or 0)
+    legacy_amount = float(payment.amount or 0)
+
+    if cash_amount < 0 or bank_amount < 0 or legacy_amount < 0:
+        raise HTTPException(400, "DITOLAK: Nominal pembayaran tidak boleh negatif!")
+
+    if cash_amount <= 0 and bank_amount <= 0 and legacy_amount > 0:
+        cash_amount = legacy_amount
+
+    total_payment = cash_amount + bank_amount
+    if total_payment <= 0:
+        raise HTTPException(400, "DITOLAK: Isi nominal pembayaran kas, bank, atau keduanya.")
+
+    if legacy_amount > 0 and abs(legacy_amount - total_payment) > 0.01:
+        raise HTTPException(400, "DITOLAK: Total pembayaran tidak cocok dengan rincian kas/bank.")
+
     sisa_hutang = obj.total - obj.paid
-    if payment.amount > sisa_hutang:
+    if total_payment > sisa_hutang:
         raise HTTPException(
             status_code=400, 
-            detail=f"DITOLAK: Jumlah bayar (Rp {payment.amount:,.0f}) melebihi sisa hutang (Rp {sisa_hutang:,.0f})!"
+            detail=f"DITOLAK: Jumlah bayar (Rp {total_payment:,.0f}) melebihi sisa hutang (Rp {sisa_hutang:,.0f})!"
         )
-        
-    obj.paid += payment.amount
+
+    from .accounting import create_auto_journal, get_account_balance
+
+    cash_acc = db.query(models.Account).filter(models.Account.code == "1-1100").first()
+    bank_acc = db.query(models.Account).filter(models.Account.code == "1-1200").first()
+    branch_id = obj.branch_id or current_user.active_branch_id
+
+    if cash_amount > 0:
+        cash_balance = get_account_balance(db, cash_acc.id, branch_id=branch_id) if cash_acc else 0.0
+        if cash_amount - cash_balance > 0.01:
+            raise HTTPException(
+                400,
+                f"DITOLAK: Saldo kas tidak cukup. Tersedia Rp {cash_balance:,.0f}, diminta Rp {cash_amount:,.0f}."
+            )
+
+    if bank_amount > 0:
+        bank_balance = get_account_balance(db, bank_acc.id, branch_id=branch_id) if bank_acc else 0.0
+        if bank_amount - bank_balance > 0.01:
+            raise HTTPException(
+                400,
+                f"DITOLAK: Saldo bank tidak cukup. Tersedia Rp {bank_balance:,.0f}, diminta Rp {bank_amount:,.0f}."
+            )
+
+    obj.paid += total_payment
     obj.status = "paid" if obj.paid >= obj.total else "partial"
 
-    from .accounting import create_auto_journal
     catatan = payment.notes or f"Cicilan Hutang untuk {obj.number}"
     
-    jurnal_pembayaran = [
-        {"code": "2-1100", "debit": payment.amount, "credit": 0},
-        {"code": "1-1100", "debit": 0, "credit": payment.amount} 
-    ]
+    jurnal_pembayaran = [{"code": "2-1100", "debit": total_payment, "credit": 0}]
+    if cash_amount > 0:
+        jurnal_pembayaran.append({"code": "1-1100", "debit": 0, "credit": cash_amount})
+    if bank_amount > 0:
+        jurnal_pembayaran.append({"code": "1-1200", "debit": 0, "credit": bank_amount})
     
     create_auto_journal(
         db=db,
@@ -242,7 +284,10 @@ def pay_purchase(
         "message": "Pembayaran berhasil dicatat", 
         "current_paid": obj.paid, 
         "remaining": obj.total - obj.paid,
-        "status": obj.status
+        "status": obj.status,
+        "amount": total_payment,
+        "cash_amount": cash_amount,
+        "bank_amount": bank_amount,
     }
 
 
@@ -261,6 +306,14 @@ def cancel_purchase(
 
     local_date = get_local_date()
     local_datetime = get_local_datetime()
+
+    from .accounting import get_books_locked_until
+    locked_until = get_books_locked_until(db, obj.branch_id)
+    if locked_until and obj.date and obj.date <= locked_until:
+        raise HTTPException(
+            status_code=400,
+            detail=f"DITOLAK: Pembelian tanggal {obj.date} berada di periode tutup buku (sampai {locked_until}). Tidak bisa dibatalkan.",
+        )
 
     # 👇 CARI GUDANG DARI CABANG ASAL FAKTUR PEMBELIAN
     gudang_aktif = db.query(models.Warehouse).filter(

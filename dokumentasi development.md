@@ -3,7 +3,7 @@
 buat rubah dari code jadi exe (oastikan file icon ada di folder yang sama dnegna main.py)
 pyinstaller --name "FPOS" --onefile --noconsole --icon="icon.ico" main.py
 
-pyinstaller --name "Printer_FPOS_5" --onefile --noconsole --icon="icon.ico" agen_printer.py
+pyinstaller --name "Printer_FPOS_11" --onefile --noconsole --icon="icon.ico" agen_printer.py
 buat komputer cabng otomatis seakan akan jadi kaya aplikasi
 "C:\Program Files\Google\Chrome\Application\chrome.exe" --app="https://desktop-b0e6dv6.balinese-alhena.ts.net" --start-maximized --kiosk-printing
 
@@ -437,34 +437,6 @@ tambahin titik di menu data barang
 
 22 april
 
-fix agar barcode bener2 unik dan jangan sampe barang A dikira barang B
-
-buat barcode nya agar bisa langsung mnge print bisa 1, 2, atau 3 lin biar ga nulis manual tapi otomatis ke print. printernya zebra.
-
-pastikan barcode itu unik, kalo udh ada barcode yang sama maka gagal menyimpan barang
-
-pastikan ada tuutp buku bulanan atau tahunan
-
-client cuma mau standar aja laporan akuntansinya untuk bulan pertama kaya laba rugi nya berapa, balancesheet dll, ga perlu terlalu detail terkait diskon itu motong berapa perbulan, harga kedua di perlakukan gimana juga
-
-buatkan akun CoA untuk diskon dari suplier dan diskon untuk customer agar di laba rugi akhir bulan bisa terlihat detail
-
-apakah harus setting terkait PPN dan kalo iya gimana caranya?
-
-Cek apakah laporan Arus kas udah bener (mulai dari pertama kali set up aplikasi)
-
-cek juga neraca nya
-
-bagaimana cara menguji arus kas? saat ini baru di uji lewat POS dan pembelian, di pembelian jgua udh bagus dimana hanya ketika sudah banyar hutang atau sebagain maka arus kas berkurang
-
-kalo pembayarannya non tunai apakah artinya perlu dibuatkan akun CoA juga?
-
-untuk barang yang meliki 2 harga berbeda untuk dijual bisa otomatis tampil pop up meilikh harga yang mana, cuma masih belum estetik aja tampilannya
-
-buat grup pelanggan silver, gold, platinum ( ada penggaln umum dan pelanggan lain berdasarkan levelnya)
-
-fitur tukar tambah (untuk POS dan Suplier)
-
 List fitur apa aja yang harus bisa
 done
 POS
@@ -499,6 +471,7 @@ managemen user
 done
 laporan
 
+done
 akuntansi
 
 fitur (backend frontend) apa aja yang udh dibuat WITA?
@@ -520,13 +493,119 @@ branch.py dan branch.html (ga butuh sama seklai jam)
 
 report.py dan reports.html done
 
+### 24 april 2026
+
+done
+buatkan akun CoA untuk diskon dari suplier dan diskon untuk customer agar di laba rugi akhir bulan bisa terlihat detail
+
+done
+apakah harus setting terkait PPN dan kalo iya gimana caranya?
+
+done
+kasih detail jenis hutangnya. hutangnya berapa dan keterangan hutang tersebut n(buat ga cuma hutang aja)
+
+done
+pastikan ada tuutp buku bulanan atau tahunan
+
+menurut anda apakah aplikasi ini sudah bisa memenuhi keinginan client berikut?
+client cuma mau standar aja laporan akuntansinya untuk bulan pertama kaya laba rugi nya berapa, balancesheet dll, ga perlu terlalu detail terkait diskon itu motong berapa perbulan, harga kedua di perlakukan gimana juga
+
+cek juga neraca nya
+
+bagaimana cara menguji arus kas? saat ini baru di uji lewat POS dan pembelian, di pembelian jgua udh bagus dimana hanya ketika sudah banyar hutang atau sebagain maka arus kas berkurang
+
 Uji tiap fitur dan pastikan cabang lain tidak terpengaruh
 
 Uji kedua kalinya di cabang dan pastikan pusat tidak terpengaruh
 
 uji konektifitas keduanya ketika ada transaksi berkaitan
 
-kasih detail jenis hutangnya. hutangnya berapa dan keterangan hutang tersebut n(buat ga cuma hutang aja)
+# barcode
 
+done
+fix agar barcode bener2 unik dan jangan sampe barang A dikira barang B
+
+done
+buat barcode nya agar bisa langsung mnge print bisa 1, 2, atau 3 lin biar ga nulis manual tapi otomatis ke print. printernya zebra.
+
+barcodenya harus bisa cetak 5 label kalo lin 3 artinya 2 baris
+
+# yang boleh dikerjakan nanti
+
+untuk barang yang meliki 2 harga berbeda untuk dijual bisa otomatis tampil pop up meilikh harga yang mana, cuma masih belum estetik aja tampilannya
+
+buat grup pelanggan silver, gold, platinum ( ada penggaln umum dan pelanggan lain berdasarkan levelnya)
+
+fitur tukar tambah (untuk POS dan Suplier)
+
+kalo pembayarannya non tunai apakah artinya perlu dibuatkan akun CoA juga?
+
+# catatan
+
+done
+menu hutang di onboarding itu ga akan ada di hutang pembelian melainkan langsung ke neraca
+
+done
+tambahin fitur hutang di onboarding
+
+done
+di file excel, meskipun disana dicata ada stok barang, tapi belum konek ke neraca sehingga value persediaan barang = 0. tapi anehnya di mutasi stok tercatat kok semuanya (import excel)
+
+done
+BUG:
+kas bisa minus -> diselesaikan dengan ketika bayar hutang di menu pembelian maupun di menu hutang maka harus nampilin mau bayar dari kas atau bank atau gabungan keduanya, kalo dana cukup maka kebayar kalo engga maka di tolak dan diarahkan untuk ke buku kas buat inpuit dari modal usaha
+
+done
 Masalah user gatau kekayaan barangnya
 bisa opname berjalan aja tapi pastikan agar opnamenya dibagi 2, set up awal atau nemuin barang hilang. karna biar dismpan di CoA berbeda seperti Jurnalnya: [Debit] Persediaan Barang -> [Kredit] 3-1999 Modal Transisi. dan 4-1300 Pendapatan Lain-lain.entar ngaruh ke laba rugi seakan untung besar padahal lagi menyesuaikan barang diawal aja
+
+# saran printer barcode
+
+• Searching the web
+
+• Searched official docs QZ Tray printing HTML barcode labels Windows raw printer mature library
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Ada. Untuk kasus Anda, yang terlihat paling matang bukan “HTML di browser biasa”, tapi client printing tool yang memang dibuat untuk kirim job ke printer lokal.
+
+Pilihan yang paling relevan:
+
+- QZ Tray
+  - Cocok kalau Anda butuh web app kirim print ke printer lokal dengan lebih stabil.
+  - Mendukung raw printing, image, PDF, HTML, queue/spooling.
+  - Untuk POS/label ini salah satu opsi paling matang.
+  - Docs: https://qz.io/docs/getting-started
+  - Raw printing/docs: https://qz.io/wiki/raw
+- JSPrintManager
+  - Fokusnya memang client-side printing dari JavaScript ke printer lokal tanpa dialog print browser.
+  - Mendukung raw bytes, text, image, PNG/JPG, PDF, ESC/POS, ZPL, EPL.
+  - Cocok kalau Anda mau tetap dari web frontend tapi tidak mau tergantung window.print().
+  - Product page: https://www.neodynamic.com/products/printing/js-print-manager/
+  - GitHub: https://github.com/neodynamic/JSPrintManager
+- Zebra Browser Print
+  - Ini matang kalau printer Anda Zebra.
+  - Sangat cocok untuk label/barcode, tapi vendor-specific.
+  - Official: https://developer.zebra.com/products/printers/browser-print
+  - Support/download: https://www.zebra.com/us/en/support-downloads/software/printer-software/browser-print.html
+- BarTender
+  - Ini level enterprise untuk desain dan print label.
+  - Sangat matang, tapi lebih berat dan biasanya cocok untuk workflow industri/warehouse, bukan POS ringan.
+  - Official: https://www.seagullscientific.com/software/bartender/
+
+Pendapat saya untuk situasi Anda sekarang:
+
+- Kalau printer Anda bukan Zebra dan Anda ingin solusi paling realistis: QZ Tray atau JSPrintManager.
+- Kalau printer Anda Zebra: Browser Print lebih natural.
+- Kalau Anda ingin tetap mempertahankan web app ringan tapi print stabil, QZ Tray paling layak dicek dulu.
+
+Kenapa:
+
+- masalah Anda sekarang bukan render barcode, tapi browser print pipeline.
+- tools seperti QZ Tray / JSPrintManager memang dibuat untuk melewati keterbatasan window.print().
+
+Kalau mau, langkah berikutnya saya bisa bantu pilihkan mana yang paling cocok dengan printer Anda sekarang. Saya butuh:
+
+- merk/model printer label
+- koneksi printer: USB / LAN / Bluetooth
+- target print: hanya barcode label, atau nanti struk juga mau disatukan.

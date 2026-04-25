@@ -2,6 +2,7 @@
 iPos 5.0 — Akuntansi Lengkap (Enterprise Multi-Branch Edition)
 Fitur:
   - Chart of Accounts (Daftar Akun)
+
   - Jurnal Umum (double-entry) dengan stempel cabang
   - Buku Besar per akun (terisolasi per cabang)
   - Neraca Saldo (Trial Balance) per cabang
@@ -18,10 +19,11 @@ from sqlalchemy import func
 from typing import Optional, List
 from datetime import date, datetime, timedelta # 👈 timedelta ditambahkan di sini
 from pydantic import BaseModel
+from calendar import monthrange
 
 from ..database import get_db
 from .. import models
-from ..auth import get_current_user, write_audit, get_query
+from ..auth import get_current_user, require_admin, write_audit, get_query
 from .. import schemas
 
 router = APIRouter()
@@ -29,6 +31,104 @@ WITA = pytz.timezone("Asia/Makassar")
 
 def get_local_date():
     return datetime.now(WITA).date()
+
+
+def resolve_active_branch_id(db: Session, current_user: models.User) -> int:
+    branch_id = current_user.active_branch_id
+    if branch_id:
+        return branch_id
+
+    first_branch = db.query(models.Branch).order_by(models.Branch.id).first()
+    if not first_branch:
+        raise HTTPException(400, "Sistem belum memiliki cabang sama sekali.")
+    return first_branch.id
+
+
+def get_books_locked_until(db: Session, branch_id: Optional[int]) -> Optional[date]:
+    q = db.query(models.BookClose).filter(models.BookClose.is_active == True)
+    if branch_id is not None:
+        q = q.filter(models.BookClose.branch_id == branch_id)
+    else:
+        q = q.filter(models.BookClose.branch_id == None)
+    obj = q.order_by(models.BookClose.period_end.desc()).first()
+    return obj.period_end if obj else None
+
+
+def assert_books_open(
+    db: Session,
+    branch_id: Optional[int],
+    trx_date: date,
+    action_label: str = "Transaksi",
+):
+    locked_until = get_books_locked_until(db, branch_id)
+    if locked_until and trx_date <= locked_until:
+        raise HTTPException(
+            status_code=400,
+            detail=f"DITOLAK: {action_label} tanggal {trx_date} berada di periode tutup buku (sampai {locked_until}).",
+        )
+
+
+class BookCloseCreate(BaseModel):
+    close_type: str = "month"  # month | year
+    end_date: date
+    notes: Optional[str] = None
+
+
+def get_branch_inventory_snapshot(db: Session, branch_id: int) -> dict:
+    warehouse_ids = [
+        wid
+        for (wid,) in db.query(models.Warehouse.id)
+        .filter(models.Warehouse.branch_id == branch_id)
+        .all()
+    ]
+
+    if warehouse_ids:
+        inventory_value = (
+            db.query(
+                func.sum(
+                    models.WarehouseStock.stock * func.coalesce(models.Item.buy_price, 0)
+                )
+            )
+            .join(models.Item, models.Item.id == models.WarehouseStock.item_id)
+            .filter(
+                models.WarehouseStock.warehouse_id.in_(warehouse_ids),
+                models.WarehouseStock.stock > 0,
+            )
+            .scalar()
+            or 0.0
+        )
+        item_count = (
+            db.query(func.count(func.distinct(models.WarehouseStock.item_id)))
+            .join(models.Item, models.Item.id == models.WarehouseStock.item_id)
+            .filter(
+                models.WarehouseStock.warehouse_id.in_(warehouse_ids),
+                models.WarehouseStock.stock > 0,
+            )
+            .scalar()
+            or 0
+        )
+    else:
+        inventory_value = (
+            db.query(
+                func.sum(models.Item.stock * func.coalesce(models.Item.buy_price, 0))
+            )
+            .filter(models.Item.stock > 0)
+            .scalar()
+            or 0.0
+        )
+        item_count = (
+            db.query(func.count(models.Item.id))
+            .filter(models.Item.stock > 0)
+            .scalar()
+            or 0
+        )
+
+    return {
+        "branch_id": branch_id,
+        "warehouse_count": len(warehouse_ids),
+        "item_count": int(item_count or 0),
+        "inventory_value": float(inventory_value or 0.0),
+    }
 
 # ══════════════════════════════════════════════════════════════════════════════
 # HELPERS
@@ -58,6 +158,8 @@ def create_auto_journal(
     branch_id: int 
 ):
     """Helper untuk membuat jurnal otomatis dari modul lain (Sales/Purchases/dll)"""
+    assert_books_open(db, branch_id, date_val, "Jurnal otomatis")
+
     # 1. Validasi Keseimbangan (Balance)
     total_debit = sum(e["debit"] for e in entries)
     total_credit = sum(e["credit"] for e in entries)
@@ -314,6 +416,7 @@ def seed_default_accounts(
             ("3-1100", "Modal Pemilik", "equity", "capital", "credit"),
             ("3-1200", "Prive / Pengambilan Pemilik", "equity", "capital", "debit"),
             ("3-1300", "Laba Ditahan", "equity", "retained_earnings", "credit"),
+            ("3-1999", "Modal Transisi (Setup Awal Stok)", "equity", "capital", "credit"),
             ("3-2000", "Mutasi Antar Cabang", "equity", "capital", "credit"),
             
             # --- PENDAPATAN ---
@@ -455,7 +558,8 @@ def create_journal(
         if line.amount <= 0:
             raise HTTPException(400, "Jumlah harus lebih dari 0")
 
-    b_id = current_user.active_branch_id
+    b_id = resolve_active_branch_id(db, current_user)
+    assert_books_open(db, b_id, data.date, "Jurnal manual")
     number = next_journal_number(db, b_id)
     
     journal = models.Journal(
@@ -495,6 +599,12 @@ def delete_journal(
         raise HTTPException(404, "Jurnal tidak ditemukan")
     if j.source != "manual":
         raise HTTPException(400, "Jurnal otomatis tidak bisa dihapus")
+    assert_books_open(
+        db,
+        j.branch_id if j.branch_id is not None else current_user.active_branch_id,
+        j.date,
+        "Hapus jurnal",
+    )
     write_audit(db, current_user.id, "DELETE", "journals", j.id, f"Hapus jurnal {j.number}")
     db.delete(j)
     db.commit()
@@ -504,6 +614,164 @@ def delete_journal(
 # ══════════════════════════════════════════════════════════════════════════════
 # BUKU BESAR
 # ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/book-close/status")
+def get_book_close_status(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    b_id = resolve_active_branch_id(db, current_user)
+    locked_until = get_books_locked_until(db, b_id)
+    latest = (
+        db.query(models.BookClose)
+        .filter(models.BookClose.branch_id == b_id, models.BookClose.is_active == True)
+        .order_by(models.BookClose.period_end.desc(), models.BookClose.id.desc())
+        .first()
+    )
+    return {
+        "branch_id": b_id,
+        "locked_until": str(locked_until) if locked_until else None,
+        "latest": (
+            {
+                "id": latest.id,
+                "close_type": latest.close_type,
+                "period_start": str(latest.period_start),
+                "period_end": str(latest.period_end),
+                "notes": latest.notes,
+                "created_by": latest.created_by,
+                "created_at": latest.created_at.isoformat() if latest.created_at else None,
+            }
+            if latest
+            else None
+        ),
+    }
+
+
+@router.get("/book-close/history")
+def get_book_close_history(
+    limit: int = 24,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    b_id = resolve_active_branch_id(db, current_user)
+    q = (
+        db.query(models.BookClose)
+        .filter(models.BookClose.branch_id == b_id)
+        .order_by(models.BookClose.period_end.desc(), models.BookClose.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "id": x.id,
+            "close_type": x.close_type,
+            "period_start": str(x.period_start),
+            "period_end": str(x.period_end),
+            "notes": x.notes,
+            "is_active": bool(x.is_active),
+            "created_by": x.created_by,
+            "created_at": x.created_at.isoformat() if x.created_at else None,
+            "reopened_by": x.reopened_by,
+            "reopened_at": x.reopened_at.isoformat() if x.reopened_at else None,
+        }
+        for x in q
+    ]
+
+
+@router.post("/book-close/close")
+def close_books(
+    data: BookCloseCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_admin),
+):
+    b_id = resolve_active_branch_id(db, current_user)
+    end_date = data.end_date
+    if end_date > get_local_date():
+        raise HTTPException(400, "Tanggal tutup buku tidak boleh di masa depan.")
+
+    close_type = (data.close_type or "month").strip().lower()
+    if close_type not in ("month", "year"):
+        raise HTTPException(400, "close_type harus 'month' atau 'year'.")
+
+    if close_type == "month":
+        last_day = monthrange(end_date.year, end_date.month)[1]
+        if end_date.day != last_day:
+            raise HTTPException(
+                400,
+                "Untuk tutup buku bulanan, tanggal harus di hari terakhir bulan tersebut.",
+            )
+        period_start = end_date.replace(day=1)
+    else:
+        if end_date.month != 12 or end_date.day != 31:
+            raise HTTPException(400, "Untuk tutup buku tahunan, tanggal harus 31 Desember.")
+        period_start = date(end_date.year, 1, 1)
+
+    locked_until = get_books_locked_until(db, b_id)
+    if locked_until and end_date <= locked_until:
+        raise HTTPException(
+            400,
+            f"Buku sudah ditutup sampai {locked_until}. Pilih tanggal setelah itu.",
+        )
+
+    obj = models.BookClose(
+        branch_id=b_id,
+        close_type=close_type,
+        period_start=period_start,
+        period_end=end_date,
+        notes=(data.notes or "").strip() or None,
+        is_active=True,
+        created_by=current_user.id,
+    )
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    write_audit(
+        db,
+        current_user.id,
+        "CREATE",
+        "book_closes",
+        obj.id,
+        f"Tutup buku ({close_type}) sampai {end_date}",
+    )
+    db.commit()
+    return {"message": f"✓ Buku berhasil ditutup sampai {end_date}", "locked_until": str(end_date)}
+
+
+@router.post("/book-close/reopen-latest")
+def reopen_latest_books(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_admin),
+):
+    b_id = resolve_active_branch_id(db, current_user)
+    obj = (
+        db.query(models.BookClose)
+        .filter(models.BookClose.branch_id == b_id, models.BookClose.is_active == True)
+        .order_by(models.BookClose.period_end.desc(), models.BookClose.id.desc())
+        .first()
+    )
+    if not obj:
+        raise HTTPException(404, "Belum ada riwayat tutup buku.")
+
+    obj.is_active = False
+    obj.reopened_by = current_user.id
+    obj.reopened_at = datetime.now(WITA)
+    db.commit()
+
+    locked_until = get_books_locked_until(db, b_id)
+    write_audit(
+        db,
+        current_user.id,
+        "UPDATE",
+        "book_closes",
+        obj.id,
+        f"Buka tutup buku terakhir (sebelumnya sampai {obj.period_end})",
+    )
+    db.commit()
+    return {
+        "message": "Periode tutup buku terakhir dibuka kembali.",
+        "locked_until": str(locked_until) if locked_until else None,
+    }
+
 
 @router.get("/ledger/{account_id}")
 def get_ledger(
@@ -524,7 +792,7 @@ def get_ledger(
         models.JournalEntryLine.credit_account_id == account_id
     ).join(models.Journal)
 
-    b_id = current_user.active_branch_id
+    b_id = resolve_active_branch_id(db, current_user)
     if b_id:
         q_debit = q_debit.filter(models.Journal.branch_id == b_id)
         q_credit = q_credit.filter(models.Journal.branch_id == b_id)
@@ -604,7 +872,7 @@ def get_trial_balance(
     rows = []
     total_debit = 0
     total_credit = 0
-    b_id = current_user.active_branch_id
+    b_id = resolve_active_branch_id(db, current_user)
 
     for a in accounts:
         balance = get_account_balance(db, a.id, end_date=end_date, branch_id=b_id)
@@ -658,7 +926,9 @@ def get_income_statement(
         models.Account.type.in_(["revenue", "expense"])
     ).order_by(models.Account.code).all()
 
-    revenues = []
+    revenues = []           # Pendapatan murni (credit normal)
+    contra_revenues = []    # Diskon ke customer, retur (debit normal, type=revenue)
+    supplier_discounts = [] # Diskon dari supplier (4-2000)
     expenses_cogs = []
     expenses_operating = []
     expenses_other = []
@@ -669,7 +939,14 @@ def get_income_statement(
         row = {"code": a.code, "name": a.name, "amount": abs(balance)}
 
         if a.type == "revenue":
-            revenues.append(row)
+            # Akun 4-2000 Diskon Pembelian = pendapatan dari supplier, pisahkan
+            if a.code == "4-2000":
+                supplier_discounts.append(row)
+            # Contra revenue: normal_balance debit (Diskon Penjualan, Retur)
+            elif a.normal_balance == "debit":
+                contra_revenues.append(row)
+            else:
+                revenues.append(row)
         elif a.type == "expense":
             if a.subtype == "cogs":
                 expenses_cogs.append(row)
@@ -678,22 +955,45 @@ def get_income_statement(
             else:
                 expenses_other.append(row)
 
-    total_revenue = sum(r["amount"] for r in revenues)
-    total_cogs = sum(e["amount"] for e in expenses_cogs)
-    gross_profit = total_revenue - total_cogs
+    # ── Kalkulasi bertahap ──────────────────────────────────────────────────
+    gross_revenue          = sum(r["amount"] for r in revenues)
+    total_contra_revenue   = sum(r["amount"] for r in contra_revenues)   # diskon ke customer
+    total_supplier_disc    = sum(r["amount"] for r in supplier_discounts) # diskon dari supplier
+
+    # Net Revenue = Penjualan - Diskon ke Customer - Retur
+    net_revenue = gross_revenue - total_contra_revenue
+
+    # Gross Profit = Net Revenue - (HPP - Diskon Supplier)
+    total_cogs  = sum(e["amount"] for e in expenses_cogs)
+    net_cogs    = total_cogs - total_supplier_disc  # diskon supplier kurangi HPP
+    gross_profit = net_revenue - net_cogs
+
     total_operating_expense = sum(e["amount"] for e in expenses_operating)
-    operating_profit = gross_profit - total_operating_expense
-    total_other_expense = sum(e["amount"] for e in expenses_other)
-    net_profit = operating_profit - total_other_expense
+    operating_profit        = gross_profit - total_operating_expense
+    total_other_expense     = sum(e["amount"] for e in expenses_other)
+    net_profit              = operating_profit - total_other_expense
 
     return {
         "period": {"start": str(start_date), "end": str(end_date)},
+
+        # Detail Pendapatan
         "revenues": revenues,
-        "total_revenue": total_revenue,
+        "gross_revenue": gross_revenue,
+        "contra_revenues": contra_revenues,          # 👈 BARU (Diskon Penjualan, Retur)
+        "total_contra_revenue": total_contra_revenue,# 👈 BARU
+        "total_revenue": net_revenue,                # Net setelah diskon
+
+        # Detail HPP
         "cogs": expenses_cogs,
-        "total_cogs": total_cogs,
+        "supplier_discounts": supplier_discounts,    # 👈 BARU (Diskon dari Supplier)
+        "total_supplier_discount": total_supplier_disc, # 👈 BARU
+        "total_cogs": net_cogs,                      # Net setelah diskon supplier
+        "gross_cogs": total_cogs,
+
         "gross_profit": gross_profit,
-        "gross_margin_percent": round(gross_profit / total_revenue * 100, 2) if total_revenue else 0,
+        "gross_margin_percent": round(gross_profit / net_revenue * 100, 2) if net_revenue else 0,
+
+        # Beban
         "operating_expenses": expenses_operating,
         "total_operating_expense": total_operating_expense,
         "operating_profit": operating_profit,
@@ -942,6 +1242,7 @@ def create_cash_transaction(
         raise HTTPException(400, "Akun (CoA) sumber/tujuan wajib dipilih agar jurnal terbentuk!")
 
     b_id = current_user.active_branch_id
+    assert_books_open(db, b_id, data.date, "Transaksi kas")
     if not data.number:
         data.number = next_cash_number(db, b_id)
         
@@ -1017,6 +1318,26 @@ def get_cash_balance(
 # ══════════════════════════════════════════════════════════════════════════════
 # EXPORT EXCEL AKUNTANSI
 # ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/liquid-balances")
+def get_liquid_balances(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    b_id = resolve_active_branch_id(db, current_user)
+    cash_acc = db.query(models.Account).filter(models.Account.code == "1-1100").first()
+    bank_acc = db.query(models.Account).filter(models.Account.code == "1-1200").first()
+
+    cash_balance = get_account_balance(db, cash_acc.id, branch_id=b_id) if cash_acc else 0.0
+    bank_balance = get_account_balance(db, bank_acc.id, branch_id=b_id) if bank_acc else 0.0
+
+    return {
+        "branch_id": b_id,
+        "cash_balance": float(cash_balance or 0.0),
+        "bank_balance": float(bank_balance or 0.0),
+        "total_available": float((cash_balance or 0.0) + (bank_balance or 0.0)),
+    }
+
 
 @router.get("/export/journal")
 def export_journal_excel(
@@ -1112,6 +1433,27 @@ class SetupBalanceIn(BaseModel):
     equipment: float = 0.0
     building: float = 0.0
     payable: float = 0.0
+
+    # Optional legacy-compatible detail rows from onboarding UI.
+    # Frontend may send extra fields; we only pick the ones we need.
+    payable_detail: Optional[List[dict]] = None
+
+
+class _SetupPayableRow(BaseModel):
+    supplier_name: Optional[str] = None
+    description: Optional[str] = None
+    amount: float = 0.0
+
+
+@router.get("/opening-inventory-value")
+def get_opening_inventory_value(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    branch_id = resolve_active_branch_id(db, current_user)
+    return get_branch_inventory_snapshot(db, branch_id)
+
+
 @router.get("/setup-status")
 def get_setup_status(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """Mengecek apakah cabang aktif saat ini sudah setup saldo awal"""
@@ -1142,7 +1484,8 @@ def setup_initial_balance(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    b_id = current_user.active_branch_id
+    b_id = resolve_active_branch_id(db, current_user)
+    import uuid
     
     # 🛡️ FIX: Jika user belum milih cabang, paksa tembak ke cabang pertama (Pusat)
     if not b_id:
@@ -1168,6 +1511,43 @@ def setup_initial_balance(
     if not acc_cash:
         raise HTTPException(400, "Master Akun (CoA) gagal dibuat. Harap ke menu Akuntansi -> Generate Akun Standar terlebih dahulu.")
 
+    def next_opening_purchase_number() -> str:
+        today_str = datetime.now(WITA).strftime("%Y%m%d")
+        prefix = f"OPAP-C{b_id}-{today_str}"
+        last = (
+            db.query(models.Purchase)
+            .filter(models.Purchase.number.like(f"{prefix}%"))
+            .order_by(models.Purchase.id.desc())
+            .with_for_update()
+            .first()
+        )
+        seq = int(last.number[-4:]) + 1 if last else 1
+        return f"{prefix}{seq:04d}"
+
+    def ensure_supplier_id(name: str) -> int:
+        cleaned = (name or "").strip()
+        if not cleaned:
+            raise HTTPException(400, "Nama supplier untuk hutang tidak boleh kosong.")
+
+        existing = (
+            db.query(models.Supplier)
+            .filter(func.lower(models.Supplier.name) == cleaned.lower())
+            .first()
+        )
+        if existing:
+            return existing.id
+
+        sup_code = f"SUP-{uuid.uuid4().hex[:5].upper()}"
+        obj = models.Supplier(code=sup_code, name=cleaned, is_active=True)
+        db.add(obj)
+        db.flush()
+        return obj.id
+
+    inventory_snapshot = get_branch_inventory_snapshot(db, b_id)
+    inventory_amount = float(data.inventory or 0)
+    if inventory_amount <= 0 and inventory_snapshot["inventory_value"] > 0:
+        inventory_amount = inventory_snapshot["inventory_value"]
+
     entries = []
     total_debit = 0.0
     total_credit = 0.0
@@ -1179,9 +1559,9 @@ def setup_initial_balance(
     if data.bank > 0:
         entries.append({"code": "1-1200", "debit": data.bank, "credit": 0})
         total_debit += data.bank
-    if data.inventory > 0:
-        entries.append({"code": "1-1400", "debit": data.inventory, "credit": 0})
-        total_debit += data.inventory
+    if inventory_amount > 0:
+        entries.append({"code": "1-1400", "debit": inventory_amount, "credit": 0})
+        total_debit += inventory_amount
     if data.equipment > 0:
         entries.append({"code": "1-2100", "debit": data.equipment, "credit": 0})
         total_debit += data.equipment
@@ -1189,10 +1569,8 @@ def setup_initial_balance(
         entries.append({"code": "1-2300", "debit": data.building, "credit": 0})
         total_debit += data.building
 
-    # 2. Hutang (Kredit)
-    if data.payable > 0:
-        entries.append({"code": "2-1100", "debit": 0, "credit": data.payable})
-        total_credit += data.payable
+    # 2. Hutang onboarding tidak dimasukkan ke jurnal ini.
+    # Hutang akan dibuat sebagai Purchase unpaid agar bisa dibayar di menu Pembelian.
 
     # 3. Hitung Ekuitas/Modal Pemilik (Otomatis seimbang)
     equity = total_debit - total_credit
@@ -1214,7 +1592,72 @@ def setup_initial_balance(
             branch_id=b_id
         )
 
-    # 5. Kunci Cabang agar tidak bisa di-setup dua kali
+    # 5. Buat hutang onboarding sebagai "Purchase unpaid" + jurnal pembuka,
+    # supaya bisa dibayar di menu Pembelian (Bayar Hutang Supplier).
+    payable_rows: list[_SetupPayableRow] = []
+    if data.payable_detail:
+        for raw in data.payable_detail:
+            try:
+                row = _SetupPayableRow.model_validate(raw)
+            except Exception:
+                continue
+            if row.amount and row.amount > 0:
+                payable_rows.append(row)
+    elif data.payable and data.payable > 0:
+        payable_rows.append(
+            _SetupPayableRow(
+                supplier_name="Supplier Hutang Awal",
+                description="Hutang awal (tanpa rincian)",
+                amount=data.payable,
+            )
+        )
+
+    for row in payable_rows:
+        supplier_name = (row.supplier_name or "").strip()
+        description = (row.description or "").strip()
+        amount = float(row.amount or 0)
+        if amount <= 0:
+            continue
+
+        # Back-compat: frontend lama kirim {description, amount} saja.
+        if not supplier_name:
+            supplier_name = description or "Supplier Hutang Awal"
+
+        supplier_id = ensure_supplier_id(supplier_name)
+        pur_number = next_opening_purchase_number()
+
+        purchase = models.Purchase(
+            number=pur_number,
+            date=get_local_date(),
+            branch_id=b_id,
+            supplier_id=supplier_id,
+            subtotal=amount,
+            discount=0,
+            tax=0,
+            total=amount,
+            paid=0,
+            status="unpaid",
+            notes=f"[ONBOARDING] {description}".strip() if description else "[ONBOARDING] Hutang awal",
+            created_by=current_user.id,
+            created_at=datetime.now(WITA),
+        )
+        db.add(purchase)
+        db.flush()
+
+        create_auto_journal(
+            db=db,
+            date_val=get_local_date(),
+            number_ref=pur_number,
+            description=f"[SISTEM] Hutang Awal Supplier: {supplier_name}",
+            entries=[
+                {"code": "3-1100", "debit": amount, "credit": 0},
+                {"code": "2-1100", "debit": 0, "credit": amount},
+            ],
+            user_id=current_user.id,
+            branch_id=b_id,
+        )
+
+    # 6. Kunci Cabang agar tidak bisa di-setup dua kali
     # 🔥 FIX: Pastikan nama kolom sesuai dengan models.py (is_setup_complete)
     branch.is_setup_complete = True
     

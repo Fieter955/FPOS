@@ -50,7 +50,7 @@ def get_pending_jobs(branch_id: int = 1, db: Session = Depends(get_db)):
     jobs = db.query(models.PrintJob).filter(
         models.PrintJob.branch_id == branch_id,
         models.PrintJob.status == "pending"
-    ).all()
+    ).order_by(models.PrintJob.id.asc()).all()
 
     if not jobs:
         return []

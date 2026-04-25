@@ -61,7 +61,7 @@ def _render_barcode(barcode_value: str, barcode_type: str,
         bc.write(buf, options={
             "module_width": 0.4,
             "module_height": 12,
-            "quiet_zone": 2,
+            "quiet_zone": 0,
             "write_text": False,
         })
         buf.seek(0)
@@ -142,6 +142,7 @@ def generate_barcode(
         models.BarcodeLabel.barcode_value == barcode_value
     ).first()
 
+    needs_commit = False
     if not existing:
         label_record = models.BarcodeLabel(
             item_id=data.item_id,
@@ -150,12 +151,16 @@ def generate_barcode(
             label_text=label_text,
         )
         db.add(label_record)
+        needs_commit = True
 
-        # Update barcode di item jika belum ada
-        if not item.barcode:
-            item.barcode = barcode_value
+    # Pastikan item ikut menyimpan barcode final yang benar
+    if item.barcode != barcode_value:
+        item.barcode = barcode_value
+        needs_commit = True
 
+    if needs_commit:
         db.commit()
+        db.refresh(item)
 
     return {
         "item_id": data.item_id,

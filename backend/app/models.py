@@ -512,6 +512,24 @@ class JournalEntryLine(Base):
 
 # ─── Sistem Lisensi & Penagihan (KILL SWITCH) ──────────────────────────────────
 
+class BookClose(Base):
+    __tablename__ = "book_closes"
+    id = Column(Integer, primary_key=True, index=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
+    close_type = Column(String(10), default="month")  # month | year
+    period_start = Column(Date, nullable=False)
+    period_end = Column(Date, nullable=False)
+    notes = Column(Text)
+    is_active = Column(Boolean, default=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    reopened_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reopened_at = Column(DateTime(timezone=True), nullable=True)
+
+    branch = relationship("Branch")
+    creator = relationship("User", foreign_keys=[created_by])
+    reopener = relationship("User", foreign_keys=[reopened_by])
+
 class License(Base):
     __tablename__ = "licenses"
     id = Column(Integer, primary_key=True, index=True)

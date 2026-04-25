@@ -32,7 +32,7 @@ from app.routes import (
     shifts, returns, backup, ai_advisor,
     email_backup, updater,
     license, warehouse, assembly, notification, discounts, onboarding,
-    unit_conversion, barcode_gen, delivery, trade_in, ai_bangunan, branches, employees, print_queue
+    unit_conversion, barcode_gen, delivery, trade_in, ai_bangunan, branches, employees, print_queue, sticker_gen
 )
 
 # ─── Create all DB tables ──────────────────────────────────────────────────────
@@ -254,6 +254,8 @@ app.include_router(ai_bangunan.router, prefix="/api/ai-bangunan", tags=["AI Bang
 app.include_router(branches.router, prefix="/api/branches", tags=["Branches"])
 app.include_router(employees.router, prefix="/api/employees", tags=["Employees"])
 app.include_router(print_queue.router, prefix="/api/print", tags=["Print Queue"])
+app.include_router(sticker_gen.router, prefix="/api/sticker", tags=["Sticker Generation"])
+app.include_router(sticker_gen.router, prefix="/api/stiker", tags=["Sticker Generation (Legacy)"])
 
 
 

@@ -254,7 +254,9 @@ class PurchaseOut(BaseModel):
     model_config = {"from_attributes": True}
 
 class PurchasePayment(BaseModel):
-    amount: float
+    amount: float = 0
+    cash_amount: float = 0
+    bank_amount: float = 0
     notes: Optional[str] = None
 
 
@@ -312,6 +314,7 @@ class AdjustmentCreate(BaseModel):
     type: str          # 'in', 'out', 'adjust'
     qty: float
     description: str
+    opname_mode: str = "running"  # 'opening' (setup awal) | 'running' (opname berjalan)
 
 
 # ─── Cash Transaction ─────────────────────────────────────────────────────────
