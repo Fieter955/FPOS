@@ -207,13 +207,162 @@ def _get_resample_filter():
         return Image.NEAREST
 
 
+def _fit_image_to_print_area(image: Image.Image, target_w: int, target_h: int) -> Image.Image:
+    if image.size == (target_w, target_h):
+        return image
+
+    if image.width <= target_w and image.height <= target_h:
+        canvas = Image.new("RGB", (target_w, target_h), "white")
+        # Untuk stok 2/3 kolom yang tidak penuh, label harus mulai dari slot kiri-atas,
+        # bukan di-center ke tengah area print.
+        canvas.paste(image, (0, 0))
+        return canvas
+
+    scale = min(target_w / image.width, target_h / image.height)
+    resized_w = max(1, int(round(image.width * scale)))
+    resized_h = max(1, int(round(image.height * scale)))
+    resized = image.resize((resized_w, resized_h), _get_resample_filter())
+    canvas = Image.new("RGB", (target_w, target_h), "white")
+    canvas.paste(resized, (0, 0))
+    return canvas
+
+
+def _build_label_devmode(h_printer, printer_name: str, width_mm: float, height_mm: float):
+    printer_info = win32print.GetPrinter(h_printer, 2)
+    devmode = printer_info.get("pDevMode")
+    if devmode is None:
+        raise RuntimeError("Printer tidak mengembalikan DEVMODE")
+
+    devmode.Orientation = win32con.DMORIENT_PORTRAIT
+    devmode.PaperSize = win32con.DMPAPER_USER
+    devmode.PaperWidth = max(1, int(round(width_mm * 10)))
+    devmode.PaperLength = max(1, int(round(height_mm * 10)))
+    devmode.Fields |= (
+        win32con.DM_ORIENTATION
+        | win32con.DM_PAPERSIZE
+        | win32con.DM_PAPERWIDTH
+        | win32con.DM_PAPERLENGTH
+    )
+
+    try:
+        win32print.DocumentProperties(
+            0,
+            h_printer,
+            printer_name,
+            devmode,
+            devmode,
+            win32con.DM_IN_BUFFER | win32con.DM_OUT_BUFFER,
+        )
+    except Exception as e:
+        print(f"DocumentProperties warning: {e}")
+
+    return devmode
+
+
+def _split_label_rows(
+    image: Image.Image,
+    total_height_mm: float,
+    row_count: int,
+    row_height_mm: float,
+    gap_vertical_mm: float,
+):
+    if row_count <= 1 or row_height_mm <= 0 or total_height_mm <= row_height_mm:
+        return [(image, total_height_mm)]
+
+    expected_total_mm = (row_height_mm * row_count) + (
+        gap_vertical_mm * max(0, row_count - 1)
+    )
+    if abs(expected_total_mm - total_height_mm) > 0.5:
+        print(
+            "Split row dibatalkan karena metadata tinggi sheet tidak cocok | "
+            f"expected={expected_total_mm:.3f}mm actual={total_height_mm:.3f}mm"
+        )
+        return [(image, total_height_mm)]
+
+    px_per_mm = image.height / total_height_mm
+    pages = []
+    page_top_mm = 0.0
+
+    for row_index in range(row_count):
+        page_height_mm = row_height_mm
+        if row_index < row_count - 1:
+            page_height_mm += gap_vertical_mm
+
+        page_bottom_mm = min(total_height_mm, page_top_mm + page_height_mm)
+        top_px = max(0, int(round(page_top_mm * px_per_mm)))
+        bottom_px = min(image.height, int(round(page_bottom_mm * px_per_mm)))
+
+        if bottom_px > top_px:
+            pages.append(
+                (
+                    image.crop((0, top_px, image.width, bottom_px)),
+                    page_bottom_mm - page_top_mm,
+                )
+            )
+
+        page_top_mm = page_bottom_mm
+
+    return pages or [(image, total_height_mm)]
+
+
+def _print_label_page(
+    image: Image.Image,
+    printer_name: str,
+    h_printer,
+    width_mm: float,
+    height_mm: float,
+    page_index: int,
+    page_count: int,
+):
+    dc = None
+
+    try:
+        devmode = _build_label_devmode(h_printer, printer_name, width_mm, height_mm)
+        hdc = win32gui.CreateDC("WINSPOOL", printer_name, devmode)
+        dc = win32ui.CreateDCFromHandle(hdc)
+
+        printable_w = dc.GetDeviceCaps(win32con.HORZRES)
+        printable_h = dc.GetDeviceCaps(win32con.VERTRES)
+        if printable_w <= 0 or printable_h <= 0:
+            raise RuntimeError("Ukuran area cetak printer tidak valid")
+
+        image = _fit_image_to_print_area(image, int(printable_w), int(printable_h))
+        job_name = (
+            "Barcode Label"
+            if page_count <= 1
+            else f"Barcode Label {page_index}/{page_count}"
+        )
+
+        dc.StartDoc(job_name)
+        dc.StartPage()
+        dib = ImageWin.Dib(image)
+        dib.draw(
+            dc.GetHandleOutput(),
+            (0, 0, int(printable_w), int(printable_h)),
+        )
+        dc.EndPage()
+        dc.EndDoc()
+
+        print(
+            f"LABEL PAGE PRINT SUCCESS | page={page_index}/{page_count} | "
+            f"size={width_mm}x{height_mm}mm | "
+            f"dc={printable_w}x{printable_h}px"
+        )
+        return True
+    finally:
+        if dc is not None:
+            try:
+                dc.DeleteDC()
+            except Exception:
+                pass
+
+
 def print_label_image(content: str, printer_name: str) -> bool:
     """
     Cetak label barcode langsung ke printer via Windows GDI.
     Jalur ini lebih stabil untuk ukuran label custom dibanding window.print().
     """
     h_printer = None
-    dc = None
 
     try:
         if not cek_printer(printer_name):
@@ -224,6 +373,9 @@ def print_label_image(content: str, printer_name: str) -> bool:
         image_base64 = str(payload.get("image_base64") or "").strip()
         width_mm = float(payload.get("width_mm") or 0)
         height_mm = float(payload.get("height_mm") or 0)
+        row_count = max(1, int(payload.get("row_count") or 1))
+        row_height_mm = float(payload.get("row_height_mm") or 0)
+        gap_vertical_mm = max(0.0, float(payload.get("gap_vertical_mm") or 0))
 
         if image_base64.startswith("data:"):
             image_base64 = image_base64.split(",", 1)[-1]
@@ -242,71 +394,37 @@ def print_label_image(content: str, printer_name: str) -> bool:
             image = image.convert("RGB")
 
         h_printer = win32print.OpenPrinter(printer_name)
-        printer_info = win32print.GetPrinter(h_printer, 2)
-        devmode = printer_info["pDevMode"]
-        devmode.Orientation = win32con.DMORIENT_PORTRAIT
-        devmode.PaperWidth = max(1, int(round(width_mm * 10)))
-        devmode.PaperLength = max(1, int(round(height_mm * 10)))
-        devmode.Fields |= (
-            win32con.DM_ORIENTATION
-            | win32con.DM_PAPERWIDTH
-            | win32con.DM_PAPERLENGTH
+
+        # Zebra/driver label tertentu sering tetap menganggap tinggi page cuma 1 row.
+        # Jadi sheet multi-row dipecah per row agar 5 label di 3 kolom tetap keluar 2 row.
+        pages = _split_label_rows(
+            image=image,
+            total_height_mm=height_mm,
+            row_count=row_count,
+            row_height_mm=row_height_mm,
+            gap_vertical_mm=gap_vertical_mm,
         )
 
-        hdc = win32gui.CreateDC("WINSPOOL", printer_name, devmode)
-        dc = win32ui.CreateDCFromHandle(hdc)
-
-        printable_w = dc.GetDeviceCaps(win32con.HORZRES)
-        printable_h = dc.GetDeviceCaps(win32con.VERTRES)
-        if printable_w <= 0 or printable_h <= 0:
-            print("Ukuran area cetak printer tidak valid")
-            return False
-
-        target_w = int(printable_w)
-        target_h = int(printable_h)
-        if image.size != (target_w, target_h):
-            if image.width <= target_w and image.height <= target_h:
-                centered = Image.new("RGB", (target_w, target_h), "white")
-                paste_x = (target_w - image.width) // 2
-                paste_y = (target_h - image.height) // 2
-                centered.paste(image, (paste_x, paste_y))
-                image = centered
-            else:
-                scale = min(target_w / image.width, target_h / image.height)
-                resized_w = max(1, int(round(image.width * scale)))
-                resized_h = max(1, int(round(image.height * scale)))
-                image = image.resize((resized_w, resized_h), _get_resample_filter())
-                centered = Image.new("RGB", (target_w, target_h), "white")
-                paste_x = (target_w - resized_w) // 2
-                paste_y = (target_h - resized_h) // 2
-                centered.paste(image, (paste_x, paste_y))
-                image = centered
-
-        dc.StartDoc("Barcode Label")
-        dc.StartPage()
-        dib = ImageWin.Dib(image)
-        dib.draw(
-            dc.GetHandleOutput(),
-            (0, 0, target_w, target_h),
-        )
-        dc.EndPage()
-        dc.EndDoc()
+        for page_index, (page_image, page_height_mm) in enumerate(pages, start=1):
+            _print_label_page(
+                image=page_image,
+                printer_name=printer_name,
+                h_printer=h_printer,
+                width_mm=width_mm,
+                height_mm=page_height_mm,
+                page_index=page_index,
+                page_count=len(pages),
+            )
 
         print(
-            f"LABEL IMAGE PRINT SUCCESS | size={width_mm}x{height_mm}mm | "
-            f"dc={printable_w}x{printable_h}px | "
-            f"target={target_w}x{target_h}px"
+            f"LABEL IMAGE PRINT SUCCESS | sheet={width_mm}x{height_mm}mm | "
+            f"rows={len(pages)} | source={image.width}x{image.height}px"
         )
         return True
     except Exception as e:
         print(f"LABEL IMAGE PRINT ERROR: {e}")
         return False
     finally:
-        if dc is not None:
-            try:
-                dc.DeleteDC()
-            except Exception:
-                pass
         if h_printer is not None:
             try:
                 win32print.ClosePrinter(h_printer)

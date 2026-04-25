@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
@@ -15,18 +15,34 @@ class PrintJobCreate(BaseModel):
     content_type: str = "raw"               # Default 'raw' untuk struk kasir
     paper_width_mm: Optional[float] = None  # Dari barcode.html (Boleh kosong)
     paper_height_mm: Optional[float] = None # Dari barcode.html (Boleh kosong)
-    branch_id: int = 1                      # Jika frontend tidak kirim, otomatis Cabang 1
+    branch_id: Optional[int] = None         # Jika frontend tidak kirim, ambil dari header cabang aktif
 
 # ==========================================
 # 1. POST: TERIMA ANTREAN DARI FRONTEND
 # ==========================================
 @router.post("/")
-def create_print_job(job: PrintJobCreate, db: Session = Depends(get_db)):
+def create_print_job(
+    job: PrintJobCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
     """
     Menerima antrean cetak dari frontend Barcode maupun POS Kasir.
     """
+    header_branch_id = request.headers.get("X-Branch-ID")
+    resolved_branch_id = job.branch_id
+
+    if resolved_branch_id is None and header_branch_id:
+        try:
+            resolved_branch_id = int(header_branch_id)
+        except (TypeError, ValueError):
+            resolved_branch_id = None
+
+    if resolved_branch_id is None:
+        resolved_branch_id = 1
+
     new_job = models.PrintJob(
-        branch_id=job.branch_id,
+        branch_id=resolved_branch_id,
         content=job.content,
         content_type=job.content_type,
         status="pending"
@@ -39,7 +55,8 @@ def create_print_job(job: PrintJobCreate, db: Session = Depends(get_db)):
     return {
         "success": True, 
         "message": "Print job berhasil ditambahkan",
-        "job_id": new_job.id
+        "job_id": new_job.id,
+        "branch_id": new_job.branch_id,
     }
 
 # ==========================================

@@ -3,7 +3,7 @@
 buat rubah dari code jadi exe (oastikan file icon ada di folder yang sama dnegna main.py)
 pyinstaller --name "FPOS" --onefile --noconsole --icon="icon.ico" main.py
 
-pyinstaller --name "Printer_FPOS_11" --onefile --noconsole --icon="icon.ico" agen_printer.py
+pyinstaller --name "Printer_FPOS_16" --onefile --noconsole --icon="icon.ico" agen_printer.py
 buat komputer cabng otomatis seakan akan jadi kaya aplikasi
 "C:\Program Files\Google\Chrome\Application\chrome.exe" --app="https://desktop-b0e6dv6.balinese-alhena.ts.net" --start-maximized --kiosk-printing
 

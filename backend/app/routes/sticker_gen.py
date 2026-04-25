@@ -26,6 +26,7 @@ class ProdukItem(BaseModel):
 class StikerBatchRequest(BaseModel):
     data_produk: List[ProdukItem]
     jumlah_kolom: int = Field(3, ge=1, le=6)
+    jumlah_kolom_sheet: Optional[int] = Field(None, ge=1, le=6)
     gap_mm: float = Field(2.0, ge=0)
     gap_vertical_mm: float = Field(0.0, ge=0)
     lebar_mm: float = Field(33.0, gt=0)
@@ -259,17 +260,21 @@ def render_stiker_sheet(req: StikerBatchRequest):
     h_px = mm_to_px(req.tinggi_mm, dpi)
     cols = req.jumlah_kolom
     rows = math.ceil(len(req.data_produk) / cols)
+    sheet_cols = req.jumlah_kolom_sheet or cols
+    sheet_cols = max(1, min(cols, sheet_cols))
+    if rows > 1:
+        sheet_cols = cols
     gap_x_mm = req.gap_mm
     gap_y_mm = req.gap_vertical_mm
-    gap_x_px = mm_to_px(gap_x_mm, dpi) if cols > 1 and gap_x_mm > 0 else 0
+    gap_x_px = mm_to_px(gap_x_mm, dpi) if sheet_cols > 1 and gap_x_mm > 0 else 0
     gap_y_px = mm_to_px(gap_y_mm, dpi) if rows > 1 and gap_y_mm > 0 else 0
 
-    sheet_w = (w_px * cols) + (gap_x_px * (cols - 1))
+    sheet_w = (w_px * sheet_cols) + (gap_x_px * (sheet_cols - 1))
     sheet_h = (h_px * rows) + (gap_y_px * (rows - 1))
     sheet = Image.new("RGB", (sheet_w, sheet_h), "white")
     draw = ImageDraw.Draw(sheet)
 
-    sheet_w_mm = (req.lebar_mm * cols) + (gap_x_mm * max(0, cols - 1))
+    sheet_w_mm = (req.lebar_mm * sheet_cols) + (gap_x_mm * max(0, sheet_cols - 1))
     sheet_h_mm = (req.tinggi_mm * rows) + (gap_y_mm * max(0, rows - 1))
 
     price_base_size = css_px_to_print_px(req.font_harga_px, dpi)
@@ -404,7 +409,7 @@ def render_stiker_sheet(req: StikerBatchRequest):
         headers={
             "Cache-Control": "no-store",
             "Content-Disposition": 'inline; filename="barcode-sheet.png"',
-            "X-Sheet-Cols": str(cols),
+            "X-Sheet-Cols": str(sheet_cols),
             "X-Sheet-Rows": str(rows),
             "X-Sheet-Width-Mm": f"{sheet_w_mm:.3f}",
             "X-Sheet-Height-Mm": f"{sheet_h_mm:.3f}",

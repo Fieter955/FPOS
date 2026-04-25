@@ -461,6 +461,8 @@
           0,
           parseFloat(document.getElementById("gapY").value) || 0,
         );
+        const rows = Math.ceil(totalLabels / cols);
+        const sheetCols = rows > 1 ? cols : Math.min(cols, totalLabels);
 
         const data_produk = [];
         for (let i = 0; i < totalLabels; i++) {
@@ -475,6 +477,7 @@
         return {
           data_produk,
           jumlah_kolom: cols,
+          jumlah_kolom_sheet: sheetCols,
           gap_mm: gapX,
           gap_vertical_mm: gapY,
           lebar_mm: w,
@@ -489,9 +492,15 @@
         };
       }
 
+      function getActiveBranchId() {
+        const raw = localStorage.getItem("active_branch_id");
+        const parsed = parseInt(raw || "", 10);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+      }
+
       function getSheetSizeMm(payload) {
-        const cols = payload.jumlah_kolom;
-        const rows = Math.ceil(payload.data_produk.length / cols);
+        const cols = payload.jumlah_kolom_sheet || payload.jumlah_kolom;
+        const rows = Math.ceil(payload.data_produk.length / payload.jumlah_kolom);
         return {
           width:
             payload.lebar_mm * cols + payload.gap_mm * Math.max(0, cols - 1),
@@ -598,6 +607,9 @@
 
         try {
           const payload = getStickerPayload();
+          const rowCount = Math.ceil(
+            payload.data_produk.length / payload.jumlah_kolom,
+          );
           const { blob, widthMm, heightMm } =
             await requestStickerSheet(payload);
           const imageBase64 = await blobToBase64(blob);
@@ -607,8 +619,14 @@
               image_base64: imageBase64,
               width_mm: widthMm,
               height_mm: heightMm,
+              row_count: rowCount,
+              row_height_mm: payload.tinggi_mm,
+              gap_vertical_mm: payload.gap_vertical_mm,
+              total_labels: payload.data_produk.length,
+              col_count: payload.jumlah_kolom,
             }),
             content_type: "label_image",
+            branch_id: getActiveBranchId(),
           });
 
           showToast("Job barcode dikirim ke antrean printer", "success");
