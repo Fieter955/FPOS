@@ -159,7 +159,15 @@ def receivables(db: Session = Depends(get_db), current_user: models.User = Depen
     sales = get_query(db, models.Sale, current_user).filter(
         models.Sale.status.in_(["unpaid", "partial"])
     ).all()
-    return [{"number": s.number, "customer": s.customer.name if s.customer else "Umum", "remaining": s.total - s.paid} for s in sales]
+    return [{
+        "id": s.id,
+        "date": s.date,
+        "number": s.number,
+        "customer": s.customer.name if s.customer else "Umum",
+        "total": s.total,
+        "paid": s.paid,
+        "remaining": s.total - s.paid
+    } for s in sales]
 
 @router.get("/payables")
 def payables(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
@@ -176,6 +184,194 @@ def payables(db: Session = Depends(get_db), current_user: models.User = Depends(
         "paid": p.paid,
         "remaining": p.total - p.paid
     } for p in purchases]
+
+# ─── 4. DETAILED SALES REPORT ────────────────────────────────────────────────
+@router.get("/sales-detailed")
+def get_sales_detailed(
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    today_local = get_local_date()
+    if not start_date: start_date = today_local.replace(day=1)
+    if not end_date: end_date = today_local
+
+    sales = get_query(db, models.Sale, current_user).filter(
+        models.Sale.date >= start_date,
+        models.Sale.date <= end_date,
+        models.Sale.status != "cancelled"
+    ).all()
+
+    results = []
+    for s in sales:
+        items = []
+        for it in s.items:
+            items.append({
+                "item_name": it.item.name if it.item else "Unknown",
+                "qty": it.qty,
+                "price": it.sell_price,
+                "discount": it.discount,
+                "total": (it.sell_price * (1 - it.discount/100)) * it.qty
+            })
+        
+        results.append({
+            "id": s.id,
+            "number": s.number,
+            "date": str(s.date),
+            "customer": s.customer.name if s.customer else "Umum",
+            "total": s.total,
+            "paid": s.paid,
+            "payment_method": s.payment_method,
+            "items": items
+        })
+    
+    return results
+
+# ─── 5. INVENTORY VALUATION ──────────────────────────────────────────────────
+@router.get("/inventory-valuation")
+def get_inventory_valuation(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    # Calculate stock value based on buy_price
+    # If branch active, filter by warehouse stocks
+    if current_user.active_branch_id:
+        gudang_ids = [g.id for g in db.query(models.Warehouse).filter(models.Warehouse.branch_id == current_user.active_branch_id).all()]
+        stock_data = db.query(
+            models.Item.name,
+            models.Item.buy_price,
+            models.Item.sell_price,
+            func.sum(models.WarehouseStock.stock).label("total_stock")
+        ).join(models.WarehouseStock).filter(
+            models.WarehouseStock.warehouse_id.in_(gudang_ids),
+            models.Item.is_active == True
+        ).group_by(models.Item.id).all()
+    else:
+        stock_data = db.query(
+            models.Item.name,
+            models.Item.buy_price,
+            models.Item.sell_price,
+            models.Item.stock.label("total_stock")
+        ).filter(models.Item.is_active == True).all()
+
+    results = []
+    total_value_buy = 0
+    total_value_sell = 0
+    
+    for row in stock_data:
+        val_buy = (row.total_stock or 0) * (row.buy_price or 0)
+        val_sell = (row.total_stock or 0) * (row.sell_price or 0)
+        total_value_buy += val_buy
+        total_value_sell += val_sell
+        results.append({
+            "name": row.name,
+            "stock": row.total_stock or 0,
+            "buy_price": row.buy_price or 0,
+            "sell_price": row.sell_price or 0,
+            "value_at_buy": val_buy,
+            "value_at_sell": val_sell
+        })
+    
+    return {
+        "items": results,
+        "total_inventory_value_buy": total_value_buy,
+        "total_inventory_value_sell": total_value_sell
+    }
+
+# ─── 6. IMPROVED EXPORT EXCEL ────────────────────────────────────────────────
+@router.get("/export/full-report")
+def export_full_report(
+    start_date: Optional[date] = None, 
+    end_date: Optional[date] = None, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(get_current_user)
+):
+    today_local = get_local_date()
+    if not start_date: start_date = today_local.replace(day=1)
+    if not end_date: end_date = today_local
+
+    wb = openpyxl.Workbook()
+    
+    # 1. Sheet Penjualan
+    ws1 = wb.active
+    ws1.title = "Penjualan"
+    headers = ["No. Faktur", "Tanggal", "Pelanggan", "Total", "Dibayar", "Metode", "Status"]
+    ws1.append(headers)
+    for cell in ws1[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
+        cell.alignment = Alignment(horizontal="center")
+
+    sales = get_query(db, models.Sale, current_user).filter(
+        models.Sale.date >= start_date, 
+        models.Sale.date <= end_date,
+        models.Sale.status != "cancelled" 
+    ).all()
+    
+    for s in sales:
+        ws1.append([s.number, str(s.date), s.customer.name if s.customer else "Umum", s.total, s.paid, s.payment_method, s.status])
+
+    # 2. Sheet Detail Item Terjual
+    ws2 = wb.create_sheet("Detail Item Terjual")
+    ws2.append(["No. Faktur", "Barang", "Qty", "Harga", "Diskon %", "Subtotal"])
+    for cell in ws2[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
+    
+    for s in sales:
+        for it in s.items:
+            sub = (it.sell_price * (1 - it.discount/100)) * it.qty
+            ws2.append([s.number, it.item.name if it.item else "-", it.qty, it.sell_price, it.discount, sub])
+
+    # 3. Sheet Laba Rugi Ringkas
+    ws3 = wb.create_sheet("Laba Rugi")
+    acc_data = get_income_statement(start_date=start_date, end_date=end_date, db=db, current_user=current_user)
+    ws3.append(["Keterangan", "Nilai"])
+    ws3.append(["Pendapatan Penjualan (Net)", acc_data.get("total_revenue", 0)])
+    ws3.append(["HPP (Harga Pokok Penjualan)", acc_data.get("total_cogs", 0)])
+    ws3.append(["Laba Kotor", acc_data.get("gross_profit", 0)])
+    ws3.append(["Biaya Operasional", acc_data.get("total_operating_expense", 0)])
+    ws3.append(["Biaya Lain-lain", acc_data.get("total_other_expense", 0)])
+    ws3.append(["Laba Bersih", acc_data.get("net_profit", 0)])
+    for cell in ws3[1]: cell.font = Font(bold=True)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    filename = f"Laporan_Lengkap_{start_date}_sd_{end_date}.xlsx"
+    return Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+# ─── 7. TOP ITEMS ────────────────────────────────────────────────────────────
+@router.get("/top-items")
+def get_top_items(
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    today_local = get_local_date()
+    if not start_date: start_date = today_local.replace(day=1)
+    if not end_date: end_date = today_local
+
+    top_items_raw = get_query(db, models.Sale, current_user).join(
+        models.SaleItem
+    ).join(
+        models.Item
+    ).with_entities(
+        models.Item.name,
+        func.sum(models.SaleItem.qty).label("total_qty"),
+        func.sum(models.SaleItem.total).label("total_amount")
+    ).filter(
+        models.Sale.date >= start_date,
+        models.Sale.date <= end_date,
+        models.Sale.status != "cancelled"
+    ).group_by(models.Item.id).order_by(func.sum(models.SaleItem.qty).desc()).limit(limit).all()
+    
+    return [{"name": r[0], "qty": r[1], "revenue": r[2]} for r in top_items_raw]
 
 # ─── 4. EXPORT EXCEL SALES ───────────────────────────────────────────────────
 @router.get("/export/sales")

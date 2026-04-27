@@ -54,9 +54,15 @@ def get_customer(cid: int, db: Session = Depends(get_db), _=Depends(get_current_
 
 @router.post("/", response_model=schemas.CustomerOut)
 def create_customer(c: schemas.CustomerCreate, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    if db.query(models.Customer).filter(models.Customer.code == c.code).first():
+    import uuid
+    cust_code = c.code.strip() if c.code else f"CUST-{uuid.uuid4().hex[:5].upper()}"
+    
+    if db.query(models.Customer).filter(models.Customer.code == cust_code).first():
         raise HTTPException(400, "Kode pelanggan sudah digunakan")
-    obj = models.Customer(**c.model_dump())
+    
+    data = c.model_dump()
+    data["code"] = cust_code
+    obj = models.Customer(**data)
     db.add(obj); db.commit(); db.refresh(obj); return obj
 
 @router.put("/{cid}", response_model=schemas.CustomerOut)

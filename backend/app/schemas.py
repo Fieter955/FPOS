@@ -132,7 +132,7 @@ class CustomerGroupOut(CustomerGroupCreate):
 
 # ─── Customer ─────────────────────────────────────────────────────────────────
 class CustomerCreate(BaseModel):
-    code: str
+    code: Optional[str] = None
     name: str
     address: Optional[str] = None
     phone: Optional[str] = None
