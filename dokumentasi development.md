@@ -559,53 +559,12 @@ done
 Masalah user gatau kekayaan barangnya
 bisa opname berjalan aja tapi pastikan agar opnamenya dibagi 2, set up awal atau nemuin barang hilang. karna biar dismpan di CoA berbeda seperti Jurnalnya: [Debit] Persediaan Barang -> [Kredit] 3-1999 Modal Transisi. dan 4-1300 Pendapatan Lain-lain.entar ngaruh ke laba rugi seakan untung besar padahal lagi menyesuaikan barang diawal aja
 
-# saran printer barcode
+## 26 april
 
-• Searching the web
+buat agar bisa multi satuan dan dianggap jadi barang baru lalu ketika itu kejual maka stok dari dus berkurang jadi koma(realtime). saya mau agar setting multi satuannya itu dengan cara search barang saat ini di data barang, lalu bisa di duplikat dan kemudian langsung diarahkan ke multisatuan dimana disana kita bisa konversi yang awalnya misal 1 dus 25 kg jadi 1 kg, maka otomatis harga hpp dan jual di buat otomatis, kemudian kita juga bisa rubah harga jualnya dan ada kolom persentasenya seberapa untung. buatkan jadi semacam tampilan tabel. pindah pindah nya bisa tanpa mouse melainkan langsung keyboard kiri kanan atas bawah
 
-• Searched official docs QZ Tray printing HTML barcode labels Windows raw printer mature library
+## 27 april
 
-──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+buka tutup buku
 
-• Ada. Untuk kasus Anda, yang terlihat paling matang bukan “HTML di browser biasa”, tapi client printing tool yang memang dibuat untuk kirim job ke printer lokal.
-
-Pilihan yang paling relevan:
-
-- QZ Tray
-  - Cocok kalau Anda butuh web app kirim print ke printer lokal dengan lebih stabil.
-  - Mendukung raw printing, image, PDF, HTML, queue/spooling.
-  - Untuk POS/label ini salah satu opsi paling matang.
-  - Docs: https://qz.io/docs/getting-started
-  - Raw printing/docs: https://qz.io/wiki/raw
-- JSPrintManager
-  - Fokusnya memang client-side printing dari JavaScript ke printer lokal tanpa dialog print browser.
-  - Mendukung raw bytes, text, image, PNG/JPG, PDF, ESC/POS, ZPL, EPL.
-  - Cocok kalau Anda mau tetap dari web frontend tapi tidak mau tergantung window.print().
-  - Product page: https://www.neodynamic.com/products/printing/js-print-manager/
-  - GitHub: https://github.com/neodynamic/JSPrintManager
-- Zebra Browser Print
-  - Ini matang kalau printer Anda Zebra.
-  - Sangat cocok untuk label/barcode, tapi vendor-specific.
-  - Official: https://developer.zebra.com/products/printers/browser-print
-  - Support/download: https://www.zebra.com/us/en/support-downloads/software/printer-software/browser-print.html
-- BarTender
-  - Ini level enterprise untuk desain dan print label.
-  - Sangat matang, tapi lebih berat dan biasanya cocok untuk workflow industri/warehouse, bukan POS ringan.
-  - Official: https://www.seagullscientific.com/software/bartender/
-
-Pendapat saya untuk situasi Anda sekarang:
-
-- Kalau printer Anda bukan Zebra dan Anda ingin solusi paling realistis: QZ Tray atau JSPrintManager.
-- Kalau printer Anda Zebra: Browser Print lebih natural.
-- Kalau Anda ingin tetap mempertahankan web app ringan tapi print stabil, QZ Tray paling layak dicek dulu.
-
-Kenapa:
-
-- masalah Anda sekarang bukan render barcode, tapi browser print pipeline.
-- tools seperti QZ Tray / JSPrintManager memang dibuat untuk melewati keterbatasan window.print().
-
-Kalau mau, langkah berikutnya saya bisa bantu pilihkan mana yang paling cocok dengan printer Anda sekarang. Saya butuh:
-
-- merk/model printer label
-- koneksi printer: USB / LAN / Bluetooth
-- target print: hanya barcode label, atau nanti struk juga mau disatukan.
+tambahin agar di menu pengguna bisa ditambahkan jenis pengguna dan diskonnya berapa persen untuk jenis tersebut. di POS bisa di pilih tipe pelanggannya, defaultnya Pelanggan umum tanpa diskon sama sekali, tapi bisa di klik jadi drop down dan langsung otomatis kasih tau persentase motong, persentase margin. jadi di POS saya juga mau agar selalu di kasih liat persentase marginnya berapa antara harga jual dan harga beli barangnya. silahkan tanya saya agar anda tidak bingung dan hasilnya ga bug

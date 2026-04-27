@@ -15,6 +15,12 @@ import textwrap
 from ..database import get_db
 from .. import models, schemas
 from ..auth import get_current_user, get_query, write_audit
+from ..services.virtual_units import (
+    get_effective_buy_price,
+    get_effective_stock_from_source,
+    get_required_stock_qty,
+    is_virtual_variant,
+)
 from .accounting import create_auto_journal  # ✅ Import di atas, sekali saja
 
 router = APIRouter()
@@ -41,6 +47,22 @@ def printer_safe(text: str, max_len: int = None) -> str:
     if max_len:
         text = text[:max_len]
     return text
+
+
+def _get_locked_stock_item(db: Session, item: models.Item, require_active: bool = True):
+    item_map = {item.id: item}
+    if not is_virtual_variant(item):
+        return item, item_map
+
+    parent = db.query(models.Item).with_for_update().get(item.parent_item_id)
+    if not parent or (require_active and not parent.is_active):
+        raise HTTPException(
+            400,
+            f"Barang induk untuk {item.name} tidak ditemukan atau sudah nonaktif.",
+        )
+
+    item_map[parent.id] = parent
+    return parent, item_map
 
 
 # ── Penomoran Faktur ──────────────────────────────────────────────────────────
@@ -162,18 +184,23 @@ def create_sale(
         if not item:
             raise HTTPException(404, f"Item {it.item_id} tidak ditemukan")
 
+        stock_item, item_map = _get_locked_stock_item(db, item)
+        required_qty = get_required_stock_qty(item, it.qty)
+
         if gudang_aktif:
             from .warehouse import get_warehouse_stock, adjust_warehouse_stock
-            stok_lokal = get_warehouse_stock(db, gudang_aktif.id, item.id)
-            if stok_lokal < it.qty:
-                raise HTTPException(400, f"Stok {item.name} di Gudang Etalase tidak cukup (Sisa: {stok_lokal})")
-            adjust_warehouse_stock(db, gudang_aktif.id, item.id, -it.qty)
+            stok_lokal = get_warehouse_stock(db, gudang_aktif.id, stock_item.id)
+            available_qty = get_effective_stock_from_source(item, stok_lokal)
+            if stok_lokal < required_qty:
+                raise HTTPException(400, f"Stok {item.name} di Gudang Etalase tidak cukup (Sisa: {round(available_qty, 4)})")
+            adjust_warehouse_stock(db, gudang_aktif.id, stock_item.id, -required_qty)
         else:
-            if item.stock < it.qty:
-                raise HTTPException(400, f"Stok {item.name} tidak cukup (Sisa: {item.stock})")
+            available_qty = get_effective_stock_from_source(item, stock_item.stock or 0)
+            if stock_item.stock < required_qty:
+                raise HTTPException(400, f"Stok {item.name} tidak cukup (Sisa: {round(available_qty, 4)})")
 
         line_total        = (it.sell_price * (1 - it.discount / 100)) * it.qty
-        current_buy_price = item.buy_price or 0
+        current_buy_price = get_effective_buy_price(db, item, item_map=item_map) or 0
         total_hpp        += current_buy_price * it.qty
 
         db.add(models.SaleItem(
@@ -186,20 +213,24 @@ def create_sale(
             total=line_total
         ))
 
-        before       = item.stock
-        item.stock  -= it.qty
+        before = float(stock_item.stock or 0)
+        stock_item.stock -= required_qty
 
         db.add(models.StockMovement(
             date=local_date,
             created_at=local_datetime,
-            item_id=item.id,
+            item_id=stock_item.id,
             branch_id=current_user.active_branch_id,
             type="out",
-            qty=it.qty,
+            qty=required_qty,
             qty_before=before,
-            qty_after=item.stock,
+            qty_after=stock_item.stock,
             reference=number,
-            notes="Penjualan Kasir"
+            notes=(
+                f"Penjualan Kasir - via {item.name}"
+                if stock_item.id != item.id
+                else "Penjualan Kasir"
+            ),
         ))
 
     # ── Customer Point ────────────────────────────────────────────────────────
@@ -300,24 +331,30 @@ def cancel_sale(
     for it in obj.items:
         item = db.query(models.Item).with_for_update().get(it.item_id)
         if item:
-            before      = item.stock
-            item.stock += it.qty
+            stock_item, _ = _get_locked_stock_item(db, item, require_active=False)
+            required_qty = get_required_stock_qty(item, it.qty)
+            before = float(stock_item.stock or 0)
+            stock_item.stock += required_qty
 
             if gudang_aktif:
                 from .warehouse import adjust_warehouse_stock
-                adjust_warehouse_stock(db, gudang_aktif.id, item.id, it.qty)
+                adjust_warehouse_stock(db, gudang_aktif.id, stock_item.id, required_qty)
 
             db.add(models.StockMovement(
                 date=local_date,
                 created_at=local_datetime,
-                item_id=item.id,
+                item_id=stock_item.id,
                 branch_id=obj.branch_id,
                 type="in",
-                qty=it.qty,
+                qty=required_qty,
                 qty_before=before,
-                qty_after=item.stock,
+                qty_after=stock_item.stock,
                 reference=obj.number,
-                notes=f"Batal Penjualan {obj.number}"
+                notes=(
+                    f"Batal Penjualan {obj.number} - restore dari {item.name}"
+                    if stock_item.id != item.id
+                    else f"Batal Penjualan {obj.number}"
+                ),
             ))
 
     # ── Tarik Kembali Poin Pelanggan ──────────────────────────────────────────

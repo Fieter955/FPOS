@@ -10,6 +10,11 @@ from .. import models
 from ..auth import get_current_user, get_query 
 from ..schemas import AdjustmentCreate
 from sqlalchemy import func 
+from ..services.virtual_units import (
+    get_effective_stock_from_source,
+    get_stock_source_item,
+    is_virtual_variant,
+)
 
 router = APIRouter()
 
@@ -67,15 +72,35 @@ def get_low_stock(db: Session = Depends(get_db), current_user: models.User = Dep
     warehouse_ids = [g[0] for g in gudang_cabang]
 
     items = db.query(models.Item).filter(models.Item.is_active == True).all()
+    item_map = {item.id: item for item in items}
+    parent_ids = {
+        item.parent_item_id
+        for item in items
+        if is_virtual_variant(item) and item.parent_item_id and item.parent_item_id not in item_map
+    }
+    if parent_ids:
+        for parent in db.query(models.Item).filter(models.Item.id.in_(parent_ids)).all():
+            item_map[parent.id] = parent
+
+    if warehouse_ids:
+        rows = db.query(
+            models.WarehouseStock.item_id,
+            func.sum(models.WarehouseStock.stock),
+        ).filter(
+            models.WarehouseStock.warehouse_id.in_(warehouse_ids)
+        ).group_by(models.WarehouseStock.item_id).all()
+        stock_map = {item_id: float(stock or 0) for item_id, stock in rows}
+    else:
+        stock_map = {
+            item_id: float(item.stock or 0)
+            for item_id, item in item_map.items()
+        }
     
     results = []
     for item in items:
-        stok_lokal = 0.0
-        if warehouse_ids:
-            stok_lokal = db.query(func.sum(models.WarehouseStock.stock)).filter(
-                models.WarehouseStock.item_id == item.id,
-                models.WarehouseStock.warehouse_id.in_(warehouse_ids)
-            ).scalar() or 0.0
+        source_item = get_stock_source_item(db, item, item_map=item_map)
+        source_stock = stock_map.get(source_item.id, 0.0)
+        stok_lokal = round(get_effective_stock_from_source(item, source_stock), 4)
 
         if stok_lokal <= item.min_stock:
             results.append({
@@ -100,6 +125,11 @@ def stock_adjustment(
     item = db.query(models.Item).with_for_update().get(data.item_id) 
     if not item: 
         raise HTTPException(404, "Item tidak ditemukan")
+    if is_virtual_variant(item):
+        raise HTTPException(
+            400,
+            f"Barang multi-satuan {item.name} tidak bisa diopname langsung. Sesuaikan stok barang induknya.",
+        )
         
     global_before = item.stock
     diff = 0

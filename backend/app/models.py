@@ -130,6 +130,9 @@ class Item(Base):
     min_stock = Column(Float, default=0)
     description = Column(Text)
     barcode = Column(String(100))
+    parent_item_id = Column(Integer, ForeignKey("items.id"), nullable=True)
+    conversion_factor_to_parent = Column(Float, default=1)
+    is_virtual_variant = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -734,6 +737,7 @@ class UnitConversion(Base):
     __tablename__ = "unit_conversions"
     id = Column(Integer, primary_key=True, index=True)
     item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    child_item_id = Column(Integer, ForeignKey("items.id"), nullable=True)
     unit_id = Column(Integer, ForeignKey("units.id"), nullable=False)     # satuan besar (Lusin)
     base_unit_id = Column(Integer, ForeignKey("units.id"), nullable=False) # satuan kecil (Pcs)
     conversion_factor = Column(Float, nullable=False)  # 1 lusin = 12 pcs

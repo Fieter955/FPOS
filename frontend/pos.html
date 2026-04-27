@@ -1145,6 +1145,88 @@
         });
       }
 
+      function roundQty(val) {
+        return Math.round((parseFloat(val || 0) + Number.EPSILON) * 10000) / 10000;
+      }
+
+      function fmtQty(val) {
+        const num = roundQty(val);
+        return Number.isInteger(num) ? String(num) : String(num).replace(/\.?0+$/, "");
+      }
+
+      function getSourceItem(item) {
+        if (!item) return null;
+        if (item.is_virtual_variant && item.parent_item_id) {
+          return allItems.find((x) => x.id === item.parent_item_id) || item;
+        }
+        return item;
+      }
+
+      function qtyToSourceUnits(item, qty) {
+        const numQty = parseFloat(qty || 0) || 0;
+        if (item?.is_virtual_variant) {
+          const factor = parseFloat(item.conversion_factor_to_parent || 1) || 1;
+          return numQty * factor;
+        }
+        return numQty;
+      }
+
+      function getReservedSourceQty(sourceId, excludeIndex = -1) {
+        return roundQty(
+          cart.reduce((sum, line, idx) => {
+            if (idx === excludeIndex) return sum;
+            const item = allItems.find((x) => x.id === line.id);
+            const sourceItem = getSourceItem(item);
+            if (!item || !sourceItem || sourceItem.id !== sourceId) return sum;
+            return sum + qtyToSourceUnits(item, line.qty);
+          }, 0),
+        );
+      }
+
+      function getAvailableCartStock(item, excludeIndex = -1) {
+        const sourceItem = getSourceItem(item);
+        if (!sourceItem) return 0;
+        const sourceStock = parseFloat(sourceItem.stock || 0) || 0;
+        const remainingSource = Math.max(
+          0,
+          roundQty(sourceStock - getReservedSourceQty(sourceItem.id, excludeIndex)),
+        );
+        if (item?.is_virtual_variant) {
+          const factor = parseFloat(item.conversion_factor_to_parent || 1) || 1;
+          return roundQty(remainingSource / factor);
+        }
+        return remainingSource;
+      }
+
+      function syncDerivedStocksFromSource(sourceId) {
+        const sourceItem = allItems.find((x) => x.id === sourceId);
+        if (!sourceItem) return;
+        allItems.forEach((item) => {
+          if (item.is_virtual_variant && item.parent_item_id === sourceId) {
+            const factor = parseFloat(item.conversion_factor_to_parent || 1) || 1;
+            item.stock = roundQty((parseFloat(sourceItem.stock || 0) || 0) / factor);
+          }
+        });
+      }
+
+      function applyLocalStockConsumption(lines) {
+        const affectedSourceIds = new Set();
+        lines.forEach((line) => {
+          const item = allItems.find((x) => x.id === line.id);
+          const sourceItem = getSourceItem(item);
+          if (!item || !sourceItem) return;
+
+          sourceItem.stock = roundQty(
+            (parseFloat(sourceItem.stock || 0) || 0) - qtyToSourceUnits(item, line.qty),
+          );
+          affectedSourceIds.add(sourceItem.id);
+        });
+
+        affectedSourceIds.forEach((sourceId) => {
+          syncDerivedStocksFromSource(sourceId);
+        });
+      }
+
       async function init() {
         try {
           const [items, cats, custs] = await Promise.all([
@@ -1225,8 +1307,11 @@
             (i, idx) => `
             <div class="item-card ${idx === kbFocusIndex ? "kb-focus" : ""}" onclick="promptQty(${i.id})">
               <div class="item-name">${i.name}</div>
+              <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">
+                ${i.unit?.abbreviation || i.unit?.name || "pcs"}${i.is_virtual_variant ? " | virtual" : ""}
+              </div>
               <div class="item-price">${fmtRp(i.sell_price)}</div>
-              <div class="item-stock ${i.stock <= i.min_stock ? "stock-low" : ""}">${i.stock <= 0 ? "Habis" : "Stok " + i.stock}</div>
+              <div class="item-stock ${i.stock <= i.min_stock ? "stock-low" : ""}">${i.stock <= 0 ? "Habis" : "Stok " + fmtQty(i.stock)}</div>
             </div>`,
           )
           .join("");
@@ -1239,7 +1324,8 @@
       function promptQty(id) {
         const item = allItems.find((i) => i.id === id);
         if (!item) return;
-        if (item.stock <= 0) {
+        const availableQty = getAvailableCartStock(item);
+        if (availableQty <= 0) {
           showToast("Stok " + item.name + " habis!", "error");
           return;
         }
@@ -1298,7 +1384,7 @@
       }
 
       function confirmQty() {
-        const qty = parseInt(document.getElementById("qtyInp").value) || 1;
+        const qty = parseFloat(document.getElementById("qtyInp").value) || 1;
         const item = allItems.find((i) => i.id === pendingItemId);
         if (!item) return;
 
@@ -1314,22 +1400,27 @@
         );
 
         if (ex) {
-          if (ex.qty + qty > item.stock) {
+          const exIndex = cart.indexOf(ex);
+          const availableQty = getAvailableCartStock(item, exIndex);
+          if (ex.qty + qty > availableQty) {
             showToast("Sisa stok tidak cukup!", "error");
             return;
           }
-          ex.qty += qty;
+          ex.qty = roundQty(ex.qty + qty);
+          ex.stock = availableQty;
         } else {
-          if (qty > item.stock) {
+          const availableQty = getAvailableCartStock(item);
+          if (qty > availableQty) {
             showToast("Sisa stok tidak cukup!", "error");
             return;
           }
           cart.push({
             id: item.id,
             name: item.name,
+            unit: item.unit?.abbreviation || item.unit?.name || "pcs",
             price: finalPrice,
-            qty: qty,
-            stock: item.stock,
+            qty: roundQty(qty),
+            stock: availableQty,
           });
         }
 
@@ -1405,8 +1496,8 @@
 
       function renderCart() {
         const totalQty = cart.reduce((sum, item) => sum + item.qty, 0);
-        document.getElementById("cartFabBadge").textContent = totalQty;
-        document.getElementById("cartCount").textContent = totalQty;
+        document.getElementById("cartFabBadge").textContent = fmtQty(totalQty);
+        document.getElementById("cartCount").textContent = fmtQty(totalQty);
         const list = document.getElementById("cartList");
         if (!cart.length) {
           list.innerHTML =
@@ -1417,10 +1508,10 @@
           .map(
             (c, i) => `
           <div class="cart-item">
-            <div class="ci-info"><div class="ci-name">${c.name}</div><div class="ci-price">${fmtRp(c.price)}</div></div>
+            <div class="ci-info"><div class="ci-name">${c.name}</div><div class="ci-price">${fmtRp(c.price)} / ${c.unit || "pcs"}</div></div>
             <div class="qty-ctrl">
               <button class="qty-btn" onclick="changeQty(${i},-1)">−</button>
-              <span style="font-size:14px;font-weight:700;min-width:18px;text-align:center">${c.qty}</span>
+              <span style="font-size:14px;font-weight:700;min-width:18px;text-align:center">${fmtQty(c.qty)}</span>
               <button class="qty-btn" onclick="changeQty(${i},1)">+</button>
             </div>
             <div class="ci-sub">${fmtRp(c.price * c.qty)}</div>
@@ -1431,7 +1522,10 @@
       }
 
       function changeQty(i, d) {
-        cart[i].qty = Math.max(1, Math.min(cart[i].stock, cart[i].qty + d));
+        const item = allItems.find((x) => x.id === cart[i].id);
+        const availableQty = getAvailableCartStock(item, i);
+        cart[i].stock = availableQty;
+        cart[i].qty = Math.max(1, Math.min(availableQty, roundQty(cart[i].qty + d)));
         renderCart();
         recalc();
       }
@@ -1493,13 +1587,9 @@
           });
           if (typeof hideLoading === "function") hideLoading();
 
-          // Kurangi stok di memory frontend agar langsung update
-          cart.forEach((c) => {
-            const it = allItems.find((x) => x.id === c.id);
-            if (it) it.stock -= c.qty;
-          });
-          filterItems();
+          applyLocalStockConsumption(cart);
           clearCart();
+          filterItems();
 
           // Tampilkan Modal Pilihan Cetak Struk
           showReceipt(sale);

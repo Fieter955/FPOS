@@ -5,6 +5,7 @@ from datetime import date
 from ..database import get_db
 from .. import models
 from ..auth import get_current_user, write_audit
+from ..services.virtual_units import get_required_stock_qty, is_virtual_variant
 
 router = APIRouter()
 
@@ -55,6 +56,13 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
     sale = db.query(models.Sale).get(sale_id)
     if not sale: raise HTTPException(404, "Penjualan tidak ditemukan")
 
+    gudang_aktif = None
+    if sale.branch_id:
+        gudang_aktif = db.query(models.Warehouse).filter(
+            models.Warehouse.branch_id == sale.branch_id,
+            models.Warehouse.is_default == True,
+        ).first()
+
     number = _next_number(db, "RS", models.SaleReturn)
     total = 0.0
 
@@ -68,7 +76,7 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
     db.add(retur); db.flush()
 
     for it in data.get("items", []):
-        item = db.query(models.Item).get(it["item_id"])
+        item = db.query(models.Item).with_for_update().get(it["item_id"])
         if not item: raise HTTPException(404, f"Item {it['item_id']} tidak ditemukan")
 
         # Validasi: qty retur tidak boleh lebih dari qty jual
@@ -97,13 +105,30 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
         ))
 
         # Kembalikan stok
-        before = item.stock
-        item.stock += it["qty"]
+        stock_item = item
+        if is_virtual_variant(item):
+            stock_item = db.query(models.Item).with_for_update().get(item.parent_item_id) or item
+
+        required_qty = get_required_stock_qty(item, it["qty"])
+        before = float(stock_item.stock or 0)
+        stock_item.stock += required_qty
+        if gudang_aktif:
+            from .warehouse import adjust_warehouse_stock
+            adjust_warehouse_stock(db, gudang_aktif.id, stock_item.id, required_qty)
         db.add(models.StockMovement(
             date=data.get("date", str(date.today())),
-            item_id=item.id, type="in", qty=it["qty"],
-            qty_before=before, qty_after=item.stock,
-            reference=number, notes=f"Retur Penjualan {sale.number}"
+            item_id=stock_item.id,
+            branch_id=sale.branch_id,
+            type="in",
+            qty=required_qty,
+            qty_before=before,
+            qty_after=stock_item.stock,
+            reference=number,
+            notes=(
+                f"Retur Penjualan {sale.number} - restore dari {item.name}"
+                if stock_item.id != item.id
+                else f"Retur Penjualan {sale.number}"
+            ),
         ))
 
     retur.total = total
@@ -152,6 +177,13 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
     purchase = db.query(models.Purchase).get(purchase_id)
     if not purchase: raise HTTPException(404, "Pembelian tidak ditemukan")
 
+    gudang_aktif = None
+    if purchase.branch_id:
+        gudang_aktif = db.query(models.Warehouse).filter(
+            models.Warehouse.branch_id == purchase.branch_id,
+            models.Warehouse.is_default == True,
+        ).first()
+
     number = _next_number(db, "RP", models.PurchaseReturn)
     total = 0.0
 
@@ -165,7 +197,7 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
     db.add(retur); db.flush()
 
     for it in data.get("items", []):
-        item = db.query(models.Item).get(it["item_id"])
+        item = db.query(models.Item).with_for_update().get(it["item_id"])
         if not item: raise HTTPException(404, f"Item {it['item_id']} tidak ditemukan")
 
         pur_item = next((pi for pi in purchase.items if pi.item_id == it["item_id"]), None)
@@ -181,11 +213,24 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
         ))
 
         # Kurangi stok
+        if gudang_aktif:
+            from .warehouse import get_warehouse_stock, adjust_warehouse_stock
+            stok_lokal = get_warehouse_stock(db, gudang_aktif.id, item.id)
+            if stok_lokal < it["qty"]:
+                raise HTTPException(400, f"Stok {item.name} tidak cukup untuk retur pembelian.")
+        elif item.stock < it["qty"]:
+            raise HTTPException(400, f"Stok {item.name} tidak cukup untuk retur pembelian.")
+
         before = item.stock
         item.stock -= it["qty"]
+        if gudang_aktif:
+            adjust_warehouse_stock(db, gudang_aktif.id, item.id, -it["qty"])
         db.add(models.StockMovement(
             date=data.get("date", str(date.today())),
-            item_id=item.id, type="out", qty=it["qty"],
+            item_id=item.id,
+            branch_id=purchase.branch_id,
+            type="out",
+            qty=it["qty"],
             qty_before=before, qty_after=item.stock,
             reference=number, notes=f"Retur Pembelian {purchase.number}"
         ))

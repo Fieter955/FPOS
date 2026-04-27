@@ -104,6 +104,9 @@ class ItemOut(BaseModel):
     name: str
     category_id: Optional[int]
     unit_id: Optional[int]
+    parent_item_id: Optional[int] = None
+    conversion_factor_to_parent: float = 1
+    is_virtual_variant: bool = False
     buy_price: float
     sell_price: float
     stock: float

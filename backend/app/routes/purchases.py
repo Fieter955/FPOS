@@ -7,6 +7,7 @@ import pytz
 from ..database import get_db
 from .. import models, schemas
 from ..auth import get_current_user, get_query
+from ..services.virtual_units import is_virtual_variant
 
 router = APIRouter()
 
@@ -69,7 +70,10 @@ def get_items_for_purchase(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    query = db.query(models.Item).filter(models.Item.is_active == True)
+    query = db.query(models.Item).filter(
+        models.Item.is_active == True,
+        (models.Item.is_virtual_variant == False) | (models.Item.is_virtual_variant == None),
+    )
     if supplier_id:
         query = query.join(models.item_supplier_link).filter(
             models.item_supplier_link.c.supplier_id == supplier_id
@@ -132,6 +136,11 @@ def create_purchase(
         item = db.query(models.Item).with_for_update().get(it.item_id)
         if not item:
             raise HTTPException(404, f"Barang ID {it.item_id} tidak ada")
+        if is_virtual_variant(item):
+            raise HTTPException(
+                400,
+                f"Barang multi-satuan {item.name} tidak boleh dibeli langsung. Beli barang induknya.",
+            )
 
         line_total = it.buy_price * it.qty
         db.add(models.PurchaseItem(

@@ -9,8 +9,62 @@ import uuid
 from ..database import get_db
 from .. import models, schemas
 from ..auth import get_current_user
+from ..services.virtual_units import (
+    get_effective_buy_price,
+    get_effective_stock_from_source,
+    get_stock_source_item,
+    is_virtual_variant,
+)
 
 router = APIRouter()
+
+
+def _apply_virtual_item_metrics(items, db: Session, current_user: models.User):
+    if not items:
+        return items
+
+    item_map = {item.id: item for item in items}
+    parent_ids = {
+        item.parent_item_id
+        for item in items
+        if is_virtual_variant(item)
+        and item.parent_item_id
+        and item.parent_item_id not in item_map
+    }
+
+    if parent_ids:
+        for parent in db.query(models.Item).filter(models.Item.id.in_(parent_ids)).all():
+            item_map[parent.id] = parent
+
+    local_stock_map = None
+    b_id = current_user.active_branch_id
+    if b_id:
+        gudang = db.query(models.Warehouse.id).filter(models.Warehouse.branch_id == b_id).first()
+        if gudang:
+            stock_item_ids = list(item_map.keys())
+            if stock_item_ids:
+                local_stocks = db.query(
+                    models.WarehouseStock.item_id,
+                    models.WarehouseStock.stock,
+                ).filter(
+                    models.WarehouseStock.warehouse_id == gudang[0],
+                    models.WarehouseStock.item_id.in_(stock_item_ids),
+                ).all()
+                local_stock_map = {item_id: stock for item_id, stock in local_stocks}
+        else:
+            local_stock_map = {}
+
+    for item in items:
+        stock_source = get_stock_source_item(db, item, item_map=item_map)
+        source_stock = (
+            float(local_stock_map.get(stock_source.id, 0) or 0)
+            if local_stock_map is not None
+            else float(stock_source.stock or 0)
+        )
+        item.stock = round(get_effective_stock_from_source(item, source_stock), 4)
+        item.buy_price = round(get_effective_buy_price(db, item, item_map=item_map), 4)
+
+    return items
 
 # ─── Categories ───────────────────────────────────────────────────────────────
 @router.get("/categories", response_model=list[schemas.CategoryOut])
@@ -90,57 +144,13 @@ def get_items(
 
     items = q.offset(skip).limit(limit).all()
     print(f"[DEBUG get_items] search='{search}', found {len(items)} items, user active_branch_id={current_user.active_branch_id}")  # 👈 DEBUG
-
-    # 🛡️ PROTEKSI MULTI-CABANG: Timpa nilai stok di layar dengan stok gudang lokal
-    b_id = current_user.active_branch_id
-    if b_id:
-        gudang = db.query(models.Warehouse.id).filter(models.Warehouse.branch_id == b_id).first()
-        if gudang:
-            gudang_id = gudang[0]
-            item_ids = [it.id for it in items]
-
-            # Tarik stok lokal secara massal agar cepat
-            if item_ids:  # 👈 PERBAIKAN: Hindari IN() dengan list kosong
-                local_stocks = db.query(models.WarehouseStock.item_id, models.WarehouseStock.stock).filter(
-                    models.WarehouseStock.warehouse_id == gudang_id,
-                    models.WarehouseStock.item_id.in_(item_ids)
-                ).all()
-
-                stock_dict = {ls.item_id: ls.stock for ls in local_stocks}
-
-                # Timpa nilai di memori (tidak disave ke DB)
-                for item in items:
-                    item.stock = stock_dict.get(item.id, 0.0)
-            else:
-                # Tidak ada barang yang match search
-                for item in items:  # items sudah kosong di sini
-                    item.stock = 0.0
-        else:
-            # Cabang belum punya gudang = stok 0
-            for item in items:
-                item.stock = 0.0
-
-    return items
+    return _apply_virtual_item_metrics(items, db, current_user)
 
 @router.get("/{item_id}", response_model=schemas.ItemOut)
 def get_item(item_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     obj = db.query(models.Item).get(item_id)
     if not obj: raise HTTPException(404, "Item tidak ditemukan")
-
-    # 🛡️ PROTEKSI MULTI-CABANG UNTUK DETAIL ITEM
-    b_id = current_user.active_branch_id
-    if b_id:
-        gudang = db.query(models.Warehouse.id).filter(models.Warehouse.branch_id == b_id).first()
-        if gudang:
-            stok_lokal = db.query(models.WarehouseStock.stock).filter(
-                models.WarehouseStock.item_id == item_id,
-                models.WarehouseStock.warehouse_id == gudang[0]
-            ).scalar() or 0.0
-            obj.stock = stok_lokal
-        else:
-            obj.stock = 0.0
-
-    return obj
+    return _apply_virtual_item_metrics([obj], db, current_user)[0]
 
 @router.post("/", response_model=schemas.ItemOut)
 def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
@@ -212,6 +222,11 @@ def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db), current
 def update_item(item_id: int, item: schemas.ItemUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     obj = db.query(models.Item).get(item_id)
     if not obj: raise HTTPException(404, "Item tidak ditemukan")
+    if is_virtual_variant(obj):
+        raise HTTPException(
+            400,
+            f"Barang multi-satuan {obj.name} dikelola dari menu Multi Satuan, bukan edit barang biasa.",
+        )
     
     data = item.model_dump(exclude_unset=True, exclude={"prices"})
     
@@ -248,6 +263,11 @@ def update_item(item_id: int, item: schemas.ItemUpdate, db: Session = Depends(ge
 def delete_item(item_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
     obj = db.query(models.Item).get(item_id)
     if not obj: raise HTTPException(404, "Item tidak ditemukan")
+    if is_virtual_variant(obj):
+        raise HTTPException(
+            400,
+            f"Barang multi-satuan {obj.name} dinonaktifkan dari menu Multi Satuan.",
+        )
     obj.is_active = False
     db.commit()
     return {"message": "Item dinonaktifkan"}

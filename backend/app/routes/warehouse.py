@@ -17,6 +17,7 @@ import pytz
 from ..database import get_db
 from ..auth import get_current_user, write_audit
 from .. import models
+from ..services.virtual_units import is_virtual_variant
 
 router = APIRouter()
 WITA = pytz.timezone("Asia/Makassar")
@@ -296,6 +297,11 @@ def create_transfer(data: TransferCreate, db: Session = Depends(get_db),
     for it in data.items:
         item = db.query(models.Item).get(it.item_id)
         if not item: raise HTTPException(404, f"Item {it.item_id} tidak ditemukan")
+        if is_virtual_variant(item):
+            raise HTTPException(
+                400,
+                f"Barang multi-satuan {item.name} tidak boleh dipindah gudang langsung. Pindahkan stok barang induknya.",
+            )
         avail = get_warehouse_stock(db, data.from_warehouse_id, it.item_id)
         if avail < it.qty:
             raise HTTPException(400, f"Stok {item.name} di {from_w.name} tidak cukup")
