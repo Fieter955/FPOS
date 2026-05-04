@@ -568,3 +568,25 @@ buat agar bisa multi satuan dan dianggap jadi barang baru lalu ketika itu kejual
 buka tutup buku
 
 tambahin agar di menu pengguna bisa ditambahkan jenis pengguna dan diskonnya berapa persen untuk jenis tersebut. di POS bisa di pilih tipe pelanggannya, defaultnya Pelanggan umum tanpa diskon sama sekali, tapi bisa di klik jadi drop down dan langsung otomatis kasih tau persentase motong, persentase margin. jadi di POS saya juga mau agar selalu di kasih liat persentase marginnya berapa antara harga jual dan harga beli barangnya. silahkan tanya saya agar anda tidak bingung dan hasilnya ga bug
+
+# 3 may 2026
+
+margin itu gaboleh ada di menu POS.html, tapi di riwayat jual atau di laporan intinya kasir gaboleh tau
+
+di grup diskon pada POS.html, selain nama pelanggan, kita juga bisa langsung pilih apakah bronze atau bukan (tampilkan grup diskon, bukan cuma nama pelanggan dengan grup diskon tertentu)
+
+produk yang dapet diskon adalah produk yang di centang di data barang bakal dapet diskon, sisanya gaboleh terpengaruh. selain itu harus ada filter tambahan ketika produknya ternyata setelah didiskon malah harga jualnya dibawah HPP maka otomatis produk itu gaboleh dapet diskon
+
+dimenu data barang ketika nambah barang atau edit harus ada ceklis mau dapte diskon juga apa engga (lokasinya disamping form harga jual grosir) lalu disamping ceklis itu ada lagi drop down broze, gold dll dimana keitka pilih itu kita bisa liat form di kanannya berubah harga jualnya (kaya preview ketika jual beneran berapa si entar harga jualnya)
+
+ketika nambah barang atau edit, kita juga bisa pilih barang ini dapet dari suplier apa, jadi bulan cuma suplier yang bisa pilih barangnya apa aja tapi dari sudut pandang barang juga bisa pilhi supliernya siapa aja
+
+di antara harga beli dan harga jual ada persentase yang bisa kita liat dan bahkan atur ulang agar harga jual menyesuaikan. ini di menu pembelian dan di menu data barang ketika nambah barang atau edit
+
+di data barang harus ada bagian yang kita isi persentase yang diinginkan dari produk tersebut, persentase nya akan otomatis muncul di saat pembelian dimana kita bisa sesuaikan kembali kali semisal kurang pas, otomatis ketika diturunkan atau dinakain maka ketika kembali ke data barang di edit, persentase disana udah berubah juga
+
+di setting bisa di ceklis terkait aturan diskon mau diterapin apa engga, dan kasih juga opsi buat setting harga broze dll yang mana entar diarahkan ke menu pelanggan grup diskon (biar ga buat tampilan baru)
+
+# ini coba make sure lagi nanti
+
+bronze itu awalnya mungkin 5%, tapi ketika kita beli

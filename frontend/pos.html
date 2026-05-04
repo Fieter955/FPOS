@@ -566,6 +566,7 @@
             id="custSel"
             class="input-control"
             style="margin: 0; padding: 9px 12px; font-size: 13px"
+            onchange="handleCustomerChange()"
           >
             <option value="">👤 Pelanggan Umum</option>
           </select>
@@ -893,6 +894,7 @@
       // =======================================================================
       let allItems = [],
         cart = [],
+        allCusts = [],
         payMethod = "cash",
         activeCat = "";
       let currentFilteredItems = [];
@@ -1146,12 +1148,16 @@
       }
 
       function roundQty(val) {
-        return Math.round((parseFloat(val || 0) + Number.EPSILON) * 10000) / 10000;
+        return (
+          Math.round((parseFloat(val || 0) + Number.EPSILON) * 10000) / 10000
+        );
       }
 
       function fmtQty(val) {
         const num = roundQty(val);
-        return Number.isInteger(num) ? String(num) : String(num).replace(/\.?0+$/, "");
+        return Number.isInteger(num)
+          ? String(num)
+          : String(num).replace(/\.?0+$/, "");
       }
 
       function getSourceItem(item) {
@@ -1189,7 +1195,9 @@
         const sourceStock = parseFloat(sourceItem.stock || 0) || 0;
         const remainingSource = Math.max(
           0,
-          roundQty(sourceStock - getReservedSourceQty(sourceItem.id, excludeIndex)),
+          roundQty(
+            sourceStock - getReservedSourceQty(sourceItem.id, excludeIndex),
+          ),
         );
         if (item?.is_virtual_variant) {
           const factor = parseFloat(item.conversion_factor_to_parent || 1) || 1;
@@ -1203,8 +1211,11 @@
         if (!sourceItem) return;
         allItems.forEach((item) => {
           if (item.is_virtual_variant && item.parent_item_id === sourceId) {
-            const factor = parseFloat(item.conversion_factor_to_parent || 1) || 1;
-            item.stock = roundQty((parseFloat(sourceItem.stock || 0) || 0) / factor);
+            const factor =
+              parseFloat(item.conversion_factor_to_parent || 1) || 1;
+            item.stock = roundQty(
+              (parseFloat(sourceItem.stock || 0) || 0) / factor,
+            );
           }
         });
       }
@@ -1217,7 +1228,8 @@
           if (!item || !sourceItem) return;
 
           sourceItem.stock = roundQty(
-            (parseFloat(sourceItem.stock || 0) || 0) - qtyToSourceUnits(item, line.qty),
+            (parseFloat(sourceItem.stock || 0) || 0) -
+              qtyToSourceUnits(item, line.qty),
           );
           affectedSourceIds.add(sourceItem.id);
         });
@@ -1235,6 +1247,7 @@
             api("GET", "/customers/?limit=500"),
           ]);
           allItems = items;
+          allCusts = custs;
           const bar = document.getElementById("catBar");
           cats.forEach((c) => {
             const b = document.createElement("button");
@@ -1394,9 +1407,32 @@
           finalPrice = pendingPriceDiskon;
         }
 
+        let custId = document.getElementById("custSel").value;
+        let selectedCust = allCusts.find((c) => c.id == custId);
+        let groupName =
+          selectedCust && selectedCust.group ? selectedCust.group.name : "";
+        let groupDiscount =
+          selectedCust && selectedCust.group
+            ? selectedCust.group.discount_percent
+            : 0;
+
+        let appliedPrice = finalPrice;
+        let specPrice = null;
+        if (groupName) {
+          let pObj = (item.prices || []).find(
+            (p) => p.name.toLowerCase() === groupName.toLowerCase(),
+          );
+          if (pObj && pObj.price > 0) specPrice = pObj.price;
+        }
+        if (specPrice !== null) {
+          appliedPrice = specPrice;
+        } else if (groupDiscount > 0) {
+          appliedPrice = finalPrice * (1 - groupDiscount / 100);
+        }
+
         // 🔥 FIX BUG KERANJANG: Pisahkan item Normal & Diskon 🔥
         const ex = cart.find(
-          (c) => c.id === pendingItemId && c.price === finalPrice,
+          (c) => c.id === pendingItemId && c.original_price === finalPrice,
         );
 
         if (ex) {
@@ -1418,7 +1454,9 @@
             id: item.id,
             name: item.name,
             unit: item.unit?.abbreviation || item.unit?.name || "pcs",
-            price: finalPrice,
+            original_price: finalPrice,
+            price: appliedPrice,
+            buy_price: parseFloat(item.buy_price) || 0,
             qty: roundQty(qty),
             stock: availableQty,
           });
@@ -1494,6 +1532,45 @@
         document.getElementById("searchInp").focus();
       }
 
+      function handleCustomerChange() {
+        if (cart.length === 0) return;
+
+        let custId = document.getElementById("custSel").value;
+        let selectedCust = allCusts.find((c) => c.id == custId);
+        let groupName =
+          selectedCust && selectedCust.group ? selectedCust.group.name : "";
+        let groupDiscount =
+          selectedCust && selectedCust.group
+            ? selectedCust.group.discount_percent
+            : 0;
+
+        cart.forEach((c) => {
+          let item = allItems.find((i) => i.id === c.id);
+          if (!item) return;
+
+          let base = c.original_price || item.sell_price;
+
+          let specPrice = null;
+          if (groupName) {
+            let pObj = (item.prices || []).find(
+              (p) => p.name.toLowerCase() === groupName.toLowerCase(),
+            );
+            if (pObj && pObj.price > 0) specPrice = pObj.price;
+          }
+
+          if (specPrice !== null) {
+            c.price = specPrice;
+          } else if (groupDiscount > 0) {
+            c.price = base * (1 - groupDiscount / 100);
+          } else {
+            c.price = base;
+          }
+        });
+
+        renderCart();
+        recalc();
+      }
+
       function renderCart() {
         const totalQty = cart.reduce((sum, item) => sum + item.qty, 0);
         document.getElementById("cartFabBadge").textContent = fmtQty(totalQty);
@@ -1505,10 +1582,24 @@
           return;
         }
         list.innerHTML = cart
-          .map(
-            (c, i) => `
+          .map((c, i) => {
+            let marginPct = 0;
+            let bp = c.buy_price || 0;
+            if (bp > 0) {
+              marginPct = ((c.price - bp) / bp) * 100;
+            } else if (bp === 0 && c.price > 0) {
+              marginPct = 100;
+            }
+            let marginColor = marginPct >= 0 ? "#10b981" : "#ef4444";
+            return `
           <div class="cart-item">
-            <div class="ci-info"><div class="ci-name">${c.name}</div><div class="ci-price">${fmtRp(c.price)} / ${c.unit || "pcs"}</div></div>
+            <div class="ci-info">
+              <div class="ci-name">${c.name}</div>
+              <div class="ci-price">${fmtRp(c.price)} / ${c.unit || "pcs"}</div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
+                Beli: ${fmtRp(bp)} <span style="color:${marginColor};font-weight:bold;">(${marginPct.toFixed(1)}%)</span>
+              </div>
+            </div>
             <div class="qty-ctrl">
               <button class="qty-btn" onclick="changeQty(${i},-1)">−</button>
               <span style="font-size:14px;font-weight:700;min-width:18px;text-align:center">${fmtQty(c.qty)}</span>
@@ -1516,8 +1607,8 @@
             </div>
             <div class="ci-sub">${fmtRp(c.price * c.qty)}</div>
             <button class="ci-del" onclick="removeCart(${i})">✕</button>
-          </div>`,
-          )
+          </div>`;
+          })
           .join("");
       }
 
@@ -1525,7 +1616,10 @@
         const item = allItems.find((x) => x.id === cart[i].id);
         const availableQty = getAvailableCartStock(item, i);
         cart[i].stock = availableQty;
-        cart[i].qty = Math.max(1, Math.min(availableQty, roundQty(cart[i].qty + d)));
+        cart[i].qty = Math.max(
+          1,
+          Math.min(availableQty, roundQty(cart[i].qty + d)),
+        );
         renderCart();
         recalc();
       }
