@@ -74,12 +74,38 @@ def get_items_for_purchase(
         models.Item.is_active == True,
         (models.Item.is_virtual_variant == False) | (models.Item.is_virtual_variant == None),
     )
-    if supplier_id:
-        query = query.join(models.item_supplier_link).filter(
-            models.item_supplier_link.c.supplier_id == supplier_id
-        )
+    
+    # Ambil list item
     items = query.all()
-    return items
+    
+    results = []
+    for item in items:
+        # Serialisasi dasar
+        it_dict = {
+            "id": item.id,
+            "code": item.code,
+            "barcode": item.barcode,
+            "name": item.name,
+            "buy_price": item.buy_price,
+            "sell_price": item.sell_price,
+            "profit_margin": item.profit_margin,
+            "unit_name": item.unit.name if item.unit else "pcs"
+        }
+        
+        # JIKA ADA supplier_id, cari harga khusus dari supplier tersebut
+        if supplier_id:
+            spec = db.query(models.ItemSupplier).filter(
+                models.ItemSupplier.item_id == item.id,
+                models.ItemSupplier.supplier_id == supplier_id
+            ).first()
+            if spec:
+                it_dict["buy_price"] = spec.buy_price
+                if spec.barcode:
+                    it_dict["barcode"] = spec.barcode
+        
+        results.append(it_dict)
+        
+    return results
 
 
 @router.get("/{pid}", response_model=schemas.PurchaseOut)
@@ -160,7 +186,24 @@ def create_purchase(
             from .warehouse import adjust_warehouse_stock
             adjust_warehouse_stock(db, gudang_aktif.id, item.id, it.qty)
 
+        # 🔄 Update / Create Harga Khusus Supplier Otomatis
+        spec = db.query(models.ItemSupplier).filter(
+            models.ItemSupplier.item_id == item.id,
+            models.ItemSupplier.supplier_id == data.supplier_id
+        ).first()
+        if spec:
+            spec.buy_price = it.buy_price
+        else:
+            db.add(models.ItemSupplier(
+                item_id=item.id,
+                supplier_id=data.supplier_id,
+                buy_price=it.buy_price,
+                barcode=item.barcode # Default pakai barcode item jika belum ada khusus
+            ))
+
         item.buy_price = it.buy_price
+        item.sell_price = it.sell_price
+        item.profit_margin = it.profit_margin
 
         db.add(models.StockMovement(
             date=tanggal_faktur,

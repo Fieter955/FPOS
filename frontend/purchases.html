@@ -111,6 +111,7 @@
         display: grid;
         grid-template-columns:
           minmax(180px, 1.5fr) 70px minmax(120px, 1.2fr)
+          70px minmax(120px, 1.2fr)
           auto minmax(110px, 1fr) minmax(110px, 1fr) 40px;
         row-gap: 12px;
         column-gap: 12px;
@@ -518,9 +519,11 @@
             <div class="purchase-grid">
               <div class="purchase-header">
                 <span>Barang</span>
-                <span>Qty</span>
-                <span>Harga Beli</span>
-                <span>Diskon Bertingkat</span>
+                <span style="text-align: center">Qty</span>
+                <span style="text-align: right">Harga Beli</span>
+                <span style="text-align: center">Margin (%)</span>
+                <span style="text-align: right">Harga Jual</span>
+                <span style="padding-left: 20px">Diskon Bertingkat</span>
                 <span style="text-align: right">Harga/Qty</span>
                 <span style="text-align: right">Total</span>
                 <span></span>
@@ -1280,6 +1283,34 @@
         hargaWrapper.className = "input-wrapper";
         hargaWrapper.innerHTML = `<span class="field-label">Harga Beli</span><input type="text" inputmode="numeric" class="input-control baris-harga" value="0" style="margin:0;padding:10px 12px;font-size:14px;text-align:right">`;
         const hargaInp = hargaWrapper.querySelector("input");
+
+        const marginWrapper = document.createElement("div");
+        marginWrapper.className = "input-wrapper";
+        marginWrapper.innerHTML = `<span class="field-label">Margin (%)</span><input type="number" step="0.01" class="input-control baris-margin" value="0" style="margin:0;padding:10px 12px;font-size:14px;text-align:center">`;
+        const marginInp = marginWrapper.querySelector("input");
+
+        const jualWrapper = document.createElement("div");
+        jualWrapper.className = "input-wrapper";
+        jualWrapper.innerHTML = `<span class="field-label">Harga Jual</span><input type="text" inputmode="numeric" class="input-control baris-jual" value="0" style="margin:0;padding:10px 12px;font-size:14px;text-align:right">`;
+        const jualInp = jualWrapper.querySelector("input");
+
+        const calcJual = () => {
+          const hb = parseNum(hargaInp.value) || 0;
+          const m = parseFloat(marginInp.value) || 0;
+          const hj = hb + (hb * m / 100);
+          jualInp.value = formatNum(hj);
+        };
+        const calcMargin = () => {
+          const hb = parseNum(hargaInp.value) || 0;
+          const hj = parseNum(jualInp.value) || 0;
+          if (hb > 0) {
+            const m = ((hj - hb) / hb) * 100;
+            marginInp.value = m.toFixed(2).replace(/\.00$/, "");
+          } else {
+            marginInp.value = "0";
+          }
+        };
+
         hargaInp.oninput = () => {
           const raw = parseNum(hargaInp.value),
             pos = hargaInp.selectionStart,
@@ -1289,7 +1320,26 @@
             pos + (hargaInp.value.length - oldLen),
             pos + (hargaInp.value.length - oldLen),
           );
+          calcJual();
           hitungTotal();
+          updateScrollLogic();
+        };
+
+        marginInp.oninput = () => {
+          calcJual();
+          updateScrollLogic();
+        };
+
+        jualInp.oninput = () => {
+          const raw = parseNum(jualInp.value),
+            pos = jualInp.selectionStart,
+            oldLen = jualInp.value.length;
+          jualInp.value = formatNum(raw);
+          jualInp.setSelectionRange(
+            pos + (jualInp.value.length - oldLen),
+            pos + (jualInp.value.length - oldLen),
+          );
+          calcMargin();
           updateScrollLogic();
         };
 
@@ -1330,6 +1380,8 @@
         container.appendChild(comboContainer);
         container.appendChild(qtyWrapper);
         container.appendChild(hargaWrapper);
+        container.appendChild(marginWrapper);
+        container.appendChild(jualWrapper);
         container.appendChild(discWrapper);
         container.appendChild(hargaPerQtyWrapper);
         container.appendChild(nettoWrapper);
@@ -1343,10 +1395,22 @@
           valueField: "id",
           labelField: "name",
           onSelect: (selected) => {
-            if (selected.item)
-              container.querySelector(".baris-harga").value = formatNum(
-                selected.item.buy_price || 0,
-              );
+            if (selected.item) {
+              const hb = selected.item.buy_price || 0;
+              const hj = selected.item.sell_price || 0;
+              let m = selected.item.profit_margin || 0;
+
+              // Generate margin jika di database masih 0 tapi ada harga
+              if (m === 0 && hb > 0 && hj > 0) {
+                m = ((hj - hb) / hb) * 100;
+              }
+
+              container.querySelector(".baris-harga").value = formatNum(hb);
+              container.querySelector(".baris-margin").value = m
+                .toFixed(2)
+                .replace(/\.00$/, "");
+              container.querySelector(".baris-jual").value = formatNum(hj);
+            }
             hitungTotal();
             updateScrollLogic();
           },
@@ -1454,15 +1518,34 @@
           "#supplierCombobox .combobox-value",
         )?.value;
         if (!supplierId) return showToast("Pilih supplier dulu", "error");
+        
         const rows = [];
+        let priceChanges = [];
+
         document
           .querySelectorAll("#barisContainer > .purchase-row")
           .forEach((row) => {
             const hiddenItem = row.querySelector(".combobox-value");
             if (!hiddenItem || !hiddenItem.value) return;
+            
+            const itemId = parseInt(hiddenItem.value);
             const qty = parseNum(row.querySelector(".qty-input").value) || 1,
-              buy_price =
-                parseNum(row.querySelector(".baris-harga").value) || 0;
+              buy_price = parseNum(row.querySelector(".baris-harga").value) || 0,
+              sell_price =
+                parseNum(row.querySelector(".baris-jual").value) || 0,
+              profit_margin =
+                parseFloat(row.querySelector(".baris-margin").value) || 0;
+
+            // Cek apakah ada perubahan harga dari harga default supplier
+            const originalItem = currentSupplierItems.find(i => i.id === itemId);
+            if (originalItem && originalItem.buy_price !== buy_price) {
+                priceChanges.push({
+                    name: originalItem.name,
+                    old: originalItem.buy_price,
+                    new: buy_price
+                });
+            }
+
             let hargaSekarang = buy_price;
             row.querySelectorAll(".baris-disc").forEach((inp) => {
               const d = parseFloat(inp.value) || 0;
@@ -1472,14 +1555,27 @@
             if (buy_price > 0)
               ekuivalenDiskon = ((buy_price - hargaSekarang) / buy_price) * 100;
             rows.push({
-              item_id: parseInt(hiddenItem.value),
+              item_id: itemId,
               qty,
               buy_price,
+              sell_price,
+              profit_margin,
               discount: parseFloat(ekuivalenDiskon.toFixed(4)),
             });
           });
         if (!rows.length)
           return showToast("Tambahkan minimal 1 barang", "error");
+
+        // Notifikasi konfirmasi jika ada perubahan harga beli
+        if (priceChanges.length > 0) {
+            let msg = "Deteksi perubahan harga beli pada barang berikut:\n";
+            priceChanges.forEach(c => {
+                msg += `- ${c.name}: ${fmtRp(c.old)} ➜ ${fmtRp(c.new)}\n`;
+            });
+            msg += "\nApakah Anda yakin ingin menyimpan pembelian dengan harga baru ini?";
+            if (!(await showConfirm(msg))) return;
+        }
+
         try {
           showLoading("Menyimpan...");
           await api("POST", "/purchases/", {

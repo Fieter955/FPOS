@@ -560,6 +560,8 @@
           style="
             padding: 8px 12px;
             border-bottom: 1px solid var(--border-color);
+            display: grid;
+            gap: 8px;
           "
         >
           <select
@@ -569,6 +571,14 @@
             onchange="handleCustomerChange()"
           >
             <option value="">👤 Pelanggan Umum</option>
+          </select>
+          <select
+            id="groupSel"
+            class="input-control"
+            style="margin: 0; padding: 9px 12px; font-size: 13px"
+            onchange="handleDiscountGroupChange()"
+          >
+            <option value="">Grup Diskon: Umum</option>
           </select>
         </div>
 
@@ -594,7 +604,7 @@
           <div
             class="ttl-row"
             style="
-              font-size: 19px;
+              font-size: 28px;
               font-weight: 900;
               border-top: 2px solid var(--border-color);
               padding-top: 8px;
@@ -787,7 +797,7 @@
         <h2 style="margin-top: 0; text-align: center">💳 Pembayaran</h2>
         <div
           style="
-            font-size: 32px;
+            font-size: 48px;
             font-weight: 900;
             color: var(--primary);
             margin: 15px 0;
@@ -895,13 +905,16 @@
       let allItems = [],
         cart = [],
         allCusts = [],
+        allGroups = [],
         payMethod = "cash",
         activeCat = "";
       let currentFilteredItems = [];
       let kbFocusIndex = -1;
       let activeModal = null;
-      let pendingItemId = null;
+      let pendingItemId = null,
+        pendingSupplierId = null; // 🚚 Supplier ID dari barcode khusus
       let qtyIdx = 0;
+
       let payModalMethods = ["cancel", "cash", "transfer", "card"];
       let payModalIdx = 1;
       let rcptIdx = 2;
@@ -1018,20 +1031,42 @@
             const scode = barcodeBuffer.toLowerCase().trim();
 
             // Cari yang benar-benar cocok 100% (Kebal String/Number)
-            const matchedItem = allItems.find(
-              (i) =>
+            let matchedSupplierId = null;
+            const matchedItem = allItems.find((i) => {
+              // 1. Cek Barcode Utama
+              if (
                 String(i.barcode || "")
                   .toLowerCase()
-                  .trim() === scode ||
+                  .trim() === scode
+              )
+                return true;
+              // 2. Cek Kode Barang
+              if (
                 String(i.code || "")
                   .toLowerCase()
-                  .trim() === scode,
-            );
+                  .trim() === scode
+              )
+                return true;
+              // 3. Cek Barcode Khusus Supplier
+              if (i.supplier_details && i.supplier_details.length > 0) {
+                const sd = i.supplier_details.find(
+                  (s) =>
+                    String(s.barcode || "")
+                      .toLowerCase()
+                      .trim() === scode,
+                );
+                if (sd) {
+                  matchedSupplierId = sd.supplier_id;
+                  return true;
+                }
+              }
+              return false;
+            });
 
             barcodeBuffer = ""; // Kosongkan buffer
 
             if (matchedItem) {
-              promptQty(matchedItem.id);
+              promptQty(matchedItem.id, matchedSupplierId);
               document.getElementById("searchInp").value = "";
               filterItems();
             } else {
@@ -1241,13 +1276,15 @@
 
       async function init() {
         try {
-          const [items, cats, custs] = await Promise.all([
+          const [items, cats, custs, groups] = await Promise.all([
             api("GET", "/items/?limit=20000"), // Limit dibesarkan agar tidak gaib
             api("GET", "/items/categories"),
             api("GET", "/customers/?limit=500"),
+            api("GET", "/customers/groups"),
           ]);
           allItems = items;
           allCusts = custs;
+          allGroups = groups;
           const bar = document.getElementById("catBar");
           cats.forEach((c) => {
             const b = document.createElement("button");
@@ -1261,8 +1298,19 @@
           custs.forEach((c) => {
             const o = document.createElement("option");
             o.value = c.id;
-            o.textContent = c.name;
+            // Hapus persentase dari nama pelanggan di dropdown
+            o.textContent = c.group
+              ? `${c.name} [${c.group.name}]`
+              : c.name;
             s.appendChild(o);
+          });
+          const groupSelect = document.getElementById("groupSel");
+          groups.forEach((g) => {
+            const o = document.createElement("option");
+            o.value = g.id;
+            // Tulis nama grup saja tanpa persentase
+            o.textContent = g.name;
+            groupSelect.appendChild(o);
           });
           filterItems();
         } catch (e) {
@@ -1334,7 +1382,66 @@
       let pendingPriceDiskon = 0;
       let hasDiskon = false;
 
-      function promptQty(id) {
+      function getActiveDiscountGroup() {
+        const groupId = document.getElementById("groupSel")?.value;
+        if (!groupId) return null;
+        return allGroups.find((g) => String(g.id) === String(groupId)) || null;
+      }
+
+      function applyDiscountGroupPrice(item, basePrice, supplierId = null) {
+        // 1. Jika barang tidak di-ceklis "Dapat Diskon Member", abaikan diskon grup
+        if (!item.is_discountable) return basePrice;
+
+        const group = getActiveDiscountGroup();
+        if (!group) return basePrice;
+
+        let calculatedPrice = basePrice;
+        const groupName = String(group.name || "").toLowerCase().trim();
+        
+        // Cari harga spesifik grup (Case Insensitive)
+        const specPrice = (item.prices || []).find(
+          (p) => String(p.name || "").toLowerCase().trim() === groupName,
+        );
+        
+        if (specPrice && parseFloat(specPrice.price) > 0) {
+          calculatedPrice = parseFloat(specPrice.price);
+        } else {
+          // Jika tidak ada harga spesifik, gunakan persen default grup
+          const discountPercent = parseFloat(group.discount_percent || 0) || 0;
+          if (discountPercent > 0) {
+            calculatedPrice = basePrice * (1 - discountPercent / 100);
+          }
+        }
+
+        // 2. Cegah Jual Rugi (Di bawah HPP) -> Batal Diskon (kembali ke normal)
+        // Gunakan supplier-specific HPP jika ada
+        let hpp = parseFloat(item.buy_price) || 0;
+        if (supplierId) {
+            const sd = (item.supplier_details || []).find(s => s.supplier_id === supplierId);
+            if (sd) hpp = sd.buy_price;
+        }
+
+        if (calculatedPrice < (hpp - 0.01)) {
+          console.warn(`Diskon untuk ${item.name} dibatalkan karena di bawah HPP (${calculatedPrice} < ${hpp})`);
+          return basePrice;
+        }
+
+        return Math.round(calculatedPrice);
+      }
+
+      function recalcCartPricesByGroup() {
+        cart.forEach((cartItem) => {
+          const item = allItems.find((i) => i.id === cartItem.id);
+          if (!item) return;
+          const basePrice = cartItem.original_price || item.sell_price;
+          cartItem.price = applyDiscountGroupPrice(item, basePrice, cartItem.supplier_id);
+        });
+
+        renderCart();
+        recalc();
+      }
+
+      function promptQty(id, supplierId = null) {
         const item = allItems.find((i) => i.id === id);
         if (!item) return;
         const availableQty = getAvailableCartStock(item);
@@ -1344,7 +1451,9 @@
         }
 
         pendingItemId = id;
-        document.getElementById("qtyItemName").textContent = item.name;
+        pendingSupplierId = supplierId; // Simpan context supplier dari barcode
+        document.getElementById("qtyItemName").textContent =
+          item.name + (supplierId ? " (Barcode Khusus)" : "");
         document.getElementById("qtyInp").value = "1";
 
         // --- CEK APAKAH BARANG INI PUNYA HARGA DISKON ---
@@ -1407,28 +1516,7 @@
           finalPrice = pendingPriceDiskon;
         }
 
-        let custId = document.getElementById("custSel").value;
-        let selectedCust = allCusts.find((c) => c.id == custId);
-        let groupName =
-          selectedCust && selectedCust.group ? selectedCust.group.name : "";
-        let groupDiscount =
-          selectedCust && selectedCust.group
-            ? selectedCust.group.discount_percent
-            : 0;
-
-        let appliedPrice = finalPrice;
-        let specPrice = null;
-        if (groupName) {
-          let pObj = (item.prices || []).find(
-            (p) => p.name.toLowerCase() === groupName.toLowerCase(),
-          );
-          if (pObj && pObj.price > 0) specPrice = pObj.price;
-        }
-        if (specPrice !== null) {
-          appliedPrice = specPrice;
-        } else if (groupDiscount > 0) {
-          appliedPrice = finalPrice * (1 - groupDiscount / 100);
-        }
+        let appliedPrice = applyDiscountGroupPrice(item, finalPrice);
 
         // 🔥 FIX BUG KERANJANG: Pisahkan item Normal & Diskon 🔥
         const ex = cart.find(
@@ -1456,9 +1544,9 @@
             unit: item.unit?.abbreviation || item.unit?.name || "pcs",
             original_price: finalPrice,
             price: appliedPrice,
-            buy_price: parseFloat(item.buy_price) || 0,
             qty: roundQty(qty),
             stock: availableQty,
+            supplier_id: pendingSupplierId, // 🔥 Simpan ID Supplier jika dari barcode khusus
           });
         }
 
@@ -1533,42 +1621,15 @@
       }
 
       function handleCustomerChange() {
-        if (cart.length === 0) return;
+        const custId = document.getElementById("custSel").value;
+        const selectedCust = allCusts.find((c) => String(c.id) === String(custId));
+        document.getElementById("groupSel").value =
+          selectedCust?.group_id || selectedCust?.group?.id || "";
+        recalcCartPricesByGroup();
+      }
 
-        let custId = document.getElementById("custSel").value;
-        let selectedCust = allCusts.find((c) => c.id == custId);
-        let groupName =
-          selectedCust && selectedCust.group ? selectedCust.group.name : "";
-        let groupDiscount =
-          selectedCust && selectedCust.group
-            ? selectedCust.group.discount_percent
-            : 0;
-
-        cart.forEach((c) => {
-          let item = allItems.find((i) => i.id === c.id);
-          if (!item) return;
-
-          let base = c.original_price || item.sell_price;
-
-          let specPrice = null;
-          if (groupName) {
-            let pObj = (item.prices || []).find(
-              (p) => p.name.toLowerCase() === groupName.toLowerCase(),
-            );
-            if (pObj && pObj.price > 0) specPrice = pObj.price;
-          }
-
-          if (specPrice !== null) {
-            c.price = specPrice;
-          } else if (groupDiscount > 0) {
-            c.price = base * (1 - groupDiscount / 100);
-          } else {
-            c.price = base;
-          }
-        });
-
-        renderCart();
-        recalc();
+      function handleDiscountGroupChange() {
+        recalcCartPricesByGroup();
       }
 
       function renderCart() {
@@ -1583,22 +1644,17 @@
         }
         list.innerHTML = cart
           .map((c, i) => {
-            let marginPct = 0;
-            let bp = c.buy_price || 0;
-            if (bp > 0) {
-              marginPct = ((c.price - bp) / bp) * 100;
-            } else if (bp === 0 && c.price > 0) {
-              marginPct = 100;
+            let discInfo = "";
+            if (c.price < c.original_price) {
+              const diff = c.original_price - c.price;
+              const pct = Math.round((diff / c.original_price) * 100);
+              discInfo = `<span style="color:#f59e0b; font-size: 0.85em; font-weight: bold; margin-right: 5px;">[Diskon ${pct}% / -${fmtRp(diff)}]</span>`;
             }
-            let marginColor = marginPct >= 0 ? "#10b981" : "#ef4444";
             return `
           <div class="cart-item">
             <div class="ci-info">
               <div class="ci-name">${c.name}</div>
-              <div class="ci-price">${fmtRp(c.price)} / ${c.unit || "pcs"}</div>
-              <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
-                Beli: ${fmtRp(bp)} <span style="color:${marginColor};font-weight:bold;">(${marginPct.toFixed(1)}%)</span>
-              </div>
+              <div class="ci-price">${discInfo}${fmtRp(c.price)} / ${c.unit || "pcs"}</div>
             </div>
             <div class="qty-ctrl">
               <button class="qty-btn" onclick="changeQty(${i},-1)">−</button>

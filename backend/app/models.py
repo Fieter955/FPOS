@@ -94,12 +94,16 @@ class Shift(Base):
 # ─── Master Data ──────────────────────────────────────────────────────────────
 
 
-# 👇 1. TAMBAHKAN TABEL PERANTARA item dan supplier untuk relasi many-to-many 👇
-item_supplier_link = Table(
-    'item_supplier_link', Base.metadata,
-    Column('item_id', Integer, ForeignKey('items.id'), primary_key=True),
-    Column('supplier_id', Integer, ForeignKey('suppliers.id'), primary_key=True)
-)
+# 👇 1. TAMBAHKAN MODEL PERANTARA item dan supplier untuk relasi many-to-many dengan data tambahan 👇
+class ItemSupplier(Base):
+    __tablename__ = "item_supplier"
+    item_id = Column(Integer, ForeignKey("items.id"), primary_key=True)
+    supplier_id = Column(Integer, ForeignKey("suppliers.id"), primary_key=True)
+    buy_price = Column(Float, default=0)
+    barcode = Column(String(100)) # Barcode khusus supplier ini
+
+    item = relationship("Item", back_populates="supplier_details")
+    supplier = relationship("Supplier", back_populates="item_details")
 
 class Category(Base):
     __tablename__ = "categories"
@@ -126,6 +130,7 @@ class Item(Base):
     unit_id = Column(Integer, ForeignKey("units.id"), nullable=True)
     buy_price = Column(Float, default=0)
     sell_price = Column(Float, default=0)
+    profit_margin = Column(Float, default=0)
     stock = Column(Float, default=0)
     min_stock = Column(Float, default=0)
     description = Column(Text)
@@ -134,6 +139,7 @@ class Item(Base):
     conversion_factor_to_parent = Column(Float, default=1)
     is_virtual_variant = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
+    is_discountable = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -143,8 +149,11 @@ class Item(Base):
     sale_items = relationship("SaleItem", back_populates="item")
     purchase_items = relationship("PurchaseItem", back_populates="item")
     stock_movements = relationship("StockMovement", back_populates="item")
-    suppliers = relationship("Supplier", secondary=item_supplier_link, back_populates="items")
 
+    # Relasi detail supplier (dengan harga khusus)
+    supplier_details = relationship("ItemSupplier", back_populates="item", cascade="all, delete-orphan")
+    # Tetap sediakan relasi simpel untuk list supplier
+    suppliers = relationship("Supplier", secondary="item_supplier", back_populates="items", viewonly=True)
 
 class ItemPrice(Base):
     __tablename__ = "item_prices"
@@ -194,7 +203,10 @@ class Supplier(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     purchases = relationship("Purchase", back_populates="supplier")
-    items = relationship("Item", secondary=item_supplier_link, back_populates="suppliers")
+    
+    # Relasi detail item (dengan harga khusus dari supplier ini)
+    item_details = relationship("ItemSupplier", back_populates="supplier", cascade="all, delete-orphan")
+    items = relationship("Item", secondary="item_supplier", back_populates="suppliers", viewonly=True)
 
 
 class SalesPerson(Base):

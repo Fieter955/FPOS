@@ -19,6 +19,17 @@ from ..services.virtual_units import (
 router = APIRouter()
 
 
+def _is_admin_user(user: models.User) -> bool:
+    return "admin" in (user.role or "")
+
+
+def _serialize_item_for_user(item: models.Item, current_user: models.User):
+    data = schemas.ItemOut.model_validate(item).model_dump()
+    if not _is_admin_user(current_user):
+        data["buy_price"] = 0
+    return data
+
+
 def _apply_virtual_item_metrics(items, db: Session, current_user: models.User):
     if not items:
         return items
@@ -144,32 +155,52 @@ def get_items(
 
     items = q.offset(skip).limit(limit).all()
     print(f"[DEBUG get_items] search='{search}', found {len(items)} items, user active_branch_id={current_user.active_branch_id}")  # 👈 DEBUG
-    return _apply_virtual_item_metrics(items, db, current_user)
+    items = _apply_virtual_item_metrics(items, db, current_user)
+    return [_serialize_item_for_user(item, current_user) for item in items]
 
 @router.get("/{item_id}", response_model=schemas.ItemOut)
 def get_item(item_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     obj = db.query(models.Item).get(item_id)
     if not obj: raise HTTPException(404, "Item tidak ditemukan")
-    return _apply_virtual_item_metrics([obj], db, current_user)[0]
+    obj = _apply_virtual_item_metrics([obj], db, current_user)[0]
+    return _serialize_item_for_user(obj, current_user)
 
 @router.post("/", response_model=schemas.ItemOut)
 def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     import uuid
-    
-    # Ambil data form, kecuali prices
-    item_data = item.model_dump(exclude={"prices"})
-    
+
+    # Ambil data form, kecuali prices dan supplier_ids
+    item_data = item.model_dump(exclude={"prices", "supplier_ids"})
+
     # 1. Pastikan Kode ter-generate otomatis dengan aman di backend
     if not item_data.get("code") or item_data["code"] == "AUTO":
         item_data["code"] = f"ITM-{uuid.uuid4().hex[:6].upper()}"
-        
+
     # 2. Paksa status Aktif agar PASTI terbaca di POS
     item_data["is_active"] = True
-    
+
     obj = models.Item(**item_data)
+
+    # 1.5. Simpan Supplier & Harga Khusus Supplier
+    if item.supplier_settings:
+        for s_data in item.supplier_settings:
+            db.add(models.ItemSupplier(
+                item=obj,
+                supplier_id=s_data.supplier_id,
+                buy_price=s_data.buy_price,
+                barcode=s_data.barcode
+            ))
+    elif item.supplier_ids:
+        for sid in item.supplier_ids:
+            db.add(models.ItemSupplier(
+                item=obj,
+                supplier_id=sid,
+                buy_price=obj.buy_price, # Default pakai harga beli umum
+                barcode=obj.barcode       # Default pakai barcode umum
+            ))
+
     db.add(obj)
-    db.flush() # Simpan sementara untuk dapatkan ID Resmi
-    
+    db.flush() # Simpan sementara untuk dapatkan ID Resmi    
     # 3. Auto-Generate Barcode
     need_barcode_gen = False
     if not obj.barcode or obj.barcode == "AUTO":
@@ -228,7 +259,7 @@ def update_item(item_id: int, item: schemas.ItemUpdate, db: Session = Depends(ge
             f"Barang multi-satuan {obj.name} dikelola dari menu Multi Satuan, bukan edit barang biasa.",
         )
     
-    data = item.model_dump(exclude_unset=True, exclude={"prices"})
+    data = item.model_dump(exclude_unset=True, exclude={"prices", "supplier_ids"})
     
     need_barcode_gen = False
     if data.get("barcode") == "AUTO":
@@ -238,6 +269,28 @@ def update_item(item_id: int, item: schemas.ItemUpdate, db: Session = Depends(ge
         
     for k, v in data.items(): 
         setattr(obj, k, v)
+        
+    # Update Supplier Settings
+    if item.supplier_settings is not None:
+        # Hapus yang lama, ganti yang baru
+        db.query(models.ItemSupplier).filter(models.ItemSupplier.item_id == item_id).delete()
+        for s_data in item.supplier_settings:
+            db.add(models.ItemSupplier(
+                item_id=item_id,
+                supplier_id=s_data.supplier_id,
+                buy_price=s_data.buy_price,
+                barcode=s_data.barcode
+            ))
+    elif item.supplier_ids is not None:
+        # Jika hanya kirim ID, reset detail dengan nilai default item saat ini
+        db.query(models.ItemSupplier).filter(models.ItemSupplier.item_id == item_id).delete()
+        for sid in item.supplier_ids:
+            db.add(models.ItemSupplier(
+                item_id=item_id,
+                supplier_id=sid,
+                buy_price=obj.buy_price,
+                barcode=obj.barcode
+            ))
         
     if need_barcode_gen:
         exist = db.query(models.BarcodeLabel).filter(models.BarcodeLabel.item_id == obj.id).first()
@@ -411,8 +464,15 @@ async def import_items_from_excel(
             db.add(new_item)
             db.flush() # Wajib flush agar new_item dapat ID resmi dari database!
 
-            # 5. Tempelkan relasi Supplier ke Barang yang sudah resmi masuk sesi
-            new_item.suppliers = item_suppliers
+            # 5. 🛡️ HUBUNGKAN SUPPLIER KE BARANG SECARA RESMI
+            # Catatan: Kita gunakan model ItemSupplier karena 'suppliers' di model Item adalah viewonly=True
+            for sup_obj in item_suppliers:
+                db.add(models.ItemSupplier(
+                    item_id=new_item.id,
+                    supplier_id=sup_obj.id,
+                    buy_price=new_item.buy_price, # Harga default dari excel
+                    barcode=new_item.barcode       # Barcode default dari excel
+                ))
 
             # 6. 🛡️ SUNTIKKAN STOK LOKAL & KARTU STOK KE GUDANG AKTIF
             # Selalu buat WarehouseStock agar barang terbaca di POS dan menu supplier

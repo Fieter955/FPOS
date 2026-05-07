@@ -450,6 +450,7 @@
       requireAuth();
       let chartInst = null;
       let latestLiquidBalances = { cash_balance: 0, bank_balance: 0 };
+      const canViewFinancialReports = (getUser().role || "").includes("admin");
 
       const ON =
         "padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit";
@@ -528,6 +529,10 @@
       }
 
       function switchTab(t) {
+        if (t === "pl" && !canViewFinancialReports) {
+          showToast("Laba rugi hanya bisa dibuka oleh admin", "error");
+          t = "dash";
+        }
         tabs.forEach((x) => {
           document.getElementById("pnl" + x).style.display =
             x.toLowerCase() === t ? "block" : "none";
@@ -537,6 +542,13 @@
         if (t === "dash") loadDash();
         if (t === "ar") loadAR();
         if (t === "ap") loadAP();
+      }
+
+      function applyRoleVisibility() {
+        if (!canViewFinancialReports) {
+          document.getElementById("tbPL").style.display = "none";
+          document.getElementById("pnlPL").style.display = "none";
+        }
       }
 
       async function loadDash() {
@@ -649,7 +661,7 @@
         try {
           showLoading("Membuat file...");
           const resp = await fetch(
-            `/api/reports/export-excel?start_date=${s}&end_date=${e}`,
+            `/api/reports/export/full-report?start_date=${s}&end_date=${e}`,
             { headers: { Authorization: `Bearer ${getToken()}` } },
           );
           if (!resp.ok) throw new Error("Gagal export");
@@ -847,6 +859,7 @@
       document.getElementById("plEnd").value = today();
       document.getElementById("topStart").value = `${y}-${mo}-01`;
       document.getElementById("topEnd").value = today();
+      applyRoleVisibility();
       loadDash();
     </script>
   </body>

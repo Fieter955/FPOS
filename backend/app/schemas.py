@@ -71,6 +71,20 @@ class ItemPriceOut(ItemPriceCreate):
     id: int
     model_config = {"from_attributes": True}
 
+class SupplierSimpleOut(BaseModel):
+    id: int
+    name: str
+    code: Optional[str] = None
+    model_config = {"from_attributes": True}
+
+# ─── Item Supplier Settings ────────────────────────────────────────────────────
+class ItemSupplierCreate(BaseModel):
+    supplier_id: int
+    buy_price: float = 0
+    barcode: Optional[str] = None
+
+class ItemSupplierOut(ItemSupplierCreate):
+    model_config = {"from_attributes": True}
 
 # ─── Item ─────────────────────────────────────────────────────────────────────
 class ItemCreate(BaseModel):
@@ -80,10 +94,14 @@ class ItemCreate(BaseModel):
     unit_id: Optional[int] = None
     buy_price: float = 0
     sell_price: float = 0
+    profit_margin: float = 0
     stock: float = 0
     min_stock: float = 0
     description: Optional[str] = None
     barcode: Optional[str] = None
+    is_discountable: bool = False
+    supplier_ids: Optional[List[int]] = None
+    supplier_settings: Optional[List[ItemSupplierCreate]] = []
     prices: Optional[List[ItemPriceCreate]] = []
 
 class ItemUpdate(BaseModel):
@@ -92,10 +110,14 @@ class ItemUpdate(BaseModel):
     unit_id: Optional[int] = None
     buy_price: Optional[float] = None
     sell_price: Optional[float] = None
+    profit_margin: Optional[float] = None
     min_stock: Optional[float] = None
     description: Optional[str] = None
     barcode: Optional[str] = None
     is_active: Optional[bool] = None
+    is_discountable: Optional[bool] = None
+    supplier_ids: Optional[List[int]] = None
+    supplier_settings: Optional[List[ItemSupplierCreate]] = None
     prices: Optional[List[ItemPriceCreate]] = None
 
 class ItemOut(BaseModel):
@@ -109,14 +131,18 @@ class ItemOut(BaseModel):
     is_virtual_variant: bool = False
     buy_price: float
     sell_price: float
+    profit_margin: float
     stock: float
     min_stock: float
     description: Optional[str]
     barcode: Optional[str]
+    is_discountable: bool
     is_active: bool
     category: Optional[CategoryOut] = None
     unit: Optional[UnitOut] = None
     prices: List[ItemPriceOut] = []
+    suppliers: List[SupplierSimpleOut] = []
+    supplier_details: List[ItemSupplierOut] = []
     model_config = {"from_attributes": True}
 
 
@@ -218,6 +244,8 @@ class PurchaseItemCreate(BaseModel):
     item_id: int
     qty: float
     buy_price: float
+    sell_price: float = 0
+    profit_margin: float = 0
     discount: float = 0
 
 class PurchaseCreate(BaseModel):
@@ -286,9 +314,12 @@ class SaleItemOut(BaseModel):
     id: int
     item_id: int
     qty: float
+    buy_price: float = 0
     sell_price: float
     discount: float
     total: float
+    margin_amount: float = 0
+    margin_percent: float = 0
     item: Optional[ItemOut] = None
     model_config = {"from_attributes": True}
 

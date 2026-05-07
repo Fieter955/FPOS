@@ -534,6 +534,7 @@ barcodenya harus bisa cetak 5 label kalo lin 3 artinya 2 baris
 
 untuk barang yang meliki 2 harga berbeda untuk dijual bisa otomatis tampil pop up meilikh harga yang mana, cuma masih belum estetik aja tampilannya
 
+done
 buat grup pelanggan silver, gold, platinum ( ada penggaln umum dan pelanggan lain berdasarkan levelnya)
 
 fitur tukar tambah (untuk POS dan Suplier)
@@ -561,32 +562,110 @@ bisa opname berjalan aja tapi pastikan agar opnamenya dibagi 2, set up awal atau
 
 ## 26 april
 
+done
 buat agar bisa multi satuan dan dianggap jadi barang baru lalu ketika itu kejual maka stok dari dus berkurang jadi koma(realtime). saya mau agar setting multi satuannya itu dengan cara search barang saat ini di data barang, lalu bisa di duplikat dan kemudian langsung diarahkan ke multisatuan dimana disana kita bisa konversi yang awalnya misal 1 dus 25 kg jadi 1 kg, maka otomatis harga hpp dan jual di buat otomatis, kemudian kita juga bisa rubah harga jualnya dan ada kolom persentasenya seberapa untung. buatkan jadi semacam tampilan tabel. pindah pindah nya bisa tanpa mouse melainkan langsung keyboard kiri kanan atas bawah
 
 ## 27 april
 
 buka tutup buku
 
+done
 tambahin agar di menu pengguna bisa ditambahkan jenis pengguna dan diskonnya berapa persen untuk jenis tersebut. di POS bisa di pilih tipe pelanggannya, defaultnya Pelanggan umum tanpa diskon sama sekali, tapi bisa di klik jadi drop down dan langsung otomatis kasih tau persentase motong, persentase margin. jadi di POS saya juga mau agar selalu di kasih liat persentase marginnya berapa antara harga jual dan harga beli barangnya. silahkan tanya saya agar anda tidak bingung dan hasilnya ga bug
 
 # 3 may 2026
 
+done
 margin itu gaboleh ada di menu POS.html, tapi di riwayat jual atau di laporan intinya kasir gaboleh tau
 
+done
 di grup diskon pada POS.html, selain nama pelanggan, kita juga bisa langsung pilih apakah bronze atau bukan (tampilkan grup diskon, bukan cuma nama pelanggan dengan grup diskon tertentu)
 
+done
 produk yang dapet diskon adalah produk yang di centang di data barang bakal dapet diskon, sisanya gaboleh terpengaruh. selain itu harus ada filter tambahan ketika produknya ternyata setelah didiskon malah harga jualnya dibawah HPP maka otomatis produk itu gaboleh dapet diskon
 
+done
 dimenu data barang ketika nambah barang atau edit harus ada ceklis mau dapte diskon juga apa engga (lokasinya disamping form harga jual grosir) lalu disamping ceklis itu ada lagi drop down broze, gold dll dimana keitka pilih itu kita bisa liat form di kanannya berubah harga jualnya (kaya preview ketika jual beneran berapa si entar harga jualnya)
 
-ketika nambah barang atau edit, kita juga bisa pilih barang ini dapet dari suplier apa, jadi bulan cuma suplier yang bisa pilih barangnya apa aja tapi dari sudut pandang barang juga bisa pilhi supliernya siapa aja
+done
+ketika nambah barang atau edit, kita juga bisa pilih barang ini dapet dari suplier apa, jadi bulan cuma suplier yang bisa pilih barangnya apa aja tapi dari sudut pandang barang juga bisa pilhi supliernya siapa aja. lihat referensi di suplier.html
 
-di antara harga beli dan harga jual ada persentase yang bisa kita liat dan bahkan atur ulang agar harga jual menyesuaikan. ini di menu pembelian dan di menu data barang ketika nambah barang atau edit
-
+done
 di data barang harus ada bagian yang kita isi persentase yang diinginkan dari produk tersebut, persentase nya akan otomatis muncul di saat pembelian dimana kita bisa sesuaikan kembali kali semisal kurang pas, otomatis ketika diturunkan atau dinakain maka ketika kembali ke data barang di edit, persentase disana udah berubah juga
+
+done
+bronze itu awalnya mungkin 5%, tapi ketika kita beli
+
+# 5 may 2026
+
+pada menu POS.html, lakukan ini, tanya saya agar jawabn anda lebih akurat
+POS
+done
+Kalo bronze ya tulis aja bronze gausah ada persentase nya di menu dropdown karna bronze tiap produk itu beda2, tapi ada default persentase nya missal 5% (anda harus liat juga pada customers.html disitu saya atur grup diskon, harus disesuaikan lagi bronze itu relativ tergantung apakah di menu items.html diedit (kamu harus tambah juga terkait itu sehingga di items.py bisa ketauan bronze untuk produk itu berapa))
+
+done
+Tulis diskon dan harga potongannya di samping kiri harga jual di POS.html (kalo diskonnya bikin harga jual kurang dari HPP ya otomatis ga bakal dapet diskon )
+
+Buat struknya biar nampilin ptongan=harga potongan berapa (refereensi indomaret)
+
+done
+Edit barang dan pembelian
+Suplier buat paling atas (dropdown) biar tau setingan harga saat ini itu buat barang dari supplier tersebut
+
+done
+Rapihin tampilannya
+
+done
+Pastiin marginnya berjalan dengan benar
+
+done -> coba uji barcode dari suplier berbeda
+Produk yang sama bisa memiliki harga beli dan jual berbeda jika beli di supplier berbeda. Jadi triger suatu barang entar kejual itu berdasarkan barcodenya yang udah diprint. Ketika mau generate barcode, pengguna harus pilih juga ini barang dari supplier mana. Kalo di ipos kode nya itu berbeda kalo dari supplier berbeda, tapi saat scan barang (lagi beli) tetep bisa ke scan si barcode asli (ada barang yang dari awal punya barcode), entar Ketika disimpan tinggal degenerate aja kalo itu untuk barang si supplier A bukan si B. Note yang beda Cuma harga beli aja (HPP nya) harga jual harus tetep sama
+
+done
+Ketika ada perubahan harga entah di jual atau di beli harus ada notifikasi ya atau tidak karna bisa aja human di items.html maupun di purchase.html
+
+Pembelian
+Di setiap transaksi harus ada tempo berupa tanggal, jadi ada tanggal pembelian dan tanggal jatuh tempo
+Di menu aksinya ada klik barcode yang otomatis ngegenerate barcode untuk pesanan itu (karna barang dari supplier A itu punya barcode berbeda karna harga nya beda (coba riset lagi))
+Tambahin filter di samping semua status untuk supplier biar ga pusing cari supliernya
+
+Di laporan harus keliatan di tangga ke n itu bayar ke supplier apa aja dan barangnya apa aja
+
+Data barang
+Bisa pilih dari supplier mana (dropdown)
+Di samping kategori ada tulisan supplier dari barang itu (jadi barang yang sama bisa terlihat 2x atau lebih tapi yang bedain supliernya)
+
+Pembelian
+Menambahkan ICON untuk psanan pembelian (jadi draft) , pembelian (bisa ambil dari draft), pembayaran (list yang udah dibayar) dari setiap fitur haru bisa dipilh dari supplier mana juga biar lebih mudah ke track dan tentu aturan tangalnya
+
+Yang jatuh temponya paling dekat bikin paling atas di menu pembelian (dashboard dari pembaliannya berupa tanggal beli, tempo, dan H- sekian)
+
+Di daftar pembayaran harus keliatan statusnya lunas apa engga (miirp kaya dashboard saat ini)
+
+Supplier
+Atur tanggal tempo di settingan supplier, terus nanti di pembelian barang otomatis di kasih tau renttang jatuh tempo berapa, pengguna bisa edit (tapi ga merubah data asli di supplier sebagai default) abis itu keliatan jatuh tempo di menu pembayaran
+
+done
+BUG:
+ketika kasih diskon berbeda di produk berbeda, di POS,html malah salah satu aja yang dapet diskon meskipun semua barang sudah diceklis diskonnya di items.html
+
+done
+angka total di POS buat lebih besar
+
+pastiin barcode dari suplier A itu harus beda dari suplier B kalo barangnya sama (otomatis entar ketahuan kejual dari suplier mana di laporan)
+
+ada maslaah di saat ganti harga, ketika ganti harga itu otomatis semua harga itu berubah atau hanya barang yang dibeli saat itu aja, karna takutnya berpengaruh ke akuntansi, pastiin dana dihitung dengan benar, semisal barangnya masih ada yang belum kejual di harga A eh beli lagi di harga B dari suplier ayng sama, nahh terus entar barang A pake harga yang mana?
+
+done
+jangan lupa barangnya kan udah multi satuan, sehingga stok barang di POS yang induknya harus jadi koma juga kalo barak anaknya kejual
+
+# masih mikir2 perlu dibuat apa engga
+
+abisin barang dari suplier aman yang duluan ngasih barang (cukup kompleks)
+
+# done -> pastikan apakah kak eva maunya margin di pembelian itu disimpan untuk jadi margin produk atau hanya pembelian itu aja?
+
+pada purchase.html bagian pop up nya di antara harga beli dan harga jual ada persentase yang bisa kita liat dan bahkan atur ulang agar harga jual menyesuaikan. persentase itu disimpan dan diambil dari database sehingga akan sinkron di menu items.html
 
 di setting bisa di ceklis terkait aturan diskon mau diterapin apa engga, dan kasih juga opsi buat setting harga broze dll yang mana entar diarahkan ke menu pelanggan grup diskon (biar ga buat tampilan baru)
 
-# ini coba make sure lagi nanti
-
-bronze itu awalnya mungkin 5%, tapi ketika kita beli
+pikirin kira kira kalo gnetik sendiri tanpa barcode, barang itu diambil dari suplier mana? karna harga beli awalnya beda2

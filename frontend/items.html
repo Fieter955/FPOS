@@ -210,6 +210,162 @@
       </main>
     </div>
 
+    <style>
+      /* Menghilangkan spinner (panah atas bawah) pada input number */
+      input::-webkit-outer-spin-button,
+      input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      input[type="number"] {
+        -moz-appearance: textfield;
+      }
+
+      #mBarang .modal-box.wide {
+        width: 85% !important;
+        max-width: 1400px !important;
+      }
+      @media (min-width: 768px) {
+        #mBarang .row-price {
+          display: grid;
+          grid-template-columns: 1fr 0.6fr 1fr 2.8fr !important;
+          gap: 12px;
+        }
+      }
+      /* === KOMPONEN SUPPLIER === */
+      .sup-selection-section {
+        margin: 16px 0;
+        padding: 16px;
+        background: var(--bg-color);
+        border-radius: 12px;
+        border: 1px solid var(--border-color);
+      }
+      .sup-selection-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .sup-selection-header label {
+        font-weight: 600;
+        color: var(--text-muted);
+        font-size: 14px;
+      }
+      .sup-search-box {
+        position: relative;
+        width: 100%;
+        max-width: 400px;
+      }
+      .sup-search-input {
+        width: 100%;
+        padding: 10px 12px 10px 36px;
+        border: 2px solid var(--border-color);
+        border-radius: 10px;
+        background: var(--input-bg, #1e293b);
+        color: var(--text-main);
+        font-size: 14px;
+        outline: none;
+        box-sizing: border-box;
+      }
+      .sup-search-input:focus {
+        border-color: var(--primary);
+      }
+      .sup-search-icon {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+        font-size: 14px;
+        pointer-events: none;
+      }
+      .sup-dropdown {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        width: 100%;
+        max-height: 250px;
+        overflow-y: auto;
+        background: var(--card-bg, #ffffff);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        z-index: 9999;
+        display: none;
+      }
+      .sup-dropdown.show {
+        display: block;
+      }
+      .sup-dropdown-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 12px;
+        cursor: pointer;
+        border-bottom: 1px solid var(--border-color);
+      }
+      .sup-dropdown-item:last-child {
+        border-bottom: none;
+      }
+      .sup-dropdown-item:hover {
+        background: var(--primary-light);
+      }
+      .sup-add-btn {
+        background: var(--primary);
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-weight: bold;
+      }
+      .sup-dropdown-empty {
+        padding: 12px;
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 13px;
+      }
+      .selected-sups-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        min-height: 36px;
+        padding: 8px;
+        border: 1px dashed var(--border-color);
+        border-radius: 8px;
+        background: var(--card-bg);
+      }
+      .sup-chip {
+        display: inline-flex;
+        align-items: center;
+        background: var(--primary-light);
+        color: var(--primary);
+        padding: 4px 8px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 500;
+        border: 1px solid var(--primary);
+      }
+      .chip-remove {
+        background: none;
+        border: none;
+        color: inherit;
+        margin-left: 6px;
+        cursor: pointer;
+        font-size: 16px;
+        line-height: 1;
+        padding: 0 2px;
+      }
+      .chip-remove:hover {
+        opacity: 0.7;
+      }
+    </style>
     <div class="modal-overlay" id="mBarang">
       <div class="modal-box wide">
         <div class="modal-hdr">
@@ -334,7 +490,56 @@
             </div>
           </div>
 
-          <div class="row3" style="margin-bottom: 16px">
+          <div class="row-price" style="margin-bottom: 16px">
+            <div
+              class="input-group"
+              style="
+                grid-column: 1 / -1;
+                background: var(--bg-color);
+                padding: 12px;
+                border-radius: 12px;
+                border: 1px dashed var(--primary);
+              "
+            >
+              <label
+                style="
+                  color: var(--primary);
+                  font-weight: bold;
+                  display: flex;
+                  align-items: center;
+                  gap: 8px;
+                "
+              >
+                Setelan Harga & Barcode Khusus Supplier
+              </label>
+              <div
+                style="
+                  display: flex;
+                  gap: 12px;
+                  align-items: center;
+                  margin-top: 8px;
+                "
+              >
+                <select
+                  id="fSupplierContext"
+                  class="input-control"
+                  style="flex: 1; margin: 0"
+                  onchange="onSupplierContextChange()"
+                >
+                  <option value="">
+                    -- Harga Umum (Default Semua Supplier) --
+                  </option>
+                </select>
+                <div
+                  style="font-size: 12px; color: var(--text-muted); flex: 1.5"
+                >
+                  Pilih supplier untuk mengatur <b>Harga Modal</b> dan
+                  <b>Barcode</b> khusus dari supplier tersebut. Jika dibiarkan
+                  umum, semua supplier menggunakan harga yang sama.
+                </div>
+              </div>
+            </div>
+
             <div class="input-group">
               <label>Harga Modal (Beli)</label>
               <input
@@ -343,7 +548,21 @@
                 inputmode="numeric"
                 class="input-control"
                 value="0"
-                oninput="formatInputRibuan(this)"
+                oninput="
+                  formatInputRibuan(this);
+                  calcHJualFromMargin();
+                "
+              />
+            </div>
+            <div class="input-group">
+              <label>Margin (%)</label>
+              <input
+                id="fMargin"
+                type="number"
+                step="0.01"
+                class="input-control"
+                value="0"
+                oninput="calcHJualFromMargin()"
               />
             </div>
             <div class="input-group">
@@ -357,21 +576,143 @@
                 class="input-control"
                 value="0"
                 required
-                oninput="formatInputRibuan(this)"
+                oninput="
+                  formatInputRibuan(this);
+                  calcMarginFromHJual();
+                  updateDiscountPreview();
+                "
               />
             </div>
             <div class="input-group">
               <label style="color: #f59e0b; font-weight: bold"
                 >Harga Diskon / Grosir</label
               >
-              <input
-                id="fHJualDiskon"
-                type="text"
-                inputmode="numeric"
-                class="input-control"
-                value="0"
-                oninput="formatInputRibuan(this)"
-              />
+              <div style="display: flex; flex-direction: column; gap: 8px">
+                <div style="display: flex; align-items: center; gap: 10px">
+                  <input
+                    id="fHJualDiskon"
+                    type="text"
+                    inputmode="numeric"
+                    class="input-control"
+                    style="flex: 1; max-width: 200px; margin: 0"
+                    value="0"
+                    oninput="
+                      formatInputRibuan(this);
+                      updateDiscountPreview();
+                    "
+                  />
+                  <label
+                    style="
+                      display: flex;
+                      align-items: center;
+                      gap: 6px;
+                      font-size: 0.85em;
+                      cursor: pointer;
+                      color: var(--text-main);
+                      white-space: nowrap;
+                      font-weight: 600;
+                    "
+                  >
+                    <input
+                      type="checkbox"
+                      id="fIsDiscountable"
+                      onchange="updateDiscountPreview()"
+                      style="width: 16px; height: 16px"
+                    />
+                    Dapat Diskon Member
+                  </label>
+                </div>
+
+                <div
+                  id="groupDiscountSection"
+                  style="
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                    background: var(--bg);
+                    padding: 12px;
+                    border-radius: 8px;
+                    border: 1px dashed var(--border-color);
+                  "
+                >
+                  <div style="display: flex; gap: 8px; align-items: center">
+                    <select
+                      id="fDiscountGroupSelect"
+                      class="input-control"
+                      style="flex: 1.5; margin: 0"
+                      onchange="onGroupSelectChange()"
+                    >
+                      <option value="">Pilih Grup (Set Harga)</option>
+                    </select>
+                    <div
+                      style="
+                        display: flex;
+                        align-items: center;
+                        gap: 4px;
+                        flex: 1;
+                      "
+                    >
+                      <input
+                        id="fGroupPercentInput"
+                        type="number"
+                        step="0.01"
+                        class="input-control"
+                        style="width: 65px; text-align: center; margin: 0"
+                        placeholder="%"
+                        oninput="onGroupPercentInput()"
+                      />
+                      <span style="font-weight: bold; font-size: 0.9em">%</span>
+                    </div>
+                    <span
+                      style="font-weight: 900; color: #f59e0b; font-size: 1.2em"
+                      >➜</span
+                    >
+                    <div style="flex: 2; position: relative">
+                      <span
+                        style="
+                          position: absolute;
+                          left: 8px;
+                          top: 50%;
+                          transform: translateY(-50%);
+                          color: var(--text-muted);
+                          font-size: 0.85em;
+                        "
+                        >Rp</span
+                      >
+                      <input
+                        id="fGroupPriceInput"
+                        type="text"
+                        inputmode="numeric"
+                        class="input-control"
+                        style="
+                          padding-left: 28px;
+                          background-color: var(--bg);
+                          color: #10b981;
+                          font-weight: bold;
+                          text-align: right;
+                          margin: 0;
+                        "
+                        placeholder="Harga Final"
+                        oninput="
+                          formatInputRibuan(this);
+                          onGroupPriceInput();
+                        "
+                      />
+                    </div>
+                  </div>
+                  <div
+                    id="groupHint"
+                    style="
+                      font-size: 11px;
+                      color: var(--text-muted);
+                      font-style: italic;
+                      margin-left: 4px;
+                    "
+                  >
+                    Pilih grup untuk mengatur harga khusus (Default Bronze: 5%)
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -395,6 +736,30 @@
                 rows="1"
                 style="resize: vertical"
               ></textarea>
+            </div>
+          </div>
+
+          <!-- === PILIH SUPPLIER === -->
+          <div class="sup-selection-section">
+            <div class="sup-selection-header">
+              <label>🚚 Supplier Barang Ini</label>
+              <div class="sup-search-box">
+                <span class="sup-search-icon">🔍</span>
+                <input
+                  type="text"
+                  id="supSearchInput"
+                  class="sup-search-input"
+                  placeholder="Ketik nama supplier..."
+                  autocomplete="off"
+                />
+                <div id="supDropdown" class="sup-dropdown"></div>
+              </div>
+            </div>
+            <div id="selectedSupsContainer" class="selected-sups-container">
+              <span
+                style="color: var(--text-muted); font-size: 13px; padding: 4px"
+                >Belum ada supplier dipilih</span
+              >
             </div>
           </div>
 
@@ -500,7 +865,16 @@
         editKatId = null,
         editSatId = null,
         fromItemModal = false,
-        curTab = "brg";
+        curTab = "brg",
+        allGroups = [],
+        groupPrices = {}, // { groupName: price }
+        initialGroupPrices = {}, // { groupName: price } untuk deteksi perubahan
+        initialBuyPrice = 0,
+        initialSellPrice = 0,
+        supplierSettingsMap = {}, // { supplierId: { buy_price, barcode } }
+        generalBuyPrice = 0,
+        generalBarcode = "",
+        currentSupplierContext = ""; // "" for general, or supplierId as string
 
       // =======================================================================
       // 🛠️ FUNGSI FORMATTING ANGKA (TITIK RIBUAN)
@@ -647,21 +1021,27 @@
                     : `/unit_conversion?source_item_id=${i.id}`;
                   return `<tr>
                   <td>
-                    <b>${i.name}</b>
-                    ${i.is_virtual_variant ? '<span class="bi" style="margin-left:8px">Virtual</span>' : ""}
-                    ${i.barcode ? `<div style="font-family:monospace;font-size:12px;color:var(--text-muted)">${i.barcode}</div>` : ""}
-                    ${i.is_virtual_variant ? `<div style="font-size:12px;color:var(--text-muted)">Stok terikat ke barang induk</div>` : ""}
+                  <b>${i.name}</b>
+                  ${i.is_virtual_variant ? '<span class="bi" style="margin-left:8px">Virtual</span>' : ""}
+                  ${i.barcode ? `<div style="font-family:monospace;font-size:12px;color:var(--text-muted)">${i.barcode}</div>` : ""}
+                  ${i.is_virtual_variant ? `<div style="font-size:12px;color:var(--text-muted)">Stok terikat ke barang induk</div>` : ""}
                   </td>
                   <td style="font-size:14px">${i.category?.name || "-"}</td>
                   <td style="font-size:14px">${i.unit?.name || "-"}</td>
                   <td>${fmtRp(i.buy_price)}</td>
                   <td style="color:var(--primary);font-weight:700">${fmtRp(i.sell_price)}</td>
                   <td style="color:#f59e0b;font-weight:700">${diskon}</td>
-                  <td><span style="font-weight:700;color:${i.stock <= i.min_stock ? "#f59e0b" : "var(--text-main)"}">${Number.isInteger(Number(i.stock || 0)) ? Number(i.stock || 0) : Number(i.stock || 0).toFixed(4).replace(/\.?0+$/, "")}</span></td>
+                  <td><span style="font-weight:700;color:${i.stock <= i.min_stock ? "#f59e0b" : "var(--text-main)"}">${
+                    Number.isInteger(Number(i.stock || 0))
+                      ? Number(i.stock || 0)
+                      : Number(i.stock || 0)
+                          .toFixed(4)
+                          .replace(/\.?0+$/, "")
+                  }</span></td>
                   <td style="white-space:nowrap">
-                    ${i.is_virtual_variant ? "" : `<button class="bsm be" onclick='editItem(${JSON.stringify(i).replace(/"/g, "&quot;")})'>Edit</button>`}
-                    <button class="bsm bp" onclick="location.href='${manageUrl}'">${i.is_virtual_variant ? "Kelola Unit" : "Multi Satuan"}</button>
-                    ${i.is_virtual_variant ? "" : `<button class="bsm bd" onclick="toggleItem(${i.id},${i.is_active})">${i.is_active ? "Nonaktif" : "Aktifkan"}</button>`}
+                  ${i.is_virtual_variant ? "" : `<button class="bsm be" onclick='editItem(${i.id})'>Edit</button>`}
+                  <button class="bsm bp" onclick="location.href='${manageUrl}'">${i.is_virtual_variant ? "Kelola Unit" : "Multi Satuan"}</button>
+                  ${i.is_virtual_variant ? "" : `<button class="bsm bd" onclick="toggleItem(${i.id},${i.is_active})">${i.is_active ? "Nonaktif" : "Aktifkan"}</button>`}
                   </td></tr>`;
                 })
                 .join("")
@@ -671,18 +1051,382 @@
         }
       }
 
+      function onGroupSelectChange() {
+        const select = document.getElementById("fDiscountGroupSelect");
+        const priceInput = document.getElementById("fGroupPriceInput");
+        const percentInput = document.getElementById("fGroupPercentInput");
+        const hint = document.getElementById("groupHint");
+        const selOpt = select.options[select.selectedIndex];
+
+        if (!selOpt || !selOpt.value) {
+          priceInput.value = "";
+          percentInput.value = "";
+          hint.textContent =
+            "Pilih grup untuk mengatur harga khusus (Default Bronze: 5%)";
+          return;
+        }
+
+        const groupName = selOpt.getAttribute("data-name");
+        const defaultDisc = parseFloat(selOpt.getAttribute("data-disc")) || 0;
+        hint.textContent = `Mengatur harga untuk grup ${groupName} (Default: ${defaultDisc}%)`;
+
+        const hjualInput = document.getElementById("fHJual");
+        const hjualDiskonInput = document.getElementById("fHJualDiskon");
+        const checkbox = document.getElementById("fIsDiscountable");
+
+        let normalPrice = toAngka(hjualInput.value);
+        let baseDiscountPrice = toAngka(hjualDiskonInput.value);
+        let basePrice =
+          baseDiscountPrice > 0 && checkbox.checked
+            ? baseDiscountPrice
+            : normalPrice;
+
+        // Cari di groupPrices secara case-insensitive
+        const key = groupName.toLowerCase();
+        if (groupPrices[key] !== undefined) {
+          let p = groupPrices[key];
+          priceInput.value = toRibuan(p);
+          let pct = basePrice > 0 ? ((basePrice - p) / basePrice) * 100 : 0;
+          percentInput.value = pct.toFixed(2).replace(/\.00$/, "");
+        } else {
+          percentInput.value = defaultDisc;
+          let finalPrice = Math.round(
+            basePrice - (basePrice * defaultDisc) / 100,
+          );
+          priceInput.value = toRibuan(finalPrice);
+        }
+      }
+
+      function onGroupPercentInput() {
+        const select = document.getElementById("fDiscountGroupSelect");
+        const priceInput = document.getElementById("fGroupPriceInput");
+        const percentInput = document.getElementById("fGroupPercentInput");
+        const selOpt = select.options[select.selectedIndex];
+        if (!selOpt || !selOpt.value) return;
+
+        const pct = parseFloat(percentInput.value) || 0;
+        const hjualInput = document.getElementById("fHJual");
+        const hjualDiskonInput = document.getElementById("fHJualDiskon");
+        const checkbox = document.getElementById("fIsDiscountable");
+
+        let normalPrice = toAngka(hjualInput.value);
+        let baseDiscountPrice = toAngka(hjualDiskonInput.value);
+        let basePrice =
+          baseDiscountPrice > 0 && checkbox.checked
+            ? baseDiscountPrice
+            : normalPrice;
+
+        let finalPrice = Math.round(basePrice - (basePrice * pct) / 100);
+        priceInput.value = toRibuan(finalPrice);
+
+        groupPrices[selOpt.getAttribute("data-name").toLowerCase()] =
+          finalPrice;
+      }
+
+      function onGroupPriceInput() {
+        const select = document.getElementById("fDiscountGroupSelect");
+        const priceInput = document.getElementById("fGroupPriceInput");
+        const percentInput = document.getElementById("fGroupPercentInput");
+        const selOpt = select.options[select.selectedIndex];
+        if (!selOpt || !selOpt.value) return;
+
+        const finalPrice = toAngka(priceInput.value);
+        const hjualInput = document.getElementById("fHJual");
+        const hjualDiskonInput = document.getElementById("fHJualDiskon");
+        const checkbox = document.getElementById("fIsDiscountable");
+
+        let normalPrice = toAngka(hjualInput.value);
+        let baseDiscountPrice = toAngka(hjualDiskonInput.value);
+        let basePrice =
+          baseDiscountPrice > 0 && checkbox.checked
+            ? baseDiscountPrice
+            : normalPrice;
+
+        let pct =
+          basePrice > 0 ? ((basePrice - finalPrice) / basePrice) * 100 : 0;
+        percentInput.value = pct.toFixed(2).replace(/\.00$/, "");
+
+        groupPrices[selOpt.getAttribute("data-name").toLowerCase()] =
+          finalPrice;
+      }
+
+      let lastBasePrice = 0;
+      function getBasePrice() {
+        const hjualInput = document.getElementById("fHJual");
+        const hjualDiskonInput = document.getElementById("fHJualDiskon");
+        const checkbox = document.getElementById("fIsDiscountable");
+        let normalPrice = toAngka(hjualInput?.value);
+        let baseDiscountPrice = toAngka(hjualDiskonInput?.value);
+        return baseDiscountPrice > 0 && checkbox?.checked
+          ? baseDiscountPrice
+          : normalPrice;
+      }
+
+      function syncGroupPricesProportionally() {
+        const newBasePrice = getBasePrice();
+        if (
+          lastBasePrice > 0 &&
+          newBasePrice > 0 &&
+          lastBasePrice !== newBasePrice
+        ) {
+          const ratio = newBasePrice / lastBasePrice;
+          for (let key in groupPrices) {
+            // Kunci Persentase: Update harga rupiah grup berdasarkan rasio perubahan harga normal
+            groupPrices[key] = Math.round(groupPrices[key] * ratio);
+          }
+        }
+        lastBasePrice = newBasePrice;
+      }
+
+      function updateDiscountPreview() {
+        syncGroupPricesProportionally();
+        onGroupSelectChange();
+      }
+
+      async function loadCustomerGroups() {
+        try {
+          const groups = await api("GET", "/customers/groups");
+          allGroups = groups;
+          const select = document.getElementById("fDiscountGroupSelect");
+          const oldVal = select.value;
+          select.innerHTML =
+            '<option value="">Pilih Grup (Set Harga)</option>' +
+            groups
+              .map(
+                (g) =>
+                  `<option value="${g.id}" data-name="${g.name}" data-disc="${g.discount_percent}">${g.name}</option>`,
+              )
+              .join("");
+          select.value = oldVal;
+        } catch (ex) {
+          console.error("Gagal load grup:", ex);
+        }
+      }
+
+      // =======================================================================
+      // 🚚 LOGIKA PILIH SUPPLIER (MULTI-SELECT)
+      // =======================================================================
+      let allSups = [];
+      let selectedSups = new Map();
+      let supSearchTimeout;
+
+      async function loadSuppliers() {
+        try {
+          const res = await api("GET", "/suppliers/?limit=500");
+          allSups = Array.isArray(res) ? res : res.data || [];
+        } catch (e) {
+          console.error("Gagal load suppliers:", e);
+        }
+      }
+
+      function setupSupSearch() {
+        const input = document.getElementById("supSearchInput");
+        const dropdown = document.getElementById("supDropdown");
+        input.addEventListener("focus", () => {
+          renderSupDropdown(input.value);
+          dropdown.classList.add("show");
+        });
+        input.addEventListener("input", () => {
+          clearTimeout(supSearchTimeout);
+          supSearchTimeout = setTimeout(() => {
+            renderSupDropdown(input.value);
+          }, 150);
+        });
+        document.addEventListener("click", (e) => {
+          if (!input.contains(e.target) && !dropdown.contains(e.target))
+            dropdown.classList.remove("show");
+        });
+      }
+
+      function renderSupDropdown(searchText = "") {
+        const dropdown = document.getElementById("supDropdown");
+        const search = searchText.toLowerCase().trim();
+        const available = allSups.filter(
+          (s) =>
+            !selectedSups.has(s.id) &&
+            (s.name.toLowerCase().includes(search) ||
+              (s.code && s.code.toLowerCase().includes(search))),
+        );
+        if (available.length === 0) {
+          dropdown.innerHTML = `<div class="sup-dropdown-empty">${search ? "Tidak ditemukan" : "Semua supplier sudah ditambahkan"}</div>`;
+          dropdown.classList.add("show");
+          return;
+        }
+        dropdown.innerHTML = available
+          .slice(0, 50)
+          .map(
+            (s) => `
+          <div class="sup-dropdown-item" data-id="${s.id}">
+            <span>${s.name}${s.code ? ` <small>[${s.code}]</small>` : ""}</span>
+            <button type="button" class="sup-add-btn" onclick="addSupToSelectionById(${s.id})">+</button>
+          </div>`,
+          )
+          .join("");
+        dropdown.classList.add("show");
+      }
+
+      window.addSupToSelectionById = function (id) {
+        const s = allSups.find((x) => x.id === id);
+        if (s) {
+          selectedSups.set(s.id, { id: s.id, name: s.name, code: s.code });
+          renderSelectedSups();
+          document.getElementById("supSearchInput").value = "";
+          document.getElementById("supDropdown").classList.remove("show");
+        }
+      };
+
+      function removeSupFromSelection(sId) {
+        selectedSups.delete(sId);
+        renderSelectedSups();
+      }
+
+      function onSupplierContextChange() {
+        const select = document.getElementById("fSupplierContext");
+        const nextSupplierId = select.value; // string ID atau ""
+        const oldContext = currentSupplierContext; // string ID atau ""
+
+        // 1. Simpan data dari konteks LAMA (yang sedang tampil sekarang)
+        const currentHBeli = toAngka(document.getElementById("fHBeli").value);
+        const currentBarcode = document.getElementById("fBarcode").value;
+        const isAuto = document.getElementById("autoBarcode").checked;
+        const finalBarcode = isAuto ? "" : currentBarcode;
+
+        if (oldContext === "") {
+          // Simpan ke data Umum
+          generalBuyPrice = currentHBeli;
+          generalBarcode = finalBarcode;
+        } else {
+          // Simpan ke data Supplier spesifik
+          supplierSettingsMap[oldContext] = {
+            buy_price: currentHBeli,
+            barcode: finalBarcode,
+          };
+        }
+
+        // 2. Muat data untuk konteks BARU
+        let targetHBeli, targetBarcode;
+
+        if (nextSupplierId === "") {
+          // Balik ke Harga Umum
+          targetHBeli = generalBuyPrice;
+          targetBarcode = generalBarcode;
+        } else {
+          // Ambil data suplier dari map
+          // Jika belum ada di map, gunakan harga umum sebagai default awal
+          const s = supplierSettingsMap[nextSupplierId];
+          if (s) {
+            targetHBeli = s.buy_price;
+            targetBarcode = s.barcode;
+          } else {
+            targetHBeli = generalBuyPrice;
+            targetBarcode = generalBarcode;
+          }
+        }
+
+        // 3. Tampilkan ke UI
+        document.getElementById("fHBeli").value = toRibuan(targetHBeli);
+        document.getElementById("fBarcode").value = targetBarcode || "";
+        document.getElementById("autoBarcode").checked = !(
+          targetBarcode && targetBarcode.trim() !== ""
+        );
+
+        // Update state konteks sekarang
+        currentSupplierContext = nextSupplierId;
+
+        // 4. Update UI pendukung
+        toggleBarcodeUI();
+
+        // KRUSIAL: Saat ganti suplier, kita ingin Harga Jual TETAP,
+        // tapi Margin yang menyesuaikan (karena harga modal suplier beda-beda).
+        calcMarginFromHJual();
+      }
+
+      function updateSupplierContextDropdown() {
+        const select = document.getElementById("fSupplierContext");
+        const oldVal = select.value;
+        let html =
+          '<option value="">-- Harga Umum (Default Semua Supplier) --</option>';
+        selectedSups.forEach((s) => {
+          html += `<option value="${s.id}">🚚 ${s.name}</option>`;
+        });
+        select.innerHTML = html;
+        // Pastikan nilai terpilih masih ada, jika tidak reset ke umum
+        if (Array.from(selectedSups.keys()).map(String).includes(oldVal)) {
+          select.value = oldVal;
+        } else {
+          select.value = "";
+          if (currentSupplierContext !== "") onSupplierContextChange();
+        }
+      }
+
+      function renderSelectedSups() {
+        const container = document.getElementById("selectedSupsContainer");
+        if (selectedSups.size === 0) {
+          container.innerHTML = `<span style="color:var(--text-muted);font-size:13px;padding:4px;">Belum ada supplier dipilih</span>`;
+          updateSupplierContextDropdown();
+          return;
+        }
+        container.innerHTML = Array.from(selectedSups.values())
+          .map(
+            (s) => `
+          <span class="sup-chip">
+            <span class="chip-name">${s.name}</span>
+            <button type="button" class="chip-remove" onclick="removeSupFromSelection(${s.id})">×</button>
+          </span>`,
+          )
+          .join("");
+        updateSupplierContextDropdown();
+      }
+
+      // =======================================================================
+      // 📈 FUNGSI KALKULASI MARGIN PROFIT
+      // =======================================================================
+      function calcHJualFromMargin() {
+        const hBeli = toAngka(document.getElementById("fHBeli").value) || 0;
+        const margin =
+          parseFloat(document.getElementById("fMargin").value) || 0;
+        const hJual = Math.round(hBeli + (hBeli * margin) / 100);
+        document.getElementById("fHJual").value = toRibuan(hJual);
+        updateDiscountPreview();
+      }
+
+      function calcMarginFromHJual() {
+        const hBeli = toAngka(document.getElementById("fHBeli").value) || 0;
+        const hJual = toAngka(document.getElementById("fHJual").value) || 0;
+        if (hBeli > 0) {
+          const margin = ((hJual - hBeli) / hBeli) * 100;
+          document.getElementById("fMargin").value = margin
+            .toFixed(2)
+            .replace(/\.00$/, "");
+        } else {
+          document.getElementById("fMargin").value = "0";
+        }
+      }
+
       function openItemModal(item = null) {
         editItemId = null;
         document.getElementById("mBarangTitle").textContent = "Tambah Barang";
         document.getElementById("fBarang").reset();
         document.getElementById("autoBarcode").checked = true;
         toggleBarcodeUI();
-
-        // Default value dengan format titik
         document.getElementById("fHBeli").value = "0";
+        document.getElementById("fMargin").value = "0";
         document.getElementById("fHJual").value = "0";
         document.getElementById("fHJualDiskon").value = "0";
         document.getElementById("fStokMin").value = "0";
+        document.getElementById("fIsDiscountable").checked = false;
+        document.getElementById("fDiscountGroupSelect").selectedIndex = 0;
+        document.getElementById("fGroupPriceInput").value = "";
+        document.getElementById("fGroupPercentInput").value = "";
+        groupPrices = {};
+        selectedSups.clear();
+        supplierSettingsMap = {};
+        generalBuyPrice = 0;
+        generalBarcode = "";
+        currentSupplierContext = "";
+        document.getElementById("fSupplierContext").value = "";
+        renderSelectedSups();
+        document.getElementById("supSearchInput").value = "";
 
         if (item) {
           editItemId = item.id;
@@ -690,67 +1434,181 @@
           document.getElementById("fNama").value = item.name;
           document.getElementById("fKat").value = item.category_id || "";
           document.getElementById("fSat").value = item.unit_id || "";
+          if (item.is_discountable !== undefined)
+            document.getElementById("fIsDiscountable").checked =
+              item.is_discountable;
 
-          // Masukkan data dengan format titik
           document.getElementById("fHBeli").value = toRibuan(item.buy_price);
           document.getElementById("fHJual").value = toRibuan(item.sell_price);
+
+          generalBuyPrice = parseFloat(item.buy_price) || 0;
+          generalBarcode = item.barcode || "";
+
+          initialBuyPrice = generalBuyPrice;
+          initialSellPrice = parseFloat(item.sell_price) || 0;
+          initialGroupPrices = {};
+
+          // Kalkulasi ulang margin dari harga yang ada agar akurat
+          const hb = initialBuyPrice;
+          const hj = initialSellPrice;
+          if (hb > 0) {
+            const m = ((hj - hb) / hb) * 100;
+            document.getElementById("fMargin").value = m
+              .toFixed(2)
+              .replace(/\.00$/, "");
+          } else {
+            document.getElementById("fMargin").value = "0";
+          }
+
           document.getElementById("fStokMin").value = toRibuan(item.min_stock);
           document.getElementById("fDesk").value = item.description || "";
-
           if (item.barcode && item.barcode.trim() !== "") {
             document.getElementById("autoBarcode").checked = false;
             toggleBarcodeUI();
             document.getElementById("fBarcode").value = item.barcode;
           }
-
           if (item.prices && item.prices.length > 0) {
-            const dPrice = item.prices.find((p) => p.name === "Harga Diskon");
-            if (dPrice)
-              document.getElementById("fHJualDiskon").value = toRibuan(
-                dPrice.price,
-              );
+            item.prices.forEach((p) => {
+              if (p.name === "Harga Diskon")
+                document.getElementById("fHJualDiskon").value = toRibuan(
+                  p.price,
+                );
+              else {
+                const key = p.name.toLowerCase();
+                groupPrices[key] = p.price;
+                initialGroupPrices[key] = p.price;
+              }
+            });
           }
+          if (item.suppliers && item.suppliers.length > 0) {
+            item.suppliers.forEach((s) => {
+              selectedSups.set(s.id, {
+                id: s.id,
+                name: s.name,
+                code: s.code || "",
+              });
+            });
+          }
+          if (item.supplier_details && item.supplier_details.length > 0) {
+            item.supplier_details.forEach((d) => {
+              supplierSettingsMap[d.supplier_id] = {
+                buy_price: d.buy_price,
+                barcode: d.barcode,
+              };
+            });
+          }
+          renderSelectedSups();
         }
+        updateDiscountPreview();
         openModal("mBarang");
         setTimeout(() => document.getElementById("fNama").focus(), 100);
       }
 
-      function editItem(i) {
-        openItemModal(i);
+      async function editItem(id) {
+        try {
+          showLoading("Memuat data...");
+          const item = await api("GET", `/items/${id}`);
+          hideLoading();
+          openItemModal(item);
+        } catch (e) {
+          hideLoading();
+          showToast("Gagal memuat detail barang: " + e.message, "error");
+        }
       }
 
       async function saveItem(e) {
         e.preventDefault();
-        let multi_prices = [];
 
-        // Hapus titik sebelum simpan ke database
+        // 0. Simpan context terakhir sebelum gather data
+        const lastSupplierId =
+          document.getElementById("fSupplierContext").value;
+        const lastBuyPrice = toAngka(document.getElementById("fHBeli").value);
+        const lastBarcode = document.getElementById("fBarcode").value;
+
+        if (lastSupplierId === "") {
+          generalBuyPrice = lastBuyPrice;
+          generalBarcode = lastBarcode;
+        } else {
+          supplierSettingsMap[lastSupplierId] = {
+            buy_price: lastBuyPrice,
+            barcode: lastBarcode,
+          };
+        }
+
+        const sellPrice = toAngka(document.getElementById("fHJual").value);
+
+        // Notifikasi konfirmasi jika ada perubahan harga beli/jual utama
+        if (editItemId) {
+          if (
+            generalBuyPrice !== initialBuyPrice ||
+            sellPrice !== initialSellPrice
+          ) {
+            let msg = "Deteksi perubahan harga UTAMA:\n";
+            if (generalBuyPrice !== initialBuyPrice)
+              msg += `- Harga Beli: ${fmtRp(initialBuyPrice)} ➜ ${fmtRp(generalBuyPrice)}\n`;
+            if (sellPrice !== initialSellPrice)
+              msg += `- Harga Jual: ${fmtRp(initialSellPrice)} ➜ ${fmtRp(sellPrice)}\n`;
+            msg +=
+              "\nApakah Anda yakin ingin menyimpan perubahan harga utama ini?";
+            if (!(await showConfirm(msg))) return;
+          }
+          // ... (logika cek perubahan harga grup tetap sama)
+        }
+
+        let multi_prices = [];
         const valDiskon = toAngka(
           document.getElementById("fHJualDiskon").value,
         );
-
-        if (valDiskon > 0) {
+        if (valDiskon > 0)
           multi_prices.push({
             name: "Harga Diskon",
             price: valDiskon,
             min_qty: 1,
           });
+        for (const [lowerName, price] of Object.entries(groupPrices)) {
+          if (price > 0 && lowerName !== "harga diskon") {
+            const g = allGroups.find((x) => x.name.toLowerCase() === lowerName);
+            multi_prices.push({
+              name: g ? g.name : lowerName,
+              price: price,
+              min_qty: 1,
+            });
+          }
         }
+
+        // Build supplier_settings array - PASTI sertakan SEMUA yang terpilih
+        let settingsArr = [];
+        selectedSups.forEach((sVal, sid) => {
+          // Cari di map (bisa index number atau string)
+          const s = supplierSettingsMap[sid] ||
+            supplierSettingsMap[sid.toString()] || {
+              buy_price: generalBuyPrice,
+              barcode: generalBarcode,
+            };
+          settingsArr.push({
+            supplier_id: sid,
+            buy_price: s.buy_price,
+            barcode: s.barcode || null,
+          });
+        });
 
         const p = {
           code: "AUTO",
-          barcode: document.getElementById("autoBarcode").checked
-            ? "AUTO"
-            : document.getElementById("fBarcode").value.trim(),
+          barcode: generalBarcode || "AUTO",
           name: document.getElementById("fNama").value,
           category_id: parseInt(document.getElementById("fKat").value) || null,
           unit_id: parseInt(document.getElementById("fSat").value) || null,
-          buy_price: toAngka(document.getElementById("fHBeli").value),
-          sell_price: toAngka(document.getElementById("fHJual").value),
+          buy_price: generalBuyPrice,
+          sell_price: sellPrice,
+          profit_margin:
+            parseFloat(document.getElementById("fMargin").value) || 0,
           min_stock: toAngka(document.getElementById("fStokMin").value),
           description: document.getElementById("fDesk").value || null,
+          is_discountable: document.getElementById("fIsDiscountable").checked,
+          supplier_ids: Array.from(selectedSups.keys()),
+          supplier_settings: settingsArr,
           prices: multi_prices,
         };
-
         try {
           if (editItemId) await api("PUT", `/items/${editItemId}`, p);
           else await api("POST", "/items/", p);
@@ -935,6 +1793,9 @@
 
       refreshSelects();
       loadItems();
+      loadCustomerGroups();
+      loadSuppliers();
+      setupSupSearch();
     </script>
   </body>
 </html>

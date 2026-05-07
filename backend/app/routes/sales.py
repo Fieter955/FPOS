@@ -25,6 +25,35 @@ from .accounting import create_auto_journal  # ✅ Import di atas, sekali saja
 
 router = APIRouter()
 
+
+def _is_admin_user(user: models.User) -> bool:
+    return "admin" in (user.role or "")
+
+
+def _sale_out_for_user(sale: models.Sale, current_user: models.User):
+    data = schemas.SaleOut.model_validate(sale).model_dump()
+    for line in data.get("items") or []:
+        qty = float(line.get("qty") or 0)
+        buy_price = float(line.get("buy_price") or 0)
+        line_total = float(line.get("total") or 0)
+        margin_amount = line_total - (buy_price * qty)
+        line["margin_amount"] = round(margin_amount, 2)
+        line["margin_percent"] = (
+            round((margin_amount / (buy_price * qty)) * 100, 2)
+            if buy_price > 0 and qty > 0
+            else (100 if margin_amount > 0 else 0)
+        )
+
+    if not _is_admin_user(current_user):
+        for line in data.get("items") or []:
+            line["buy_price"] = 0
+            line["margin_amount"] = 0
+            line["margin_percent"] = 0
+            item = line.get("item")
+            if item:
+                item["buy_price"] = 0
+    return data
+
 # ── Zona Waktu ────────────────────────────────────────────────────────────────
 WITA = pytz.timezone("Asia/Makassar")
 
@@ -102,7 +131,8 @@ def get_sales(
     if end_date:   q = q.filter(models.Sale.date <= end_date)
     if customer_id: q = q.filter(models.Sale.customer_id == customer_id)
     if status:     q = q.filter(models.Sale.status == status)
-    return q.order_by(models.Sale.id.desc()).offset(skip).limit(limit).all()
+    sales = q.order_by(models.Sale.id.desc()).offset(skip).limit(limit).all()
+    return [_sale_out_for_user(sale, current_user) for sale in sales]
 
 
 @router.get("/{sid}", response_model=schemas.SaleOut)
@@ -114,7 +144,7 @@ def get_sale(
     obj = get_query(db, models.Sale, current_user).filter(models.Sale.id == sid).first()
     if not obj:
         raise HTTPException(404, "Penjualan tidak ditemukan")
-    return obj
+    return _sale_out_for_user(obj, current_user)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -288,7 +318,7 @@ def create_sale(
 
     db.commit()
     db.refresh(sale)
-    return sale
+    return _sale_out_for_user(sale, current_user)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

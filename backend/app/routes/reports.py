@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import func, String, cast
 from typing import Optional
@@ -24,6 +24,15 @@ WITA = pytz.timezone("Asia/Makassar")
 def get_local_date():
     return datetime.now(WITA).date()
 
+
+def _is_admin_user(user: models.User) -> bool:
+    return "admin" in (user.role or "")
+
+
+def _require_financial_report_access(user: models.User):
+    if not _is_admin_user(user):
+        raise HTTPException(403, "Akses laporan modal/HPP/laba hanya untuk admin")
+
 # ─── 1. DASHBOARD KPI (UTAMA) ────────────────────────────────────────────────
 @router.get("/dashboard")
 def get_dashboard_data(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
@@ -45,9 +54,11 @@ def get_dashboard_data(db: Session = Depends(get_db), current_user: models.User 
     ).count()
 
     # 👇 BARU: Ambil Laba Bersih Bulan Ini dari Modul Akuntansi
-    start_month = today_local.replace(day=1)
-    acc_report = get_income_statement(start_date=start_month, end_date=today_local, db=db, current_user=current_user)
-    net_profit_month = acc_report.get("net_profit", 0)
+    net_profit_month = 0
+    if _is_admin_user(current_user):
+        start_month = today_local.replace(day=1)
+        acc_report = get_income_statement(start_date=start_month, end_date=today_local, db=db, current_user=current_user)
+        net_profit_month = acc_report.get("net_profit", 0)
 
     # Hitung stok menipis berdasarkan Gudang Cabang Aktif
     low_stock_count = 0
@@ -132,23 +143,34 @@ def profit_loss(
     current_user: models.User = Depends(get_current_user)
 ):
     # 👇 REVISI TOTAL: Tanya langsung ke modul akuntansi
+    _require_financial_report_access(current_user)
     acc_data = get_income_statement(start_date=start_date, end_date=end_date, db=db, current_user=current_user)
+    period_start = start_date or get_local_date().replace(day=1)
+    period_end = end_date or get_local_date()
+    total_purchases = get_query(db, models.Purchase, current_user).filter(
+        models.Purchase.date >= period_start,
+        models.Purchase.date <= period_end,
+        models.Purchase.status != "cancelled"
+    ).with_entities(func.sum(models.Purchase.total)).scalar() or 0
     
     return {
         # Format Baru (Lengkap)
         "total_revenue": acc_data.get("total_revenue", 0),
         "total_cogs": acc_data.get("total_cogs", 0),
+        "gross_profit": acc_data.get("gross_profit", 0),
         "total_operating_expense": acc_data.get("total_operating_expense", 0),
         "total_other_expense": acc_data.get("total_other_expense", 0),
         "net_profit": acc_data.get("net_profit", 0),
         "period": acc_data.get("period"),
         
         # Format Lama (Backward Compatibility untuk mencegah Frontend Error)
+        "total_sales": acc_data.get("total_revenue", 0),
+        "total_purchases": float(total_purchases),
         "hpp": acc_data.get("total_cogs", 0), 
         "expenses": acc_data.get("total_operating_expense", 0) + acc_data.get("total_other_expense", 0),
         "transaction_count": get_query(db, models.Sale, current_user).filter(
-            models.Sale.date >= (start_date or get_local_date().replace(day=1)), 
-            models.Sale.date <= (end_date or get_local_date()),
+            models.Sale.date >= period_start,
+            models.Sale.date <= period_end,
             models.Sale.status != "cancelled"
         ).count()
     }
@@ -231,6 +253,7 @@ def get_sales_detailed(
 # ─── 5. INVENTORY VALUATION ──────────────────────────────────────────────────
 @router.get("/inventory-valuation")
 def get_inventory_valuation(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    _require_financial_report_access(current_user)
     # Calculate stock value based on buy_price
     # If branch active, filter by warehouse stocks
     if current_user.active_branch_id:
@@ -284,6 +307,7 @@ def export_full_report(
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(get_current_user)
 ):
+    _require_financial_report_access(current_user)
     today_local = get_local_date()
     if not start_date: start_date = today_local.replace(day=1)
     if not end_date: end_date = today_local
