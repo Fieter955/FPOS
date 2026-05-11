@@ -90,12 +90,12 @@
           />
         </div>
         <div class="input-group">
-          <label>Alamat Lengkap</label>
+          <label>Alamat Lengkap *</label>
           <textarea
             id="cAddress"
             class="input-control"
             rows="2"
-            placeholder="Opsional"
+            placeholder="Wajib diisi"
           ></textarea>
         </div>
 
@@ -211,9 +211,14 @@
       async function simpanCabang() {
         const id = document.getElementById("cId").value;
         const name = document.getElementById("cName").value.trim();
+        const address = document.getElementById("cAddress").value.trim();
 
         if (!name) {
           showToast("Nama Cabang wajib diisi!", "error");
+          return;
+        }
+        if (!address) {
+          showToast("Alamat Cabang wajib diisi!", "error");
           return;
         }
 
@@ -221,7 +226,7 @@
           code: "AUTO", // Kode dummy agar lolos validasi skema Pydantic di Backend
           name: name,
           phone: document.getElementById("cPhone").value.trim(),
-          address: document.getElementById("cAddress").value.trim(),
+          address: address,
         };
 
         try {

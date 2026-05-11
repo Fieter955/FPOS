@@ -1200,7 +1200,45 @@
 
       function openCoaModal() {
         editCoaId = null;
+        document.getElementById("mCoaTitle").textContent = "Tambah Akun";
+        document.getElementById("coaId").value = "";
+        document.getElementById("coaKode").value = "";
+        document.getElementById("coaNama").value = "";
+        document.getElementById("coaTipe").value = "asset";
         openModal("mCoa");
+      }
+      async function editCoa(a) {
+        editCoaId = a.id;
+        document.getElementById("mCoaTitle").textContent = "Edit Akun";
+        document.getElementById("coaId").value = a.id;
+        document.getElementById("coaKode").value = a.code;
+        document.getElementById("coaNama").value = a.name;
+        document.getElementById("coaTipe").value = a.type;
+        openModal("mCoa");
+      }
+      async function saveCoa() {
+        const code = document.getElementById("coaKode").value.trim(),
+          name = document.getElementById("coaNama").value.trim();
+        if (!code || !name) {
+          showToast("Kode dan nama wajib diisi", "error");
+          return;
+        }
+        const data = {
+          code,
+          name,
+          type: document.getElementById("coaTipe").value,
+        };
+        try {
+          if (editCoaId)
+            await api("PUT", `/accounting/accounts/${editCoaId}`, data);
+          else await api("POST", "/accounting/accounts", data);
+          showToast("Berhasil!");
+          closeModal("mCoa");
+          loadCoa();
+          loadAkunSelect();
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
       }
       function closeModal(id) {
         document.getElementById(id).style.display = "none";

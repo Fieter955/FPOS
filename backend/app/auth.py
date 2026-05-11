@@ -100,11 +100,15 @@ def write_audit(db: Session, user_id: int, action: str, table: str,
 def get_query(db: Session, model, current_user: models.User):
     q = db.query(model)
     
-    if hasattr(model, 'branch_id'):
-        if current_user.active_branch_id is not None:
-            # Tampilkan data cabang ini ATAU data yang branch_id-nya NULL (data lama/global)
-            q = q.filter(
-                (model.branch_id == current_user.active_branch_id) |
-                (model.branch_id == None)
-            )
+    if current_user.active_branch_id is not None:
+        if hasattr(model, 'branch_id'):
+            # Filter berdasarkan cabang asal (branch_id)
+            criteria = (model.branch_id == current_user.active_branch_id) | (model.branch_id == None)
+            
+            # Kasus khusus Pembelian/PO: Jika cabang ini adalah TUJUAN (target_branch_id), dia juga harus bisa melihatnya
+            if hasattr(model, 'target_branch_id'):
+                criteria |= (model.target_branch_id == current_user.active_branch_id)
+                
+            q = q.filter(criteria)
+            
     return q

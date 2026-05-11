@@ -669,3 +669,60 @@ pada purchase.html bagian pop up nya di antara harga beli dan harga jual ada per
 di setting bisa di ceklis terkait aturan diskon mau diterapin apa engga, dan kasih juga opsi buat setting harga broze dll yang mana entar diarahkan ke menu pelanggan grup diskon (biar ga buat tampilan baru)
 
 pikirin kira kira kalo gnetik sendiri tanpa barcode, barang itu diambil dari suplier mana? karna harga beli awalnya beda2
+
+#### 10 Mei 2026
+
+done
+**Setting Multi Cabang (Mandatory Address)**: Sekarang setiap penambahan cabang baru wajib mengisi alamat lengkap. Alamat ini akan disimpan di database cabang tersebut dan digunakan sebagai alamat tujuan pengiriman pada faktur.
+
+done
+**Export PDF Faktur Pembelian**: Menambahkan fitur cetak PDF profesional di menu `purchases.html`. PDF menampilkan Detail Supplier, Alamat Cabang Tujuan, Daftar Barang (Qty & Harga Beli), dan Total. Harga jual disembunyikan untuk menjaga kerahasiaan internal.
+
+done
+**Fix Database Inconsistency**: Menambahkan kolom `disc1` dan `disc2` pada tabel `purchase_items` di `ipos.db` untuk memperbaiki error 500 saat memuat data pembelian.
+
+done
+**Knowledge Base (GEMINI.md & README.md)**: Membuat dokumentasi terpusat agar AI CLI berikutnya lebih pintar memahami alur logika proyek (seperti sinkronisasi schema dan validasi alamat).
+
+#### 10 Mei 2026 (Fixing PO & Documentation)
+
+- **Fix po.html**: Memperbaiki mismatch nama fungsi `hitungTotal` -> `hitungGrandTotal` yang menyebabkan error pada input diskon/PPN.
+- **Improved Export PDF**: Mengaktifkan tombol Export PDF secara default dengan validasi internal (toast warning) jika data belum disimpan, meningkatkan user experience.
+- **Documentation Update**: Menambahkan standar "Event Handler Precision" dan "State-Based UI" di `README.md` sebagai panduan pengembangan UI ke depannya.
+
+- **Fix UNIQUE Constraint Error**: Memperbaiki error `IntegrityError: UNIQUE constraint failed: purchases.number` saat memproses PO menjadi Pembelian. Masalah disebabkan karena nomor PO terbawa ke form Pembelian baru. Sekarang `createOrderManager` akan mengosongkan kolom nomor jika mendeteksi mode `from_po`, sehingga backend akan men-generate nomor faktur baru yang unik.
+- **Improved OrderManager Logic**: Memperbaiki konversi nominal diskon/tax dari database menjadi persentase di UI agar perhitungan Grand Total tetap akurat saat mengedit atau memproses draft/PO.
+
+- **Fix Alamat Cabang di PDF**: Memperbaiki logika `generatePurchaseHTML` di `js/print.js` agar selalu menampilkan alamat cabang yang memesan (requester) pada dokumen PO, dan alamat cabang tujuan pada dokumen Faktur Pembelian (fulfillment). Sebelumnya, PDF seringkali salah menampilkan alamat Pusat jika request ditujukan ke Pusat.
+- **PO Fulfillment Enhancement**: `catat-pembelian.html` sekarang otomatis menangkap `branch_id` dari PO asal dan menyimpannya sebagai `target_branch_id` pada faktur baru. Hal ini memungkinkan sistem untuk melacak tujuan pengiriman barang meskipun transaksi dicatat oleh admin di Pusat.
+
+- **Payment Restriction for Branch Requests**: Membatasi tombol "Bayar" pada `purchases.html`. Jika transaksi ditandai sebagai **📦 PO** (is_branch_request), maka tombol bayar hanya akan muncul bagi user di **Toko Pusat (ID 1)**. User Cabang tidak bisa membayar transaksi ini karena secara akuntansi Pusat-lah yang menalangi pembayarannya ke supplier.
+- **Automated PO Routing**: Halaman `po.html` sekarang otomatis mengarahkan permintaan ke Pusat (ID 1) jika diakses oleh Cabang, menyembunyikan pilihan target cabang untuk menyederhanakan alur kerja.
+
+- **Fix PO Finalization Logic**: Memperbaiki error "Hanya faktur draft yang bisa diedit" saat Pusat memproses permintaan (PO) dari cabang. Sekarang backend mengizinkan status `pending` untuk diupdate menjadi `paid` atau `draft` Pusat. Proses ini secara otomatis memindahkan kepemilikan faktur ke Pusat namun tetap mengirimkan stok ke cabang pemesan.
+- **Dashboard PO Badge**: Menambahkan notifikasi angka _real-time_ pada menu Pre-Order di `dashboard.html` untuk memberitahu Toko Utama jika ada permintaan baru dari cabang yang perlu diproses.
+
+#### 10 Mei 2026 (Finalisasi PO Workflow & Inter-Branch Accounting)
+
+- **Inter-Branch Accounting**: Berhasil mengimplementasikan pemisahan jurnal otomatis. Pusat menalangi pembayaran (`Mutasi Keluar`), Cabang menerima barang (`Mutasi Masuk`). Saldo kas Cabang tetap aman, sedangkan stok bertambah di gudang yang benar.
+- **Ownership & Routing**: Permintaan cabang otomatis diarahkan ke Pusat (ID 1). Saat Pusat memproses, `branch_id` faktur otomatis berpindah ke Pusat untuk keperluan administratif keuangan, namun `target_branch_id` tetap mencatat asal permintaan.
+- **UI Protection**: Menghilangkan tombol bayar bagi Cabang pada faktur bertanda **📦 PO** untuk mencegah kesalahan prosedur keuangan.
+- **Standardisasi**: Seluruh logika alur PO dan akuntansi antar-cabang telah didokumentasikan di `GEMINI.md` sebagai standar baku sistem.
+
+BUG:
+Pembelian malah tercatat di cabang juga ketiika request PO, tapi ketika pusat acc di cabang hilang pembeliannya
+Seharusnya:
+Cabang ga nyatat pembelian apapun meskipun sementara
+Catatan pembelian di laporan pusat bertambah Ketika pusat memang sudah simpan pembelian request cabang
+
+Cabang ga nyatat jurnal penerimaan barang
+Seharusnya:
+Pakai akun penerimaan barang dari toko pusat
+
+Mutasi stok malah nambah ke Toko pusat
+Seharusnya:
+Mutasi stok hanya nambah ke cabang sedangkan toko pusat tidak
+
+Toko pusat ga pakai akun transer cabang
+Seharusnya :
+Pakai akun transfer

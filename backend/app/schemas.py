@@ -60,6 +60,28 @@ class UnitOut(UnitCreate):
     id: int
     model_config = {"from_attributes": True}
 
+# ─── Branch / Cabang ──────────────────────────────────────────────────────────
+class BranchCreate(BaseModel):
+    code: str
+    name: str
+    address: str
+    phone: Optional[str] = None
+
+class BranchUpdate(BaseModel):
+    name: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class BranchOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    address: Optional[str]
+    phone: Optional[str]
+    is_active: bool
+    model_config = {"from_attributes": True}
+
 
 # ─── ItemPrice ────────────────────────────────────────────────────────────────
 class ItemPriceCreate(BaseModel):
@@ -243,7 +265,11 @@ class SalesPersonOut(SalesPersonCreate):
 class PurchaseItemCreate(BaseModel):
     item_id: int
     qty: float
+    qty_ordered: float = 0
+    qty_received: float = 0
     buy_price: float
+    disc1: float = 0
+    disc2: float = 0
     sell_price: float = 0
     profit_margin: float = 0
     discount: float = 0
@@ -257,13 +283,21 @@ class PurchaseCreate(BaseModel):
     notes: Optional[str] = None
     items: List[PurchaseItemCreate]
     paid: float = 0
+    status: Optional[str] = None
+    is_branch_request: Optional[bool] = False
+    target_branch_id: Optional[int] = None
+    from_po_id: Optional[int] = None
 
 class PurchaseItemOut(BaseModel):
     id: int
     item_id: int
     qty: float
+    qty_ordered: float = 0
+    qty_received: float = 0
     buy_price: float
     discount: float
+    disc1: float = 0
+    disc2: float = 0
     total: float
     item: Optional[ItemOut] = None
     model_config = {"from_attributes": True}
@@ -280,7 +314,11 @@ class PurchaseOut(BaseModel):
     paid: float
     status: str
     notes: Optional[str]
+    is_branch_request: Optional[bool] = False
+    target_branch_id: Optional[int] = None
     supplier: Optional[SupplierOut] = None
+    branch: Optional[BranchOut] = None
+    target_branch: Optional[BranchOut] = None
     items: List[PurchaseItemOut] = []
     model_config = {"from_attributes": True}
 
@@ -408,27 +446,4 @@ class JournalOut(BaseModel):
     reference: Optional[str] = None
     # 👇👇 INI ADALAH KUNCI JAWABANNYA 👇👇
     entries: List[JournalEntryLineOut] = [] 
-    model_config = {"from_attributes": True}
-
-
-    # ─── Branch / Cabang ──────────────────────────────────────────────────────────
-class BranchCreate(BaseModel):
-    code: str
-    name: str
-    address: Optional[str] = None
-    phone: Optional[str] = None
-
-class BranchUpdate(BaseModel):
-    name: Optional[str] = None
-    address: Optional[str] = None
-    phone: Optional[str] = None
-    is_active: Optional[bool] = None
-
-class BranchOut(BaseModel):
-    id: int
-    code: str
-    name: str
-    address: Optional[str]
-    phone: Optional[str]
-    is_active: bool
     model_config = {"from_attributes": True}

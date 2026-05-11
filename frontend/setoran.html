@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Pembayaran Hutang - FPOS</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <style>
+      .payment-source-selector {
+        display: flex;
+        gap: 20px;
+        margin-bottom: 20px;
+        background: var(--bg-color);
+        padding: 15px;
+        border-radius: 12px;
+      }
+      .payment-source-selector label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .payment-source-selector input { width: 18px; height: 18px; }
+      
+      .supplier-filter { margin-bottom: 20px; }
+    </style>
+  </head>
+  <body>
+    <div class="app-container">
+      <main class="main-content">
+        <div class="pg-header">
+          <div>
+            <button class="btn" style="background:transparent; border:none; padding: 0; color: var(--primary); font-size: 14px; cursor: pointer; margin-bottom: 8px;" onclick="location.href='purchases.html'">← Kembali ke Pembelian</button>
+            <h1>💸 Pembayaran Hutang</h1>
+            <p>Bayar tagihan pembelian yang belum lunas ke supplier.</p>
+          </div>
+        </div>
+
+        <div class="card" style="padding:20px; margin-bottom: 24px">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 20px">
+                <div class="supplier-filter">
+                    <label>Filter Supplier</label>
+                    <select id="fSupplier" class="input-control" onchange="loadDebts()">
+                        <option value="">Semua Supplier</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Sumber Pembayaran</label>
+                    <div class="payment-source-selector">
+                        <label><input type="radio" name="paySource" value="cash" checked> Kas (1-1100)</label>
+                        <label><input type="radio" name="paySource" value="bank"> Bank (1-1200)</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>No. Faktur</th>
+                <th>Supplier</th>
+                <th>Tgl. Beli</th>
+                <th>Jatuh Tempo</th>
+                <th>Total</th>
+                <th>Sisa Hutang</th>
+                <th style="width:150px">Bayar</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="tblDebts"></tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/theme.js"></script>
+    <script>
+      requireAuth();
+      let allSuppliers = [];
+
+      function fmtRp(n) { return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n || 0); }
+      function toAngka(s) { return parseFloat(String(s).replace(/\./g, "").replace(",", ".")) || 0; }
+      function toRibuan(n) { return (n || 0).toLocaleString("id-ID"); }
+      function formatInputRibuan(inp) { let val = toAngka(inp.value); inp.value = toRibuan(val); }
+      function today() { return new Date().toISOString().split('T')[0]; }
+
+      async function init() {
+        allSuppliers = await api("GET", "/suppliers/?limit=500&active_only=true");
+        const fSup = document.getElementById("fSupplier");
+        allSuppliers.forEach(s => {
+          const opt = document.createElement("option");
+          opt.value = s.id;
+          opt.textContent = s.name;
+          fSup.appendChild(opt);
+        });
+        loadDebts();
+      }
+
+      async function loadDebts() {
+        const sid = document.getElementById("fSupplier").value;
+        const tbody = document.getElementById("tblDebts");
+        tbody.innerHTML = "<tr><td colspan='8' style='text-align:center'>Memuat data...</td></tr>";
+        
+        let url = "/purchases/?status=unpaid&limit=500";
+        if (sid) url += `&supplier_id=${sid}`;
+        const data = await api("GET", url);
+        
+        let urlPartial = "/purchases/?status=partial&limit=500";
+        if (sid) urlPartial += `&supplier_id=${sid}`;
+        const dataPartial = await api("GET", urlPartial);
+        
+        const all = [...data, ...dataPartial].sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
+        
+        tbody.innerHTML = all.length ? all.map(p => `
+          <tr>
+            <td style="font-family:monospace; font-weight:700">${p.number}</td>
+            <td>${p.supplier?.name || "-"}</td>
+            <td>${p.date}</td>
+            <td>${p.due_date || "-"}</td>
+            <td>${fmtRp(p.total)}</td>
+            <td style="color:#ef4444; font-weight:700">${fmtRp(p.total - p.paid)}</td>
+            <td>
+                <input type="text" class="input-control pay-amt" data-id="${p.id}" value="${toRibuan(p.total - p.paid)}" oninput="formatInputRibuan(this)" />
+            </td>
+            <td><button class="btn btn-primary" onclick="doBayar(${p.id})">✓ Bayar</button></td>
+          </tr>
+        `).join("") : "<tr><td colspan='8' style='text-align:center'>Tidak ada hutang yang perlu dibayar.</td></tr>";
+      }
+
+      async function doBayar(id) {
+        const input = document.querySelector(`.pay-amt[data-id="${id}"]`);
+        const amt = toAngka(input.value);
+        const source = document.querySelector('input[name="paySource"]:checked').value;
+        
+        if (amt <= 0) return showToast("Masukkan nominal bayar", "error");
+        
+        const payload = {
+          cash_amount: source === 'cash' ? amt : 0,
+          bank_amount: source === 'bank' ? amt : 0,
+          payment_date: today(),
+          notes: `Bayar via ${source.toUpperCase()}`
+        };
+
+        try {
+          await api("POST", `/purchases/${id}/pay`, payload);
+          showToast("Pembayaran berhasil ✓");
+          loadDebts();
+        } catch (e) {
+          showToast(e.message, "error");
+        }
+      }
+
+      init();
+    </script>
+  </body>
+</html>

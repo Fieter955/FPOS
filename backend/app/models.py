@@ -70,7 +70,7 @@ class Branch(Base):
     users = relationship("User", back_populates="branch")
     warehouses = relationship("Warehouse", back_populates="branch")
     sales = relationship("Sale", back_populates="branch")
-    purchases = relationship("Purchase", back_populates="branch")
+    purchases = relationship("Purchase", back_populates="branch", foreign_keys="[Purchase.branch_id]")
     shifts = relationship("Shift", back_populates="branch")
 
 
@@ -240,7 +240,12 @@ class Purchase(Base):
     items = relationship("PurchaseItem", back_populates="purchase", cascade="all, delete-orphan")
     returns = relationship("PurchaseReturn", back_populates="purchase")
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
-    branch = relationship("Branch", back_populates="purchases")
+    branch = relationship("Branch", back_populates="purchases", foreign_keys=[branch_id])
+    
+    # 👇 TAMBAHAN UNTUK REQUEST CABANG (PO) 👇
+    is_branch_request = Column(Boolean, default=False)
+    target_branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
+    target_branch = relationship("Branch", foreign_keys=[target_branch_id])
 
 
 class PurchaseItem(Base):
@@ -248,9 +253,13 @@ class PurchaseItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     purchase_id = Column(Integer, ForeignKey("purchases.id"), nullable=False)
     item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
-    qty = Column(Float, nullable=False)
+    qty = Column(Float, nullable=False) # 👇 Stok yang bertambah (sama dengan qty_received jika sudah diterima)
+    qty_ordered = Column(Float, default=0) # 👇 Jumlah pesanan awal
+    qty_received = Column(Float, default=0) # 👇 Jumlah yang benar-benar diterima
     buy_price = Column(Float, nullable=False)
     discount = Column(Float, default=0)
+    disc1 = Column(Float, default=0)
+    disc2 = Column(Float, default=0)
     total = Column(Float, nullable=False)
     purchase = relationship("Purchase", back_populates="items")
     item = relationship("Item", back_populates="purchase_items")

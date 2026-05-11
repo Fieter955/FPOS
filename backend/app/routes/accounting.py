@@ -283,7 +283,9 @@ class AccountCreate(BaseModel):
     opening_balance: float = 0.0
 
 class AccountUpdate(BaseModel):
+    code: Optional[str] = None
     name: Optional[str] = None
+    type: Optional[str] = None
     subtype: Optional[str] = None
     normal_balance: Optional[str] = None
     opening_balance: Optional[float] = None
@@ -418,6 +420,8 @@ def seed_default_accounts(
             ("3-1300", "Laba Ditahan", "equity", "retained_earnings", "credit"),
             ("3-1999", "Modal Transisi (Setup Awal Stok)", "equity", "capital", "credit"),
             ("3-2000", "Mutasi Antar Cabang", "equity", "capital", "credit"),
+            ("3-2100", "Transfer dari Pusat (Inter-Branch)", "equity", "capital", "credit"),
+            ("3-2200", "Kirim Barang ke Cabang (Inter-Branch)", "equity", "capital", "credit"),
             
             # --- PENDAPATAN ---
             ("4-1100", "Penjualan", "revenue", "operating", "credit"),

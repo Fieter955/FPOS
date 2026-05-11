@@ -248,209 +248,18 @@
       </main>
     </div>
 
-    <!-- Bayar Piutang Modal -->
-    <div class="modal-overlay" id="mBayarAR">
-      <div class="modal-box">
-        <div class="modal-hdr">
-          <h2>💸 Bayar Piutang</h2>
-          <button class="btn-x" onclick="closeModal('mBayarAR')">×</button>
-        </div>
-        <input type="hidden" id="arId" />
-        <div
-          id="arInfo"
-          style="
-            background: var(--bg-color);
-            border-radius: 12px;
-            padding: 14px;
-            margin-bottom: 16px;
-            font-size: 15px;
-          "
-        ></div>
-        <div class="input-group">
-          <label>Jumlah Bayar</label
-          ><input
-            type="number"
-            id="arAmt"
-            class="input-control"
-            min="0"
-            inputmode="numeric"
-          />
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
-          <button
-            onclick="closeModal('mBayarAR')"
-            class="btn"
-            style="
-              background: var(--bg-color);
-              border: 1px solid var(--border-color);
-              color: var(--text-main);
-            "
-          >
-            Batal
-          </button>
-          <button onclick="doBayarAR()" class="btn btn-primary">✓ Bayar</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Bayar Hutang Modal -->
-    <div class="modal-overlay" id="mBayarAP">
-      <div class="modal-box">
-        <div class="modal-hdr">
-          <h2>💸 Bayar Hutang Supplier</h2>
-          <button class="btn-x" onclick="closeModal('mBayarAP')">×</button>
-        </div>
-        <input type="hidden" id="bayarId" />
-        <input type="hidden" id="bayarRemaining" />
-        <div
-          id="bayarInfo"
-          style="
-            background: var(--bg-color);
-            border-radius: 12px;
-            padding: 14px;
-            margin-bottom: 16px;
-            font-size: 15px;
-          "
-        ></div>
-        <div class="input-group" style="margin-bottom: 16px">
-          <label style="margin-bottom: 6px">Metode Pembayaran *</label>
-          <select
-            id="bayarMethod"
-            class="input-control"
-            onchange="applyBayarMethod()"
-          >
-            <option value="cash">Kas</option>
-            <option value="bank">Bank / Transfer</option>
-            <option value="mix">Gabungan Kas + Bank</option>
-          </select>
-        </div>
-        <div
-          id="bayarBalances"
-          style="
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 16px;
-          "
-        >
-          <div style="background:var(--bg-color);border-radius:10px;padding:12px">
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">
-              Saldo Kas
-            </div>
-            <div id="bayarCashBalance" style="font-weight:800">Rp 0</div>
-          </div>
-          <div style="background:var(--bg-color);border-radius:10px;padding:12px">
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">
-              Saldo Bank
-            </div>
-            <div id="bayarBankBalance" style="font-weight:800">Rp 0</div>
-          </div>
-        </div>
-        <div class="row2" style="margin-bottom: 16px">
-          <div class="input-group" id="bayarCashGroup">
-            <label style="margin-bottom: 6px">Bayar Dari Kas (Rp)</label>
-            <input
-              type="text"
-              inputmode="numeric"
-              id="bayarCashAmt"
-              class="input-control"
-              min="0"
-              oninput="formatSplitPaymentInput(this)"
-            />
-          </div>
-          <div class="input-group" id="bayarBankGroup">
-            <label style="margin-bottom: 6px"
-              >Bayar Dari Bank / Transfer (Rp)</label
-            >
-            <input
-              type="text"
-              inputmode="numeric"
-              id="bayarBankAmt"
-              class="input-control"
-              min="0"
-              oninput="formatSplitPaymentInput(this)"
-            />
-          </div>
-        </div>
-        <div
-          style="
-            background: rgba(16, 185, 129, 0.08);
-            border: 1px solid rgba(16, 185, 129, 0.2);
-            border-radius: 12px;
-            padding: 14px;
-            margin-bottom: 16px;
-          "
-        >
-          <div style="display:flex;justify-content:space-between;gap:12px">
-            <span style="color:var(--text-muted)">Total Pembayaran</span>
-            <b id="bayarTotalLabel" style="font-size:18px;color:#10b981"
-              >Rp 0</b
-            >
-          </div>
-        </div>
-        <div
-          id="bayarFundingHelp"
-          style="
-            background: rgba(245, 158, 11, 0.08);
-            border: 1px dashed rgba(245, 158, 11, 0.35);
-            border-radius: 12px;
-            padding: 14px;
-            margin-bottom: 16px;
-          "
-        >
-          <div style="font-size:13px;color:var(--text-main);margin-bottom:10px">
-            Jika saldo tidak cukup, sistem akan menolak pembayaran. Catat dulu
-            setoran modal / dana pemodal di Buku Kas.
-          </div>
-          <button
-            type="button"
-            class="btn"
-            style="background:#f59e0b;color:white;border:none"
-            onclick="goToFundingKas()"
-          >
-            Buka Buku Kas Untuk Tambah Dana
-          </button>
-        </div>
-        <div class="input-group">
-          <label style="margin-bottom: 6px">Catatan</label>
-          <input
-            type="text"
-            id="bayarNote"
-            class="input-control"
-            placeholder="No. transfer, bukti bayar, dll..."
-          />
-        </div>
-        <div
-          style="
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-top: 16px;
-          "
-        >
-          <button
-            onclick="closeModal('mBayarAP')"
-            class="btn"
-            style="
-              background: var(--bg-color);
-              border: 1px solid var(--border-color);
-              color: var(--text-main);
-            "
-          >
-            Batal
-          </button>
-          <button onclick="doBayarAP()" class="btn btn-primary">✓ Bayar</button>
-        </div>
-      </div>
-    </div>
-
     <script src="/js/api.js"></script>
     <script src="/js/theme.js"></script>
+    <script src="/js/components.js"></script>
     <script>
       requireAuth();
       let chartInst = null;
       let latestLiquidBalances = { cash_balance: 0, bank_balance: 0 };
       const canViewFinancialReports = (getUser().role || "").includes("admin");
+
+      // Initialize Shared Payment Modals
+      const arModal = createPaymentModal({ type: 'ar', onSuccess: loadAR });
+      const apModal = createPaymentModal({ type: 'ap', onSuccess: loadAP });
 
       const ON =
         "padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit";
@@ -463,69 +272,6 @@
       }
       function parseNum(s) {
         return parseFloat(String(s).replace(/\./g, "").replace(",", ".")) || 0;
-      }
-      function formatSplitPaymentInput(input) {
-        const raw = parseNum(input.value);
-        const pos = input.selectionStart;
-        const oldLen = input.value.length;
-        input.value = formatNum(raw);
-        const newLen = input.value.length;
-        input.setSelectionRange(pos + (newLen - oldLen), pos + (newLen - oldLen));
-        syncBayarTotal();
-      }
-      function syncBayarTotal() {
-        const cash = parseNum(document.getElementById("bayarCashAmt")?.value || 0);
-        const bank = parseNum(document.getElementById("bayarBankAmt")?.value || 0);
-        document.getElementById("bayarTotalLabel").textContent = fmtRp(cash + bank);
-      }
-      function applyBayarMethod(resetValues = false) {
-        const method = document.getElementById("bayarMethod")?.value || "cash";
-        const remaining = parseNum(
-          document.getElementById("bayarRemaining")?.value || 0,
-        );
-        const cashGroup = document.getElementById("bayarCashGroup");
-        const bankGroup = document.getElementById("bayarBankGroup");
-        const cashInput = document.getElementById("bayarCashAmt");
-        const bankInput = document.getElementById("bayarBankAmt");
-        if (!cashGroup || !bankGroup || !cashInput || !bankInput) return;
-
-        cashGroup.style.display = method === "bank" ? "none" : "block";
-        bankGroup.style.display = method === "cash" ? "none" : "block";
-
-        if (method === "cash") {
-          bankInput.value = "";
-          if (resetValues) cashInput.value = remaining ? formatNum(remaining) : "";
-        } else if (method === "bank") {
-          cashInput.value = "";
-          if (resetValues) bankInput.value = remaining ? formatNum(remaining) : "";
-        } else if (resetValues) {
-          const cashPart = Math.min(remaining, latestLiquidBalances?.cash_balance || 0);
-          const bankPart = Math.max(0, remaining - cashPart);
-          cashInput.value = cashPart ? formatNum(cashPart) : "";
-          bankInput.value = bankPart ? formatNum(bankPart) : "";
-        }
-
-        syncBayarTotal();
-      }
-      function goToFundingKas() {
-        const note = encodeURIComponent(
-          "Setoran modal pemilik / dana pemodal untuk pembayaran hutang supplier",
-        );
-        location.href = `/accounting?tab=kas&openKas=1&type=income&account_code=3-1100&desc=${note}`;
-      }
-      async function loadLiquidBalances() {
-        try {
-          latestLiquidBalances = await api("GET", "/accounting/liquid-balances");
-        } catch (e) {
-          latestLiquidBalances = { cash_balance: 0, bank_balance: 0 };
-        }
-        document.getElementById("bayarCashBalance").textContent = fmtRp(
-          latestLiquidBalances.cash_balance || 0,
-        );
-        document.getElementById("bayarBankBalance").textContent = fmtRp(
-          latestLiquidBalances.bank_balance || 0,
-        );
-        return latestLiquidBalances;
       }
 
       function switchTab(t) {
@@ -700,7 +446,7 @@
       <td>${fmtRp(p.total)}</td>
       <td style="color:#10b981;font-weight:600">${fmtRp(p.paid)}</td>
       <td style="color:#ef4444;font-weight:800;font-size:16px">${fmtRp(p.total - p.paid)}</td>
-      <td><button class="bsm bp" onclick="openBayarAR(${p.id},${p.total},${p.paid},'${p.customer?.name || "Umum"}')">Bayar</button></td>
+      <td><button class="bsm bp" onclick="arModal.open({id:${p.id}, total:${p.total}, paid:${p.paid}, name:'${p.customer?.name || "Umum"}'})">Bayar</button></td>
     </tr>`,
                 )
                 .join("")
@@ -730,7 +476,7 @@
       <td>${fmtRp(p.total)}</td>
       <td style="color:#10b981;font-weight:600">${fmtRp(p.paid)}</td>
       <td style="color:#ef4444;font-weight:800;font-size:16px">${fmtRp(p.total - p.paid)}</td>
-      <td><button class="bsm bp" onclick="openBayarAP(${p.id},${p.total},${p.paid})">Bayar</button></td>
+      <td><button class="bsm bp" onclick="apModal.open({id:${p.id}, total:${p.total}, paid:${p.paid}, name:'${p.supplier?.name || "-"}'})">Bayar</button></td>
     </tr>`,
                 )
                 .join("")
@@ -769,87 +515,9 @@
         }
       }
 
-      function openBayarAR(id, total, paid, name) {
-        document.getElementById("arId").value = id;
-        document.getElementById("arInfo").innerHTML =
-          `<b>${name}</b><br>Sisa: <b style="color:#ef4444">${fmtRp(total - paid)}</b>`;
-        document.getElementById("arAmt").value = total - paid;
-        openModal("mBayarAR");
-      }
-      async function doBayarAR() {
-        const id = document.getElementById("arId").value,
-          amt = parseFloat(document.getElementById("arAmt").value) || 0;
-        try {
-          showLoading();
-          await api("POST", `/sales/${id}/pay`, { amount: amt });
-          hideLoading();
-          showToast("Berhasil ✓");
-          closeModal("mBayarAR");
-          loadAR();
-        } catch (ex) {
-          hideLoading();
-          showToast(ex.message, "error");
-        }
-      }
-
-      async function openBayarAP(id, total, paid) {
-        document.getElementById("bayarId").value = id;
-        const sisa = total - paid;
-        document.getElementById("bayarRemaining").value = sisa;
-        document.getElementById("bayarInfo").innerHTML =
-          `<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Total Tagihan</span><b>${fmtRp(total)}</b></div><div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Sudah Dibayar</span><b style="color:#10b981">${fmtRp(paid)}</b></div><div style="display:flex;justify-content:space-between;font-size:18px;font-weight:800;border-top:1px solid var(--border-color);padding-top:8px"><span>Sisa Hutang</span><b style="color:#ef4444">${fmtRp(sisa)}</b></div>`;
-        await loadLiquidBalances();
-        document.getElementById("bayarMethod").value = "cash";
-        applyBayarMethod(true);
-        document.getElementById("bayarNote").value = "";
-        setTimeout(() => openModal("mBayarAP"), 250);
-      }
-      async function doBayarAP() {
-        const id = document.getElementById("bayarId").value;
-        const method = document.getElementById("bayarMethod").value;
-        const cashAmt =
-          method === "bank"
-            ? 0
-            : parseNum(document.getElementById("bayarCashAmt").value) || 0;
-        const bankAmt =
-          method === "cash"
-            ? 0
-            : parseNum(document.getElementById("bayarBankAmt").value) || 0;
-        const amt = cashAmt + bankAmt;
-        if (!amt) return showToast("Isi pembayaran kas, bank, atau keduanya", "error");
-        try {
-          showLoading("Memproses...");
-          await api("POST", `/purchases/${id}/pay`, {
-            amount: amt,
-            cash_amount: cashAmt,
-            bank_amount: bankAmt,
-            notes: document.getElementById("bayarNote").value,
-          });
-          hideLoading();
-          showToast("Berhasil ✓");
-          closeModal("mBayarAP");
-          loadAP();
-        } catch (ex) {
-          hideLoading();
-          if (ex.message.includes("Saldo kas tidak cukup")) {
-            if (
-              await showConfirm(
-                `${ex.message}\n\nBuka Buku Kas untuk catat setoran modal / dana pemodal sekarang?`,
-              )
-            ) {
-              goToFundingKas();
-              return;
-            }
-          } else if (ex.message.includes("Saldo bank tidak cukup")) {
-            showToast(
-              `${ex.message} Lakukan setoran/transfer ke rekening usaha lebih dulu atau ubah metode ke gabungan.`,
-              "error",
-            );
-            return;
-          }
-          showToast(ex.message, "error");
-        }
-      }
+      function today() { return new Date().toISOString().split('T')[0]; }
+      function fmtRp(n) { return "Rp " + Math.round(n).toLocaleString("id-ID"); }
+      function fmtDate(d) { if (!d) return "-"; return new Date(d + "T00:00:00").toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" }); }
 
       // Init
       const m = new Date();

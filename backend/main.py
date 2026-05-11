@@ -32,7 +32,7 @@ from app.routes import (
     shifts, returns, backup, ai_advisor,
     email_backup, updater,
     license, warehouse, assembly, notification, discounts, onboarding,
-    unit_conversion, barcode_gen, delivery, trade_in, ai_bangunan, branches, employees, print_queue, sticker_gen
+    unit_conversion, barcode_gen, delivery, trade_in, ai_bangunan, branches, employees, print_queue, sticker_gen, po
 )
 
 # ─── Create all DB tables ──────────────────────────────────────────────────────
@@ -133,6 +133,10 @@ def run_migrations():
     add_col("users", "branch_id", "INTEGER")
     add_col("sales", "branch_id", "INTEGER DEFAULT 1") 
     add_col("purchases", "branch_id", "INTEGER DEFAULT 1")
+    add_col("purchases", "is_branch_request", "INTEGER DEFAULT 0")
+    add_col("purchases", "target_branch_id", "INTEGER")
+    add_col("purchase_items", "qty_ordered", "FLOAT DEFAULT 0")
+    add_col("purchase_items", "qty_received", "FLOAT DEFAULT 0")
     add_col("shifts", "branch_id", "INTEGER DEFAULT 1")
     add_col("warehouses", "branch_id", "INTEGER DEFAULT 1")
     add_col("print_jobs", "content_type", "TEXT DEFAULT 'text'")
@@ -260,6 +264,7 @@ app.include_router(employees.router, prefix="/api/employees", tags=["Employees"]
 app.include_router(print_queue.router, prefix="/api/print", tags=["Print Queue"])
 app.include_router(sticker_gen.router, prefix="/api/sticker", tags=["Sticker Generation"])
 app.include_router(sticker_gen.router, prefix="/api/stiker", tags=["Sticker Generation (Legacy)"])
+app.include_router(po.router, prefix="/api/po", tags=["Purchase Orders / Requests"])
 
 
 
@@ -296,11 +301,11 @@ if FRONTEND_DIR.exists():
         return FileResponse(str(FRONTEND_DIR / "index.html"))
 
     HTML_PAGES = [
-        "index", "dashboard", "pos", "sales", "purchases", "returns",
+        "index", "dashboard", "pos", "sales", "purchases", "catat-pembelian", "returns",
         "items", "customers", "suppliers", "inventory", "reports",
         "accounting", "shifts", "konsinyasi", "ai_advisor",
         "settings", "warehouse", "assembly", "discounts", "onboarding",
-        "unit_conversion", "delivery", "trade_in", "ai_bangunan", "branches", "users", "barcode",
+        "unit_conversion", "delivery", "trade_in", "ai_bangunan", "branches", "users", "barcode", "po", "setor", "setoran", "pembayaran",
     ]
 
     for page in HTML_PAGES:
