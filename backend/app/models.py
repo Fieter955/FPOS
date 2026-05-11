@@ -90,6 +90,29 @@ class Shift(Base):
     user = relationship("User")
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
     branch = relationship("Branch", back_populates="shifts")
+    
+    # 👇 TAMBAHAN UNTUK SETORAN KE PUSAT 👇
+    is_deposited = Column(Boolean, default=False)
+    deposit_id = Column(Integer, ForeignKey("branch_deposits.id"), nullable=True)
+    deposit = relationship("BranchDeposit", back_populates="shifts")
+
+class BranchDeposit(Base):
+    __tablename__ = "branch_deposits"
+    id = Column(Integer, primary_key=True, index=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    date = Column(Date, nullable=False)
+    amount = Column(Float, nullable=False) # Total
+    cash_amount = Column(Float, default=0)
+    bank_amount = Column(Float, default=0)
+    bank_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
+    journal_id = Column(Integer, ForeignKey("journals.id"), nullable=True)
+    notes = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    branch = relationship("Branch")
+    bank_account = relationship("Account")
+    journal = relationship("Journal")
+    shifts = relationship("Shift", back_populates="deposit")
 
 # ─── Master Data ──────────────────────────────────────────────────────────────
 

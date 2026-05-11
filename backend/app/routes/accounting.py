@@ -422,6 +422,7 @@ def seed_default_accounts(
             ("3-2000", "Mutasi Antar Cabang", "equity", "capital", "credit"),
             ("3-2100", "Transfer dari Pusat (Inter-Branch)", "equity", "capital", "credit"),
             ("3-2200", "Kirim Barang ke Cabang (Inter-Branch)", "equity", "capital", "credit"),
+            ("3-2300", "Setoran ke Pusat", "equity", "capital", "credit"),
             
             # --- PENDAPATAN ---
             ("4-1100", "Penjualan", "revenue", "operating", "credit"),

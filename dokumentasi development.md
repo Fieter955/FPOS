@@ -709,7 +709,7 @@ done
 - **UI Protection**: Menghilangkan tombol bayar bagi Cabang pada faktur bertanda **📦 PO** untuk mencegah kesalahan prosedur keuangan.
 - **Standardisasi**: Seluruh logika alur PO dan akuntansi antar-cabang telah didokumentasikan di `GEMINI.md` sebagai standar baku sistem.
 
-BUG:
+BUG LOGIC (JANGAN RUBAH TAMPILAN APAPUN):
 Pembelian malah tercatat di cabang juga ketiika request PO, tapi ketika pusat acc di cabang hilang pembeliannya
 Seharusnya:
 Cabang ga nyatat pembelian apapun meskipun sementara

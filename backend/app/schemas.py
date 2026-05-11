@@ -380,6 +380,28 @@ class SaleOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ─── Branch Deposit ──────────────────────────────────────────────────────────
+class BranchDepositCreate(BaseModel):
+    amount: float # Total
+    cash_amount: float = 0
+    bank_amount: float = 0
+    bank_account_id: Optional[int] = None
+    notes: Optional[str] = None
+
+class BranchDepositOut(BaseModel):
+    id: int
+    branch_id: int
+    date: date
+    amount: float
+    cash_amount: float
+    bank_amount: float
+    bank_account_id: Optional[int]
+    journal_id: Optional[int]
+    notes: Optional[str]
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+
 # ─── Stock Opname ─────────────────────────────────────────────────────────────
 class AdjustmentCreate(BaseModel):
     item_id: int

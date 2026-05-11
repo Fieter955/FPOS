@@ -3,157 +3,346 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Pembayaran Hutang - FPOS</title>
+    <title>Setoran - FPOS</title>
     <link rel="stylesheet" href="/css/style.css" />
-    <style>
-      .payment-source-selector {
-        display: flex;
-        gap: 20px;
-        margin-bottom: 20px;
-        background: var(--bg-color);
-        padding: 15px;
-        border-radius: 12px;
-      }
-      .payment-source-selector label {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        cursor: pointer;
-        font-weight: 600;
-      }
-      .payment-source-selector input { width: 18px; height: 18px; }
-      
-      .supplier-filter { margin-bottom: 20px; }
-    </style>
+    <link rel="stylesheet" href="/css/components.css" />
   </head>
   <body>
     <div class="app-container">
       <main class="main-content">
+        <!-- Tombol Kembali Standard -->
+        <button
+          class="btn"
+          style="background: transparent; color: var(--text-muted); padding: 0; margin-bottom: 16px;"
+          onclick="location.href = '/dashboard'"
+        >
+          ← Kembali
+        </button>
+
+        <!-- Page Header Standard -->
         <div class="pg-header">
           <div>
-            <button class="btn" style="background:transparent; border:none; padding: 0; color: var(--primary); font-size: 14px; cursor: pointer; margin-bottom: 8px;" onclick="location.href='purchases.html'">← Kembali ke Pembelian</button>
-            <h1>💸 Pembayaran Hutang</h1>
-            <p>Bayar tagihan pembelian yang belum lunas ke supplier.</p>
+            <h1>💸 Setoran Pendapatan</h1>
+            <p>Kelola penyetoran kas dari tiap shift ke Kas Utama/Pusat.</p>
+          </div>
+          <div style="display: flex; gap: 10px">
+            <button class="btn" style="background: var(--card-bg); border: 1px solid var(--border-color);" onclick="toggleTheme()">
+              🌓 Tema
+            </button>
           </div>
         </div>
 
-        <div class="card" style="padding:20px; margin-bottom: 24px">
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 20px">
-                <div class="supplier-filter">
-                    <label>Filter Supplier</label>
-                    <select id="fSupplier" class="input-control" onchange="loadDebts()">
-                        <option value="">Semua Supplier</option>
-                    </select>
-                </div>
-                <div>
-                    <label>Sumber Pembayaran</label>
-                    <div class="payment-source-selector">
-                        <label><input type="radio" name="paySource" value="cash" checked> Kas (1-1100)</label>
-                        <label><input type="radio" name="paySource" value="bank"> Bank (1-1200)</label>
-                    </div>
-                </div>
-            </div>
+        <!-- Summary Row Standard -->
+        <div id="summaryRow" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 20px;">
+          <div class="card" style="padding:18px">
+            <div style="font-size:13px;color:var(--text-muted);margin-bottom:4px">Kas Belum Disetor</div>
+            <div id="kPending" style="font-size:22px;font-weight:800;color:var(--primary)">Rp 0</div>
+            <div id="kCount" style="font-size:13px;color:var(--text-muted)">0 shift menunggu</div>
+          </div>
         </div>
 
+        <!-- Filter Bar Standard -->
+        <div class="filter-bar">
+          <input type="date" id="fStart" class="input-control" onchange="load()">
+          <input type="date" id="fEnd" class="input-control" onchange="load()">
+          <select id="fStatus" class="input-control" onchange="load()">
+            <option value="pending">Belum Disetor</option>
+            <option value="deposited">Sudah Disetor</option>
+          </select>
+          <button class="btn btn-primary" onclick="processAll()" id="btnAll" style="display:none">Setor Semua Sekaligus</button>
+        </div>
+
+        <!-- Table Wrap & Table Standard -->
         <div class="tbl-wrap">
           <table class="tbl">
             <thead>
               <tr>
-                <th>No. Faktur</th>
-                <th>Supplier</th>
-                <th>Tgl. Beli</th>
-                <th>Jatuh Tempo</th>
-                <th>Total</th>
-                <th>Sisa Hutang</th>
-                <th style="width:150px">Bayar</th>
+                <th>No. Shift</th>
+                <th>Waktu Tutup</th>
+                <th>Kasir</th>
+                <th>Kas Akhir</th>
                 <th>Aksi</th>
               </tr>
             </thead>
-            <tbody id="tblDebts"></tbody>
+            <tbody id="tblBody">
+              <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted)">Memuat data...</td></tr>
+            </tbody>
           </table>
         </div>
       </main>
     </div>
 
+    <!-- Script Utama -->
     <script src="/js/api.js"></script>
     <script src="/js/theme.js"></script>
+    <script src="/js/components.js"></script>
     <script>
       requireAuth();
-      let allSuppliers = [];
+      let rawData = [];
 
-      function fmtRp(n) { return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n || 0); }
-      function toAngka(s) { return parseFloat(String(s).replace(/\./g, "").replace(",", ".")) || 0; }
-      function toRibuan(n) { return (n || 0).toLocaleString("id-ID"); }
-      function formatInputRibuan(inp) { let val = toAngka(inp.value); inp.value = toRibuan(val); }
-      function today() { return new Date().toISOString().split('T')[0]; }
+      // Helper lokal untuk format
+      const fmtDT = (d) => d ? new Date(d).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "-";
 
-      async function init() {
-        allSuppliers = await api("GET", "/suppliers/?limit=500&active_only=true");
-        const fSup = document.getElementById("fSupplier");
-        allSuppliers.forEach(s => {
-          const opt = document.createElement("option");
-          opt.value = s.id;
-          opt.textContent = s.name;
-          fSup.appendChild(opt);
-        });
-        loadDebts();
-      }
-
-      async function loadDebts() {
-        const sid = document.getElementById("fSupplier").value;
-        const tbody = document.getElementById("tblDebts");
-        tbody.innerHTML = "<tr><td colspan='8' style='text-align:center'>Memuat data...</td></tr>";
+      async function load() {
+        const start = document.getElementById("fStart").value;
+        const end = document.getElementById("fEnd").value;
+        const status = document.getElementById("fStatus").value;
         
-        let url = "/purchases/?status=unpaid&limit=500";
-        if (sid) url += `&supplier_id=${sid}`;
-        const data = await api("GET", url);
-        
-        let urlPartial = "/purchases/?status=partial&limit=500";
-        if (sid) urlPartial += `&supplier_id=${sid}`;
-        const dataPartial = await api("GET", urlPartial);
-        
-        const all = [...data, ...dataPartial].sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
-        
-        tbody.innerHTML = all.length ? all.map(p => `
-          <tr>
-            <td style="font-family:monospace; font-weight:700">${p.number}</td>
-            <td>${p.supplier?.name || "-"}</td>
-            <td>${p.date}</td>
-            <td>${p.due_date || "-"}</td>
-            <td>${fmtRp(p.total)}</td>
-            <td style="color:#ef4444; font-weight:700">${fmtRp(p.total - p.paid)}</td>
-            <td>
-                <input type="text" class="input-control pay-amt" data-id="${p.id}" value="${toRibuan(p.total - p.paid)}" oninput="formatInputRibuan(this)" />
-            </td>
-            <td><button class="btn btn-primary" onclick="doBayar(${p.id})">✓ Bayar</button></td>
-          </tr>
-        `).join("") : "<tr><td colspan='8' style='text-align:center'>Tidak ada hutang yang perlu dibayar.</td></tr>";
-      }
-
-      async function doBayar(id) {
-        const input = document.querySelector(`.pay-amt[data-id="${id}"]`);
-        const amt = toAngka(input.value);
-        const source = document.querySelector('input[name="paySource"]:checked').value;
-        
-        if (amt <= 0) return showToast("Masukkan nominal bayar", "error");
-        
-        const payload = {
-          cash_amount: source === 'cash' ? amt : 0,
-          bank_amount: source === 'bank' ? amt : 0,
-          payment_date: today(),
-          notes: `Bayar via ${source.toUpperCase()}`
-        };
+        let url = `/branches/pending-deposits?status=${status}`;
+        if (start) url += `&start_date=${start}`;
+        if (end) url += `&end_date=${end}`;
 
         try {
-          await api("POST", `/purchases/${id}/pay`, payload);
-          showToast("Pembayaran berhasil ✓");
-          loadDebts();
+          const res = await api("GET", url);
+          rawData = res.shifts || [];
+          
+          const label = status === 'pending' ? 'Kas Belum Disetor' : 'Total Kas Disetor';
+          const countLabel = status === 'pending' ? 'shift menunggu' : 'shift disetor';
+          
+          document.getElementById("summaryRow").innerHTML = `
+            <div class="card" style="padding:18px">
+              <div style="font-size:13px;color:var(--text-muted);margin-bottom:4px">${label}</div>
+              <div id="kPending" style="font-size:22px;font-weight:800;color:var(--primary)">${fmtRp(res.total)}</div>
+              <div id="kCount" style="font-size:13px;color:var(--text-muted)">${rawData.length} ${countLabel}</div>
+            </div>
+          `;
+          
+          if (status === 'pending' && rawData.length > 1) {
+            document.getElementById("btnAll").style.display = "block";
+          } else {
+            document.getElementById("btnAll").style.display = "none";
+          }
+
+          renderTable();
         } catch (e) {
           showToast(e.message, "error");
         }
       }
 
-      init();
+      function renderTable() {
+        const status = document.getElementById("fStatus").value;
+        const body = document.getElementById("tblBody");
+
+        if (rawData.length === 0) {
+          const msg = status === 'pending' ? 'Semua shift sudah disetorkan ✓' : 'Tidak ada data setoran ditemukan';
+          body.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted)">${msg}</td></tr>`;
+          return;
+        }
+
+        body.innerHTML = rawData.map(s => `
+          <tr>
+            <td style="font-family:monospace;font-weight:700;color:var(--primary)">${s.number}</td>
+            <td style="font-size:13px">${fmtDT(s.closed_at)}</td>
+            <td>${s.user}</td>
+            <td style="font-weight:700">${fmtRp(s.closing_cash)}</td>
+            <td>
+              ${s.is_deposited ? '<span class="badge badge-success" style="background:#10b981;color:white;padding:4px 8px;border-radius:4px;font-size:12px">✓ Disetor</span>' : 
+              `<button class="bsm bp" onclick="paySingle(${s.id}, ${s.closing_cash})">Setor Sekarang</button>`}
+            </td>
+          </tr>
+        `).join("");
+      }
+
+      // --- CUSTOM COMPONENT: createDepositModal ---
+      // Mimics the standard createPaymentModal but tailored for Branch Deposits
+      function createDepositModal(config = {}) {
+        const { title, total, onConfirm } = config;
+        const modalId = `mDep_${Math.floor(Math.random() * 1000)}`;
+        const overlay = document.createElement("div");
+        overlay.id = modalId;
+        overlay.className = "modal-overlay";
+        document.body.appendChild(overlay);
+
+        overlay.innerHTML = `
+          <div class="modal-box" style="max-width:480px; width:calc(100% - 32px)">
+            <div class="modal-hdr">
+              <h2>💸 ${title}</h2>
+              <button class="btn-x">×</button>
+            </div>
+            
+            <div class="p-info" style="background:var(--bg-color); border-radius:12px; padding:14px; margin-bottom:16px; font-size:15px; text-align:center">
+                <div style="color:var(--text-muted); font-size:13px">Total yang Harus Disetor</div>
+                <b style="font-size:24px; color:var(--primary)">${fmtRp(total)}</b>
+            </div>
+
+            <div class="input-group" style="margin-bottom:16px">
+              <label>Metode Penyetoran *</label>
+              <select class="input-control p-method">
+                <option value="cash">Kas Cabang</option>
+                <option value="bank">Transfer Bank</option>
+                <option value="mix">Gabungan (Kas + Bank)</option>
+              </select>
+            </div>
+
+            <div class="p-balances" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;">
+              <div style="background:var(--bg-color); border-radius:10px; padding:12px">
+                <div style="font-size:12px; color:var(--text-muted)">Saldo Kas</div>
+                <div class="p-cash-balance" style="font-weight:800">Rp 0</div>
+              </div>
+              <div style="background:var(--bg-color); border-radius:10px; padding:12px">
+                <div style="font-size:12px; color:var(--text-muted)">Saldo Bank</div>
+                <div class="p-bank-balance" style="font-weight:800">Rp 0</div>
+              </div>
+            </div>
+
+            <div class="row2 p-inputs-row" style="margin-bottom:16px">
+              <div class="input-group p-cash-group">
+                <label>Dari Kas</label>
+                <input type="text" class="input-control p-cash-amt" placeholder="0" />
+              </div>
+              <div class="input-group p-bank-group">
+                <label>Dari Bank</label>
+                <input type="text" class="input-control p-bank-amt" placeholder="0" />
+              </div>
+            </div>
+
+            <div class="input-group p-bank-select-group" style="display:none; margin-bottom:16px">
+              <label>Akun Bank Tujuan Penarikan *</label>
+              <div id="dep-bank-select"></div>
+            </div>
+
+            <div style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2); border-radius:12px; padding:14px; margin-bottom:16px;">
+              <div style="display:flex; justify-content:space-between; align-items:center">
+                <span>Total Input</span>
+                <b class="p-total-label" style="font-size:18px; color:#10b981">${fmtRp(0)}</b>
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label>Catatan Setoran</label>
+              <input type="text" class="p-note input-control" placeholder="Misal: Setoran akhir pekan..." />
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px;">
+              <button class="btn p-cancel">Batal</button>
+              <button class="btn btn-primary p-submit">✓ Konfirmasi Setoran</button>
+            </div>
+          </div>
+        `;
+
+        const methodSel = overlay.querySelector(".p-method"),
+              cashGroup = overlay.querySelector(".p-cash-group"),
+              bankGroup = overlay.querySelector(".p-bank-group"),
+              cashInp = overlay.querySelector(".p-cash-amt"),
+              bankInp = overlay.querySelector(".p-bank-amt"),
+              totalLabel = overlay.querySelector(".p-total-label"),
+              bankSelectGroup = overlay.querySelector(".p-bank-select-group"),
+              cashBalDiv = overlay.querySelector(".p-cash-balance"),
+              bankBalDiv = overlay.querySelector(".p-bank-balance"),
+              noteInp = overlay.querySelector(".p-note"),
+              submitBtn = overlay.querySelector(".p-submit"),
+              closeBtn = overlay.querySelector(".btn-x"),
+              cancelBtn = overlay.querySelector(".p-cancel");
+
+        const parseNum = (s) => parseFloat(String(s).replace(/\./g, "").replace(",", ".")) || 0;
+        const formatNum = (n) => (n || 0).toLocaleString("id-ID");
+        let bankCombo = null;
+
+        const syncTotal = () => {
+          const c = parseNum(cashInp.value);
+          const b = parseNum(bankInp.value);
+          const currentTotal = c + b;
+          totalLabel.textContent = fmtRp(currentTotal);
+          bankSelectGroup.style.display = b > 0 ? "block" : "none";
+          
+          if (round(currentTotal, 2) !== round(total, 2)) {
+            totalLabel.style.color = "#ef4444";
+          } else {
+            totalLabel.style.color = "#10b981";
+          }
+        };
+
+        const applyMethod = (reset = false) => {
+          const method = methodSel.value;
+          cashGroup.style.display = method === "bank" ? "none" : "block";
+          bankGroup.style.display = method === "cash" ? "none" : "block";
+          
+          if (reset) {
+            if (method === "cash") { cashInp.value = formatNum(total); bankInp.value = ""; }
+            else if (method === "bank") { bankInp.value = formatNum(total); cashInp.value = ""; }
+            else { cashInp.value = ""; bankInp.value = ""; }
+          }
+          syncTotal();
+        };
+
+        cashInp.oninput = (e) => { e.target.value = formatNum(parseNum(e.target.value)); syncTotal(); };
+        bankInp.oninput = (e) => { e.target.value = formatNum(parseNum(e.target.value)); syncTotal(); };
+        methodSel.onchange = () => applyMethod(true);
+
+        const close = () => { overlay.remove(); document.body.style.overflow = ""; };
+        closeBtn.onclick = close;
+        cancelBtn.onclick = close;
+
+        submitBtn.onclick = async () => {
+          const cash = parseNum(cashInp.value);
+          const bank = parseNum(bankInp.value);
+          if (round(cash + bank, 2) !== round(total, 2)) return showToast("Total harus sesuai!", "error");
+          
+          let bId = null;
+          if (bank > 0) {
+            const sel = bankCombo.getSelected();
+            if (!sel) return showToast("Pilih akun bank!", "error");
+            bId = sel.id;
+          }
+
+          try {
+            showLoading("Memproses Setoran...");
+            await api("POST", "/branches/deposit", {
+              amount: total,
+              cash_amount: cash,
+              bank_amount: bank,
+              bank_account_id: bId,
+              notes: noteInp.value
+            });
+            hideLoading();
+            showToast("Setoran Berhasil ✓");
+            close();
+            if (onConfirm) onConfirm();
+          } catch (e) {
+            hideLoading();
+            showToast(e.message, "error");
+          }
+        };
+
+        // Init
+        overlay.style.display = "flex";
+        document.body.style.overflow = "hidden";
+        applyMethod(true);
+
+        api("GET", "/accounting/liquid-balances").then(bal => {
+          cashBalDiv.textContent = fmtRp(bal.cash_balance);
+          bankBalDiv.textContent = fmtRp(bal.bank_balance);
+        });
+
+        api("GET", "/accounting/accounts?type=asset").then(accounts => {
+          const banks = accounts.filter(a => a.code === '1-1200');
+          bankCombo = createPremiumCombo(overlay.querySelector("#dep-bank-select"), banks, { placeholder: "Pilih Bank..." });
+        });
+      }
+
+      // Helper pembulatan
+      function round(n, d) {
+        return Number(Math.round(n + "e" + d) + "e-" + d);
+      }
+
+      async function paySingle(id, amount) {
+        createDepositModal({
+          title: "Setoran Per Shift",
+          total: amount,
+          onConfirm: () => load()
+        });
+      }
+
+      async function processAll() {
+        const total = rawData.reduce((a, b) => a + b.closing_cash, 0);
+        createDepositModal({
+          title: "Setor Seluruh Pendapatan",
+          total: total,
+          onConfirm: () => load()
+        });
+      }
+
+      load();
     </script>
   </body>
 </html>
