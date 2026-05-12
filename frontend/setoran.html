@@ -22,10 +22,11 @@
         <!-- Page Header Standard -->
         <div class="pg-header">
           <div>
-            <h1>💸 Setoran Pendapatan</h1>
-            <p>Kelola penyetoran kas dari tiap shift ke Kas Utama/Pusat.</p>
+            <h1 id="pageTitle">💸 Setoran Pendapatan</h1>
+            <p id="pageDesc">Kelola penyetoran kas dari tiap shift ke Kas Utama/Pusat.</p>
           </div>
-          <div style="display: flex; gap: 10px">
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <div id="branchSelectorContainer" style="width: 250px; display: none;"></div>
             <button class="btn" style="background: var(--card-bg); border: 1px solid var(--border-color);" onclick="toggleTheme()">
               🌓 Tema
             </button>
@@ -35,7 +36,7 @@
         <!-- Summary Row Standard -->
         <div id="summaryRow" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 20px;">
           <div class="card" style="padding:18px">
-            <div style="font-size:13px;color:var(--text-muted);margin-bottom:4px">Kas Belum Disetor</div>
+            <div id="summaryLabel" style="font-size:13px;color:var(--text-muted);margin-bottom:4px">Kas Belum Disetor</div>
             <div id="kPending" style="font-size:22px;font-weight:800;color:var(--primary)">Rp 0</div>
             <div id="kCount" style="font-size:13px;color:var(--text-muted)">0 shift menunggu</div>
           </div>
@@ -46,8 +47,9 @@
           <input type="date" id="fStart" class="input-control" onchange="load()">
           <input type="date" id="fEnd" class="input-control" onchange="load()">
           <select id="fStatus" class="input-control" onchange="load()">
-            <option value="pending">Belum Disetor</option>
-            <option value="deposited">Sudah Disetor</option>
+            <option value="pending">Belum Disetor (Pending)</option>
+            <option value="deposited">Sudah Disetor (Shift)</option>
+            <option value="history">Riwayat Setoran (Global)</option>
           </select>
           <button class="btn btn-primary" onclick="processAll()" id="btnAll" style="display:none">Setor Semua Sekaligus</button>
         </div>
@@ -55,7 +57,7 @@
         <!-- Table Wrap & Table Standard -->
         <div class="tbl-wrap">
           <table class="tbl">
-            <thead>
+            <thead id="tblHead">
               <tr>
                 <th>No. Shift</th>
                 <th>Waktu Tutup</th>
@@ -79,53 +81,138 @@
     <script>
       requireAuth();
       let rawData = [];
+      let currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+      let isMainBranch = currentUser.branch_id === 1;
+      let selectedBranchId = null;
+      let branchCombo = null;
 
       // Helper lokal untuk format
       const fmtDT = (d) => d ? new Date(d).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "-";
+
+      async function init() {
+        if (isMainBranch) {
+          document.getElementById("branchSelectorContainer").style.display = "block";
+          document.getElementById("pageTitle").textContent = "📊 Monitoring Setoran Cabang";
+          document.getElementById("pageDesc").textContent = "Pantau kas yang belum disetor dan riwayat setoran dari seluruh cabang.";
+          
+          try {
+            const branches = await api("GET", "/branches");
+            // Filter out Pusat from selector because we monitor other branches
+            const subBranches = branches.filter(b => b.id !== 1);
+            branchCombo = createPremiumCombo(document.getElementById("branchSelectorContainer"), subBranches, {
+              placeholder: "🔍 Cari Cabang...",
+              onSelect: (b) => {
+                selectedBranchId = b ? b.id : null;
+                load();
+              }
+            });
+          } catch (e) {
+            console.error("Failed to load branches", e);
+          }
+        }
+        load();
+      }
 
       async function load() {
         const start = document.getElementById("fStart").value;
         const end = document.getElementById("fEnd").value;
         const status = document.getElementById("fStatus").value;
         
+        // Hide btnAll by default
+        document.getElementById("btnAll").style.display = "none";
+
+        if (status === 'history') {
+          return loadHistory(start, end);
+        }
+
         let url = `/branches/pending-deposits?status=${status}`;
         if (start) url += `&start_date=${start}`;
         if (end) url += `&end_date=${end}`;
+        if (selectedBranchId) url += `&target_branch_id=${selectedBranchId}`;
 
         try {
           const res = await api("GET", url);
-          rawData = res.shifts || [];
           
-          const label = status === 'pending' ? 'Kas Belum Disetor' : 'Total Kas Disetor';
-          const countLabel = status === 'pending' ? 'shift menunggu' : 'shift disetor';
-          
-          document.getElementById("summaryRow").innerHTML = `
-            <div class="card" style="padding:18px">
-              <div style="font-size:13px;color:var(--text-muted);margin-bottom:4px">${label}</div>
-              <div id="kPending" style="font-size:22px;font-weight:800;color:var(--primary)">${fmtRp(res.total)}</div>
-              <div id="kCount" style="font-size:13px;color:var(--text-muted)">${rawData.length} ${countLabel}</div>
-            </div>
-          `;
-          
-          if (status === 'pending' && rawData.length > 1) {
-            document.getElementById("btnAll").style.display = "block";
+          if (res.is_summary) {
+            renderSummaryView(res);
           } else {
-            document.getElementById("btnAll").style.display = "none";
+            renderShiftView(res, status);
           }
-
-          renderTable();
         } catch (e) {
           showToast(e.message, "error");
         }
       }
 
-      function renderTable() {
-        const status = document.getElementById("fStatus").value;
-        const body = document.getElementById("tblBody");
+      function renderSummaryView(res) {
+        rawData = res.branches || [];
+        const isPending = res.status === 'pending';
+        
+        document.getElementById("summaryLabel").textContent = isPending ? "Total Kas Pending (Semua Cabang)" : "Total Kas Sudah Setor (Semua Cabang)";
+        document.getElementById("kPending").textContent = fmtRp(res.total);
+        document.getElementById("kCount").textContent = `${rawData.length} cabang ${isPending ? 'memiliki kas pending' : 'telah menyetor kas'}`;
 
+        const head = document.getElementById("tblHead");
+        head.innerHTML = `
+          <tr>
+            <th>Kode</th>
+            <th>Nama Cabang</th>
+            <th style="text-align:right">${isPending ? 'Total Pending' : 'Total Sudah Setor'}</th>
+            <th style="text-align:center">Jumlah Shift</th>
+            <th>Aksi</th>
+          </tr>
+        `;
+
+        const body = document.getElementById("tblBody");
         if (rawData.length === 0) {
-          const msg = status === 'pending' ? 'Semua shift sudah disetorkan ✓' : 'Tidak ada data setoran ditemukan';
+          const msg = isPending ? 'Semua cabang sudah menyetorkan kas ✓' : 'Belum ada data setoran dari cabang';
           body.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted)">${msg}</td></tr>`;
+          return;
+        }
+
+        body.innerHTML = rawData.map(b => `
+          <tr>
+            <td style="font-family:monospace;font-weight:700">${b.branch_code}</td>
+            <td>${b.branch_name}</td>
+            <td style="text-align:right;font-weight:700;color:var(--primary)">${fmtRp(b.total_amount)}</td>
+            <td style="text-align:center">${b.shift_count} shift</td>
+            <td>
+              <button class="bsm" onclick="filterByBranch(${b.branch_id})">Lihat Detail</button>
+            </td>
+          </tr>
+        `).join("");
+      }
+
+      function renderShiftView(res, status) {
+        rawData = res.shifts || [];
+        const label = status === 'pending' ? 'Kas Belum Disetor' : 'Total Kas Disetor';
+        const countLabel = status === 'pending' ? 'shift menunggu' : 'shift disetor';
+        
+        document.getElementById("summaryLabel").textContent = label;
+        document.getElementById("kPending").textContent = fmtRp(res.total);
+        document.getElementById("kCount").textContent = `${rawData.length} ${countLabel}`;
+
+        // Explicitly hide btnAll for Main Branch
+        if (status === 'pending' && rawData.length > 1 && !isMainBranch) {
+          document.getElementById("btnAll").style.display = "block";
+        } else {
+          document.getElementById("btnAll").style.display = "none";
+        }
+
+        const head = document.getElementById("tblHead");
+        head.innerHTML = `
+          <tr>
+            <th>No. Shift</th>
+            <th>Waktu Tutup</th>
+            <th>Kasir</th>
+            <th style="text-align:right">Kas Akhir</th>
+            ${isMainBranch ? '' : '<th>Aksi</th>'}
+          </tr>
+        `;
+
+        const body = document.getElementById("tblBody");
+        if (rawData.length === 0) {
+          const msg = status === 'pending' ? 'Semua shift sudah disetorkan ✓' : 'Tidak ada data shift ditemukan';
+          body.innerHTML = `<tr><td colspan="${isMainBranch ? 4 : 5}" style="text-align:center;padding:24px;color:var(--text-muted)">${msg}</td></tr>`;
           return;
         }
 
@@ -134,16 +221,83 @@
             <td style="font-family:monospace;font-weight:700;color:var(--primary)">${s.number}</td>
             <td style="font-size:13px">${fmtDT(s.closed_at)}</td>
             <td>${s.user}</td>
-            <td style="font-weight:700">${fmtRp(s.closing_cash)}</td>
+            <td style="font-weight:700;text-align:right">${fmtRp(s.closing_cash)}</td>
+            ${isMainBranch ? '' : `
             <td>
               ${s.is_deposited ? '<span class="badge badge-success" style="background:#10b981;color:white;padding:4px 8px;border-radius:4px;font-size:12px">✓ Disetor</span>' : 
               `<button class="bsm bp" onclick="paySingle(${s.id}, ${s.closing_cash})">Setor Sekarang</button>`}
-            </td>
+            </td>`}
           </tr>
         `).join("");
       }
 
-      // --- CUSTOM COMPONENT: createDepositModal ---
+      async function loadHistory(start, end) {
+        let url = `/branches/deposits?dummy=1`;
+        if (start) url += `&start_date=${start}`;
+        if (end) url += `&end_date=${end}`;
+        if (selectedBranchId) url += `&branch_id=${selectedBranchId}`;
+
+        try {
+          const res = await api("GET", url);
+          const totalHistory = res.reduce((a, b) => a + b.amount, 0);
+          
+          document.getElementById("summaryLabel").textContent = "Total Riwayat Setoran";
+          document.getElementById("kPending").textContent = fmtRp(totalHistory);
+          document.getElementById("kCount").textContent = `${res.length} transaksi setoran`;
+
+          const head = document.getElementById("tblHead");
+          head.innerHTML = `
+            <tr>
+              <th>Waktu</th>
+              <th>Cabang</th>
+              <th>Metode</th>
+              <th style="text-align:right">Total</th>
+              <th>Catatan</th>
+            </tr>
+          `;
+
+          const body = document.getElementById("tblBody");
+          if (res.length === 0) {
+            body.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada riwayat setoran</td></tr>`;
+            return;
+          }
+
+          body.innerHTML = res.map(d => {
+            let method = [];
+            if (d.cash_amount > 0) method.push("Kas");
+            if (d.bank_amount > 0) method.push(`Bank (${d.bank_account_name || 'Transfer'})`);
+            
+            return `
+              <tr>
+                <td style="font-size:13px">
+                  <b>${new Date(d.date).toLocaleDateString("id-ID")}</b><br>
+                  <span style="color:var(--text-muted);font-size:11px">${new Date(d.created_at).toLocaleTimeString("id-ID")}</span>
+                </td>
+                <td><span class="badge" style="background:var(--primary);color:white">${d.branch_name}</span></td>
+                <td style="font-size:12px">${method.join(" + ")}</td>
+                <td style="text-align:right;font-weight:700">${fmtRp(d.amount)}</td>
+                <td style="font-size:12px;color:var(--text-muted)">${d.notes || '-'}</td>
+              </tr>
+            `;
+          }).join("");
+        } catch (e) {
+          showToast(e.message, "error");
+        }
+      }
+
+      function filterByBranch(id) {
+        if (branchCombo) {
+          // Find the branch object from combo data
+          // This is a bit hacky but works since we know the data
+          const opt = branchCombo.options.find(o => o.id === id);
+          if (opt) branchCombo.select(opt);
+        } else {
+          selectedBranchId = id;
+          load();
+        }
+      }
+
+      // --- CUSTOM COMPONENT: createDepositModal --- (Keep existing logic)
       // Mimics the standard createPaymentModal but tailored for Branch Deposits
       function createDepositModal(config = {}) {
         const { title, total, onConfirm } = config;
@@ -342,7 +496,7 @@
         });
       }
 
-      load();
+      init();
     </script>
   </body>
 </html>

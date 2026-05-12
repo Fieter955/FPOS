@@ -423,6 +423,7 @@ def seed_default_accounts(
             ("3-2100", "Transfer dari Pusat (Inter-Branch)", "equity", "capital", "credit"),
             ("3-2200", "Kirim Barang ke Cabang (Inter-Branch)", "equity", "capital", "credit"),
             ("3-2300", "Setoran ke Pusat", "equity", "capital", "credit"),
+            ("3-2400", "Setoran dari Cabang", "equity", "capital", "credit"),
             
             # --- PENDAPATAN ---
             ("4-1100", "Penjualan", "revenue", "operating", "credit"),
@@ -1035,7 +1036,15 @@ def get_balance_sheet(
 
     for a in accounts:
         balance = get_account_balance(db, a.id, end_date=as_of, branch_id=b_id)
-        row = {"code": a.code, "name": a.name, "amount": balance}
+        
+        # 🛡️ FIX: Sesuaikan tanda (sign) agar Liability & Equity dijumlahkan berdasarkan saldo KREDIT
+        # Jika akun bertipe Liability/Equity tapi saldo normalnya DEBIT (seperti Prive atau Setoran), 
+        # maka kita balik tandanya agar dia mengurangi total (contra-account).
+        display_balance = balance
+        if a.type in ["liability", "equity"] and a.normal_balance == "debit":
+            display_balance = -balance
+            
+        row = {"code": a.code, "name": a.name, "amount": display_balance}
 
         if a.type == "asset":
             if a.subtype == "fixed_asset":

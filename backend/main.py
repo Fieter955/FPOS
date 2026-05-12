@@ -215,18 +215,23 @@ async def lifespan(app: FastAPI):
             db.commit()
             print(f"✅ 'Toko Pusat' dan Gudangnya berhasil dibuat. Akun Admin telah ditetapkan!")
             
-        # 👇 TAMBAHAN: Pastikan akun Setoran ke Pusat ada 👇
-        acc_setoran = db.query(models.Account).filter(models.Account.code == "3-2300").first()
-        if not acc_setoran:
-            db.add(models.Account(
-                code="3-2300", 
-                name="Setoran ke Pusat", 
-                type="equity", 
-                subtype="capital", 
-                normal_balance="credit"
-            ))
-            db.commit()
-            print("✅ Akun '3-2300 Setoran ke Pusat' berhasil disiapkan.")
+        # 👇 TAMBAHAN: Pastikan akun Setoran ke Pusat & Cabang ada 👇
+        codes_to_ensure = [
+            ("3-2300", "Setoran ke Pusat"),
+            ("3-2400", "Setoran dari Cabang")
+        ]
+        for code, name in codes_to_ensure:
+            acc = db.query(models.Account).filter(models.Account.code == code).first()
+            if not acc:
+                db.add(models.Account(
+                    code=code, 
+                    name=name, 
+                    type="equity", 
+                    subtype="capital", 
+                    normal_balance="credit"
+                ))
+                db.commit()
+                print(f"✅ Akun '{code} {name}' berhasil disiapkan.")
     except Exception as e:
         print(f"⚠️ Gagal inisialisasi data awal: {e}")
     finally:
