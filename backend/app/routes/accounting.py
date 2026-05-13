@@ -36,7 +36,9 @@ def get_local_date():
 def resolve_active_branch_id(db: Session, current_user: models.User) -> int:
     branch_id = current_user.active_branch_id
     if branch_id:
-        return branch_id
+        exists = db.query(models.Branch.id).filter(models.Branch.id == branch_id).first()
+        if exists:
+            return branch_id
 
     first_branch = db.query(models.Branch).order_by(models.Branch.id).first()
     if not first_branch:
@@ -383,19 +385,8 @@ def delete_account(
     return {"message": "Akun dihapus"}
 
 
-@router.post("/accounts/seed-default")
-def seed_default_accounts(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    if current_user.role != "admin":
-        raise HTTPException(403, "Hanya admin")
-
-    existing = db.query(func.count(models.Account.id)).scalar()
-    if existing > 0:
-        raise HTTPException(400, "Chart of accounts sudah ada")
-
-    default_accounts = [
+def get_default_accounts() -> list[tuple[str, str, str, str, str]]:
+    return [
             # --- ASET ---
             ("1-1100", "Kas", "asset", "current_asset", "debit"),
             ("1-1200", "Bank", "asset", "current_asset", "debit"),
@@ -444,13 +435,47 @@ def seed_default_accounts(
             ("5-2700", "Beban Lain-lain", "expense", "non_operating", "debit"),
         ]
 
-    for code, name, type_, subtype, normal in default_accounts:
+
+def ensure_default_accounts(db: Session) -> int:
+    created = 0
+    for code, name, type_, subtype, normal in get_default_accounts():
+        account = db.query(models.Account).filter(models.Account.code == code).first()
+        if account:
+            if not account.name:
+                account.name = name
+            if not account.type:
+                account.type = type_
+            if not account.subtype:
+                account.subtype = subtype
+            if not account.normal_balance:
+                account.normal_balance = normal
+            continue
+
         db.add(models.Account(
-            code=code, name=name, type=type_,
-            subtype=subtype, normal_balance=normal
+            code=code,
+            name=name,
+            type=type_,
+            subtype=subtype,
+            normal_balance=normal,
         ))
+        created += 1
+    db.flush()
+    return created
+
+
+@router.post("/accounts/seed-default")
+def seed_default_accounts(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    if "admin" not in (current_user.role or ""):
+        raise HTTPException(403, "Hanya admin")
+
+    created = ensure_default_accounts(db)
     db.commit()
-    return {"message": f"{len(default_accounts)} akun default dibuat"}
+    if created == 0:
+        return {"message": "Chart of accounts sudah lengkap"}
+    return {"message": f"{created} akun default dibuat"}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1485,6 +1510,14 @@ def get_setup_status(db: Session = Depends(get_db), current_user: models.User = 
 
     branch = db.query(models.Branch).get(b_id)
     if not branch:
+        first_branch = db.query(models.Branch).order_by(models.Branch.id).first()
+        if not first_branch:
+            raise HTTPException(400, "Sistem belum memiliki cabang sama sekali.")
+        b_id = first_branch.id
+        branch = db.query(models.Branch).get(b_id)
+        if not branch:
+            raise HTTPException(400, "Cabang aktif tidak ditemukan. Silakan restart aplikasi.")
+    if not branch:
         return {"is_setup_completed": False}
         
     # 🛡️ FIX TYPO: Sesuai dengan nama kolom di models.py (tanpa 'd')
@@ -1513,17 +1546,16 @@ def setup_initial_balance(
         raise HTTPException(400, "Setup saldo awal sudah pernah dilakukan. Gunakan menu Jurnal Manual jika ingin mengubah.")
 
     # 🛡️ AUTO-GENERATE CoA: Jika akun belum digenerate, bantu generate otomatis!
-    acc_cash = db.query(models.Account).filter(models.Account.code == "1-1100").first()
-    if not acc_cash:
-        try:
-            seed_default_accounts(db=db, current_user=current_user)
-        except Exception:
-            pass
+    ensure_default_accounts(db)
 
-    # Cek lagi setelah auto-generate
-    acc_cash = db.query(models.Account).filter(models.Account.code == "1-1100").first()
-    if not acc_cash:
-        raise HTTPException(400, "Master Akun (CoA) gagal dibuat. Harap ke menu Akuntansi -> Generate Akun Standar terlebih dahulu.")
+    required_account_codes = ["1-1100", "1-1200", "1-1400", "1-2100", "1-2300", "2-1100", "3-1100"]
+    missing_codes = [
+        code
+        for code in required_account_codes
+        if not db.query(models.Account.id).filter(models.Account.code == code).first()
+    ]
+    if missing_codes:
+        raise HTTPException(400, f"Master Akun (CoA) belum lengkap: {', '.join(missing_codes)}.")
 
     def next_opening_purchase_number() -> str:
         today_str = datetime.now(WITA).strftime("%Y%m%d")

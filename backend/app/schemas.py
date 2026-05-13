@@ -306,6 +306,7 @@ class PurchaseOut(BaseModel):
     id: int
     number: str
     date: date
+    branch_id: Optional[int] = None
     supplier_id: int
     subtotal: float
     discount: float

@@ -20,6 +20,7 @@ from .accounting import get_income_statement
 router = APIRouter()
 
 WITA = pytz.timezone("Asia/Makassar")
+REAL_PURCHASE_STATUSES = ["unpaid", "partial", "paid"]
 
 def get_local_date():
     return datetime.now(WITA).date()
@@ -43,10 +44,14 @@ def get_dashboard_data(db: Session = Depends(get_db), current_user: models.User 
         models.Sale.status != "cancelled"
     ).with_entities(func.sum(models.Sale.total)).scalar() or 0
 
-    total_purchases_today = get_query(db, models.Purchase, current_user).filter(
+    purchase_q = db.query(models.Purchase).filter(
+        models.Purchase.is_branch_request == False,
         models.Purchase.date == today_local,
-        models.Purchase.status != "cancelled"
-    ).with_entities(func.sum(models.Purchase.total)).scalar() or 0
+        models.Purchase.status.in_(REAL_PURCHASE_STATUSES)
+    )
+    if current_user.active_branch_id is not None:
+        purchase_q = purchase_q.filter(models.Purchase.branch_id == current_user.active_branch_id)
+    total_purchases_today = purchase_q.with_entities(func.sum(models.Purchase.total)).scalar() or 0
 
     total_tx_today = get_query(db, models.Sale, current_user).filter(
         models.Sale.date == today_local,
@@ -147,11 +152,15 @@ def profit_loss(
     acc_data = get_income_statement(start_date=start_date, end_date=end_date, db=db, current_user=current_user)
     period_start = start_date or get_local_date().replace(day=1)
     period_end = end_date or get_local_date()
-    total_purchases = get_query(db, models.Purchase, current_user).filter(
+    purchase_q = db.query(models.Purchase).filter(
+        models.Purchase.is_branch_request == False,
         models.Purchase.date >= period_start,
         models.Purchase.date <= period_end,
-        models.Purchase.status != "cancelled"
-    ).with_entities(func.sum(models.Purchase.total)).scalar() or 0
+        models.Purchase.status.in_(REAL_PURCHASE_STATUSES)
+    )
+    if current_user.active_branch_id is not None:
+        purchase_q = purchase_q.filter(models.Purchase.branch_id == current_user.active_branch_id)
+    total_purchases = purchase_q.with_entities(func.sum(models.Purchase.total)).scalar() or 0
     
     return {
         # Format Baru (Lengkap)
@@ -193,9 +202,13 @@ def receivables(db: Session = Depends(get_db), current_user: models.User = Depen
 
 @router.get("/payables")
 def payables(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    purchases = get_query(db, models.Purchase, current_user).filter(
+    q = db.query(models.Purchase).filter(
+        models.Purchase.is_branch_request == False,
         models.Purchase.status.in_(["unpaid", "partial"])
-    ).all()
+    )
+    if current_user.active_branch_id is not None:
+        q = q.filter(models.Purchase.branch_id == current_user.active_branch_id)
+    purchases = q.all()
     
     return [{
         "id": p.id,

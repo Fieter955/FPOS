@@ -386,28 +386,28 @@ def create_transfer(data: TransferCreate, db: Session = Depends(get_db),
 
     # Jurnal Akuntansi (hanya untuk transfer lintas cabang)
     if not is_internal_transfer and total_nilai_transfer > 0:
-        from .accounting import create_auto_journal
+        from ..services.journal_service import create_transfer_journal
 
-        create_auto_journal(
-            db=db, date_val=data.date, number_ref=number,
+        create_transfer_journal(
+            db=db,
+            date_val=data.date,
+            number_ref=number,
+            total=total_nilai_transfer,
+            direction="out",
             description=f"Transfer Keluar ke {to_w.branch.name} ({to_w.name})",
-            entries=[
-                {"code": "3-2000", "debit": total_nilai_transfer, "credit": 0},
-                {"code": "1-1400", "debit": 0, "credit": total_nilai_transfer}
-            ],
             user_id=current_user.id,
-            branch_id=from_w.branch_id
+            branch_id=from_w.branch_id,
         )
 
-        create_auto_journal(
-            db=db, date_val=data.date, number_ref=number,
+        create_transfer_journal(
+            db=db,
+            date_val=data.date,
+            number_ref=number,
+            total=total_nilai_transfer,
+            direction="in",
             description=f"Transfer Masuk dari {from_w.branch.name} ({from_w.name})",
-            entries=[
-                {"code": "1-1400", "debit": total_nilai_transfer, "credit": 0},
-                {"code": "3-2000", "debit": 0, "credit": total_nilai_transfer}
-            ],
             user_id=current_user.id,
-            branch_id=to_w.branch_id
+            branch_id=to_w.branch_id,
         )
 
     db.commit()

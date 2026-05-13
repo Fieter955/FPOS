@@ -66,7 +66,17 @@ def get_current_user(request: Request, token: str = Depends(oauth2_scheme), db: 
     
     if "admin" in user.role:
         if requested_branch: # Jika admin pilih cabang tertentu
-            user.active_branch_id = int(requested_branch)
+            try:
+                b_id = int(requested_branch)
+                # 🛡️ VALIDASI: Pastikan cabang benar-benar ada di database
+                exists = db.query(models.Branch.id).filter(models.Branch.id == b_id).first()
+                if exists:
+                    user.active_branch_id = b_id
+                else:
+                    # Jika ID hantu (misal dari localStorage lama), balikkan ke default
+                    user.active_branch_id = user.branch_id or 1
+            except (ValueError, TypeError):
+                user.active_branch_id = user.branch_id or 1
         else: # Jika admin pilih "-- Semua Cabang --"
             user.active_branch_id = None 
     else:

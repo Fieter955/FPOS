@@ -262,7 +262,7 @@ class Purchase(Base):
     supplier = relationship("Supplier", back_populates="purchases")
     items = relationship("PurchaseItem", back_populates="purchase", cascade="all, delete-orphan")
     returns = relationship("PurchaseReturn", back_populates="purchase")
-    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     branch = relationship("Branch", back_populates="purchases", foreign_keys=[branch_id])
     
     # 👇 TAMBAHAN UNTUK REQUEST CABANG (PO) 👇
@@ -336,7 +336,7 @@ class Sale(Base):
     customer = relationship("Customer", back_populates="sales")
     items = relationship("SaleItem", back_populates="sale", cascade="all, delete-orphan")
     returns = relationship("SaleReturn", back_populates="sale")
-    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     branch = relationship("Branch", back_populates="sales")
 
 
@@ -383,7 +383,7 @@ class SaleReturnItem(Base):
 class StockMovement(Base):
     __tablename__ = "stock_movements"
     id = Column(Integer, primary_key=True, index=True)
-    branch_id = Column(Integer, nullable=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     date = Column(Date, nullable=False)
     item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
     type = Column(String(20), nullable=False)
@@ -406,7 +406,7 @@ class CashTransaction(Base):
     reference = Column(String(100))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False) 
-    branch_id = Column(Integer, nullable=True) # Tambahkan ini di model Kas
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False) # Tambahkan ini di model Kas
     account = relationship("Account")
 
 
