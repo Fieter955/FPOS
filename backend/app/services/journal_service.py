@@ -113,21 +113,38 @@ def create_branch_fulfillment_journal(db: Session, *, date_val: date, number_ref
                                       supplier_name: str, target_branch_id: int,
                                       total: float, paid: float, user_id: int,
                                       pusat_branch_id: int = 1):
-    entries = [{"code": ACCOUNT_TRANSFER_OUT, "debit": total, "credit": 0}]
+    # 1. Jurnal Toko Pusat (Mengeluarkan Kas/Hutang, Mencatat Transfer Keluar)
+    entries_pusat = [{"code": ACCOUNT_TRANSFER_OUT, "debit": total, "credit": 0}]
     if paid > 0:
-        entries.append({"code": ACCOUNT_CASH, "debit": 0, "credit": paid})
+        entries_pusat.append({"code": ACCOUNT_CASH, "debit": 0, "credit": paid})
     payable = total - paid
     if payable > 0:
-        entries.append({"code": ACCOUNT_PAYABLE, "debit": 0, "credit": payable})
+        entries_pusat.append({"code": ACCOUNT_PAYABLE, "debit": 0, "credit": payable})
+
+    _auto_journal(
+        db,
+        date_val,
+        number_ref,
+        f"Pusat beli untuk Cabang ({target_branch_id}) - {supplier_name}",
+        entries_pusat,
+        user_id,
+        pusat_branch_id,
+    )
+
+    # 2. Jurnal Cabang Penerima (Menerima Stok, Mencatat Hutang Antar Kantor)
+    entries_cabang = [
+        {"code": ACCOUNT_INVENTORY, "debit": total, "credit": 0},
+        {"code": ACCOUNT_TRANSFER_IN, "debit": 0, "credit": total},
+    ]
 
     return _auto_journal(
         db,
         date_val,
         number_ref,
-        f"Pusat beli untuk Cabang ({target_branch_id}) - {supplier_name}",
-        entries,
+        f"Terima stok dari Pusat (PO: {number_ref})",
+        entries_cabang,
         user_id,
-        pusat_branch_id,
+        target_branch_id,
     )
 
 
@@ -135,19 +152,37 @@ def create_branch_fulfillment_reversal_journal(db: Session, *, date_val: date,
                                                number_ref: str, target_branch_id: int,
                                                total: float, paid: float,
                                                user_id: int, pusat_branch_id: int = 1):
-    entries = [{"code": ACCOUNT_TRANSFER_OUT, "debit": 0, "credit": total}]
+    # 1. Balik Jurnal Toko Pusat
+    entries_pusat = [{"code": ACCOUNT_TRANSFER_OUT, "debit": 0, "credit": total}]
     if paid > 0:
-        entries.append({"code": ACCOUNT_CASH, "debit": paid, "credit": 0})
+        entries_pusat.append({"code": ACCOUNT_CASH, "debit": paid, "credit": 0})
     payable = total - paid
     if payable > 0:
-        entries.append({"code": ACCOUNT_PAYABLE, "debit": payable, "credit": 0})
+        entries_pusat.append({"code": ACCOUNT_PAYABLE, "debit": payable, "credit": 0})
+
+    _auto_journal(
+        db,
+        date_val,
+        number_ref,
+        f"PEMBATALAN FULFILLMENT CABANG ({target_branch_id}): {number_ref}",
+        entries_pusat,
+        user_id,
+        pusat_branch_id,
+    )
+
+    # 2. Balik Jurnal Cabang Penerima
+    entries_cabang = [
+        {"code": ACCOUNT_TRANSFER_IN, "debit": total, "credit": 0},
+        {"code": ACCOUNT_INVENTORY, "debit": 0, "credit": total},
+    ]
 
     return _auto_journal(
         db,
         date_val,
         number_ref,
-        f"PEMBATALAN FULFILLMENT CABANG ({target_branch_id}): {number_ref}",
-        entries,
+        f"PEMBATALAN TERIMA STOK: {number_ref}",
+        entries_cabang,
         user_id,
-        pusat_branch_id,
+        target_branch_id,
     )
+

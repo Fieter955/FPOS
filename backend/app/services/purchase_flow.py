@@ -379,28 +379,49 @@ def update_draft_purchase(db: Session, *, purchase: models.Purchase,
     purchase.status = status
     purchase.notes = data.notes
     purchase.is_branch_request = False
-    purchase.target_branch_id = data.target_branch_id
+    
+    # 🛡️ FIX: Preserve target_branch_id if not explicitly provided (prevents losing branch link when finalizing drafts)
+    final_target_branch_id = data.target_branch_id or purchase.target_branch_id
+    purchase.target_branch_id = final_target_branch_id
 
     db.query(models.PurchaseItem).filter(models.PurchaseItem.purchase_id == purchase.id).delete()
     add_purchase_items(db, purchase, data, received=True)
     db.flush()
 
     if status != "draft":
-        stock_branch_id = data.target_branch_id or purchase.branch_id
+        stock_branch_id = final_target_branch_id or purchase.branch_id
         receive_branch_stock(db, purchase=purchase, target_branch_id=stock_branch_id,
                              local_datetime=local_datetime)
         update_supplier_item_master(db, data)
+        
         supplier = db.query(models.Supplier).get(data.supplier_id)
-        create_purchase_journal(
-            db,
-            date_val=tanggal,
-            number_ref=purchase.number,
-            supplier_name=supplier.name if supplier else "Supplier",
-            total=totals["total"],
-            paid=data.paid or 0,
-            user_id=current_user.id,
-            branch_id=purchase.branch_id,
-        )
+        supplier_name = supplier.name if supplier else "Supplier"
+
+        # 🛡️ FIX: Use Fulfillment Journal if this was a PO for another branch
+        if purchase.branch_id == PUSAT_BRANCH_ID and final_target_branch_id and final_target_branch_id != PUSAT_BRANCH_ID:
+            create_branch_fulfillment_journal(
+                db,
+                date_val=tanggal,
+                number_ref=purchase.number,
+                supplier_name=supplier_name,
+                target_branch_id=stock_branch_id,
+                total=totals["total"],
+                paid=data.paid or 0,
+                user_id=current_user.id,
+                pusat_branch_id=purchase.branch_id,
+            )
+        else:
+            create_purchase_journal(
+                db,
+                date_val=tanggal,
+                number_ref=purchase.number,
+                supplier_name=supplier_name,
+                total=totals["total"],
+                paid=data.paid or 0,
+                user_id=current_user.id,
+                branch_id=purchase.branch_id,
+            )
+
 
     return purchase
 

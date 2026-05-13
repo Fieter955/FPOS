@@ -141,7 +141,11 @@
           >
             📥 Permintaan dari Cabang
           </button>
-          <button class="tab-btn" id="buatTabBtn" onclick="switchTab('buatTab')">
+          <button
+            class="tab-btn"
+            id="buatTabBtn"
+            onclick="switchTab('buatTab')"
+          >
             🛒 Membelikan Cabang / Buat PO
           </button>
           <button
@@ -169,10 +173,27 @@
 
           <!-- Filter Bar Pusat -->
           <div class="filter-bar">
-            <input type="date" id="reqStart" class="input-control" style="width: 160px" onchange="loadRequests()">
+            <input
+              type="date"
+              id="reqStart"
+              class="input-control"
+              style="width: 160px"
+              onchange="loadRequests()"
+            />
             <span style="color: var(--text-muted)">s/d</span>
-            <input type="date" id="reqEnd" class="input-control" style="width: 160px" onchange="loadRequests()">
-            <select id="reqStatus" class="input-control" style="width: 200px" onchange="loadRequests()">
+            <input
+              type="date"
+              id="reqEnd"
+              class="input-control"
+              style="width: 160px"
+              onchange="loadRequests()"
+            />
+            <select
+              id="reqStatus"
+              class="input-control"
+              style="width: 200px"
+              onchange="loadRequests()"
+            >
               <option value="pending">Menunggu Diproses</option>
               <option value="completed">Sudah Diproses (Beli)</option>
               <option value="cancelled">Dibatalkan/Ditolak</option>
@@ -205,10 +226,32 @@
 
         <!-- 👇 TAB 2: FORM BUAT PO / REQUEST 👇 -->
         <div id="buatTab" class="tab-content">
-          <div id="pusatInfoView" style="display: none; padding: 40px; text-align: center; background: var(--bg-color); border-radius: 12px; border: 2px dashed var(--border-color);">
-            <div style="font-size: 48px; margin-bottom: 16px;">🏢</div>
-            <h3 style="color: var(--text-muted);">Menu Pembuatan Pesanan (PO)</h3>
-            <p style="color: var(--text-muted); max-width: 400px; margin: 8px auto;">Halaman ini digunakan oleh Cabang untuk mengirimkan permintaan barang ke Pusat. Toko Pusat mengelola permintaan tersebut melalui tab <b>"Permintaan dari Cabang"</b>.</p>
+          <div
+            id="pusatInfoView"
+            style="
+              display: none;
+              padding: 40px;
+              text-align: center;
+              background: var(--bg-color);
+              border-radius: 12px;
+              border: 2px dashed var(--border-color);
+            "
+          >
+            <div style="font-size: 48px; margin-bottom: 16px">🏢</div>
+            <h3 style="color: var(--text-muted)">
+              Menu Pembuatan Pesanan (PO)
+            </h3>
+            <p
+              style="
+                color: var(--text-muted);
+                max-width: 400px;
+                margin: 8px auto;
+              "
+            >
+              Halaman ini digunakan oleh Cabang untuk mengirimkan permintaan
+              barang ke Pusat. Toko Pusat mengelola permintaan tersebut melalui
+              tab <b>"Permintaan dari Cabang"</b>.
+            </p>
           </div>
 
           <div id="poFormContent">
@@ -276,10 +319,27 @@
 
           <!-- Filter Bar Cabang -->
           <div class="filter-bar">
-            <input type="date" id="histStart" class="input-control" style="width: 160px" onchange="loadMyRequests()">
+            <input
+              type="date"
+              id="histStart"
+              class="input-control"
+              style="width: 160px"
+              onchange="loadMyRequests()"
+            />
             <span style="color: var(--text-muted)">s/d</span>
-            <input type="date" id="histEnd" class="input-control" style="width: 160px" onchange="loadMyRequests()">
-            <select id="histStatus" class="input-control" style="width: 200px" onchange="loadMyRequests()">
+            <input
+              type="date"
+              id="histEnd"
+              class="input-control"
+              style="width: 160px"
+              onchange="loadMyRequests()"
+            />
+            <select
+              id="histStatus"
+              class="input-control"
+              style="width: 200px"
+              onchange="loadMyRequests()"
+            >
               <option value="all">Semua Riwayat</option>
               <option value="pending">Sedang Menunggu</option>
               <option value="completed">Disetujui Pusat</option>
@@ -308,7 +368,6 @@
             </table>
           </div>
         </div>
-
       </main>
     </div>
 
@@ -335,10 +394,12 @@
 
       function getStatusBadge(status) {
         status = status.toLowerCase();
-        if (status === 'pending') return `<span class="badge bo">PENDING</span>`;
-        if (status === 'completed' || status === 'unpaid' || status === 'paid') 
+        if (status === "pending")
+          return `<span class="badge bo">PENDING</span>`;
+        if (status === "completed" || status === "unpaid" || status === "paid")
           return `<span class="badge" style="background:#10b981; color:white">DISETUJUI</span>`;
-        if (status === 'cancelled') return `<span class="badge" style="background:#ef4444; color:white">DITOLAK</span>`;
+        if (status === "cancelled")
+          return `<span class="badge" style="background:#ef4444; color:white">DITOLAK</span>`;
         return `<span class="badge">${status.toUpperCase()}</span>`;
       }
 
@@ -350,8 +411,10 @@
           .querySelectorAll(".tab-btn")
           .forEach((b) => b.classList.remove("active"));
         document.getElementById(tabId).classList.add("active");
-        
-        const targetBtn = document.querySelector(`button[onclick="switchTab('${tabId}')"]`);
+
+        const targetBtn = document.querySelector(
+          `button[onclick="switchTab('${tabId}')"]`,
+        );
         if (targetBtn) targetBtn.classList.add("active");
 
         if (tabId === "requestTab") loadRequests();
@@ -360,9 +423,13 @@
 
       function setDefaultDates() {
         const now = new Date();
-        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-        
+        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
+          .toISOString()
+          .split("T")[0];
+        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+          .toISOString()
+          .split("T")[0];
+
         if (document.getElementById("reqStart")) {
           document.getElementById("reqStart").value = firstDay;
           document.getElementById("reqEnd").value = lastDay;
@@ -392,7 +459,8 @@
           document.getElementById("buatTabBtn").classList.add("active");
           document.getElementById("buatTab").classList.add("active");
           document.getElementById("btnSaveDraft").style.display = "none";
-          document.getElementById("buatTabBtn").textContent = "📤 Buat Permintaan ke Pusat";
+          document.getElementById("buatTabBtn").textContent =
+            "📤 Buat Permintaan ke Pusat";
         }
 
         const urlParams = new URLSearchParams(window.location.search);
@@ -406,7 +474,7 @@
           const status = document.getElementById("reqStatus").value;
           const start = document.getElementById("reqStart").value;
           const end = document.getElementById("reqEnd").value;
-          
+
           let url = `/po/requests?status=${status}`;
           if (start) url += `&start_date=${start}`;
           if (end) url += `&end_date=${end}`;
@@ -431,7 +499,7 @@
                       <td>
                         <div style="display:flex; gap:4px">
                             <button class="bsm be" onclick="loadPO(${r.id})">Lihat</button>
-                            ${r.status === 'pending' ? `<button class="bsm bp" onclick="location.href='catat-pembelian.html?po_id=${r.id}'">Beli</button>` : ''}
+                            ${r.status === "pending" ? `<button class="bsm bp" onclick="location.href='catat-pembelian.html?po_id=${r.id}'">Beli</button>` : ""}
                             <button class="bsm" style="background:#e2e8f0; color:#475569" onclick="exportPurchasePDF(${r.id})">📄 PDF</button>
                         </div>
                       </td>
@@ -449,7 +517,7 @@
           const status = document.getElementById("histStatus").value;
           const start = document.getElementById("histStart").value;
           const end = document.getElementById("histEnd").value;
-          
+
           let url = `/po/my-requests?status=${status}`;
           if (start) url += `&start_date=${start}`;
           if (end) url += `&end_date=${end}`;
@@ -495,12 +563,12 @@
             initialData: p,
           });
           document.getElementById("bNotes").value = p.notes || "";
-          
+
           if (myBranchId == 1) {
             document.getElementById("pusatInfoView").style.display = "none";
             document.getElementById("poFormContent").style.display = "block";
           }
-          
+
           switchTab("buatTab");
         } catch (e) {
           showToast(e.message, "error");
@@ -512,11 +580,6 @@
         if (!orderManager) return;
         const data = orderManager.getData();
 
-        if (myBranchId == 1 && !data.target_branch_id)
-          return showToast(
-            "Hanya cabang yang dapat melakukan request",
-            "error",
-          );
         if (!data.supplier_id) return showToast("Pilih supplier", "error");
         if (data.items.length === 0)
           return showToast("Tambahkan minimal 1 barang", "error");
@@ -556,11 +619,13 @@
       }
 
       async function resetForm() {
-        if(confirm("Kosongkan semua input?")) {
+        if (confirm("Kosongkan semua input?")) {
           currentPOId = null;
-          orderManager = await createOrderManager("orderManagerContainer", { type: "po" });
+          orderManager = await createOrderManager("orderManagerContainer", {
+            type: "po",
+          });
           document.getElementById("bNotes").value = "";
-          
+
           if (myBranchId == 1) {
             document.getElementById("pusatInfoView").style.display = "block";
             document.getElementById("poFormContent").style.display = "none";

@@ -61,10 +61,9 @@ def get_purchases(
             | (models.Purchase.target_branch_id == PUSAT_BRANCH_ID)
         )
     else:
-        q = q.filter(
-            (models.Purchase.branch_id == branch_id)
-            | (models.Purchase.target_branch_id == branch_id)
-        )
+        # 🛡️ FIX: Cabang hanya boleh melihat faktur yang mereka buat sendiri (branch_id).
+        # Faktur kiriman dari Pusat (target_branch_id) hanya muncul di po.html (Riwayat Request).
+        q = q.filter(models.Purchase.branch_id == branch_id)
 
     if start_date:
         q = q.filter(models.Purchase.date >= start_date)
