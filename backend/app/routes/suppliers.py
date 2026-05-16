@@ -65,13 +65,16 @@ def create_supplier(
     db: Session = Depends(get_db),
     _=Depends(get_current_user)
 ):
-    import uuid
     # 1. Generate kode jika kosong
     sup_code = s.code.strip() if s.code else f"SUP-{uuid.uuid4().hex[:5].upper()}"
 
     # 2. Cek duplikat SATU KALI SAJA dengan konsisten
     if db.query(models.Supplier).filter(models.Supplier.code == sup_code).first():
         raise HTTPException(status_code=400, detail="Kode supplier sudah digunakan")
+    
+    # 👇 TAMBAHKAN CEK NAMA
+    if db.query(models.Supplier).filter(models.Supplier.name.ilike(s.name)).first():
+        raise HTTPException(status_code=400, detail="Nama supplier sudah terdaftar")
 
     obj = models.Supplier(
         code=sup_code,
@@ -86,9 +89,11 @@ def create_supplier(
 
     # 3. Hubungkan Item tanpa filter is_active agar tidak ada barang yang "nyangkut"
     if s.item_ids:
-        items = db.query(models.Item).filter(models.Item.id.in_(s.item_ids)).all()
-        for item in items:
-            obj.items.append(item)
+        for iid in s.item_ids:
+            db.add(models.ItemSupplier(
+                supplier=obj,
+                item_id=iid
+            ))
 
     db.commit()
     db.refresh(obj)
@@ -125,14 +130,17 @@ def update_supplier(
         setattr(obj, k, v)
     
     if item_ids is not None:
-        obj.items.clear()
+        # 🛡️ HAPUS RELASI LAMA LANGSUNG KE TABEL PERANTARA 🛡️
+        # Karena relasi 'items' di model Supplier adalah viewonly=True
+        db.query(models.ItemSupplier).filter(models.ItemSupplier.supplier_id == sid).delete()
+        
         if item_ids:
-            items = db.query(models.Item).filter(
-                models.Item.id.in_(item_ids),
-                models.Item.is_active == True
-            ).all()
-            for item in items:
-                obj.items.append(item)
+            # Hubungkan item baru tanpa filter is_active agar data tetap konsisten
+            for iid in item_ids:
+                db.add(models.ItemSupplier(
+                    supplier_id=sid,
+                    item_id=iid
+                ))
     
     db.commit()
     db.refresh(obj)

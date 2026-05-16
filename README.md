@@ -44,9 +44,14 @@ Dokumentasi ini dirancang agar AI (CLI Agent) dapat memahami struktur kerja sist
 2. **Realtime Stock**: Stok dipotong dari Gudang Default Cabang (mendukung kuantitas desimal untuk multi-satuan).
 3. **Auto-Journal**: Mencatat Pendapatan, Kas/Bank, dan HPP (Harga Pokok Penjualan) secara instan.
 
-#### D. Inventaris & Multi-Satuan
-- **Virtual Variants**: Barang bisa memiliki satuan berbeda (Pcs vs Dus). Penjualan satuan kecil otomatis memotong stok induk secara proporsional (desimal).
-- **Stock Movement**: Setiap perubahan stok wajib dicatat di `stock_movements` untuk audit trail (Before/After).
+#### D. Inter-Branch PO (Pemenuhan Permintaan Cabang)
+- **Workflow**: Cabang membuat Request (`is_branch_request=true`) -> Pusat proses di `po.html` -> Simpan Draft atau Bayar.
+- **Reciprocal Accounting**: 
+  - Saat Pusat memproses PO untuk Cabang, sistem otomatis mencatat **dua jurnal sekaligus**:
+    1. **Toko Pusat**: Mendebit akun `3-2200 Kirim Barang ke Cabang` dan mengkredit Kas/Hutang.
+    2. **Cabang Penerima**: Mendebit akun `1-1400 Persediaan` dan mengkredit `3-2100 Transfer dari Pusat` (Hutang Antar Kantor).
+- **Stock Isolation**: Stok hanya bertambah di gudang cabang tujuan (`target_branch_id`), bukan di Toko Pusat, untuk mencegah data persediaan yang keliru.
+- **Visibility**: Faktur pemenuhan milik Pusat otomatis disembunyikan dari daftar pembelian reguler (`purchases.html`) milik Cabang agar tidak membingungkan, namun tetap terlihat di **Riwayat Request Saya** pada `po.html`.
 
 ### 4. Skema Database (Highlight)
 - `users`: Autentikasi dan hak akses cabang.

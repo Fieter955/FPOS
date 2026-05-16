@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Penjualan - iPos 5.0</title>
+    <title>Penjualan - FPOS</title>
     <link rel="stylesheet" href="/css/style.css" />
   </head>
   <body>
@@ -156,7 +156,6 @@
         ({ cash: "💵 Cash", transfer: "🏦 Transfer", card: "💳 Kartu" })[m] ||
         m ||
         "-";
-
       async function load() {
         const s = document.getElementById("fStart").value,
           e = document.getElementById("fEnd").value,
@@ -205,6 +204,20 @@
       async function showDetail(id) {
         try {
           const s = await api("GET", `/sales/${id}`);
+          const canViewMargin = (s.items || []).some(
+            (item) =>
+              item &&
+              (Object.prototype.hasOwnProperty.call(item, "margin_percent") ||
+                Object.prototype.hasOwnProperty.call(item, "margin_amount") ||
+                Object.prototype.hasOwnProperty.call(item, "buy_price")),
+          );
+          const marginTotal = (s.items || []).reduce(
+            (sum, item) => sum + (item.margin_amount || 0),
+            0,
+          );
+          const marginColumns = canViewMargin
+            ? '<th style="text-align:right">Margin / Item</th><th style="text-align:right">Total Margin</th>'
+            : "";
           document.getElementById("mDetailTitle").textContent =
             `Faktur ${s.number}`;
           document.getElementById("mDetailBody").innerHTML = `
@@ -215,20 +228,30 @@
         <div><div style="font-size:13px;color:var(--text-muted)">Status</div>${sb(s.status)}</div>
       </div>
       <table class="tbl" style="margin-bottom:16px">
-        <thead><tr><th>Barang</th><th style="text-align:right">Qty</th><th style="text-align:right">Harga</th><th style="text-align:right">Total</th></tr></thead>
+        <thead><tr><th>Barang</th><th style="text-align:right">Qty</th><th style="text-align:right">Harga</th>${marginColumns}<th style="text-align:right">Total</th></tr></thead>
         <tbody>${(s.items || [])
           .map(
-            (i) => `<tr>
+            (i) => {
+              const unitMargin =
+                i.qty > 0 ? (i.margin_amount || 0) / i.qty : i.margin_amount || 0;
+              const marginColor = (i.margin_amount || 0) >= 0 ? "#10b981" : "#ef4444";
+              const marginCells = canViewMargin
+                ? `<td style="text-align:right;color:${marginColor};font-weight:700">${fmtRp(unitMargin)}<div style="font-size:11px;color:var(--text-muted)">${(i.margin_percent || 0).toFixed(1)}%</div></td><td style="text-align:right;color:${marginColor};font-weight:800">${fmtRp(i.margin_amount || 0)}</td>`
+                : "";
+              return `<tr>
           <td>${i.item?.name || "-"}</td>
           <td style="text-align:right">${i.qty}</td>
           <td style="text-align:right">${fmtRp(i.sell_price)}</td>
+          ${marginCells}
           <td style="text-align:right;font-weight:700">${fmtRp(i.total)}</td>
-        </tr>`,
+        </tr>`;
+            },
           )
           .join("")}</tbody>
       </table>
       <div style="background:var(--bg-color);border-radius:12px;padding:16px">
         <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span>Subtotal</span><span>${fmtRp(s.subtotal)}</span></div>
+        ${canViewMargin ? `<div style="display:flex;justify-content:space-between;margin-bottom:8px;color:${marginTotal >= 0 ? "#10b981" : "#ef4444"};font-weight:800"><span>Total Margin Barang</span><span>${fmtRp(marginTotal)}</span></div>` : ""}
         ${s.discount > 0 ? `<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span>Diskon</span><span>-${fmtRp(s.discount)}</span></div>` : ""}
         ${s.tax > 0 ? `<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span>PPN</span><span>${fmtRp(s.tax)}</span></div>` : ""}
         <div style="display:flex;justify-content:space-between;font-size:20px;font-weight:900;border-top:1px solid var(--border-color);padding-top:10px;margin-top:6px"><span>TOTAL</span><span style="color:var(--primary)">${fmtRp(s.total)}</span></div>

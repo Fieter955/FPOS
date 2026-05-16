@@ -95,8 +95,9 @@ def get_items_for_purchase(
     current_user: models.User = Depends(get_current_user),
 ):
     from ..services.virtual_units import is_virtual_variant
+    from sqlalchemy.orm import joinedload
 
-    query = db.query(models.Item).filter(
+    query = db.query(models.Item).options(joinedload(models.Item.suppliers)).filter(
         models.Item.is_active == True,
         (models.Item.is_virtual_variant == False) | (models.Item.is_virtual_variant == None),
     )
@@ -117,13 +118,12 @@ def get_items_for_purchase(
             "sell_price": item.sell_price,
             "profit_margin": item.profit_margin,
             "unit_name": item.unit.name if item.unit else "pcs",
+            "suppliers": [{"id": s.id, "name": s.name} for s in item.suppliers],
+            "supplier_details": [{"supplier_id": s.supplier_id, "buy_price": s.buy_price} for s in item.supplier_details]
         }
 
         if supplier_id:
-            spec = db.query(models.ItemSupplier).filter(
-                models.ItemSupplier.item_id == item.id,
-                models.ItemSupplier.supplier_id == supplier_id,
-            ).first()
+            spec = next((s for s in item.supplier_details if s.supplier_id == supplier_id), None)
             if spec:
                 item_data["buy_price"] = spec.buy_price
                 if spec.barcode:
@@ -140,7 +140,12 @@ def get_purchase(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    obj = get_query(db, models.Purchase, current_user).filter(models.Purchase.id == pid).first()
+    from sqlalchemy.orm import joinedload
+    obj = get_query(db, models.Purchase, current_user).options(
+        joinedload(models.Purchase.items).joinedload(models.PurchaseItem.item).joinedload(models.Item.suppliers),
+        joinedload(models.Purchase.items).joinedload(models.PurchaseItem.item).joinedload(models.Item.supplier_details)
+    ).filter(models.Purchase.id == pid).first()
+    
     if not obj:
         raise HTTPException(404, "Pembelian tidak ditemukan")
     return obj
@@ -226,6 +231,73 @@ def create_purchase(
     db.refresh(purchase)
     return purchase
 
+
+@router.post("/{pid}/split-fulfill")
+def split_fulfill_request(
+    pid: int,
+    data: schemas.SplitFulfillRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    source = db.query(models.Purchase).filter(models.Purchase.id == pid).with_for_update().first()
+    if not source:
+        raise HTTPException(404, "Request cabang tidak ditemukan")
+    if not source.is_branch_request:
+        raise HTTPException(400, "Dokumen bukan request cabang")
+    if source.status != "pending":
+        raise HTTPException(400, f"Request sudah berstatus {source.status}")
+
+    # Group items by supplier_id
+    from collections import defaultdict
+    groups = defaultdict(list)
+    for it in data.items:
+        groups[it.supplier_id].append(it)
+
+    created_purchases = []
+    tanggal = get_local_date()
+    
+    for supplier_id, items in groups.items():
+        number = _next_number(db, "PUR", models.Purchase, current_user)
+        
+        # Calculate subtotal for this group
+        subtotal = sum(it.qty * it.buy_price for it in items)
+        
+        purchase = models.Purchase(
+            number=number,
+            date=tanggal,
+            branch_id=PUSAT_BRANCH_ID,
+            created_at=get_local_datetime(),
+            supplier_id=supplier_id,
+            subtotal=subtotal,
+            discount=0,
+            tax=0,
+            total=subtotal,
+            paid=0,
+            status="draft",
+            notes=data.notes or f"Fulfillment draft untuk {source.number}",
+            created_by=current_user.id,
+            is_branch_request=False,
+            target_branch_id=source.branch_id,
+            from_po_id=source.id
+        )
+        db.add(purchase)
+        db.flush()
+        
+        for it in items:
+            db.add(models.PurchaseItem(
+                purchase_id=purchase.id,
+                item_id=it.item_id,
+                qty=it.qty,
+                qty_ordered=it.qty,
+                qty_received=0,
+                buy_price=it.buy_price,
+                total=it.qty * it.buy_price
+            ))
+        created_purchases.append(purchase)
+
+    source.status = "completed"
+    db.commit()
+    return {"message": f"Berhasil membuat {len(created_purchases)} draft pembelian", "ids": [p.id for p in created_purchases]}
 
 @router.post("/{pid}/pay")
 def pay_purchase(

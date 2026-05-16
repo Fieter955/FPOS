@@ -483,9 +483,25 @@
 
       async function loadAllItems() {
         try {
-          allItems = await api("GET", "/items/?limit=1000");
+          // Minta langsung 20.000 item biar tidak pernah terpotong lagi
+          const result = await api(
+            "GET",
+            "/items/?limit=20000&active_only=true",
+          );
+
+          // Guard: pastikan format yang diterima adalah array
+          allItems = Array.isArray(result)
+            ? result
+            : result?.items || result?.data || [];
+
+          if (allItems.length === 0) {
+            console.warn(
+              "Peringatan: Tidak ada item yang dimuat dari database.",
+            );
+          }
         } catch (e) {
-          console.warn("Gagal load items:", e.message);
+          // Sekarang jika gagal, kasir/admin akan tahu masalahnya!
+          showToast("Gagal memuat daftar barang: " + e.message, "error");
           allItems = [];
         }
       }

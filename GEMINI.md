@@ -78,11 +78,14 @@ Always reuse existing components instead of re-implementing them. Files: `fronte
 - **Accounting (Reciprocal Transfer)**:
   - **Main Store (Branch 1)**: Debit `3-2200 Kirim Barang ke Cabang`, Credit `1-1100 Kas` / `2-1100 Hutang`.
   - **Requesting Branch**: Debit `1-1400 Persediaan`, Credit `3-2100 Transfer dari Pusat`.
-  - **Rule**: Branch's cash MUST NOT be affected.
+  - **Implementation**: Both journals MUST be created simultaneously in `journal_service.py` during fulfillment.
 - **Stock Isolation**:
-  - **Pusat Stock**: `item.stock` MUST ONLY increase if `target_branch_id == 1`.
-  - **Branch Stock**: Increments MUST be directed to the branch's warehouse via `adjust_warehouse_stock`.
-  - **Audit**: `StockMovement` records must use `get_total_branch_stock` for accurate branch-level snapshots.
+  - **Pusat Stock**: `item.stock` MUST NOT increase when Pusat fulfills a request for another branch.
+  - **Branch Stock**: Increments MUST be directed to the target branch's warehouse (`target_branch_id`).
+- **Data Integrity**:
+  - **Draft Preservation**: `target_branch_id` MUST be preserved when updating/finalizing a draft PO fulfillment, even if the frontend payload is incomplete.
+  - **Visibility Filter**: Fulfillment purchases (where `branch_id == 1` and `target_branch_id > 1`) MUST be excluded from the branch's main purchase list to prevent duplicate views, accessible only via `po.html`.
+- **Audit**: `StockMovement` records must use `get_total_branch_stock` for accurate branch-level snapshots.
 
 ## 🧠 AI Optimization & Intelligence
 

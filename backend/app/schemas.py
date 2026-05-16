@@ -277,7 +277,7 @@ class PurchaseItemCreate(BaseModel):
 class PurchaseCreate(BaseModel):
     number: Optional[str] = None
     date: date
-    supplier_id: int
+    supplier_id: Optional[int] = None
     discount: float = 0
     tax: float = 0
     notes: Optional[str] = None
@@ -307,7 +307,8 @@ class PurchaseOut(BaseModel):
     number: str
     date: date
     branch_id: Optional[int] = None
-    supplier_id: int
+    supplier_id: Optional[int] = None
+    from_po_id: Optional[int] = None
     subtotal: float
     discount: float
     tax: float
@@ -327,6 +328,16 @@ class PurchasePayment(BaseModel):
     amount: float = 0
     cash_amount: float = 0
     bank_amount: float = 0
+    notes: Optional[str] = None
+
+class SplitFulfillItem(BaseModel):
+    item_id: int
+    qty: float
+    supplier_id: int
+    buy_price: float = 0
+
+class SplitFulfillRequest(BaseModel):
+    items: List[SplitFulfillItem]
     notes: Optional[str] = None
 
 

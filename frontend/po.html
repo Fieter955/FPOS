@@ -292,7 +292,7 @@
             <!-- Unified Order Manager Container -->
             <div id="orderManagerContainer"></div>
 
-            <div class="card" style="padding: 24px; margin-top: 24px">
+            <div class="card" id="om-notes-card" style="padding: 24px; margin-top: 24px">
               <label>Catatan</label>
               <textarea
                 id="bNotes"
@@ -446,6 +446,7 @@
 
         orderManager = await createOrderManager("orderManagerContainer", {
           type: "po",
+          isBranchRequest: myBranchId != 1,
         });
 
         if (myBranchId == 1) {
@@ -461,6 +462,7 @@
           document.getElementById("btnSaveDraft").style.display = "none";
           document.getElementById("buatTabBtn").textContent =
             "📤 Buat Permintaan ke Pusat";
+          document.getElementById("om-notes-card").style.display = "none";
         }
 
         const urlParams = new URLSearchParams(window.location.search);
@@ -559,14 +561,31 @@
         showLoading();
         try {
           const p = await api("GET", `/purchases/${id}`);
+          
+          // Special mode for Pusat viewing Branch Request
+          const isSplitFulfillment = myBranchId == 1 && p.is_branch_request;
+          
           orderManager = await createOrderManager("orderManagerContainer", {
             initialData: p,
+            isBranchRequest: myBranchId != 1,
+            isSplitFulfillment: isSplitFulfillment
           });
           document.getElementById("bNotes").value = p.notes || "";
 
           if (myBranchId == 1) {
             document.getElementById("pusatInfoView").style.display = "none";
             document.getElementById("poFormContent").style.display = "block";
+            
+            if (isSplitFulfillment) {
+              document.getElementById("btnSavePO").style.display = "none";
+              document.getElementById("btnSaveDraft").textContent = "✓ Simpan sebagai Draft";
+              document.getElementById("btnSaveDraft").classList.remove("btn");
+              document.getElementById("btnSaveDraft").classList.add("btn-primary");
+              document.getElementById("om-notes-card").style.display = "none";
+            } else {
+               document.getElementById("btnSavePO").style.display = "inline-block";
+               document.getElementById("btnSaveDraft").textContent = "Simpan sebagai Draft";
+            }
           }
 
           switchTab("buatTab");
@@ -579,10 +598,32 @@
       async function simpan(status) {
         if (!orderManager) return;
         const data = orderManager.getData();
+        const isSplitMode = myBranchId == 1 && document.getElementById("btnSavePO").style.display === "none";
 
-        if (!data.supplier_id) return showToast("Pilih supplier", "error");
+        if (myBranchId == 1 && !isSplitMode && !data.supplier_id) return showToast("Pilih supplier", "error");
         if (data.items.length === 0)
           return showToast("Tambahkan minimal 1 barang", "error");
+
+        if (isSplitMode) {
+          // Validate all items have supplier
+          const missing = data.items.filter(it => !it.supplier_id);
+          if (missing.length > 0) return showToast("Pilih supplier untuk semua barang", "error");
+          
+          try {
+            showLoading("Memproses Split Draft...");
+            const res = await api("POST", `/purchases/${currentPOId}/split-fulfill`, {
+               items: data.items,
+               notes: document.getElementById("bNotes").value || null
+            });
+            hideLoading();
+            showToast(res.message);
+            setTimeout(() => location.href = "purchases.html", 1000);
+            return;
+          } catch(e) {
+            hideLoading();
+            return showToast(e.message, "error");
+          }
+        }
 
         const isRequest = myBranchId != 1 && status === "po";
 
@@ -623,6 +664,7 @@
           currentPOId = null;
           orderManager = await createOrderManager("orderManagerContainer", {
             type: "po",
+            isBranchRequest: myBranchId != 1,
           });
           document.getElementById("bNotes").value = "";
 

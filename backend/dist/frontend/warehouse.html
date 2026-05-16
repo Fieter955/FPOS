@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Multi Gudang - iPos 5.0</title>
+    <title>Multi Gudang - FPOS</title>
     <link rel="stylesheet" href="/css/style.css" />
     <style>
       /* Styling khusus baris transfer multi-barang */
@@ -41,6 +41,7 @@
         >
           ← Kembali
         </button>
+
         <div class="pg-header">
           <div>
             <h1>🏢 Multi Gudang</h1>
@@ -131,6 +132,22 @@
           >
             🌐 Semua Barang di Cabang
           </button>
+          <button
+            id="tbMutasi"
+            onclick="switchTab('mutasi')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            📊 Laporan Mutasi Detail
+          </button>
         </div>
 
         <div id="pnlGudang">
@@ -214,6 +231,148 @@
                 </tr>
               </thead>
               <tbody id="tblSemuaBarang"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="pnlMutasi" style="display: none">
+          <div
+            class="filter-bar"
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 16px;
+              margin-bottom: 16px;
+            "
+          >
+            <div
+              style="
+                background: rgba(0, 0, 0, 0.02);
+                padding: 12px;
+                border-radius: 8px;
+                border: 1px solid var(--border-color);
+              "
+            >
+              <div
+                style="
+                  font-weight: bold;
+                  margin-bottom: 8px;
+                  color: var(--text-main);
+                "
+              >
+                📤 Sumber / Asal
+              </div>
+              <select
+                id="fMutasiFromBranch"
+                class="input-control"
+                style="margin-bottom: 8px"
+                onchange="updateMutasiGudangDropdown('From')"
+              >
+                <option value="">Semua Cabang Asal</option>
+              </select>
+              <select id="fMutasiFromWarehouse" class="input-control">
+                <option value="">Semua Gudang di Cabang Ini</option>
+              </select>
+            </div>
+
+            <div
+              style="
+                background: rgba(0, 0, 0, 0.02);
+                padding: 12px;
+                border-radius: 8px;
+                border: 1px solid var(--border-color);
+              "
+            >
+              <div
+                style="
+                  font-weight: bold;
+                  margin-bottom: 8px;
+                  color: var(--text-main);
+                "
+              >
+                📥 Penerima / Tujuan
+              </div>
+              <select
+                id="fMutasiToBranch"
+                class="input-control"
+                style="margin-bottom: 8px"
+                onchange="updateMutasiGudangDropdown('To')"
+              >
+                <option value="">Semua Cabang Tujuan</option>
+              </select>
+              <select id="fMutasiToWarehouse" class="input-control">
+                <option value="">Semua Gudang di Cabang Ini</option>
+              </select>
+            </div>
+          </div>
+
+          <div
+            class="filter-bar"
+            style="
+              display: flex;
+              gap: 12px;
+              align-items: flex-end;
+              margin-bottom: 16px;
+            "
+          >
+            <div style="flex: 1">
+              <label
+                style="
+                  font-size: 12px;
+                  color: var(--text-muted);
+                  display: block;
+                  margin-bottom: 4px;
+                "
+                >Dari Tanggal</label
+              >
+              <input type="date" id="fMutasiStartDate" class="input-control" />
+            </div>
+            <div style="flex: 1">
+              <label
+                style="
+                  font-size: 12px;
+                  color: var(--text-muted);
+                  display: block;
+                  margin-bottom: 4px;
+                "
+                >Sampai Tanggal</label
+              >
+              <input type="date" id="fMutasiEndDate" class="input-control" />
+            </div>
+            <button
+              class="btn btn-primary"
+              style="height: 42px"
+              onclick="loadMutasiDetail()"
+            >
+              🔍 Terapkan Filter
+            </button>
+          </div>
+
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Tanggal</th>
+                  <th>No. Transfer</th>
+                  <th>Dari (Cabang - Gudang)</th>
+                  <th>Ke (Cabang - Gudang)</th>
+                  <th>Barang</th>
+                  <th style="text-align: right">Qty</th>
+                </tr>
+              </thead>
+              <tbody id="tblMutasi">
+                <tr>
+                  <td
+                    colspan="6"
+                    style="
+                      text-align: center;
+                      padding: 24px;
+                      color: var(--text-muted);
+                    "
+                  >
+                    Silakan terapkan filter untuk melihat data mutasi.
+                  </td>
+                </tr>
+              </tbody>
             </table>
           </div>
         </div>
@@ -329,13 +488,19 @@
           <div id="tfItemsContainer"></div>
         </div>
 
-        <div class="input-group" style="margin-bottom: 16px">
-          <label>Keterangan Transfer</label
-          ><input
-            id="tfNote"
-            class="input-control"
-            placeholder="Tujuan transfer, nomor surat jalan, dll..."
-          />
+        <div class="row2" style="margin-bottom: 16px">
+          <div class="input-group">
+            <label>Tanggal Transfer *</label>
+            <input type="date" id="tfDate" class="input-control" required />
+          </div>
+          <div class="input-group">
+            <label>Keterangan Transfer</label>
+            <input
+              id="tfNote"
+              class="input-control"
+              placeholder="Tujuan transfer, nomor surat jalan, dll..."
+            />
+          </div>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
           <button
@@ -396,8 +561,32 @@
         return new Intl.NumberFormat("id-ID").format(n || 0);
       }
 
+      // 👇 FITUR BARU: MENCEGAH INPUT BARANG GANDA 👇
+      function cegahBarangGanda(selectElement) {
+        const selectedItemId = selectElement.value;
+        if (!selectedItemId) return;
+
+        const allSelects = document.querySelectorAll(".tf-item-select");
+        let kemunculan = 0;
+
+        allSelects.forEach((sel) => {
+          if (sel.value === selectedItemId) {
+            kemunculan++;
+          }
+        });
+
+        if (kemunculan > 1) {
+          showToast(
+            "Anda sudah memilih barang yang sama di baris lain!",
+            "error",
+          );
+          selectElement.value = ""; // Langsung reset jadi kosong
+        }
+      }
+      // 👆 BATAS FITUR BARU 👆
+
       function switchTab(t) {
-        ["Gudang", "Transfer", "Stok", "SemuaBarang"].forEach((x) => {
+        ["Gudang", "Transfer", "Stok", "SemuaBarang", "Mutasi"].forEach((x) => {
           document.getElementById("pnl" + x).style.display =
             x.toLowerCase() === t ? "block" : "none";
           document.getElementById("tb" + x).style.cssText =
@@ -406,18 +595,120 @@
         if (t === "gudang") loadGudang();
         if (t === "transfer") loadTransfer();
         if (t === "semuabarang") loadInventorySummary();
+        if (t === "mutasi") setupMutasiFilters(); // Inisiasi dropdown cabang
+      }
+
+      function setupMutasiFilters() {
+        const selFromB = document.getElementById("fMutasiFromBranch");
+        const selToB = document.getElementById("fMutasiToBranch");
+
+        // Kosongkan lalu isi ulang opsi cabang
+        selFromB.innerHTML = '<option value="">Semua Cabang Asal</option>';
+        selToB.innerHTML = '<option value="">Semua Cabang Tujuan</option>';
+
+        allBranches.forEach((b) => {
+          selFromB.insertAdjacentHTML(
+            "beforeend",
+            `<option value="${b.id}">${b.name}</option>`,
+          );
+          selToB.insertAdjacentHTML(
+            "beforeend",
+            `<option value="${b.id}">${b.name}</option>`,
+          );
+        });
+      }
+
+      function updateMutasiGudangDropdown(type) {
+        const branchId = document.getElementById(`fMutasi${type}Branch`).value;
+        const selWarehouse = document.getElementById(`fMutasi${type}Warehouse`);
+
+        selWarehouse.innerHTML =
+          '<option value="">Semua Gudang di Cabang Ini</option>';
+
+        if (branchId) {
+          // Filter gudang yang hanya ada di cabang terpilih
+          const filteredGudang = allGudang.filter(
+            (g) => g.branch_id == branchId,
+          );
+          filteredGudang.forEach((g) => {
+            selWarehouse.insertAdjacentHTML(
+              "beforeend",
+              `<option value="${g.id}">${g.name}</option>`,
+            );
+          });
+        }
+      }
+
+      async function loadMutasiDetail() {
+        const fromB = document.getElementById("fMutasiFromBranch").value;
+        const fromW = document.getElementById("fMutasiFromWarehouse").value;
+        const toB = document.getElementById("fMutasiToBranch").value;
+        const toW = document.getElementById("fMutasiToWarehouse").value;
+        const startD = document.getElementById("fMutasiStartDate").value;
+        const endD = document.getElementById("fMutasiEndDate").value;
+
+        let queryParams = [];
+        if (fromB) queryParams.push(`from_branch_id=${fromB}`);
+        if (fromW) queryParams.push(`from_warehouse_id=${fromW}`);
+        if (toB) queryParams.push(`to_branch_id=${toB}`);
+        if (toW) queryParams.push(`to_warehouse_id=${toW}`);
+        if (startD) queryParams.push(`start_date=${startD}`);
+        if (endD) queryParams.push(`end_date=${endD}`);
+
+        const queryString =
+          queryParams.length > 0 ? "?" + queryParams.join("&") : "";
+
+        try {
+          showLoading("Memuat data mutasi...");
+          const d = await api(
+            "GET",
+            `/warehouses/transfers/detailed${queryString}`,
+          );
+          hideLoading();
+
+          document.getElementById("tblMutasi").innerHTML = d.length
+            ? d
+                .map(
+                  (t) => `
+      <tr>
+        <td style="font-size:13px">${t.date}</td>
+        <td style="font-family:monospace;font-size:13px;color:var(--primary)">${t.number}</td>
+        <td>
+          <b style="color:var(--text-main)">${t.from_branch}</b><br>
+          <small style="color:var(--text-muted)">${t.from_warehouse}</small>
+        </td>
+        <td>
+          <b style="color:var(--text-main)">${t.to_branch}</b><br>
+          <small style="color:var(--text-muted)">${t.to_warehouse}</small>
+        </td>
+        <td>
+          <b>${t.item_name}</b><br>
+          <small style="font-family:monospace; color:var(--text-muted)">${t.item_code}</small>
+        </td>
+        <td style="text-align:right;font-size:16px;font-weight:900;color:var(--primary)">${formatNum(t.qty)}</td>
+      </tr>
+    `,
+                )
+                .join("")
+            : '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Tidak ada riwayat mutasi yang cocok dengan filter.</td></tr>';
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
       }
 
       async function init() {
         try {
-          allGudang = await api("GET", "/warehouses/");
-          const gudangUntukTransfer = await api(
-            "GET",
-            "/warehouses/?all_branches=true",
-          );
+          // Mengambil semua data gudang lintas cabang untuk keperluan filter mutasi dan transfer
+          allGudang = await api("GET", "/warehouses/?all_branches=true");
+
+          // Menggunakan data yang sama untuk dropdown transfer agar tidak melakukan fetch ulang
+          const gudangUntukTransfer = allGudang;
+
           allItems = await api("GET", "/items/?limit=1000");
           allBranches = await api("GET", "/branches/");
 
+          // Inisialisasi dropdown Transfer Stok (Asal & Tujuan)
           const selFrom = document.getElementById("tfFrom");
           const selTo = document.getElementById("tfTo");
 
@@ -425,6 +716,7 @@
             '<option value="">-- Pilih Gudang Asal --</option>';
           selTo.innerHTML =
             '<option value="">-- Pilih Gudang Tujuan --</option>';
+
           gudangUntukTransfer.forEach((g) => {
             selFrom.insertAdjacentHTML(
               "beforeend",
@@ -436,15 +728,19 @@
             );
           });
 
+          // Inisialisasi dropdown Filter Stok per Gudang
           const selFilter = document.getElementById("filterGudang");
           selFilter.innerHTML = '<option value="">-- Pilih Gudang --</option>';
-          allGudang.forEach((g) =>
+
+          // Filter hanya gudang yang aktif untuk tampilan stok per gudang
+          allGudang.forEach((g) => {
             selFilter.insertAdjacentHTML(
               "beforeend",
               `<option value="${g.id}">${g.name}</option>`,
-            ),
-          );
+            );
+          });
 
+          // Inisialisasi dropdown Cabang pada Modal Tambah Gudang
           const selBranch = document.getElementById("gBranch");
           selBranch.innerHTML = '<option value="">-- Pilih Cabang --</option>';
           allBranches.forEach((b) =>
@@ -454,6 +750,7 @@
             ),
           );
 
+          // Memuat daftar gudang utama
           loadGudang();
         } catch (ex) {
           showToast(ex.message, "error");
@@ -576,6 +873,17 @@
         document.getElementById("tfFrom").value = "";
         document.getElementById("tfTo").value = "";
         document.getElementById("tfNote").value = "";
+
+        // Ambil tanggal lokal perangkat tanpa konversi UTC
+        const d = new Date();
+        const localDate =
+          d.getFullYear() +
+          "-" +
+          String(d.getMonth() + 1).padStart(2, "0") +
+          "-" +
+          String(d.getDate()).padStart(2, "0");
+        document.getElementById("tfDate").value = localDate;
+
         document.getElementById("tfItemsContainer").innerHTML = "";
         tfRowCounter = 0;
         currentFromStock = [];
@@ -599,7 +907,6 @@
         }
       }
 
-      // 👇 Fungsi dropdown diubah agar memunculkan Gembok saat awal
       function buildOptionsHtml() {
         const fromId = document.getElementById("tfFrom").value;
 
@@ -640,7 +947,7 @@
         });
       }
 
-      // 👇 Fungsi tambah baris diperbaiki simetrisnya
+      // 👇 FITUR BARU: onchange memanggil cegahBarangGanda(this) 👇
       function addTransferRow() {
         const rowId = tfRowCounter++;
         const container = document.getElementById("tfItemsContainer");
@@ -652,7 +959,7 @@
     <div class="tf-row" id="tfRow_${rowId}">
       <div>
         <label>Nama Barang</label>
-        <select class="input-control tf-item-select" onchange="updateStokInfoRowLocal(${rowId})" ${isDisabled}>
+        <select class="input-control tf-item-select" onchange="cegahBarangGanda(this); updateStokInfoRowLocal(${rowId})" ${isDisabled}>
           ${optionsHtml}
         </select>
         <div class="tf-stok-info" style="font-size:12px;color:var(--text-muted);margin-top:4px;height:16px;"></div>
@@ -669,13 +976,13 @@
         container.insertAdjacentHTML("beforeend", html);
         updateStokInfoRowLocal(rowId);
       }
+      // 👆 BATAS FITUR BARU 👆
 
       function removeTransferRow(rowId) {
         const row = document.getElementById(`tfRow_${rowId}`);
         if (row) row.remove();
       }
 
-      // 👇 Teks "Pilih gudang asal dulu" ditiadakan dari sini, diganti dengan gembok di dropdown
       function updateStokInfoRowLocal(rowId) {
         const row = document.getElementById(`tfRow_${rowId}`);
         if (!row) return;
@@ -754,9 +1061,15 @@
           );
           return;
         }
-
+        const d = new Date();
+        const localDate =
+          d.getFullYear() +
+          "-" +
+          String(d.getMonth() + 1).padStart(2, "0") +
+          "-" +
+          String(d.getDate()).padStart(2, "0");
         const payload = {
-          date: new Date().toISOString().split("T")[0],
+          date: localDate,
           from_warehouse_id: from_id,
           to_warehouse_id: to_id,
           notes: document.getElementById("tfNote").value || null,

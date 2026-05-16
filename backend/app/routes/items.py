@@ -144,7 +144,8 @@ def get_items(
     if limit <= 1000:
         limit = 20000
         
-    q = db.query(models.Item)
+    from sqlalchemy.orm import joinedload
+    q = db.query(models.Item).options(joinedload(models.Item.suppliers), joinedload(models.Item.supplier_details))
     if active_only: q = q.filter(models.Item.is_active == True)
     if search: q = q.filter(
         models.Item.name.ilike(f"%{search}%") |

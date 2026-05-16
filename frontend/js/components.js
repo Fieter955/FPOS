@@ -142,27 +142,45 @@ function createPurchaseGrid(container, config = {}) {
     itemDataSource = [],
     onChange = null,
     isFulfillment = false,
+    isBranchRequest = false,
+    showSupplierColumn = false,
   } = config;
 
   let barisIdx = 0;
   let currentData = typeof itemDataSource === "function" ? [] : itemDataSource;
+  let supplierList = [];
 
   // Header column configuration
-  const columns = isFulfillment
-    ? "2.5fr 60px 60px 0.7fr 60px 0.7fr var(--disc-col-width, 1fr) 110px 30px"
-    : "2.5fr 60px 0.7fr 60px 0.7fr var(--disc-col-width, 1fr) 110px 30px";
+  let columns;
+  if (showSupplierColumn) {
+    columns = "2.5fr 120px 2.5fr 40px";
+  } else if (isBranchRequest) {
+    columns = "2.5fr 120px 40px";
+  } else {
+    columns = isFulfillment
+      ? "2.5fr 60px 60px 0.7fr 60px 0.7fr var(--disc-col-width, 1fr) 110px 30px"
+      : "2.5fr 60px 0.7fr 60px 0.7fr var(--disc-col-width, 1fr) 110px 30px";
+  }
 
   target.innerHTML = `
         <div class="purchase-grid-container">
             <div class="purchase-grid-header" style="display:grid; grid-template-columns: ${columns}; gap:10px; padding:10px; background:var(--bg-color); font-weight:700; font-size:12px; border-radius:8px 8px 0 0">
                 <div>Nama Barang</div>
                 <div style="text-align:center">Pesan</div>
+                ${
+                  showSupplierColumn
+                    ? "<div>Pilih Supplier</div>"
+                    : isBranchRequest
+                      ? ""
+                      : `
                 ${isFulfillment ? '<div style="text-align:center">Terima</div>' : ""}
                 <div>Harga Beli</div>
                 <div style="text-align:center">Margin (%)</div>
                 <div>Harga Jual</div>
                 <div style="text-align:center">Diskon (%)</div>
                 <div style="text-align:right">Total</div>
+                `
+                }
                 <div></div>
             </div>
             <div class="purchase-grid-body" style="border:1px solid var(--border-color); border-top:none; border-radius:0 0 8px 8px; min-height:100px"></div>
@@ -199,16 +217,24 @@ function createPurchaseGrid(container, config = {}) {
     row.innerHTML = `
             <div class="item-selector" id="pg-combo-${id}"></div>
             <input type="number" class="combobox-input pg-ordered" value="${qtyOrdered}" style="text-align:center" />
-            ${isFulfillment ? `<input type="number" class="combobox-input pg-received" value="${qtyReceived}" style="text-align:center; border-color:var(--primary)" />` : ""}
-            <input type="text" class="combobox-input pg-beli" value="${toRibuan(item?.buy_price || 0)}" style="text-align:left" />
-            <input type="number" step="0.01" class="combobox-input pg-margin" value="${item?.profit_margin || 0}" style="text-align:center" />
-            <input type="text" class="combobox-input pg-jual" value="${toRibuan(item?.sell_price || 0)}" style="text-align:left" />
-            <div class="disc-group">
-                <input type="number" class="combobox-input pg-disc" value="${item?.disc1 || 0}" placeholder="0" style="text-align:center" />
-                ${item?.disc2 ? `<input type="number" class="combobox-input pg-disc" value="${item.disc2}" placeholder="0" style="text-align:center" />` : ""}
-                <button class="btn-plus-disc" title="Diskon Bertingkat">+</button>
-            </div>
-            <div class="purchase-grid-netto">Rp 0</div>
+            ${
+              showSupplierColumn
+                ? '<div id="pg-supp-' + id + '"></div>'
+                : !isBranchRequest
+                  ? `
+                ${isFulfillment ? `<input type="number" class="combobox-input pg-received" value="${qtyReceived}" style="text-align:center; border-color:var(--primary)" />` : ""}
+                <input type="text" class="combobox-input pg-beli" value="${toRibuan(item?.buy_price || 0)}" style="text-align:left" />
+                <input type="number" step="0.01" class="combobox-input pg-margin" value="${item?.profit_margin || 0}" style="text-align:center" />
+                <input type="text" class="combobox-input pg-jual" value="${toRibuan(item?.sell_price || 0)}" style="text-align:left" />
+                <div class="disc-group">
+                    <input type="number" class="combobox-input pg-disc" value="${item?.disc1 || 0}" placeholder="0" style="text-align:center" />
+                    ${item?.disc2 ? `<input type="number" class="combobox-input pg-disc" value="${item.disc2}" placeholder="0" style="text-align:center" />` : ""}
+                    <button class="btn-plus-disc" title="Diskon Bertingkat">+</button>
+                </div>
+                <div class="purchase-grid-netto">Rp 0</div>
+            `
+                  : ""
+            }
             <button class="btn btn-del-row" style="color:var(--danger); background:transparent; padding:0; justify-content:center">✕</button>
         `;
 
@@ -225,6 +251,10 @@ function createPurchaseGrid(container, config = {}) {
     const discGroup = row.querySelector(".disc-group");
 
     const calculateRow = () => {
+      if (isBranchRequest || showSupplierColumn) {
+        if (onChange) onChange();
+        return;
+      }
       // Total based on received qty in fulfillment mode, otherwise ordered qty
       const qOrd = parseFloat(ordInp.value) || 0;
       const qRec = recInp ? parseFloat(recInp.value) || 0 : 0;
@@ -257,6 +287,7 @@ function createPurchaseGrid(container, config = {}) {
     };
 
     const updateDiscColWidth = () => {
+      if (isBranchRequest || showSupplierColumn) return;
       const groups = Array.from(target.querySelectorAll(".disc-group"));
       const maxInputs = Math.max(
         1,
@@ -270,26 +301,58 @@ function createPurchaseGrid(container, config = {}) {
       isItem: true,
       placeholder: "Cari barang...",
       onSelect: (sel) => {
-        beliInp.value = toRibuan(sel.buy_price);
-        jualInp.value = toRibuan(sel.sell_price);
-        marginInp.value = sel.profit_margin || 0;
+        if (!isBranchRequest && !showSupplierColumn) {
+          beliInp.value = toRibuan(sel.buy_price);
+          jualInp.value = toRibuan(sel.sell_price);
+          marginInp.value = sel.profit_margin || 0;
+        }
+        row._itemData = sel;
+        if (showSupplierColumn && row._suppCombo) {
+          // Filter suppliers to only those who have this item
+          const validSuppliers = sel.suppliers || [];
+          row._suppCombo.updateData(validSuppliers);
+          
+          // Clear current selection and auto-select if only 1 valid supplier
+          row._suppCombo.clear();
+          if (validSuppliers.length === 1) {
+            row._suppCombo.set(validSuppliers[0].id, validSuppliers[0].name);
+          }
+        }
         calculateRow();
       },
     });
 
-    btnPlus.onclick = () => {
-      const inputs = row.querySelectorAll(".pg-disc");
-      if (inputs.length >= 4)
-        return showToast("Maksimal 4 tingkat diskon", "warning");
-      const newInp = document.createElement("input");
-      newInp.type = "number";
-      newInp.className = "combobox-input pg-disc";
-      newInp.placeholder = "0";
-      newInp.style.textAlign = "center";
-      newInp.oninput = calculateRow;
-      discGroup.insertBefore(newInp, btnPlus);
-      updateDiscColWidth();
-    };
+    let suppCombo = null;
+    if (showSupplierColumn) {
+      const rowSuppliers = item?.suppliers || [];
+      suppCombo = createPremiumCombo(`pg-supp-${id}`, rowSuppliers, {
+        placeholder: "Pilih Supplier...",
+        onSelect: (sel) => {
+          // Find buy price for this supplier
+          const spec = row._itemData?.supplier_details?.find(
+            (s) => s.supplier_id == sel.id,
+          );
+          row._buyPrice = spec ? spec.buy_price : row._itemData?.buy_price || 0;
+          calculateRow();
+        },
+      });
+    }
+
+    if (btnPlus) {
+      btnPlus.onclick = () => {
+        const inputs = row.querySelectorAll(".pg-disc");
+        if (inputs.length >= 4)
+          return showToast("Maksimal 4 tingkat diskon", "warning");
+        const newInp = document.createElement("input");
+        newInp.type = "number";
+        newInp.className = "combobox-input pg-disc";
+        newInp.placeholder = "0";
+        newInp.style.textAlign = "center";
+        newInp.oninput = calculateRow;
+        discGroup.insertBefore(newInp, btnPlus);
+        updateDiscColWidth();
+      };
+    }
 
     ordInp.oninput = () => {
       // If fulfillment, auto-update received if it was the same as ordered (synced)
@@ -305,29 +368,35 @@ function createPurchaseGrid(container, config = {}) {
     };
     if (recInp) recInp.oninput = calculateRow;
 
-    beliInp.oninput = (e) => {
-      e.target.value = toRibuan(toAngka(e.target.value));
-      calculateRow();
-    };
-    jualInp.oninput = (e) => {
-      e.target.value = toRibuan(toAngka(e.target.value));
-      calculateRow();
-    };
+    if (beliInp) {
+      beliInp.oninput = (e) => {
+        e.target.value = toRibuan(toAngka(e.target.value));
+        calculateRow();
+      };
+    }
+    if (jualInp) {
+      jualInp.oninput = (e) => {
+        e.target.value = toRibuan(toAngka(e.target.value));
+        calculateRow();
+      };
+    }
     row
       .querySelectorAll(".pg-disc")
       .forEach((inp) => (inp.oninput = calculateRow));
-    marginInp.oninput = () => {
-      const hb = toAngka(beliInp.value);
-      let hargaNeto = hb;
-      row.querySelectorAll(".pg-disc").forEach((inp) => {
-        const d = parseFloat(inp.value) || 0;
-        hargaNeto = hargaNeto * (1 - d / 100);
-      });
-      const margin = parseFloat(marginInp.value) || 0;
-      const hj = hargaNeto + (hargaNeto * margin) / 100;
-      jualInp.value = toRibuan(Math.round(hj));
-      calculateRow();
-    };
+    if (marginInp) {
+      marginInp.oninput = () => {
+        const hb = toAngka(beliInp.value);
+        let hargaNeto = hb;
+        row.querySelectorAll(".pg-disc").forEach((inp) => {
+          const d = parseFloat(inp.value) || 0;
+          hargaNeto = hargaNeto * (1 - d / 100);
+        });
+        const margin = parseFloat(marginInp.value) || 0;
+        const hj = hargaNeto + (hargaNeto * margin) / 100;
+        jualInp.value = toRibuan(Math.round(hj));
+        calculateRow();
+      };
+    }
     delBtn.onclick = () => {
       row.remove();
       if (onChange) onChange();
@@ -338,6 +407,7 @@ function createPurchaseGrid(container, config = {}) {
       calculateRow();
     }
     row._combo = combo;
+    row._suppCombo = suppCombo;
     return row;
   };
 
@@ -349,7 +419,14 @@ function createPurchaseGrid(container, config = {}) {
     updateDataSource: (newData) => {
       currentData = newData;
       target.querySelectorAll(".item-selector").forEach((sel) => {
-        if (sel._combo) sel._combo.updateData(newData);
+        const row = sel.closest(".purchase-grid-row");
+        if (row && row._combo) row._combo.updateData(newData);
+      });
+    },
+    updateSuppliers: (newList) => {
+      supplierList = newList;
+      target.querySelectorAll(".purchase-grid-row").forEach((row) => {
+        if (row._suppCombo) row._suppCombo.updateData(newList);
       });
     },
     getData: () => {
@@ -358,35 +435,59 @@ function createPurchaseGrid(container, config = {}) {
         const comboElem = row.querySelector(".item-selector");
         const iid = comboElem._combo.val();
         if (iid) {
-          const hb = toAngka(row.querySelector(".pg-beli").value);
-          const discs = Array.from(row.querySelectorAll(".pg-disc")).map(
-            (inp) => parseFloat(inp.value) || 0,
-          );
+          const hbInp = row.querySelector(".pg-beli");
+          const hb = hbInp
+            ? toAngka(hbInp.value)
+            : row._buyPrice || row._itemData?.buy_price || 0;
+
+          const sid = row._suppCombo ? row._suppCombo.val() : null;
+
+          const discInputs = row.querySelectorAll(".pg-disc");
+          const discs =
+            discInputs.length > 0
+              ? Array.from(discInputs).map((inp) => parseFloat(inp.value) || 0)
+              : [0, 0];
+
           let hargaNeto = hb;
           discs.forEach((d) => {
             hargaNeto = hargaNeto * (1 - d / 100);
           });
 
           const qOrd = parseFloat(row.querySelector(".pg-ordered").value) || 0;
-          const qRec = isFulfillment
-            ? parseFloat(row.querySelector(".pg-received").value) || 0
-            : qOrd;
+          const recInp = row.querySelector(".pg-received");
+          const qRec = recInp
+            ? parseFloat(recInp.value) || 0
+            : isFulfillment
+              ? qOrd
+              : isBranchRequest || showSupplierColumn
+                ? qOrd
+                : 0;
+
+          const hjInp = row.querySelector(".pg-jual");
+          const hj = hjInp
+            ? toAngka(hjInp.value)
+            : row._itemData?.sell_price || 0;
+
+          const margInp = row.querySelector(".pg-margin");
+          const margin = margInp
+            ? parseFloat(margInp.value) || 0
+            : row._itemData?.profit_margin || 0;
 
           data.push({
             item_id: parseInt(iid),
+            supplier_id: sid ? parseInt(sid) : null,
             name: row._itemData?.name || "",
             code: row._itemData?.code || "",
-            qty: qRec, // Backwards compatibility if needed, but we use received for stock
+            qty: showSupplierColumn ? qOrd : qRec,
             qty_ordered: qOrd,
-            qty_received: qRec,
+            qty_received: showSupplierColumn ? qOrd : qRec,
             buy_price: hb,
             discount: hb - hargaNeto,
             disc1: discs[0] || 0,
             disc2: discs[1] || 0,
-            sell_price: toAngka(row.querySelector(".pg-jual").value),
-            profit_margin:
-              parseFloat(row.querySelector(".pg-margin").value) || 0,
-            total: qRec * hargaNeto,
+            sell_price: hj,
+            profit_margin: margin,
+            total: (showSupplierColumn ? qOrd : qRec) * hargaNeto,
           });
         }
       });
@@ -635,16 +736,22 @@ function createPaymentModal(config = {}) {
  */
 async function createOrderManager(containerId, config = {}) {
   const target = document.getElementById(containerId);
-  const { type = "purchase", initialData = null, onChange = null } = config;
+  const {
+    type = "purchase",
+    initialData = null,
+    onChange = null,
+    isBranchRequest = false,
+    isSplitFulfillment = false,
+  } = config;
 
   let itemsGrid = null;
   let supplierCombo = null;
 
   target.innerHTML = `
-        <div class="order-manager-wrap" style="display:grid; grid-template-columns: 1.5fr 1fr; gap: 24px; margin-bottom: 24px">
+        <div class="order-manager-wrap" style="display:${isBranchRequest || isSplitFulfillment ? "none" : "grid"}; grid-template-columns: ${isBranchRequest ? "1fr" : "1.5fr 1fr"}; gap: 24px; margin-bottom: 24px">
             <div class="card" style="padding:24px">
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px">
-                    <div class="input-group">
+                    <div class="input-group" style="${isBranchRequest ? "display:none" : ""}">
                         <label>Supplier / Vendor *</label>
                         <div id="om-supplier-combo"></div>
                     </div>
@@ -664,7 +771,7 @@ async function createOrderManager(containerId, config = {}) {
                     </div>
                 </div>
             </div>
-            <div class="card" style="padding:24px; background: var(--primary-light); border: 1px solid var(--primary); display: flex; flex-direction: column; justify-content: center">
+            <div class="card" style="padding:24px; background: var(--primary-light); border: 1px solid var(--primary); display: ${isBranchRequest ? "none" : "flex"}; flex-direction: column; justify-content: center">
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px">
                     <div class="input-group"><label>Diskon Global (%)</label><input type="number" id="om-global-disc" class="input-control" value="0" /></div>
                     <div class="input-group"><label>PPN (%)</label><input type="number" id="om-global-tax" class="input-control" value="0" /></div>
@@ -694,15 +801,16 @@ async function createOrderManager(containerId, config = {}) {
     if (!itemsGrid) return;
     const items = itemsGrid.getData();
     const subtotal = items.reduce((acc, it) => {
-      let hargaNeto =
-        it.buy_price * (1 - it.disc1 / 100) * (1 - it.disc2 / 100);
+      let hargaNeto = it.buy_price * (1 - it.disc1 / 100) * (1 - it.disc2 / 100);
       return acc + it.qty * hargaNeto;
     }, 0);
-    const disc =
-      parseFloat(document.getElementById("om-global-disc").value) || 0;
-    const tax = parseFloat(document.getElementById("om-global-tax").value) || 0;
+    const discInput = document.getElementById("om-global-disc");
+    const taxInput = document.getElementById("om-global-tax");
+    const disc = discInput ? parseFloat(discInput.value) || 0 : 0;
+    const tax = taxInput ? parseFloat(taxInput.value) || 0 : 0;
     const grand = subtotal * (1 - disc / 100) * (1 + tax / 100);
-    document.getElementById("om-total-label").textContent = fmtRp(grand);
+    const totalLabel = document.getElementById("om-total-label");
+    if (totalLabel) totalLabel.textContent = fmtRp(grand);
     if (onChange) onChange(grand);
   };
 
@@ -719,6 +827,8 @@ async function createOrderManager(containerId, config = {}) {
 
   itemsGrid = createPurchaseGrid(itemsGridContainer, {
     isFulfillment,
+    isBranchRequest,
+    showSupplierColumn: isSplitFulfillment,
     initialItems:
       initialData?.items?.map((it) => ({
         id: it.item_id,
@@ -731,14 +841,25 @@ async function createOrderManager(containerId, config = {}) {
         profit_margin: it.item?.profit_margin,
         disc1: it.disc1,
         disc2: it.disc2,
+        supplier_id: it.item?.suppliers?.[0]?.id, // Default to first supplier if available
+        suppliers: it.item?.suppliers || [],
+        supplier_details: it.item?.supplier_details || [],
       })) || [],
-    itemDataSource: [], // Will be updated on supplier select
+    itemDataSource: [], // Will be updated
     onChange: recalc,
   });
+
+  if (isBranchRequest || isSplitFulfillment) {
+    const allItems = await api("GET", "/items/?limit=1000");
+    itemsGrid.updateDataSource(allItems);
+  }
+
   document.getElementById("om-btn-add").onclick = () => itemsGrid.addRow();
 
-  document.getElementById("om-global-disc").oninput = recalc;
-  document.getElementById("om-global-tax").oninput = recalc;
+  const discInput = document.getElementById("om-global-disc");
+  if (discInput) discInput.oninput = recalc;
+  const taxInput = document.getElementById("om-global-tax");
+  if (taxInput) taxInput.oninput = recalc;
 
   if (initialData) {
     document.getElementById("om-date").value = initialData.date;
@@ -751,12 +872,11 @@ async function createOrderManager(containerId, config = {}) {
         : initialData.discount || 0;
     const taxPct =
       initialData.subtotal - initialData.discount > 0
-        ? (initialData.tax / (initialData.subtotal - initialData.discount)) *
-          100
+        ? (initialData.tax / (initialData.subtotal - initialData.discount)) * 100
         : initialData.tax || 0;
-    document.getElementById("om-global-disc").value = discPct.toFixed(2);
-    document.getElementById("om-global-tax").value = taxPct.toFixed(2);
-    if (initialData.supplier_id)
+    if (discInput) discInput.value = discPct.toFixed(2);
+    if (taxInput) taxInput.value = taxPct.toFixed(2);
+    if (initialData.supplier_id && supplierCombo)
       supplierCombo.set(
         initialData.supplier_id,
         initialData.supplier?.name || "Supplier",
@@ -765,13 +885,16 @@ async function createOrderManager(containerId, config = {}) {
 
   return {
     getData: () => ({
-      supplier_id: supplierCombo.val(),
+      supplier_id: isBranchRequest || isSplitFulfillment ? null : supplierCombo.val(),
       date: document.getElementById("om-date").value,
       number: document.getElementById("om-number").value,
       due_date: document.getElementById("om-due-date").value || null,
-      discount:
-        parseFloat(document.getElementById("om-global-disc").value) || 0,
-      tax: parseFloat(document.getElementById("om-global-tax").value) || 0,
+      discount: isBranchRequest || isSplitFulfillment
+        ? 0
+        : parseFloat(document.getElementById("om-global-disc").value) || 0,
+      tax: isBranchRequest || isSplitFulfillment
+        ? 0
+        : parseFloat(document.getElementById("om-global-tax").value) || 0,
       items: itemsGrid.getData(),
     }),
     itemsGrid,

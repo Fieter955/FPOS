@@ -249,7 +249,7 @@ class Purchase(Base):
     id = Column(Integer, primary_key=True, index=True)
     number = Column(String(50), unique=True, nullable=False)
     date = Column(Date, nullable=False)
-    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=False)
+    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
     subtotal = Column(Float, default=0)
     discount = Column(Float, default=0)
     tax = Column(Float, default=0)
@@ -269,6 +269,8 @@ class Purchase(Base):
     is_branch_request = Column(Boolean, default=False)
     target_branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
     target_branch = relationship("Branch", foreign_keys=[target_branch_id])
+    from_po_id = Column(Integer, ForeignKey("purchases.id"), nullable=True)
+    from_po = relationship("Purchase", remote_side=[id])
 
 
 class PurchaseItem(Base):

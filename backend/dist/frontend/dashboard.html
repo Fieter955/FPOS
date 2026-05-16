@@ -191,6 +191,17 @@
             <h3>Tukar Tambah</h3>
             <p>Tukar barang + uang</p>
           </div>
+          <div class="menu-card" onclick="location.href = '/po'" style="position:relative">
+            <div id="poBadge" style="display:none; position:absolute; top:-10px; right:-10px; background:#ef4444; color:white; min-width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:14px; border:3px solid var(--card-bg); box-shadow:0 4px 10px rgba(239,68,68,0.3)">0</div>
+            <div class="icon-w">🔄</div>
+            <h3>Pre-Order</h3>
+            <p>Pre-order barang</p>
+          </div>
+          <div class="menu-card" onclick="location.href = '/setoran'">
+            <div class="icon-w">🔄</div>
+            <h3>Setoran</h3>
+            <p>Setoran uang ke kas</p>
+          </div>
         </div>
 
         <h2 class="section-title">📦 Inventaris & Pembelian</h2>
@@ -271,6 +282,12 @@
             <h3>Manajemen User</h3>
             <p>Kelola akun & hak akses</p>
           </div>
+
+          <div class="menu-card" onclick="location.href = '/barcode'">
+            <div class="icon-w">🏷️</div>
+            <h3>Barcode</h3>
+            <p>Buat & kelola barcode produk</p>
+          </div>
         </div>
       </main>
     </div>
@@ -315,6 +332,38 @@
 
       // Panggilan pertama saat halaman dimuat
       loadKPI();
+      loadPOCount();
+
+      async function loadPOCount() {
+          const badge = document.getElementById("poBadge");
+          try {
+              const res = await api("GET", "/po/count-pending");
+              if (res.count > 0) {
+                  badge.textContent = res.count;
+                  badge.style.display = "flex";
+              } else {
+                  badge.style.display = "none";
+              }
+          } catch (e) { console.error("Gagal load PO count", e); }
+      }
+      // ==========================================
+      // FITUR PENJAGA GERBANG (GATEKEEPER)
+      // ==========================================
+      async function checkGatekeeper() {
+        try {
+          // Asumsi prefix untuk accounting.py di main.py Anda adalah /accounting
+          const res = await api("GET", "/accounting/setup-status");
+          if (res.is_setup_completed === false) {
+            // Belum setup? Tendang ke halaman onboarding!
+            window.location.replace("/onboarding.html");
+          }
+        } catch (e) {
+          console.error("Gagal mengecek status setup", e);
+        }
+      }
+
+      // Jalankan pengecekan
+      checkGatekeeper();
 
       // ==========================================
       // TAMBAHKAN KODE INI DI BAWAHNYA

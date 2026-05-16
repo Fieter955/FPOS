@@ -352,14 +352,16 @@
         allItems = await api("GET", "/items/?limit=2000");
         setupAutocomplete(document.getElementById("adjSearch"));
 
-        document.getElementById("mStart").value = new Date(
-          new Date().setDate(1),
-        )
-          .toISOString()
-          .slice(0, 10);
-        document.getElementById("mEnd").value = new Date()
-          .toISOString()
-          .split("T")[0];
+        // Tambahkan fungsi today() yang aman
+        function today() {
+          const d = new Date();
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        }
+
+        // Atur filter dari tanggal 1 sampai hari ini
+        document.getElementById("mStart").value = today().slice(0, 7) + "-01"; // ✅ AMAN
+        document.getElementById("mEnd").value = today(); // ✅ AMAN
+
         loadMutasi();
       }
 
