@@ -255,38 +255,42 @@
           </div>
 
           <div id="poFormContent">
-            <div
-              style="
-                display: flex;
-                justify-content: flex-end;
-                gap: 10px;
-                margin-bottom: 20px;
-              "
-            >
-              <button class="btn" onclick="resetForm()">Kosongkan Form</button>
-              <button
-                id="btnSaveDraft"
-                class="btn"
-                style="background: #64748b; color: white"
-                onclick="simpan('draft')"
+            <div id="buttonGroup">
+              <div
+                style="
+                  display: flex;
+                  justify-content: flex-end;
+                  gap: 10px;
+                  margin-bottom: 20px;
+                "
               >
-                Simpan sebagai Draft
-              </button>
-              <button
-                id="btnSavePO"
-                class="btn btn-primary"
-                onclick="simpan('po')"
-              >
-                ✓ Simpan PO
-              </button>
-              <button
-                class="btn"
-                style="background: #10b981; color: white"
-                onclick="exportPDF()"
-                id="btnPDF"
-              >
-                💾 Export PDF
-              </button>
+                <button class="btn" onclick="resetForm()">
+                  Kosongkan Form
+                </button>
+                <button
+                  id="btnSaveDraft"
+                  class="btn"
+                  style="background: #64748b; color: white"
+                  onclick="simpan('draft')"
+                >
+                  Simpan sebagai Draft
+                </button>
+                <button
+                  id="btnSavePO"
+                  class="btn btn-primary"
+                  onclick="simpan('po')"
+                >
+                  ✓ Simpan PO
+                </button>
+                <button
+                  class="btn"
+                  style="background: #10b981; color: white"
+                  onclick="exportPDF()"
+                  id="btnPDF"
+                >
+                  💾 Export PDF
+                </button>
+              </div>
             </div>
 
             <!-- Unified Order Manager Container -->
@@ -533,6 +537,7 @@
           user = getUser();
           console.log("User Branch Status:", user.branch_status);
           document.getElementById("requestTabBtn").style.display = "block";
+          document.getElementById("buatTabBtn").style.display = "none";
           switchTab("requestTab");
         } else {
           document.getElementById("historyTabBtn").style.display = "block";
@@ -583,22 +588,21 @@
           tbody.innerHTML = reqs
             .map(
               (r) => `
-                  <tr>
-                      <td><b>${r.number}</b></td>
-                      <td>${r.date}</td>
-                      <td>${(allBranches || []).find((b) => b.id == r.branch_id)?.name || "Cabang " + r.branch_id}</td>
-                      <td>${r.supplier?.name || "-"}</td>
-                      <td style="text-align:right"><b>${fmtRp(r.total)}</b></td>
-                      <td>${getStatusBadge(r.status)}</td>
-                      <td>
-                        <div style="display:flex; gap:4px">
-                            <button class="bsm be" onclick="loadPO(${r.id})">Lihat</button>
-                            ${r.status === "pending" ? `<button class="bsm bp" onclick="location.href='catat-pembelian.html?po_id=${r.id}'">Beli</button>` : ""}
-                            <button class="bsm" style="background:#e2e8f0; color:#475569" onclick="exportPurchasePDF(${r.id})">📄 PDF</button>
-                        </div>
-                      </td>
-                  </tr>
-              `,
+                       <tr>
+                           <td><b>${r.number}</b></td>
+                           <td>${r.date}</td>
+                           <td>${(allBranches || []).find((b) => b.id == r.branch_id)?.name || "Cabang " + r.branch_id}</td>
+                           <td>${r.supplier?.name || "-"}</td>
+                           <td style="text-align:right"><b>${fmtRp(r.total)}</b></td>
+                           <td>${getStatusBadge(r.status)}</td>
+                           <td>
+                             <div style="display:flex; gap:4px">
+                                 <button class="bsm be" onclick="loadPO(${r.id}, true)">Lihat</button>
+                                 <button class="bsm" style="background:#e2e8f0; color:#475569" onclick="exportPurchasePDF(${r.id})">📄 PDF</button>
+                             </div>
+                           </td>
+                       </tr>
+                   `,
             )
             .join("");
         } catch (e) {
@@ -627,21 +631,21 @@
           tbody.innerHTML = reqs
             .map(
               (r) => `
-                  <tr>
-                      <td><b>${r.number}</b></td>
-                      <td>${r.date}</td>
-                      <td>${r.supplier?.name || "-"}</td>
-                      <td style="text-align:right"><b>${fmtRp(r.total)}</b></td>
-                      <td>${getStatusBadge(r.status)}</td>
-                      <td>
-                        <div style="display:flex; gap:4px">
-                            ${r.status === "shipping" ? `<button class="bsm" style="background:#10b981; color:white" onclick="receiveGoods(${r.id})">📦 Terima</button>` : ""}
-                            <button class="bsm be" onclick="loadPO(${r.id})">Detail</button>
-                            <button class="bsm" style="background:#e2e8f0; color:#475569" onclick="exportPurchasePDF(${r.id})">📄 PDF</button>
-                        </div>
-                      </td>
-                  </tr>
-              `,
+                       <tr>
+                           <td><b>${r.number}</b></td>
+                           <td>${r.date}</td>
+                           <td>${r.supplier?.name || "-"}</td>
+                           <td style="text-align:right"><b>${fmtRp(r.total)}</b></td>
+                           <td>${getStatusBadge(r.status)}</td>
+                           <td>
+                             <div style="display:flex; gap:4px">
+                                 ${r.status === "shipping" ? `<button class="bsm" style="background:#10b981; color:white" onclick="receiveGoods(${r.id})">📦 Terima</button>` : ""}
+                                 <button class="bsm be" onclick="loadPO(${r.id})">Detail ey</button>
+                                 <button class="bsm" style="background:#e2e8f0; color:#475569" onclick="exportPurchasePDF(${r.id})">📄 PDF</button>
+                             </div>
+                           </td>
+                       </tr>
+                   `,
             )
             .join("");
         } catch (e) {
@@ -650,11 +654,14 @@
         }
       }
 
-      async function loadPO(id) {
+      async function loadPO(id, toko_utama = false) {
         currentPOId = id;
         showLoading();
         try {
           const p = await api("GET", `/purchases/${id}`);
+          if (toko_utama) {
+            document.getElementById("buttonGroup").style.display = "none";
+          }
 
           // Special mode for Pusat viewing Branch Request
           const isSplitFulfillment = myBranchId == 1 && p.is_branch_request;
@@ -673,41 +680,41 @@
           if (p.fulfillment_drafts && p.fulfillment_drafts.length > 0) {
             fulfillCont.style.display = "block";
             fulfillList.innerHTML = `
-              <table class="tbl" style="margin-top: 12px;">
-                <thead>
-                  <tr>
-                    <th>No. Faktur (Draft)</th>
-                    <th>Supplier</th>
-                    <th>Status</th>
-                    <th>Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${p.fulfillment_drafts
-                    .map(
-                      (d) => `
-                    <tr>
-                      <td><b>${d.number}</b></td>
-                      <td>${d.supplier?.name || "-"}</td>
-                      <td>${getStatusBadge(d.status)}</td>
-                      <td>
-                        <div style="display:flex; gap:4px">
-                            <button class="bsm be" onclick="location.href='catat-pembelian.html?po_id=${d.id}'">Lihat Detail</button>
-                            ${
-                              !d.is_received_by_branch
-                                ? `<button class="bsm bp" onclick="openReceiveDraftModal(${d.id})">✔️ ACC</button>`
-                                : `<span class="bl">Selesai</span>`
-                            }
-                            <button class="bsm" style="background:#e2e8f0; color:#475569" onclick="exportPurchasePDF(${d.id})">📄 PDF</button>
-                        </div>
-                      </td>
-                    </tr>
-                  `,
-                    )
-                    .join("")}
-                </tbody>
-              </table>
-            `;
+                   <table class="tbl" style="margin-top: 12px;">
+                     <thead>
+                       <tr>
+                         <th>No. Faktur (Draft)</th>
+                         <th>Supplier</th>
+                         <th>Status</th>
+                         <th>Aksi</th>
+                       </tr>
+                     </thead>
+                     <tbody>
+                       ${p.fulfillment_drafts
+                         .map(
+                           (d) => `
+                         <tr>
+                           <td><b>${d.number}</b></td>
+                           <td>${d.supplier?.name || "-"}</td>
+                           <td>${getStatusBadge(d.status)}</td>
+                           <td>
+                             <div style="display:flex; gap:4px">
+                                 <button class="bsm be" onclick="location.href='catat-pembelian.html?po_id=${d.id}'">Lihat Detail</button>
+                                 ${
+                                   !d.is_received_by_branch
+                                     ? `<button class="bsm bp" onclick="openReceiveDraftModal(${d.id})">✔️ ACC</button>`
+                                     : `<span class="bl">Selesai</span>`
+                                 }
+                                 <button class="bsm" style="background:#e2e8f0; color:#475569" onclick="exportPurchasePDF(${d.id})">📄 PDF</button>
+                             </div>
+                           </td>
+                         </tr>
+                       `,
+                         )
+                         .join("")}
+                     </tbody>
+                   </table>
+                 `;
           } else {
             fulfillCont.style.display = "none";
           }
@@ -740,10 +747,10 @@
                 fulfillCont.insertAdjacentHTML(
                   "afterbegin",
                   `
-                    <button id="btn-acc-receive" class="btn btn-primary" style="width:100%; padding:16px; font-size:18px; margin-bottom:16px" onclick="receiveGoods(${p.id})">
-                      📦 TERIMA BARANG (ACC)
-                    </button>
-                 `,
+                         <button id="btn-acc-receive" class="btn btn-primary" style="width:100%; padding:16px; font-size:18px; margin-bottom:16px" onclick="receiveGoods(${p.id})">
+                           📦 TERIMA BARANG (ACC)
+                         </button>
+                      `,
                 );
               }
             }

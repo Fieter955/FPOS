@@ -729,6 +729,7 @@ Pakai akun transfer
 
 14 MAY (PSTIIN BENER SESUAI DEGNAN DRWA IO)
 https://app.diagrams.net/#G1hVxyTr3Q_fawX3Kx3b15G7vdoayldSXt#%7B%22pageId%22%3A%22WwQgFP8OE8CQRQFswfxV%22%7D
+
 done
 menjadikan toko utama sebagai status selain branch ==1
 
