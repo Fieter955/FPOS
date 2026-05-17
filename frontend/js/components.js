@@ -747,8 +747,10 @@ async function createOrderManager(containerId, config = {}) {
   let itemsGrid = null;
   let supplierCombo = null;
 
+  
+
   target.innerHTML = `
-        <div class="order-manager-wrap" style="display:grid; grid-template-columns: ${isBranchRequest ? "1fr" : "1.5fr 1fr"}; gap: 24px; margin-bottom: 24px">
+        <div class="order-manager-wrap" style="display:${type === "po" ? "none" : "grid"}; grid-template-columns: ${isBranchRequest ? "1fr" : "1.5fr 1fr"}; gap: 24px; margin-bottom: 24px">
             <div class="card" style="padding:24px">
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px">
                     <div class="input-group" style="${isBranchRequest || isSplitFulfillment ? "display:none" : ""}">

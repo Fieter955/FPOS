@@ -292,15 +292,34 @@
             <!-- Unified Order Manager Container -->
             <div id="orderManagerContainer"></div>
 
-            <div id="fulfillment-container" style="display:none; margin-top:24px">
-              <div class="card" style="padding:24px; border:2px solid var(--primary); background:var(--primary-light)">
-                  <h3 style="color:var(--primary); margin-bottom:12px">📄 Hasil Proses Pusat</h3>
-                  <p style="margin-bottom:16px">Permintaan ini telah diproses oleh Pusat menjadi beberapa draft pembelian berikut:</p>
-                  <div id="fulfillment-list"></div>
+            <div
+              id="fulfillment-container"
+              style="display: none; margin-top: 24px"
+            >
+              <div
+                class="card"
+                style="
+                  padding: 24px;
+                  border: 2px solid var(--primary);
+                  background: var(--primary-light);
+                "
+              >
+                <h3 style="color: var(--primary); margin-bottom: 12px">
+                  📄 Hasil Proses Pusat
+                </h3>
+                <p style="margin-bottom: 16px">
+                  Permintaan ini telah diproses oleh Pusat menjadi beberapa
+                  draft pembelian berikut:
+                </p>
+                <div id="fulfillment-list"></div>
               </div>
             </div>
 
-            <div class="card" id="om-notes-card" style="padding: 24px; margin-top: 24px">
+            <div
+              class="card"
+              id="om-notes-card"
+              style="padding: 24px; margin-top: 24px"
+            >
               <label>Catatan</label>
               <textarea
                 id="bNotes"
@@ -381,6 +400,61 @@
 
     <div id="notifBubble" class="notif-bubble"></div>
 
+    <!-- 👇 MODAL RECEIVE DRAFT (ACC) 👇 -->
+    <div id="mReceiveDraft" class="modal-overlay">
+      <div class="modal-box wide">
+        <div class="modal-hdr">
+          <h2>📦 ACC Penerimaan Barang</h2>
+          <button class="btn-x" onclick="closeModal('mReceiveDraft')">×</button>
+        </div>
+        <p style="margin-bottom: 20px; color: var(--text-muted)">
+          Silakan periksa barang fisik yang diterima. Jika ada perbedaan jumlah,
+          harga, atau merek, Anda dapat menyesuaikannya di sini.
+        </p>
+
+        <div class="tbl-wrap">
+          <table class="tbl" id="receiveDraftTable">
+            <thead>
+              <tr>
+                <th>Barang Pesanan</th>
+                <th>Merek/Nama Baru (Jika Beda)</th>
+                <th style="text-align: center">Pesan</th>
+                <th style="text-align: center">Terima</th>
+                <th>Harga Beli</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div class="input-group" style="margin-top: 20px">
+          <label>Catatan Penerimaan</label>
+          <textarea
+            id="recNotes"
+            class="input-control"
+            placeholder="Contoh: Barang sesuai, atau ada pecah 1..."
+          ></textarea>
+        </div>
+
+        <div
+          style="
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 24px;
+          "
+        >
+          <button class="btn" onclick="closeModal('mReceiveDraft')">
+            Batal
+          </button>
+          <button class="btn btn-primary" onclick="submitReceiveDraft()">
+            ✓ Konfirmasi & Masuk Stok
+          </button>
+        </div>
+      </div>
+    </div>
+
     <script src="/js/api.js"></script>
     <script src="/js/theme.js"></script>
     <script src="/js/components.js"></script>
@@ -391,7 +465,6 @@
         currentPOId = null;
       let allBranches = [];
       const myBranchId = localStorage.getItem("active_branch_id") || 1;
-      const isMainStore = () => myBranchId == 1;
 
       function fmtRp(n) {
         return new Intl.NumberFormat("id-ID", {
@@ -457,11 +530,14 @@
       async function init() {
         // 1. Aktivasi Tab Segera agar UI tidak blank saat memuat data
         if (isMainStore()) {
+          user = getUser();
+          console.log("User Branch Status:", user.branch_status);
           document.getElementById("requestTabBtn").style.display = "block";
           switchTab("requestTab");
         } else {
           document.getElementById("historyTabBtn").style.display = "block";
-          document.getElementById("buatTabBtn").textContent = "📤 Buat Permintaan ke Pusat";
+          document.getElementById("buatTabBtn").textContent =
+            "📤 Buat Permintaan ke Pusat";
           switchTab("buatTab");
           document.getElementById("btnSaveDraft").style.display = "none";
           document.getElementById("om-notes-card").style.display = "none";
@@ -579,14 +655,15 @@
         showLoading();
         try {
           const p = await api("GET", `/purchases/${id}`);
-          
+
           // Special mode for Pusat viewing Branch Request
           const isSplitFulfillment = myBranchId == 1 && p.is_branch_request;
-          
+
           orderManager = await createOrderManager("orderManagerContainer", {
+            type: "po",
             initialData: p,
             isBranchRequest: myBranchId != 1,
-            isSplitFulfillment: isSplitFulfillment
+            isSplitFulfillment: isSplitFulfillment,
           });
           document.getElementById("bNotes").value = p.notes || "";
 
@@ -606,19 +683,28 @@
                   </tr>
                 </thead>
                 <tbody>
-                  ${p.fulfillment_drafts.map(d => `
+                  ${p.fulfillment_drafts
+                    .map(
+                      (d) => `
                     <tr>
                       <td><b>${d.number}</b></td>
-                      <td>${d.supplier?.name || '-'}</td>
+                      <td>${d.supplier?.name || "-"}</td>
                       <td>${getStatusBadge(d.status)}</td>
                       <td>
                         <div style="display:flex; gap:4px">
                             <button class="bsm be" onclick="location.href='catat-pembelian.html?po_id=${d.id}'">Lihat Detail</button>
+                            ${
+                              !d.is_received_by_branch
+                                ? `<button class="bsm bp" onclick="openReceiveDraftModal(${d.id})">✔️ ACC</button>`
+                                : `<span class="bl">Selesai</span>`
+                            }
                             <button class="bsm" style="background:#e2e8f0; color:#475569" onclick="exportPurchasePDF(${d.id})">📄 PDF</button>
                         </div>
                       </td>
                     </tr>
-                  `).join("")}
+                  `,
+                    )
+                    .join("")}
                 </tbody>
               </table>
             `;
@@ -629,29 +715,37 @@
           if (myBranchId == 1) {
             document.getElementById("pusatInfoView").style.display = "none";
             document.getElementById("poFormContent").style.display = "block";
-            
+
             if (isSplitFulfillment) {
               document.getElementById("btnSavePO").style.display = "none";
-              document.getElementById("btnSaveDraft").textContent = "✓ Simpan sebagai Draft";
+              document.getElementById("btnSaveDraft").textContent =
+                "✓ Simpan sebagai Draft";
               document.getElementById("btnSaveDraft").classList.remove("btn");
-              document.getElementById("btnSaveDraft").classList.add("btn-primary");
+              document
+                .getElementById("btnSaveDraft")
+                .classList.add("btn-primary");
               document.getElementById("om-notes-card").style.display = "none";
             } else {
-               document.getElementById("btnSavePO").style.display = "inline-block";
-               document.getElementById("btnSaveDraft").textContent = "Simpan sebagai Draft";
+              document.getElementById("btnSavePO").style.display =
+                "inline-block";
+              document.getElementById("btnSaveDraft").textContent =
+                "Simpan sebagai Draft";
             }
           } else {
             // Branch view: if shipping, show large ACC button
             if (p.status === "shipping") {
-               fulfillCont.style.display = "block"; // Ensure container is visible
-               // Prepend the button only if not already there to avoid duplicates
-               if (!document.getElementById("btn-acc-receive")) {
-                 fulfillCont.insertAdjacentHTML('afterbegin', `
+              fulfillCont.style.display = "block"; // Ensure container is visible
+              // Prepend the button only if not already there to avoid duplicates
+              if (!document.getElementById("btn-acc-receive")) {
+                fulfillCont.insertAdjacentHTML(
+                  "afterbegin",
+                  `
                     <button id="btn-acc-receive" class="btn btn-primary" style="width:100%; padding:16px; font-size:18px; margin-bottom:16px" onclick="receiveGoods(${p.id})">
                       📦 TERIMA BARANG (ACC)
                     </button>
-                 `);
-               }
+                 `,
+                );
+              }
             }
           }
 
@@ -663,15 +757,20 @@
       }
 
       async function receiveGoods(id) {
-        if (!confirm("Apakah barang fisik sudah sampai dan sesuai dengan pesanan? Stok akan bertambah setelah Anda melakukan ACC.")) return;
-        
+        if (
+          !confirm(
+            "Apakah barang fisik sudah sampai dan sesuai dengan pesanan? Stok akan bertambah setelah Anda melakukan ACC.",
+          )
+        )
+          return;
+
         try {
           showLoading("Memproses Penerimaan Barang...");
           const res = await api("POST", `/purchases/${id}/receive-branch`);
           hideLoading();
           showToast(res.message);
           setTimeout(() => location.reload(), 1500);
-        } catch(e) {
+        } catch (e) {
           hideLoading();
           showToast(e.message, "error");
         }
@@ -680,28 +779,36 @@
       async function simpan(status) {
         if (!orderManager) return;
         const data = orderManager.getData();
-        const isSplitMode = myBranchId == 1 && document.getElementById("btnSavePO").style.display === "none";
+        const isSplitMode =
+          myBranchId == 1 &&
+          document.getElementById("btnSavePO").style.display === "none";
 
-        if (myBranchId == 1 && !isSplitMode && !data.supplier_id) return showToast("Pilih supplier", "error");
+        if (myBranchId == 1 && !isSplitMode && !data.supplier_id)
+          return showToast("Pilih supplier", "error");
         if (data.items.length === 0)
           return showToast("Tambahkan minimal 1 barang", "error");
 
         if (isSplitMode) {
           // Validate all items have supplier
-          const missing = data.items.filter(it => !it.supplier_id);
-          if (missing.length > 0) return showToast("Pilih supplier untuk semua barang", "error");
-          
+          const missing = data.items.filter((it) => !it.supplier_id);
+          if (missing.length > 0)
+            return showToast("Pilih supplier untuk semua barang", "error");
+
           try {
             showLoading("Memproses Split Draft...");
-            const res = await api("POST", `/purchases/${currentPOId}/split-fulfill`, {
-               items: data.items,
-               notes: document.getElementById("bNotes").value || null
-            });
+            const res = await api(
+              "POST",
+              `/purchases/${currentPOId}/split-fulfill`,
+              {
+                items: data.items,
+                notes: document.getElementById("bNotes").value || null,
+              },
+            );
             hideLoading();
             showToast(res.message);
-            setTimeout(() => location.href = "purchases.html", 1000);
+            setTimeout(() => (location.href = "purchases.html"), 1000);
             return;
-          } catch(e) {
+          } catch (e) {
             hideLoading();
             return showToast(e.message, "error");
           }

@@ -289,6 +289,7 @@ def create_supplier_purchase(db: Session, *, data: schemas.PurchaseCreate,
         created_by=current_user.id,
         is_branch_request=False,
         target_branch_id=target_branch_id,
+        from_po_id=source_request.id if source_request else data.from_po_id,
     )
     db.add(purchase)
     db.flush()

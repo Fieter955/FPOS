@@ -323,6 +323,7 @@ class PurchaseOut(BaseModel):
     notes: Optional[str]
     is_branch_request: Optional[bool] = False
     target_branch_id: Optional[int] = None
+    is_received_by_branch: bool = False
     supplier: Optional[SupplierOut] = None
     branch: Optional[BranchOut] = None
     target_branch: Optional[BranchOut] = None
@@ -344,6 +345,16 @@ class SplitFulfillItem(BaseModel):
 
 class SplitFulfillRequest(BaseModel):
     items: List[SplitFulfillItem]
+    notes: Optional[str] = None
+
+class DraftReceiveItem(BaseModel):
+    purchase_item_id: int
+    qty_received: float
+    buy_price: float
+    new_item_name: Optional[str] = None
+
+class DraftReceiveRequest(BaseModel):
+    items: List[DraftReceiveItem]
     notes: Optional[str] = None
 
 

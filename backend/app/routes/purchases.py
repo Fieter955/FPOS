@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..auth import get_current_user, get_query
 from ..database import get_db
-from ..services.journal_service import create_purchase_payment_journal
+from ..services.journal_service import create_purchase_payment_journal, create_branch_receiving_journal
 from ..services.purchase_flow import (
     PUSAT_BRANCH_ID,
     cancel_purchase_flow,
@@ -17,6 +17,7 @@ from ..services.purchase_flow import (
     get_local_date,
     get_local_datetime,
     update_draft_purchase,
+    receive_branch_stock,
 )
 
 router = APIRouter()
@@ -177,15 +178,36 @@ def create_purchase(
         source_request = db.query(models.Purchase).filter(models.Purchase.id == data.from_po_id).with_for_update().first()
         if not source_request:
             raise HTTPException(404, "Request PO sumber tidak ditemukan")
-        assert_books_open(db, PUSAT_BRANCH_ID, tanggal, "Fulfillment request cabang")
-        number = _next_number(db, "PUR", models.Purchase, current_user)
-        purchase = finalize_request_to_purchase(
-            db,
-            source_request=source_request,
-            data=data,
-            current_user=current_user,
-            number=number,
-        )
+
+        if source_request.is_branch_request:
+            # INTER-BRANCH PO: Must be fulfilled by Toko Pusat
+            assert_books_open(db, PUSAT_BRANCH_ID, tanggal, "Fulfillment request cabang")
+            number = _next_number(db, "PUR", models.Purchase, current_user)
+            purchase = finalize_request_to_purchase(
+                db,
+                source_request=source_request,
+                data=data,
+                current_user=current_user,
+                number=number,
+            )
+        else:
+            # NORMAL SUPPLIER PO: Fulfilled by the requesting branch itself
+            allowed_branch = source_request.target_branch_id or source_request.branch_id
+            if current_user.active_branch_id != allowed_branch:
+                raise HTTPException(403, f"Hanya cabang {allowed_branch} yang bisa menerima barang dari PO ini.")
+            
+            assert_books_open(db, current_user.active_branch_id, tanggal, "Fulfillment PO Supplier")
+            number = _next_number(db, "PUR", models.Purchase, current_user)
+            purchase = create_supplier_purchase(
+                db,
+                data=data,
+                current_user=current_user,
+                number=number,
+                branch_id=current_user.active_branch_id,
+                target_branch_id=current_user.active_branch_id,
+                source_request=source_request,
+            )
+
         db.commit()
         db.refresh(purchase)
         return purchase
@@ -506,27 +528,16 @@ def update_purchase(
         db.refresh(final_purchase)
         return final_purchase
 
-    if data.from_po_id:
-        source_request = db.query(models.Purchase).filter(models.Purchase.id == data.from_po_id).with_for_update().first()
-        if not source_request:
-            raise HTTPException(404, "Request PO sumber tidak ditemukan")
-        assert_books_open(db, PUSAT_BRANCH_ID, tanggal, "Fulfillment request cabang")
-        number = _next_number(db, "PUR", models.Purchase, current_user)
-        final_purchase = finalize_request_to_purchase(
-            db,
-            source_request=source_request,
-            data=data,
-            current_user=current_user,
-            number=number,
-        )
-        db.commit()
-        db.refresh(final_purchase)
-        return final_purchase
-
     assert_books_open(db, purchase.branch_id, tanggal, "Pembelian")
     updated = update_draft_purchase(db, purchase=purchase, data=data, current_user=current_user)
     db.commit()
     db.refresh(updated)
+
+    # Trigger shipping transition if all drafts finalized
+    if updated.from_po_id:
+        from ..services.purchase_flow import check_and_update_source_status
+        check_and_update_source_status(db, updated.from_po_id)
+
     return updated
 
 
@@ -582,3 +593,89 @@ def reorder_missing_items(
     db.commit()
     db.refresh(new_purchase)
     return new_purchase
+
+
+@router.post("/{pid}/receive-draft")
+def receive_draft(
+    pid: int,
+    payload: schemas.DraftReceiveRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    draft = db.query(models.Purchase).filter(models.Purchase.id == pid).first()
+    if not draft:
+        raise HTTPException(404, "Draft tidak ditemukan")
+    if draft.is_received_by_branch:
+        raise HTTPException(400, "Draft sudah pernah di-ACC sebelumnya")
+    if not draft.from_po_id:
+        raise HTTPException(400, "Bukan merupakan draft fulfillment PO")
+
+    po = db.query(models.Purchase).get(draft.from_po_id)
+    if po.branch_id != current_user.active_branch_id:
+        raise HTTPException(403, "Hanya cabang peminta yang dapat melakukan ACC")
+
+    local_dt = get_local_datetime()
+    local_date = get_local_date()
+
+    # 1. Process Items
+    payload_map = {item.purchase_item_id: item for item in payload.items}
+
+    for pi in draft.items:
+        if pi.id in payload_map:
+            p_item = payload_map[pi.id]
+
+            # Type 1: Brand/Item change
+            if p_item.new_item_name:
+                orig_item = db.query(models.Item).get(pi.item_id)
+                # Create new item cloning the original
+                new_item = models.Item(
+                    code=f"{orig_item.code}-{local_dt.strftime('%H%M%S')}",  # unique code
+                    name=p_item.new_item_name,
+                    category_id=orig_item.category_id,
+                    unit_id=orig_item.unit_id,
+                    buy_price=p_item.buy_price,
+                    sell_price=orig_item.sell_price,
+                    profit_margin=orig_item.profit_margin,
+                    stock=0,
+                    is_active=True,
+                    is_discountable=orig_item.is_discountable
+                )
+                db.add(new_item)
+                db.flush()
+                pi.item_id = new_item.id
+
+            # Type 2 & 3: Qty and Price change
+            pi.qty_received = p_item.qty_received
+            pi.qty = p_item.qty_received  # Final stock to add
+            pi.buy_price = p_item.buy_price
+            pi.total = pi.qty_received * pi.buy_price
+
+    # 2. Recalculate Draft Totals
+    new_subtotal = sum(item.total for item in draft.items)
+    # We maintain original discount/tax ratio if any, or just keep absolute values
+    draft.subtotal = new_subtotal
+    draft.total = new_subtotal - draft.discount + draft.tax
+
+    # 3. Stock Movement & Journal
+    receive_branch_stock(db, purchase=draft, target_branch_id=po.branch_id, local_datetime=local_dt)
+    create_branch_receiving_journal(
+        db,
+        date_val=local_date,
+        number_ref=draft.number,
+        total=draft.total,
+        user_id=current_user.id,
+        target_branch_id=po.branch_id
+    )
+
+    # 4. Mark as received
+    draft.is_received_by_branch = True
+    if payload.notes:
+        draft.notes = (draft.notes or "") + f"\nACC Notes: {payload.notes}"
+
+    # 5. Check if all drafts of the PO are received
+    all_drafts = db.query(models.Purchase).filter(models.Purchase.from_po_id == po.id).all()
+    if all(d.is_received_by_branch for d in all_drafts):
+        po.status = "completed"
+
+    db.commit()
+    return {"message": "Berhasil ACC penerimaan barang per faktur", "draft_id": draft.id}

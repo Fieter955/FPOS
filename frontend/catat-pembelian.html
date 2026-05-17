@@ -41,9 +41,7 @@
             <button class="btn" onclick="location.href = 'purchases.html'">
               Batal
             </button>
-            <button class="btn btn-primary" onclick="finalisasi('paid')">
-              ✓ Simpan Pembelian
-            </button>
+            <div id="buttonACCOrFinal"></div>
           </div>
         </div>
 
@@ -105,7 +103,9 @@
       async function init() {
         // --- CEK ROLE ---
         if (user.role !== "admin") {
-          alert("Akses Ditolak: Hanya Admin yang bisa memproses/mengedit draft.");
+          alert(
+            "Akses Ditolak: Hanya Admin yang bisa memproses/mengedit draft.",
+          );
           return (location.href = "purchases.html");
         }
 
@@ -115,21 +115,33 @@
         if (urlParams.has("po_id")) {
           loadedPOId = urlParams.get("po_id");
           initialData = await api("GET", `/purchases/${loadedPOId}`);
-          poBranchId = initialData.branch_id; 
+          poBranchId = initialData.branch_id;
+          
+          let btnHtml = "";
+          if (!initialData.is_branch_request && initialData.from_po_id) {
+              btnHtml = `<button class="btn btn-PO-success" onclick="terimaBarangCabang(${initialData.from_po_id})">ACC (Terima dari Pusat)</button>`;
+          } else if (initialData.is_branch_request) {
+              btnHtml = `<button class="btn btn-PO-success" onclick="terimaBarangCabang(${initialData.id})">ACC (Terima dari Pusat)</button>`;
+          } else {
+              btnHtml = `<button class="btn btn-PO-success" onclick="finalisasi('paid')">ACC (Simpan Invoice)</button>`;
+          }
+          document.getElementById("buttonACCOrFinal").innerHTML = btnHtml;
           document.getElementById("modeBadge").innerHTML =
             `<span class="fulfillment-mode-badge">MODE VERIFIKASI PO</span>`;
         } else if (urlParams.has("id")) {
           currentEditId = urlParams.get("id");
           initialData = await api("GET", `/purchases/${currentEditId}`);
+          document.getElementById("buttonACCOrFinal").innerHTML =
+            `<button class="btn btn-primary" onclick="finalisasi('paid')">Finalisasi</button>`;
           if (initialData.status !== "draft") {
             alert("Hanya faktur draft yang bisa diedit.");
             return (location.href = "purchases.html");
           }
           // Simpan data barang asli untuk perbandingan nanti
-          originalItems = initialData.items.map(it => ({
+          originalItems = initialData.items.map((it) => ({
             item_id: it.item_id,
             qty_ordered: it.qty_ordered || it.qty,
-            qty_received: it.qty_received || it.qty
+            qty_received: it.qty_received || it.qty,
           }));
         }
 
@@ -140,13 +152,16 @@
 
         // LOCK SUPPLIER jika sedang edit draft atau verifikasi PO
         if (currentEditId || loadedPOId) {
-           orderManager.supplierCombo.disable();
-           // Muat ulang data barang supplier tersebut agar Grid bisa menambah barang lain dari supplier yang sama
-           const sid = initialData.supplier_id;
-           if (sid) {
-              const supplierItems = await api("GET", `/purchases/items/?supplier_id=${sid}`);
-              orderManager.itemsGrid.updateDataSource(supplierItems);
-           }
+          orderManager.supplierCombo.disable();
+          // Muat ulang data barang supplier tersebut agar Grid bisa menambah barang lain dari supplier yang sama
+          const sid = initialData.supplier_id;
+          if (sid) {
+            const supplierItems = await api(
+              "GET",
+              `/purchases/items/?supplier_id=${sid}`,
+            );
+            orderManager.itemsGrid.updateDataSource(supplierItems);
+          }
         }
       }
 
@@ -160,31 +175,34 @@
 
         // --- VALIDASI PERUBAHAN DRAFT ---
         if (currentEditId) {
-            let changes = [];
-            
-            // Cek barang yang dihapus
-            originalItems.forEach(orig => {
-                const found = data.items.find(it => it.item_id === orig.item_id);
-                if (!found) changes.push(`- Barang dihapus dari list`);
-            });
+          let changes = [];
 
-            // Cek perubahan qty atau barang baru
-            data.items.forEach(it => {
-                const orig = originalItems.find(o => o.item_id === it.item_id);
-                if (!orig) {
-                    changes.push(`- Barang baru ditambahkan`);
-                } else if (it.qty_ordered !== orig.qty_ordered || it.qty_received !== orig.qty_received) {
-                    changes.push(`- Perubahan jumlah pada barang yang sudah ada`);
-                }
-            });
+          // Cek barang yang dihapus
+          originalItems.forEach((orig) => {
+            const found = data.items.find((it) => it.item_id === orig.item_id);
+            if (!found) changes.push(`- Barang dihapus dari list`);
+          });
 
-            if (changes.length > 0) {
-                const uniqueChanges = [...new Set(changes)];
-                const confirmed = await showConfirm(
-                    `Peringatan: Anda telah melakukan perubahan pada draft asli:\n${uniqueChanges.join("\n")}\n\nApakah Anda yakin ingin melanjutkan?`
-                );
-                if (!confirmed) return;
+          // Cek perubahan qty atau barang baru
+          data.items.forEach((it) => {
+            const orig = originalItems.find((o) => o.item_id === it.item_id);
+            if (!orig) {
+              changes.push(`- Barang baru ditambahkan`);
+            } else if (
+              it.qty_ordered !== orig.qty_ordered ||
+              it.qty_received !== orig.qty_received
+            ) {
+              changes.push(`- Perubahan jumlah pada barang yang sudah ada`);
             }
+          });
+
+          if (changes.length > 0) {
+            const uniqueChanges = [...new Set(changes)];
+            const confirmed = await showConfirm(
+              `Peringatan: Anda telah melakukan perubahan pada draft asli:\n${uniqueChanges.join("\n")}\n\nApakah Anda yakin ingin melanjutkan?`,
+            );
+            if (!confirmed) return;
+          }
         }
 
         const payload = {
@@ -297,6 +315,26 @@
           setTimeout(() => {
             location.href = "purchases.html";
           }, 1000);
+        } catch (e) {
+          hideLoading();
+          showToast(e.message, "error");
+        }
+      }
+
+      async function terimaBarangCabang(targetPoId) {
+        if (
+          !confirm(
+            "Apakah barang fisik sudah sampai dan sesuai dengan pesanan? Stok akan bertambah setelah Anda melakukan ACC.",
+          )
+        )
+          return;
+
+        try {
+          showLoading("Memproses Penerimaan Barang...");
+          const res = await api("POST", `/purchases/${targetPoId}/receive-branch`);
+          hideLoading();
+          showToast(res.message);
+          setTimeout(() => (location.href = "po.html"), 1500);
         } catch (e) {
           hideLoading();
           showToast(e.message, "error");

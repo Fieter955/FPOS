@@ -25,6 +25,13 @@ class User(Base):
     
     # 👇 TAMBAHKAN BARIS INI (Cabang aktif saat login) 👇
     active_branch_id = Column(Integer, nullable=True)
+    active_branch = relationship("Branch", primaryjoin="User.active_branch_id == Branch.id", foreign_keys=[active_branch_id])
+
+    @property
+    def branch_status(self):
+        if self.active_branch:
+            return self.active_branch.status
+        return "Cabang"
 
 
 class AuditLog(Base):
@@ -273,6 +280,7 @@ class Purchase(Base):
     from_po_id = Column(Integer, ForeignKey("purchases.id"), nullable=True)
     from_po = relationship("Purchase", remote_side=[id], back_populates="fulfillment_drafts")
     fulfillment_drafts = relationship("Purchase", back_populates="from_po")
+    is_received_by_branch = Column(Boolean, default=False)
 
 
 class PurchaseItem(Base):

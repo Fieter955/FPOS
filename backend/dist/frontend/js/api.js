@@ -23,6 +23,14 @@ function getUser() {
   }
 }
 
+function isMainStore() {
+  const user = getUser();
+  const activeBranchId =
+    localStorage.getItem("active_branch_id") || user.active_branch_id;
+  // Main store is branch ID 1 OR branch status "Toko Utama"
+  return activeBranchId == 1 || user.branch_status === "Toko Utama";
+}
+
 async function api(method, path, body = null) {
   const h = { "Content-Type": "application/json" };
   const tok = getToken();
@@ -429,6 +437,17 @@ async function initBranchSwitcher() {
       localStorage.setItem("active_branch_id", activeId);
     }
 
+    // 🔥 SYNC: Jika ID cabang di localStorage beda dengan data user, refresh agar branch_status sinkron
+    if (activeId && activeId != user.active_branch_id) {
+      try {
+        const updatedUser = await api("GET", "/auth/me");
+        localStorage.setItem("ipos_user", JSON.stringify(updatedUser));
+        Object.assign(user, updatedUser); // Update objek user lokal
+      } catch (e) {
+        console.warn("Gagal sinkron data user di awal:", e);
+      }
+    }
+
     const switcher = document.createElement("div");
     switcher.style.cssText =
       "position:fixed; bottom:20px; left:20px; z-index:9999; background:var(--card-bg, #1e293b); padding:8px 12px; border-radius:12px; border:2px solid var(--primary); box-shadow:0 10px 25px rgba(0,0,0,0.5); display:flex; align-items:center; gap:10px; transition:0.3s;";
@@ -451,8 +470,17 @@ async function initBranchSwitcher() {
     // Saat admin mengganti cabang, simpan dan refresh halaman!
     document
       .getElementById("globalBranchSelect")
-      .addEventListener("change", function () {
+      .addEventListener("change", async function () {
         localStorage.setItem("active_branch_id", this.value);
+
+        // 🔥 REVISI: Refresh data user agar branch_status terbaru ikut tersimpan sebelum reload
+        try {
+          const updatedUser = await api("GET", "/auth/me");
+          localStorage.setItem("ipos_user", JSON.stringify(updatedUser));
+        } catch (e) {
+          console.error("Gagal sinkron status cabang:", e);
+        }
+
         window.location.reload();
       });
   } catch (e) {
