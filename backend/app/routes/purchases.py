@@ -148,6 +148,11 @@ def get_purchase(
     
     if not obj:
         raise HTTPException(404, "Pembelian tidak ditemukan")
+    
+    # If it's a branch request, also fetch its fulfillment drafts
+    if obj.is_branch_request:
+        obj.fulfillment_drafts = db.query(models.Purchase).filter(models.Purchase.from_po_id == obj.id).all()
+        
     return obj
 
 
@@ -229,6 +234,12 @@ def create_purchase(
     )
     db.commit()
     db.refresh(purchase)
+    
+    # Trigger shipping transition if all drafts finalized
+    if purchase.from_po_id:
+        from ..services.purchase_flow import check_and_update_source_status
+        check_and_update_source_status(db, purchase.from_po_id)
+        
     return purchase
 
 
@@ -295,9 +306,60 @@ def split_fulfill_request(
             ))
         created_purchases.append(purchase)
 
-    source.status = "completed"
+    source.status = "processing"
     db.commit()
     return {"message": f"Berhasil membuat {len(created_purchases)} draft pembelian", "ids": [p.id for p in created_purchases]}
+
+
+@router.post("/{pid}/receive-branch")
+def receive_branch_request(
+    pid: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    source = db.query(models.Purchase).filter(models.Purchase.id == pid).with_for_update().first()
+    if not source:
+        raise HTTPException(404, "Request cabang tidak ditemukan")
+    if not source.is_branch_request:
+        raise HTTPException(400, "Dokumen bukan merupakan request cabang")
+    if source.branch_id != current_user.active_branch_id:
+        raise HTTPException(403, "Hanya cabang peminta yang dapat melakukan ACC penerimaan barang")
+    if source.status != "shipping":
+        raise HTTPException(400, f"Status saat ini '{source.status}'. Barang harus berstatus 'DIJALAN' untuk diterima.")
+
+    from ..services.purchase_flow import receive_branch_stock
+    from ..services.journal_service import create_branch_receiving_journal
+
+    # 1. Update Status
+    source.status = "completed"
+    
+    # 2. Add Stock for Branch
+    # We use all finalized fulfillment drafts to know exactly what items and quantities were bought
+    drafts = db.query(models.Purchase).filter(
+        models.Purchase.from_po_id == source.id,
+        models.Purchase.status != "draft"
+    ).all()
+    
+    total_received_value = 0
+    local_dt = get_local_datetime()
+    
+    for d in drafts:
+        receive_branch_stock(db, purchase=d, target_branch_id=source.branch_id, local_datetime=local_dt)
+        total_received_value += d.total
+
+    # 3. Create Branch Journal (Debit: Persediaan, Credit: Transfer dari Pusat)
+    create_branch_receiving_journal(
+        db,
+        date_val=get_local_date(),
+        number_ref=source.number,
+        total=total_received_value,
+        user_id=current_user.id,
+        target_branch_id=source.branch_id
+    )
+
+    db.commit()
+    return {"message": "Barang berhasil diterima! Stok telah diperbarui dan jurnal telah dicatat.", "status": source.status}
+
 
 @router.post("/{pid}/pay")
 def pay_purchase(

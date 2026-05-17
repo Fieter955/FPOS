@@ -748,10 +748,10 @@ async function createOrderManager(containerId, config = {}) {
   let supplierCombo = null;
 
   target.innerHTML = `
-        <div class="order-manager-wrap" style="display:${isBranchRequest || isSplitFulfillment ? "none" : "grid"}; grid-template-columns: ${isBranchRequest ? "1fr" : "1.5fr 1fr"}; gap: 24px; margin-bottom: 24px">
+        <div class="order-manager-wrap" style="display:grid; grid-template-columns: ${isBranchRequest ? "1fr" : "1.5fr 1fr"}; gap: 24px; margin-bottom: 24px">
             <div class="card" style="padding:24px">
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px">
-                    <div class="input-group" style="${isBranchRequest ? "display:none" : ""}">
+                    <div class="input-group" style="${isBranchRequest || isSplitFulfillment ? "display:none" : ""}">
                         <label>Supplier / Vendor *</label>
                         <div id="om-supplier-combo"></div>
                     </div>
@@ -771,7 +771,7 @@ async function createOrderManager(containerId, config = {}) {
                     </div>
                 </div>
             </div>
-            <div class="card" style="padding:24px; background: var(--primary-light); border: 1px solid var(--primary); display: ${isBranchRequest ? "none" : "flex"}; flex-direction: column; justify-content: center">
+            <div class="card" style="padding:24px; background: var(--primary-light); border: 1px solid var(--primary); display: flex; flex-direction: column; justify-content: center">
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px">
                     <div class="input-group"><label>Diskon Global (%)</label><input type="number" id="om-global-disc" class="input-control" value="0" /></div>
                     <div class="input-group"><label>PPN (%)</label><input type="number" id="om-global-tax" class="input-control" value="0" /></div>

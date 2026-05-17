@@ -296,20 +296,31 @@ def create_supplier_purchase(db: Session, *, data: schemas.PurchaseCreate,
     db.flush()
 
     if status != "draft":
-        stock_branch_id = target_branch_id or branch_id
-        receive_branch_stock(db, purchase=purchase, target_branch_id=stock_branch_id,
-                             local_datetime=local_datetime)
+        from .journal_service import create_pusat_fulfillment_journal
+
+        # 🛡️ NEW LOGIC: If Pusat fulfills for another branch, DEFER stock and branch journal
+        is_fulfillment = (branch_id == PUSAT_BRANCH_ID and 
+                          target_branch_id and 
+                          target_branch_id != PUSAT_BRANCH_ID)
+
+        if not is_fulfillment:
+            # Normal Flow: Stock increases immediately
+            stock_branch_id = target_branch_id or branch_id
+            receive_branch_stock(db, purchase=purchase, target_branch_id=stock_branch_id,
+                                 local_datetime=local_datetime)
+        
         update_supplier_item_master(db, data)
 
         supplier = db.query(models.Supplier).get(data.supplier_id)
         supplier_name = supplier.name if supplier else "Supplier"
-        if source_request is not None:
-            create_branch_fulfillment_journal(
+
+        if is_fulfillment:
+            create_pusat_fulfillment_journal(
                 db,
                 date_val=tanggal,
                 number_ref=number,
                 supplier_name=supplier_name,
-                target_branch_id=stock_branch_id,
+                target_branch_id=target_branch_id,
                 total=totals["total"],
                 paid=data.paid or 0,
                 user_id=current_user.id,
@@ -389,22 +400,33 @@ def update_draft_purchase(db: Session, *, purchase: models.Purchase,
     db.flush()
 
     if status != "draft":
-        stock_branch_id = final_target_branch_id or purchase.branch_id
-        receive_branch_stock(db, purchase=purchase, target_branch_id=stock_branch_id,
-                             local_datetime=local_datetime)
+        from .journal_service import create_pusat_fulfillment_journal
+
+        # 🛡️ NEW LOGIC: If Pusat fulfills for another branch, DEFER stock and branch journal
+        is_fulfillment = (purchase.branch_id == PUSAT_BRANCH_ID and 
+                          final_target_branch_id and 
+                          final_target_branch_id != PUSAT_BRANCH_ID)
+
+        if not is_fulfillment:
+            # Normal Flow: Stock increases immediately
+            stock_branch_id = final_target_branch_id or purchase.branch_id
+            receive_branch_stock(db, purchase=purchase, target_branch_id=stock_branch_id,
+                                 local_datetime=local_datetime)
+        
         update_supplier_item_master(db, data)
         
         supplier = db.query(models.Supplier).get(data.supplier_id)
         supplier_name = supplier.name if supplier else "Supplier"
 
-        # 🛡️ FIX: Use Fulfillment Journal if this was a PO for another branch
-        if purchase.branch_id == PUSAT_BRANCH_ID and final_target_branch_id and final_target_branch_id != PUSAT_BRANCH_ID:
-            create_branch_fulfillment_journal(
+        if is_fulfillment:
+            # Only record the outgoing journal for Pusat. 
+            # Branch stock and journal will be handled in 'receive-branch' route.
+            create_pusat_fulfillment_journal(
                 db,
                 date_val=tanggal,
                 number_ref=purchase.number,
                 supplier_name=supplier_name,
-                target_branch_id=stock_branch_id,
+                target_branch_id=final_target_branch_id,
                 total=totals["total"],
                 paid=data.paid or 0,
                 user_id=current_user.id,
@@ -424,6 +446,26 @@ def update_draft_purchase(db: Session, *, purchase: models.Purchase,
 
 
     return purchase
+
+
+def check_and_update_source_status(db: Session, from_po_id: int):
+    """
+    Check if all drafts linked to a source PO are finalized.
+    If yes, move source PO status to 'shipping'.
+    """
+    source = db.query(models.Purchase).get(from_po_id)
+    if not source or not source.is_branch_request:
+        return
+
+    # Count drafts that are still 'draft'
+    drafts_count = db.query(models.Purchase).filter(
+        models.Purchase.from_po_id == from_po_id,
+        models.Purchase.status == 'draft'
+    ).count()
+
+    if drafts_count == 0:
+        source.status = 'shipping'
+        db.commit()
 
 
 def cancel_purchase_flow(db: Session, *, purchase: models.Purchase,

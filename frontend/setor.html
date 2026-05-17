@@ -51,11 +51,10 @@
       let isPusat = false;
 
       async function init() {
-          const u = JSON.parse(localStorage.getItem("pos_user") || "{}");
-          isPusat = (u.active_branch_id === 1 || !u.active_branch_id);
-          
-          if (isPusat) {
-              document.getElementById("btnBack").onclick = () => location.href = 'purchases.html';
+          const u = getUser();
+          isPusat = isMainStore();
+
+          if (isPusat) {              document.getElementById("btnBack").onclick = () => location.href = 'purchases.html';
               document.getElementById("pageTitle").textContent = "📩 Permintaan dari Cabang";
               document.getElementById("pageDesc").textContent = "Lihat dan setujui permintaan stok dari cabang-cabang.";
           } else {

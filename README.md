@@ -28,8 +28,13 @@ Dokumentasi ini dirancang agar AI (CLI Agent) dapat memahami struktur kerja sist
 
 ### 3. Alur Kerja Inti (Core Workflows)
 
-#### A. Multi-Cabang (Multi-Branch)
+#### A. Multi-Cabang (Multi-Branch) & Toko Utama
 - **Identity**: Setiap user memiliki `active_branch_id`.
+- **Toko Utama (Main Store)**: Didefinisikan secara dinamis sebagai cabang di mana `id == 1` ATAU memiliki `status == 'Toko Utama'`.
+- **Logic**: Menggunakan helper global `isMainStore()` di frontend dan pengecekan status di backend untuk mengizinkan fitur pusat (monitoring setoran, approval permintaan barang) pada cabang yang ditunjuk.
+- **Item Visibility (Penyaringan Master Barang)**:
+  - **Pusat**: Dapat melihat dan mengelola **seluruh** master barang di sistem.
+  - **Cabang**: Hanya dapat melihat barang yang **pernah dikirim** oleh Toko Utama. Secara teknis, sistem melakukan *Inner Join* antara master barang dan stok gudang cabang. Barang baru akan muncul otomatis di daftar master cabang segera setelah Mutasi Stok (Warehouse Transfer) pertama dilakukan ke gudang cabang tersebut.
 - **Filtering**: Endpoint menggunakan `get_query(db, model, user)` di `auth.py` untuk memfilter data otomatis berdasarkan cabang user.
 - **Accounting**: Jurnal dan Buku Kas dicatat per cabang (`branch_id`).
 

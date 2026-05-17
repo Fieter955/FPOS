@@ -109,11 +109,11 @@ def create_transfer_journal(db: Session, *, date_val: date, number_ref: str,
     return _auto_journal(db, date_val, number_ref, description, entries, user_id, branch_id)
 
 
-def create_branch_fulfillment_journal(db: Session, *, date_val: date, number_ref: str,
-                                      supplier_name: str, target_branch_id: int,
-                                      total: float, paid: float, user_id: int,
-                                      pusat_branch_id: int = 1):
-    # 1. Jurnal Toko Pusat (Mengeluarkan Kas/Hutang, Mencatat Transfer Keluar)
+def create_pusat_fulfillment_journal(db: Session, *, date_val: date, number_ref: str,
+                                     supplier_name: str, target_branch_id: int,
+                                     total: float, paid: float, user_id: int,
+                                     pusat_branch_id: int = 1):
+    # Jurnal Toko Pusat (Mengeluarkan Kas/Hutang, Mencatat Transfer Keluar)
     entries_pusat = [{"code": ACCOUNT_TRANSFER_OUT, "debit": total, "credit": 0}]
     if paid > 0:
         entries_pusat.append({"code": ACCOUNT_CASH, "debit": 0, "credit": paid})
@@ -121,7 +121,7 @@ def create_branch_fulfillment_journal(db: Session, *, date_val: date, number_ref
     if payable > 0:
         entries_pusat.append({"code": ACCOUNT_PAYABLE, "debit": 0, "credit": payable})
 
-    _auto_journal(
+    return _auto_journal(
         db,
         date_val,
         number_ref,
@@ -131,7 +131,11 @@ def create_branch_fulfillment_journal(db: Session, *, date_val: date, number_ref
         pusat_branch_id,
     )
 
-    # 2. Jurnal Cabang Penerima (Menerima Stok, Mencatat Hutang Antar Kantor)
+
+def create_branch_receiving_journal(db: Session, *, date_val: date, number_ref: str,
+                                    total: float, user_id: int,
+                                    target_branch_id: int):
+    # Jurnal Cabang Penerima (Menerima Stok, Mencatat Hutang Antar Kantor)
     entries_cabang = [
         {"code": ACCOUNT_INVENTORY, "debit": total, "credit": 0},
         {"code": ACCOUNT_TRANSFER_IN, "debit": 0, "credit": total},
@@ -145,6 +149,22 @@ def create_branch_fulfillment_journal(db: Session, *, date_val: date, number_ref
         entries_cabang,
         user_id,
         target_branch_id,
+    )
+
+
+def create_branch_fulfillment_journal(db: Session, *, date_val: date, number_ref: str,
+                                      supplier_name: str, target_branch_id: int,
+                                      total: float, paid: float, user_id: int,
+                                      pusat_branch_id: int = 1):
+    # Backward compatibility or combined call if needed (deprecated in new flow)
+    create_pusat_fulfillment_journal(
+        db, date_val=date_val, number_ref=number_ref, supplier_name=supplier_name,
+        target_branch_id=target_branch_id, total=total, paid=paid, user_id=user_id,
+        pusat_branch_id=pusat_branch_id
+    )
+    return create_branch_receiving_journal(
+        db, date_val=date_val, number_ref=number_ref, total=total,
+        user_id=user_id, target_branch_id=target_branch_id
     )
 
 

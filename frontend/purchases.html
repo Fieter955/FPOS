@@ -570,7 +570,7 @@
           tbody.innerHTML = d.length
             ? d
                 .map((p) => {
-                  const canPay = myBranchId == 1 || !p.is_branch_request;
+                  const canPay = isMainStore() || !p.is_branch_request;
                   const payBtn =
                     p.status === "draft" && canPay
                       ? `<button class="btn" style="padding:4px 8px;font-size:12px;background:var(--primary);color:white;border:none" onclick="startPaymentProcess(${p.id})">💸 Bayar</button>`

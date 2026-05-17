@@ -729,17 +729,24 @@ Pakai akun transfer
 
 14 MAY (PSTIIN BENER SESUAI DEGNAN DRWA IO)
 https://app.diagrams.net/#G1hVxyTr3Q_fawX3Kx3b15G7vdoayldSXt#%7B%22pageId%22%3A%22WwQgFP8OE8CQRQFswfxV%22%7D
+done
+menjadikan toko utama sebagai status selain branch ==1
 
 cabang punya 1 suplier, toko utama
-cabang gasuah pusing beli barang itu belinya disupllier mana
+
+done
 cabang cukup kirim list produk yang di beli (toko utama yang pusing pilih dari supplier mana dia beli produk yang mau dibeli)
 
+done
 dari sudut pandang toko utama dia entar tinggal pilh barnagnya dari supplier mana (sderiap barang itu terikat supplier jadi bisa langung diklik beli dimana)
 
-toko cabang di kunci suplaiernya
+done
 toko utama bisa lebih dari 1, sehingga dia bisa melayani toko cbaang terdekat (jadi jangan dihilangin tampilan cabang yang sekarang)
+
+done
 toko cabang hanya punya barang yang udh pernah dikirim aja
 
+done
 di POS pastrikan barangnya yang udh dikirim tapi habis ya gaap muncul habis tapi kalo barangnya ga pernah dikirm jangan pernah di tampilin
 
 setoran
@@ -747,8 +754,6 @@ toko utama harus klik approve dulu baru masuk jurnal
 
 print pdf di PO udah bener
 tapi pas di pembelian malah alamatnya ke pusat
-
-Ganti nama “simpan PO” jadi “
 
 Selain akun admin gaboleh bisa edit barang dan gabisa edit harga edit supplier
 Akun admin bisa milih menu terkait apa aja yang bisa dilakuin oleh akun selian admin

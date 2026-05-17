@@ -68,10 +68,24 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(),
     auth_utils.write_audit(db, user.id, "LOGIN", "users", user.id, f"Login dari {ip}")
     db.commit()
 
+    # Get branch status
+    branch_status = "Cabang"
+    if user.active_branch_id:
+        branch = db.query(models.Branch).get(user.active_branch_id)
+        if branch:
+            branch_status = branch.status
+
     return {
         "access_token": token,
         "token_type": "bearer",
-        "user": {"id": user.id, "username": user.username, "full_name": user.full_name, "role": user.role}
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "full_name": user.full_name,
+            "role": user.role,
+            "active_branch_id": user.active_branch_id,
+            "branch_status": branch_status
+        }
     }
 
 
@@ -97,8 +111,21 @@ def get_users(db: Session = Depends(get_db), _=Depends(auth_utils.require_admin)
     return db.query(models.User).all()
 
 @router.get("/me", response_model=schemas.UserOut)
-def get_me(current_user: models.User = Depends(auth_utils.get_current_user)):
-    return current_user
+def get_me(current_user: models.User = Depends(auth_utils.get_current_user), db: Session = Depends(get_db)):
+    # Get branch status
+    branch_status = "Cabang"
+    if current_user.active_branch_id:
+        branch = db.query(models.Branch).get(current_user.active_branch_id)
+        if branch:
+            branch_status = branch.status
+    
+    # Return a dict that matches schemas.UserOut but includes extra fields if needed
+    # (Actually schemas.UserOut needs to be updated to include branch_status)
+    user_data = schemas.UserOut.model_validate(current_user).model_dump()
+    user_data["branch_status"] = branch_status
+    user_data["active_branch_id"] = current_user.active_branch_id
+    
+    return user_data
 
 @router.put("/users/{uid}/password")
 def change_password(uid: int, data: dict, db: Session = Depends(get_db),

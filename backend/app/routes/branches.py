@@ -24,24 +24,27 @@ def get_pending_deposits(
 ):
     active_b_id = current_user.active_branch_id
     
-    # Logic: Jika Pusat (ID 1) dan tidak ada target_branch_id, berikan ringkasan per cabang
-    if active_b_id == 1 and not target_branch_id:
+    # Logic: Jika Pusat (ID 1 atau status Toko Utama) dan tidak ada target_branch_id, berikan ringkasan per cabang
+    active_branch = db.query(models.Branch).get(active_b_id) if active_b_id else None
+    is_pusat = active_branch and (active_branch.id == 1 or active_branch.status == "Toko Utama")
+
+    if is_pusat and not target_branch_id:
         # Ringkasan: Cabang Mana saja yang punya kas berdasarkan status
-        branches = db.query(models.Branch).filter(models.Branch.id != 1).all()
+        branches = db.query(models.Branch).filter(models.Branch.id != active_b_id, models.Branch.status != "Toko Utama").all()
         summary = []
         overall_total = 0
-        
+
         is_dep_filter = (status == "deposited")
-        
+
         for b in branches:
             q = db.query(models.Shift).filter(
-                models.Shift.branch_id == b.id, 
+                models.Shift.branch_id == b.id,
                 models.Shift.status == "closed",
                 models.Shift.is_deposited == is_dep_filter
             )
             if start_date: q = q.filter(func.date(models.Shift.closed_at) >= start_date)
             if end_date: q = q.filter(func.date(models.Shift.closed_at) <= end_date)
-            
+
             shifts = q.all()
             total_b = sum(s.closing_cash for s in shifts if s.closing_cash)
             if total_b > 0:
@@ -53,7 +56,7 @@ def get_pending_deposits(
                     "shift_count": len(shifts)
                 })
                 overall_total += total_b
-        
+
         return {
             "is_summary": True,
             "status": status,
@@ -62,8 +65,7 @@ def get_pending_deposits(
         }
 
     # Jika sub-cabang atau Pusat sedang memfilter cabang tertentu
-    b_id = target_branch_id if (active_b_id == 1 and target_branch_id) else active_b_id
-    
+    b_id = target_branch_id if (is_pusat and target_branch_id) else active_b_id    
     if not b_id:
         return {"total": 0, "shifts": []}
         

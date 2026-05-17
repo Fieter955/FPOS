@@ -146,6 +146,25 @@ def get_items(
         
     from sqlalchemy.orm import joinedload
     q = db.query(models.Item).options(joinedload(models.Item.suppliers), joinedload(models.Item.supplier_details))
+
+    # 🏢 FILTER LINTAS CABANG (Penyaringan Barang)
+    active_branch = None
+    if current_user.active_branch_id:
+        active_branch = db.query(models.Branch).get(current_user.active_branch_id)
+    
+    is_pusat = not active_branch or (active_branch.id == 1 or active_branch.status == "Toko Utama")
+    print(f"[DEBUG get_items] user={current_user.username}, branch_id={current_user.active_branch_id}, is_pusat={is_pusat}")
+
+    if not is_pusat:
+        # Jika bukan Pusat, hanya munculkan barang yang sudah pernah didaftarkan stoknya di gudang cabang ini
+        gudang_ids = [g.id for g in db.query(models.Warehouse.id).filter(models.Warehouse.branch_id == active_branch.id).all()]
+        print(f"[DEBUG get_items] sub-branch filter applied. gudang_ids={gudang_ids}")
+        if gudang_ids:
+            # Menggunakan join + distinct agar lebih mantap dan menghindari duplikasi jika ada >1 gudang per cabang
+            q = q.join(models.WarehouseStock).filter(models.WarehouseStock.warehouse_id.in_(gudang_ids)).distinct()
+        else:
+            q = q.filter(models.Item.id == -1)
+
     if active_only: q = q.filter(models.Item.is_active == True)
     if search: q = q.filter(
         models.Item.name.ilike(f"%{search}%") |

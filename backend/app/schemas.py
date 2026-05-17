@@ -37,6 +37,8 @@ class UserOut(BaseModel):
     full_name: Optional[str]
     role: str
     branch_id: Optional[int]
+    active_branch_id: Optional[int] = None
+    branch_status: Optional[str] = "Cabang"
     is_active: bool
     model_config = {"from_attributes": True}
 
@@ -66,11 +68,13 @@ class BranchCreate(BaseModel):
     name: str
     address: str
     phone: Optional[str] = None
+    status: Optional[str] = "Cabang"
 
 class BranchUpdate(BaseModel):
     name: Optional[str] = None
     address: Optional[str] = None
     phone: Optional[str] = None
+    status: Optional[str] = None
     is_active: Optional[bool] = None
 
 class BranchOut(BaseModel):
@@ -79,6 +83,7 @@ class BranchOut(BaseModel):
     name: str
     address: Optional[str]
     phone: Optional[str]
+    status: str
     is_active: bool
     model_config = {"from_attributes": True}
 
@@ -322,6 +327,7 @@ class PurchaseOut(BaseModel):
     branch: Optional[BranchOut] = None
     target_branch: Optional[BranchOut] = None
     items: List[PurchaseItemOut] = []
+    fulfillment_drafts: List["PurchaseOut"] = []
     model_config = {"from_attributes": True}
 
 class PurchasePayment(BaseModel):
@@ -481,3 +487,5 @@ class JournalOut(BaseModel):
     # 👇👇 INI ADALAH KUNCI JAWABANNYA 👇👇
     entries: List[JournalEntryLineOut] = [] 
     model_config = {"from_attributes": True}
+
+PurchaseOut.model_rebuild()

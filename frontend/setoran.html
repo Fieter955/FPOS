@@ -81,8 +81,8 @@
     <script>
       requireAuth();
       let rawData = [];
-      let currentUser = JSON.parse(localStorage.getItem("user") || "{}");
-      let isMainBranch = currentUser.branch_id === 1;
+      let currentUser = getUser();
+      let isMainBranch = isMainStore();
       let selectedBranchId = null;
       let branchCombo = null;
 

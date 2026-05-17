@@ -23,6 +23,13 @@ function getUser() {
   }
 }
 
+function isMainStore() {
+  const user = getUser();
+  const activeBranchId = localStorage.getItem("active_branch_id") || user.active_branch_id;
+  // Main store is branch ID 1 OR branch status "Toko Utama"
+  return activeBranchId == 1 || user.branch_status === "Toko Utama";
+}
+
 async function api(method, path, body = null) {
   const h = { "Content-Type": "application/json" };
   const tok = getToken();

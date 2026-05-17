@@ -61,6 +61,7 @@ class Branch(Base):
     name = Column(String(100), nullable=False)             # Misal: Eva Store - Pusat
     address = Column(Text)
     phone = Column(String(20))
+    status = Column(String(20), default="Cabang") # Toko Utama | Cabang
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -270,7 +271,8 @@ class Purchase(Base):
     target_branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
     target_branch = relationship("Branch", foreign_keys=[target_branch_id])
     from_po_id = Column(Integer, ForeignKey("purchases.id"), nullable=True)
-    from_po = relationship("Purchase", remote_side=[id])
+    from_po = relationship("Purchase", remote_side=[id], back_populates="fulfillment_drafts")
+    fulfillment_drafts = relationship("Purchase", back_populates="from_po")
 
 
 class PurchaseItem(Base):
