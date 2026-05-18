@@ -111,11 +111,20 @@
 
         const urlParams = new URLSearchParams(window.location.search);
         let initialData = null;
+        const allowNameEdit = urlParams.get("allowNameEdit") === "true";
 
         if (urlParams.has("po_id")) {
           loadedPOId = urlParams.get("po_id");
           initialData = await api("GET", `/purchases/${loadedPOId}`);
           poBranchId = initialData.branch_id;
+
+          // Simpan data barang asli untuk perbandingan nanti
+          originalItems = initialData.items.map((it) => ({
+            item_id: it.item_id,
+            name: it.item?.name || "",
+            qty_ordered: it.qty_ordered || it.qty,
+            qty_received: it.qty_received || it.qty,
+          }));
           
           let btnHtml = "";
           if (!initialData.is_branch_request && initialData.from_po_id) {
@@ -140,6 +149,7 @@
           // Simpan data barang asli untuk perbandingan nanti
           originalItems = initialData.items.map((it) => ({
             item_id: it.item_id,
+            name: it.item?.name || "",
             qty_ordered: it.qty_ordered || it.qty,
             qty_received: it.qty_received || it.qty,
           }));
@@ -148,6 +158,8 @@
         orderManager = await createOrderManager("orderManagerContainer", {
           initialData: initialData,
           from_po: loadedPOId ? true : false,
+          allowNameEdit: allowNameEdit || !!loadedPOId,
+          readonlySelector: !!loadedPOId,
         });
 
         // LOCK SUPPLIER jika sedang edit draft atau verifikasi PO
@@ -173,33 +185,35 @@
         if (data.items.length === 0)
           return showToast("Daftar barang kosong", "error");
 
-        // --- VALIDASI PERUBAHAN DRAFT ---
-        if (currentEditId) {
+        // --- VALIDASI PERUBAHAN DRAFT / PO ---
+        if (currentEditId || loadedPOId) {
           let changes = [];
 
           // Cek barang yang dihapus
           originalItems.forEach((orig) => {
             const found = data.items.find((it) => it.item_id === orig.item_id);
-            if (!found) changes.push(`- Barang dihapus dari list`);
+            if (!found) changes.push(`- Barang dihapus dari list: ${orig.name}`);
           });
 
-          // Cek perubahan qty atau barang baru
+          // Cek perubahan qty, nama, atau barang baru
           data.items.forEach((it) => {
             const orig = originalItems.find((o) => o.item_id === it.item_id);
             if (!orig) {
-              changes.push(`- Barang baru ditambahkan`);
-            } else if (
-              it.qty_ordered !== orig.qty_ordered ||
-              it.qty_received !== orig.qty_received
-            ) {
-              changes.push(`- Perubahan jumlah pada barang yang sudah ada`);
+              changes.push(`- Barang baru ditambahkan: ${it.name}`);
+            } else {
+               if (it.qty_ordered !== orig.qty_ordered || it.qty_received !== orig.qty_received) {
+                  changes.push(`- Perubahan jumlah pada barang: ${orig.name}`);
+               }
+               if (it.name !== orig.name) {
+                  changes.push(`- Nama barang diubah: '${orig.name}' menjadi '${it.name}'`);
+               }
             }
           });
 
           if (changes.length > 0) {
             const uniqueChanges = [...new Set(changes)];
             const confirmed = await showConfirm(
-              `Peringatan: Anda telah melakukan perubahan pada draft asli:\n${uniqueChanges.join("\n")}\n\nApakah Anda yakin ingin melanjutkan?`,
+              `Peringatan: Anda telah melakukan perubahan pada data asli:\n${uniqueChanges.join("\n")}\n\nApakah Anda yakin ingin melanjutkan?`,
             );
             if (!confirmed) return;
           }
@@ -284,12 +298,46 @@
         closeModal("mMismatch");
         if (!pendingPayload) return;
         pendingPayload.status = status;
+        
         try {
-          showLoading("Menyimpan...");
+          showLoading("Memproses Data...");
+
+          // --- LOGIKA CLONE BARANG JIKA NAMA BERUBAH ---
+          for (let it of pendingPayload.items) {
+            const orig = originalItems.find((o) => o.item_id === it.item_id);
+            if (orig && it.name !== orig.name) {
+              console.log(`[CLONE] Mendeteksi perubahan nama: ${orig.name} -> ${it.name}`);
+              showLoading(`Membuat barang baru: ${it.name}...`);
+              
+              // 1. Ambil detail barang asli
+              const originalDetail = await api("GET", `/items/${it.item_id}`);
+              
+              // 2. Siapkan payload clone
+              const newName = it.name;
+              const clonePayload = {
+                ...originalDetail,
+                name: newName,
+                code: "AUTO",
+                barcode: "AUTO",
+                stock: 0, // Barang baru mulai dari stok 0
+                supplier_ids: originalDetail.suppliers?.map(s => s.id) || []
+              };
+              
+              // 3. Simpan barang baru
+              const newItem = await api("POST", "/items/", clonePayload);
+              
+              // 4. Update item_id di payload pembelian
+              it.item_id = newItem.id;
+              console.log(`[CLONE] Barang baru dibuat dengan ID: ${newItem.id}`);
+            }
+          }
+
+          showLoading("Menyimpan Invoice...");
           const targetId = currentEditId;
           if (targetId)
             await api("PUT", `/purchases/${targetId}`, pendingPayload);
           else await api("POST", "/purchases/", pendingPayload);
+          
           showToast("Berhasil disimpan ✓");
           setTimeout(() => {
             location.href = "purchases.html";

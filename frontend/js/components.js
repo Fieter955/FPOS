@@ -144,6 +144,8 @@ function createPurchaseGrid(container, config = {}) {
     isFulfillment = false,
     isBranchRequest = false,
     showSupplierColumn = false,
+    allowNameEdit = false,
+    readonlySelector = false,
   } = config;
 
   let barisIdx = 0;
@@ -215,7 +217,11 @@ function createPurchaseGrid(container, config = {}) {
           : 0;
 
     row.innerHTML = `
-            <div class="item-selector" id="pg-combo-${id}"></div>
+            <div class="item-col-container">
+                <div class="item-selector" id="pg-combo-${id}" style="${readonlySelector ? "display:none" : ""}"></div>
+                ${readonlySelector ? `<div style="font-weight:700; font-size:13px; margin-bottom:4px; color:var(--text-main)">${item?.name || "Item"}</div>` : ""}
+                ${allowNameEdit ? `<input type="text" class="input-control pg-name-edit" value="${item?.name || ""}" placeholder="Nama barang (bisa diubah)..." style="font-size:11px; margin-top:4px; border-color:var(--primary)" />` : ""}
+            </div>
             <input type="number" class="combobox-input pg-ordered" value="${qtyOrdered}" style="text-align:center" />
             ${
               showSupplierColumn
@@ -235,7 +241,7 @@ function createPurchaseGrid(container, config = {}) {
             `
                   : ""
             }
-            <button class="btn btn-del-row" style="color:var(--danger); background:transparent; padding:0; justify-content:center">✕</button>
+            ${readonlySelector ? "<div></div>" : `<button class="btn btn-del-row" style="color:var(--danger); background:transparent; padding:0; justify-content:center">✕</button>`}
         `;
 
     body.appendChild(row);
@@ -307,11 +313,14 @@ function createPurchaseGrid(container, config = {}) {
           marginInp.value = sel.profit_margin || 0;
         }
         row._itemData = sel;
+        const nameEditInp = row.querySelector(".pg-name-edit");
+        if (nameEditInp) nameEditInp.value = sel.name || "";
+
         if (showSupplierColumn && row._suppCombo) {
           // Filter suppliers to only those who have this item
           const validSuppliers = sel.suppliers || [];
           row._suppCombo.updateData(validSuppliers);
-          
+
           // Clear current selection and auto-select if only 1 valid supplier
           row._suppCombo.clear();
           if (validSuppliers.length === 1) {
@@ -473,10 +482,15 @@ function createPurchaseGrid(container, config = {}) {
             ? parseFloat(margInp.value) || 0
             : row._itemData?.profit_margin || 0;
 
+          const nameEditInp = row.querySelector(".pg-name-edit");
+          const customName = nameEditInp
+            ? nameEditInp.value
+            : row._itemData?.name || "";
+
           data.push({
             item_id: parseInt(iid),
             supplier_id: sid ? parseInt(sid) : null,
-            name: row._itemData?.name || "",
+            name: customName,
             code: row._itemData?.code || "",
             qty: showSupplierColumn ? qOrd : qRec,
             qty_ordered: qOrd,
@@ -742,19 +756,21 @@ async function createOrderManager(containerId, config = {}) {
     onChange = null,
     isBranchRequest = false,
     isSplitFulfillment = false,
+    from_po = false,
+    allowNameEdit = false,
+    readonlySelector = false,
   } = config;
 
   let itemsGrid = null;
   let supplierCombo = null;
 
-  
-
   target.innerHTML = `
         <div class="order-manager-wrap" style="display:${type === "po" ? "none" : "grid"}; grid-template-columns: ${isBranchRequest ? "1fr" : "1.5fr 1fr"}; gap: 24px; margin-bottom: 24px">
             <div class="card" style="padding:24px">
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px">
-                    <div class="input-group" style="${isBranchRequest || isSplitFulfillment ? "display:none" : ""}">
+                    <div class="input-group" style="${isBranchRequest || isSplitFulfillment || (from_po && readonlySelector) ? "display:none" : ""}">
                         <label>Supplier / Vendor *</label>
+
                         <div id="om-supplier-combo"></div>
                     </div>
                     <div class="input-group">
@@ -787,7 +803,7 @@ async function createOrderManager(containerId, config = {}) {
         <div class="card" style="padding:24px">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px">
                 <h3>Daftar Barang</h3>
-                <button class="btn btn-primary" id="om-btn-add">+ Tambah Barang</button>
+                ${readonlySelector ? "" : '<button class="btn btn-primary" id="om-btn-add">+ Tambah Barang</button>'}
             </div>
             <div id="om-grid-container"></div>
         </div>
@@ -803,7 +819,8 @@ async function createOrderManager(containerId, config = {}) {
     if (!itemsGrid) return;
     const items = itemsGrid.getData();
     const subtotal = items.reduce((acc, it) => {
-      let hargaNeto = it.buy_price * (1 - it.disc1 / 100) * (1 - it.disc2 / 100);
+      let hargaNeto =
+        it.buy_price * (1 - it.disc1 / 100) * (1 - it.disc2 / 100);
       return acc + it.qty * hargaNeto;
     }, 0);
     const discInput = document.getElementById("om-global-disc");
@@ -831,6 +848,8 @@ async function createOrderManager(containerId, config = {}) {
     isFulfillment,
     isBranchRequest,
     showSupplierColumn: isSplitFulfillment,
+    allowNameEdit: allowNameEdit || !!from_po,
+    readonlySelector: readonlySelector,
     initialItems:
       initialData?.items?.map((it) => ({
         id: it.item_id,
@@ -874,7 +893,8 @@ async function createOrderManager(containerId, config = {}) {
         : initialData.discount || 0;
     const taxPct =
       initialData.subtotal - initialData.discount > 0
-        ? (initialData.tax / (initialData.subtotal - initialData.discount)) * 100
+        ? (initialData.tax / (initialData.subtotal - initialData.discount)) *
+          100
         : initialData.tax || 0;
     if (discInput) discInput.value = discPct.toFixed(2);
     if (taxInput) taxInput.value = taxPct.toFixed(2);
@@ -887,16 +907,19 @@ async function createOrderManager(containerId, config = {}) {
 
   return {
     getData: () => ({
-      supplier_id: isBranchRequest || isSplitFulfillment ? null : supplierCombo.val(),
+      supplier_id:
+        isBranchRequest || isSplitFulfillment ? null : supplierCombo.val(),
       date: document.getElementById("om-date").value,
       number: document.getElementById("om-number").value,
       due_date: document.getElementById("om-due-date").value || null,
-      discount: isBranchRequest || isSplitFulfillment
-        ? 0
-        : parseFloat(document.getElementById("om-global-disc").value) || 0,
-      tax: isBranchRequest || isSplitFulfillment
-        ? 0
-        : parseFloat(document.getElementById("om-global-tax").value) || 0,
+      discount:
+        isBranchRequest || isSplitFulfillment
+          ? 0
+          : parseFloat(document.getElementById("om-global-disc").value) || 0,
+      tax:
+        isBranchRequest || isSplitFulfillment
+          ? 0
+          : parseFloat(document.getElementById("om-global-tax").value) || 0,
       items: itemsGrid.getData(),
     }),
     itemsGrid,

@@ -639,7 +639,7 @@
                            <td>${getStatusBadge(r.status)}</td>
                            <td>
                              <div style="display:flex; gap:4px">
-                                 ${r.status === "shipping" ? `<button class="bsm" style="background:#10b981; color:white" onclick="receiveGoods(${r.id})">📦 Terima</button>` : ""}
+                        
                                  <button class="bsm be" onclick="loadPO(${r.id})">Detail ey</button>
                                  <button class="bsm" style="background:#e2e8f0; color:#475569" onclick="exportPurchasePDF(${r.id})">📄 PDF</button>
                              </div>
@@ -659,7 +659,7 @@
         showLoading();
         try {
           const p = await api("GET", `/purchases/${id}`);
-          if (toko_utama) {
+          if (!toko_utama) {
             document.getElementById("buttonGroup").style.display = "none";
           }
 
@@ -699,12 +699,7 @@
                            <td>${getStatusBadge(d.status)}</td>
                            <td>
                              <div style="display:flex; gap:4px">
-                                 <button class="bsm be" onclick="location.href='catat-pembelian.html?po_id=${d.id}'">Lihat Detail</button>
-                                 ${
-                                   !d.is_received_by_branch
-                                     ? `<button class="bsm bp" onclick="openReceiveDraftModal(${d.id})">✔️ ACC</button>`
-                                     : `<span class="bl">Selesai</span>`
-                                 }
+                                 <button class="bsm be" onclick="location.href='catat-pembelian.html?po_id=${d.id}&allowNameEdit=true'">Lihat Detail</button>
                                  <button class="bsm" style="background:#e2e8f0; color:#475569" onclick="exportPurchasePDF(${d.id})">📄 PDF</button>
                              </div>
                            </td>
@@ -747,8 +742,8 @@
                 fulfillCont.insertAdjacentHTML(
                   "afterbegin",
                   `
-                         <button id="btn-acc-receive" class="btn btn-primary" style="width:100%; padding:16px; font-size:18px; margin-bottom:16px" onclick="receiveGoods(${p.id})">
-                           📦 TERIMA BARANG (ACC)
+                         <button id="btn-acc-receive" class="btn btn-primary" style="width:100%; padding:16px; font-size:18px; margin-bottom:16px"">
+                           📦 Silahkan Terima Barang Pada Faktur dibawah dengan Klik Detail terlebih dahulu
                          </button>
                       `,
                 );
