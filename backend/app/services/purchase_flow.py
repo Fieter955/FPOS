@@ -166,7 +166,7 @@ def update_supplier_item_master(db: Session, data: schemas.PurchaseCreate):
 
 
 def receive_branch_stock(db: Session, *, purchase: models.Purchase,
-                         target_branch_id: int, local_datetime: datetime):
+                         target_branch_id: int, local_datetime: datetime, local_date: date):
     warehouse = get_or_create_default_warehouse(db, target_branch_id)
     is_pusat_stock = target_branch_id == PUSAT_BRANCH_ID
 
@@ -179,7 +179,7 @@ def receive_branch_stock(db: Session, *, purchase: models.Purchase,
 
         adjust_warehouse_stock(db, warehouse.id, item.id, purchase_item.qty)
         db.add(models.StockMovement(
-            date=local_datetime.date,
+            date=local_date,
             created_at=local_datetime,
             item_id=item.id,
             branch_id=target_branch_id,

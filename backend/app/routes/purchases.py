@@ -361,9 +361,10 @@ def receive_branch_request(
     
     # 2. Add Stock for Branch
     # Menggunakan source items karena cabang mungkin telah melakukan clone barang atau mengubah qty
-    local_dt = get_local_datetime()
+    local_datetime = get_local_datetime()
+    local_date = get_local_date()
     
-    receive_branch_stock(db, purchase=source, target_branch_id=source.branch_id, local_datetime=local_dt)
+    receive_branch_stock(db, purchase=source, target_branch_id=source.branch_id, local_datetime=local_datetime, local_date=local_date)
     
     # Kalkulasi nilai penerimaan berdasarkan item yang sudah terupdate
     total_received_value = sum(pi.total for pi in source.items)
@@ -371,7 +372,7 @@ def receive_branch_request(
     # 3. Create Branch Journal (Debit: Persediaan, Credit: Transfer dari Pusat)
     create_branch_receiving_journal(
         db,
-        date_val=get_local_date(),
+        date_val=local_date,
         number_ref=source.number,
         total=total_received_value,
         user_id=current_user.id,
