@@ -118,21 +118,13 @@
           initialData = await api("GET", `/purchases/${loadedPOId}`);
           poBranchId = initialData.branch_id;
 
-          // Simpan data barang asli untuk perbandingan nanti
-          originalItems = initialData.items.map((it) => ({
-            item_id: it.item_id,
-            name: it.item?.name || "",
-            qty_ordered: it.qty_ordered || it.qty,
-            qty_received: it.qty_received || it.qty,
-          }));
-          
           let btnHtml = "";
           if (!initialData.is_branch_request && initialData.from_po_id) {
-              btnHtml = `<button class="btn btn-PO-success" onclick="terimaBarangCabang(${initialData.from_po_id})">ACC (Terima dari Pusat)</button>`;
+            btnHtml = `<button class="btn btn-PO-success" onclick="terimaBarangCabang(${initialData.from_po_id})">ACC (Terima dari Pusat)</button>`;
           } else if (initialData.is_branch_request) {
-              btnHtml = `<button class="btn btn-PO-success" onclick="terimaBarangCabang(${initialData.id})">ACC (Terima dari Pusat)</button>`;
+            btnHtml = `<button class="btn btn-PO-success" onclick="terimaBarangCabang(${initialData.id})">ACC (Terima dari Pusat)</button>`;
           } else {
-              btnHtml = `<button class="btn btn-PO-success" onclick="finalisasi('paid')">ACC (Simpan Invoice)</button>`;
+            btnHtml = `<button class="btn btn-PO-success" onclick="finalisasi('paid')">ACC (Simpan Invoice)</button>`;
           }
           document.getElementById("buttonACCOrFinal").innerHTML = btnHtml;
           document.getElementById("modeBadge").innerHTML =
@@ -146,7 +138,9 @@
             alert("Hanya faktur draft yang bisa diedit.");
             return (location.href = "purchases.html");
           }
-          // Simpan data barang asli untuk perbandingan nanti
+        }
+        // Simpan data barang asli untuk perbandingan nanti
+        if (initialData && initialData.items) {
           originalItems = initialData.items.map((it) => ({
             item_id: it.item_id,
             name: it.item?.name || "",
@@ -192,7 +186,8 @@
           // Cek barang yang dihapus
           originalItems.forEach((orig) => {
             const found = data.items.find((it) => it.item_id === orig.item_id);
-            if (!found) changes.push(`- Barang dihapus dari list: ${orig.name}`);
+            if (!found)
+              changes.push(`- Barang dihapus dari list: ${orig.name}`);
           });
 
           // Cek perubahan qty, nama, atau barang baru
@@ -201,12 +196,17 @@
             if (!orig) {
               changes.push(`- Barang baru ditambahkan: ${it.name}`);
             } else {
-               if (it.qty_ordered !== orig.qty_ordered || it.qty_received !== orig.qty_received) {
-                  changes.push(`- Perubahan jumlah pada barang: ${orig.name}`);
-               }
-               if (it.name !== orig.name) {
-                  changes.push(`- Nama barang diubah: '${orig.name}' menjadi '${it.name}'`);
-               }
+              if (
+                it.qty_ordered !== orig.qty_ordered ||
+                it.qty_received !== orig.qty_received
+              ) {
+                changes.push(`- Perubahan jumlah pada barang: ${orig.name}`);
+              }
+              if (it.name !== orig.name) {
+                changes.push(
+                  `- Nama barang diubah: '${orig.name}' menjadi '${it.name}'`,
+                );
+              }
             }
           });
 
@@ -298,7 +298,7 @@
         closeModal("mMismatch");
         if (!pendingPayload) return;
         pendingPayload.status = status;
-        
+
         try {
           showLoading("Memproses Data...");
 
@@ -306,12 +306,14 @@
           for (let it of pendingPayload.items) {
             const orig = originalItems.find((o) => o.item_id === it.item_id);
             if (orig && it.name !== orig.name) {
-              console.log(`[CLONE] Mendeteksi perubahan nama: ${orig.name} -> ${it.name}`);
+              console.log(
+                `[CLONE] Mendeteksi perubahan nama: ${orig.name} -> ${it.name}`,
+              );
               showLoading(`Membuat barang baru: ${it.name}...`);
-              
+
               // 1. Ambil detail barang asli
               const originalDetail = await api("GET", `/items/${it.item_id}`);
-              
+
               // 2. Siapkan payload clone
               const newName = it.name;
               const clonePayload = {
@@ -320,15 +322,17 @@
                 code: "AUTO",
                 barcode: "AUTO",
                 stock: 0, // Barang baru mulai dari stok 0
-                supplier_ids: originalDetail.suppliers?.map(s => s.id) || []
+                supplier_ids: [data.supplier_id],
               };
-              
+
               // 3. Simpan barang baru
               const newItem = await api("POST", "/items/", clonePayload);
-              
+
               // 4. Update item_id di payload pembelian
               it.item_id = newItem.id;
-              console.log(`[CLONE] Barang baru dibuat dengan ID: ${newItem.id}`);
+              console.log(
+                `[CLONE] Barang baru dibuat dengan ID: ${newItem.id}`,
+              );
             }
           }
 
@@ -337,7 +341,7 @@
           if (targetId)
             await api("PUT", `/purchases/${targetId}`, pendingPayload);
           else await api("POST", "/purchases/", pendingPayload);
-          
+
           showToast("Berhasil disimpan ✓");
           setTimeout(() => {
             location.href = "purchases.html";
@@ -368,8 +372,60 @@
           showToast(e.message, "error");
         }
       }
-
       async function terimaBarangCabang(targetPoId) {
+        if (!orderManager) return;
+        const data = orderManager.getData();
+        console.log("[TERIMA CABANG] Data yang akan diproses:", data);
+
+        // --- DETEKSI PERUBAHAN NAMA ---
+        let nameChanges = [];
+        data.items.forEach((it) => {
+          const orig = originalItems.find((o) => o.item_id === it.item_id);
+          if (orig && it.name.trim() !== orig.name.trim()) {
+            nameChanges.push({
+              oldName: orig.name,
+              newName: it.name,
+              item: it,
+            });
+          }
+        });
+
+        console.log(
+          "[TERIMA CABANG] Perubahan nama yang terdeteksi:",
+          nameChanges,
+        );
+
+        if (nameChanges.length > 0) {
+          const confirmed = await createItemChangeModal(nameChanges);
+          if (!confirmed) return;
+
+          showLoading("Memproses Barang Baru...");
+          for (let nc of nameChanges) {
+            try {
+              // 1. Ambil detail asli
+              const originalDetail = await api(
+                "GET",
+                `/items/${nc.item.item_id}`,
+              );
+              // 2. Siapkan payload clone
+              const clonePayload = {
+                ...originalDetail,
+                name: nc.newName,
+                code: "AUTO",
+                barcode: "AUTO",
+                stock: 0,
+                supplier_ids: [data.supplier_id],
+              };
+              // 3. Simpan baru
+              const newItem = await api("POST", "/items/", clonePayload);
+              // 4. Update ID di data lokal
+              nc.item.item_id = newItem.id;
+            } catch (err) {
+              console.error("Gagal clone barang:", err);
+            }
+          }
+        }
+
         if (
           !confirm(
             "Apakah barang fisik sudah sampai dan sesuai dengan pesanan? Stok akan bertambah setelah Anda melakukan ACC.",
@@ -379,16 +435,30 @@
 
         try {
           showLoading("Memproses Penerimaan Barang...");
-          const res = await api("POST", `/purchases/${targetPoId}/receive-branch`);
+
+          // --- SIMPAN PERUBAHAN KE TRANSAKSI DAHULU ---
+          // Ini memastikan qty_received dan item_id baru tersimpan sebelum proses stok
+          const updatePayload = {
+            ...data,
+            notes: document.getElementById("bNotes").value || null,
+            from_po_id: loadedPOId,
+            target_branch_id: poBranchId || data.target_branch_id,
+          };
+          await api("PUT", `/purchases/${targetPoId}`, updatePayload);
+
+          // --- FINALIZE RECEIVE ---
+          const res = await api(
+            "POST",
+            `/purchases/${targetPoId}/receive-branch`,
+          );
           hideLoading();
-          showToast(res.message);
+          showToast(res.message || "Berhasil ACC ✓");
           setTimeout(() => (location.href = "po.html"), 1500);
         } catch (e) {
           hideLoading();
           showToast(e.message, "error");
         }
       }
-
       init();
     </script>
   </body>

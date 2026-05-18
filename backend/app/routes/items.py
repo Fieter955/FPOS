@@ -190,7 +190,7 @@ def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db), current
     import uuid
 
     # Ambil data form, kecuali prices dan supplier_ids
-    item_data = item.model_dump(exclude={"prices", "supplier_ids"})
+    item_data = item.model_dump(exclude={"prices", "supplier_ids", "supplier_settings"})
 
     # 1. Pastikan Kode ter-generate otomatis dengan aman di backend
     if not item_data.get("code") or item_data["code"] == "AUTO":
@@ -279,7 +279,7 @@ def update_item(item_id: int, item: schemas.ItemUpdate, db: Session = Depends(ge
             f"Barang multi-satuan {obj.name} dikelola dari menu Multi Satuan, bukan edit barang biasa.",
         )
     
-    data = item.model_dump(exclude_unset=True, exclude={"prices", "supplier_ids"})
+    data = item.model_dump(exclude_unset=True, exclude={"prices", "supplier_ids", "supplier_settings"})
     
     need_barcode_gen = False
     if data.get("barcode") == "AUTO":

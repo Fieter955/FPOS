@@ -219,7 +219,7 @@ function createPurchaseGrid(container, config = {}) {
     row.innerHTML = `
             <div class="item-col-container">
                 <div class="item-selector" id="pg-combo-${id}" style="${readonlySelector ? "display:none" : ""}"></div>
-                ${readonlySelector ? `<div style="font-weight:700; font-size:13px; margin-bottom:4px; color:var(--text-main)">${item?.name || "Item"}</div>` : ""}
+             
                 ${allowNameEdit ? `<input type="text" class="input-control pg-name-edit" value="${item?.name || ""}" placeholder="Nama barang (bisa diubah)..." style="font-size:11px; margin-top:4px; border-color:var(--primary)" />` : ""}
             </div>
             <input type="number" class="combobox-input pg-ordered" value="${qtyOrdered}" style="text-align:center" />
@@ -255,6 +255,7 @@ function createPurchaseGrid(container, config = {}) {
     const nettoDiv = row.querySelector(".purchase-grid-netto");
     const delBtn = row.querySelector(".btn-del-row");
     const discGroup = row.querySelector(".disc-group");
+    const formBarangEdit = row.querySelector(".pg-name-edit");
 
     const calculateRow = () => {
       if (isBranchRequest || showSupplierColumn) {
@@ -406,10 +407,12 @@ function createPurchaseGrid(container, config = {}) {
         calculateRow();
       };
     }
-    delBtn.onclick = () => {
-      row.remove();
-      if (onChange) onChange();
-    };
+    if (delBtn) {
+      delBtn.onclick = () => {
+        row.remove();
+        if (onChange) onChange();
+      };
+    }
     if (item) {
       combo.set(item.id, item.name);
       row._itemData = item;
@@ -875,7 +878,10 @@ async function createOrderManager(containerId, config = {}) {
     itemsGrid.updateDataSource(allItems);
   }
 
-  document.getElementById("om-btn-add").onclick = () => itemsGrid.addRow();
+  const btnAdd = document.getElementById("om-btn-add");
+  if (btnAdd) {
+    btnAdd.onclick = () => itemsGrid.addRow();
+  }
 
   const discInput = document.getElementById("om-global-disc");
   if (discInput) discInput.oninput = recalc;
@@ -925,4 +931,78 @@ async function createOrderManager(containerId, config = {}) {
     itemsGrid,
     supplierCombo,
   };
+}
+
+/**
+ * createItemChangeModal
+ * Digunakan untuk konfirmasi perubahan nama barang (cloning) saat terima barang.
+ */
+function createItemChangeModal(nameChanges) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.style.display = "flex";
+
+    const box = document.createElement("div");
+    box.className = "modal-box";
+    box.style.maxWidth = "500px";
+
+    const hdr = `<div class="modal-hdr">
+      <h2 style="color:var(--primary)">📝 Perubahan Nama Barang</h2>
+      <button class="btn-x">×</button>
+    </div>`;
+
+    const body = `
+      <p style="margin-bottom:16px; font-size:14px; color:var(--text-muted)">
+        Anda mengubah nama beberapa barang. Sistem akan membuat variasi barang baru (cloning) dengan nama tersebut untuk stok cabang Anda.
+      </p>
+      <div style="background:var(--bg-color); border-radius:12px; padding:12px; margin-bottom:20px; border:1px solid var(--border-color)">
+        <table style="width:100%; font-size:13px; border-collapse:collapse">
+          <thead>
+            <tr style="text-align:left; color:var(--text-muted); border-bottom:1px solid var(--border-color)">
+              <th style="padding:8px">Nama Asli</th>
+              <th style="padding:8px">Nama Baru</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${nameChanges
+              .map(
+                (nc) => `
+              <tr style="border-bottom:1px solid var(--border-color)">
+                <td style="padding:8px; color:var(--text-main)">${nc.oldName}</td>
+                <td style="padding:8px; color:var(--primary); font-weight:700">${nc.newName}</td>
+              </tr>
+            `,
+              )
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
+        <button class="btn btn-cancel" style="padding:12px">Batal</button>
+        <button class="btn btn-primary btn-confirm" style="padding:12px">Ya, Buat Barang Baru</button>
+      </div>
+    `;
+
+    box.innerHTML = hdr + body;
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    const close = () => {
+      document.body.removeChild(overlay);
+    };
+
+    box.querySelector(".btn-x").onclick = () => {
+      close();
+      resolve(false);
+    };
+    box.querySelector(".btn-cancel").onclick = () => {
+      close();
+      resolve(false);
+    };
+    box.querySelector(".btn-confirm").onclick = () => {
+      close();
+      resolve(true);
+    };
+  });
 }

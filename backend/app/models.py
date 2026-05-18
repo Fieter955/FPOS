@@ -156,7 +156,7 @@ class Item(Base):
     __tablename__ = "items"
     id = Column(Integer, primary_key=True, index=True)
     code = Column(String(50), unique=True, nullable=False)
-    name = Column(String(200), nullable=False)
+    name = Column(String(200), unique=True, nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     unit_id = Column(Integer, ForeignKey("units.id"), nullable=True)
     buy_price = Column(Float, default=0)

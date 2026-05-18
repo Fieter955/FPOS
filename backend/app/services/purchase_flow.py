@@ -179,7 +179,7 @@ def receive_branch_stock(db: Session, *, purchase: models.Purchase,
 
         adjust_warehouse_stock(db, warehouse.id, item.id, purchase_item.qty)
         db.add(models.StockMovement(
-            date=purchase.date,
+            date=local_datetime.date,
             created_at=local_datetime,
             item_id=item.id,
             branch_id=target_branch_id,
