@@ -67,7 +67,8 @@ def get_purchase_history_items(
             "status": item_status,
             "purchase_date": str(it.purchase.date),
             "purchase_id": it.purchase_id,
-            "purchase_number": it.purchase.number
+            "purchase_number": it.purchase.number,
+            "supplier_name": it.purchase.supplier.name if it.purchase.supplier else "-"
         })
     return result
 
@@ -124,7 +125,8 @@ def get_sale_history_items(
             "status": item_status,
             "sale_date": str(it.sale.date),
             "sale_id": it.sale_id,
-            "sale_number": it.sale.number
+            "sale_number": it.sale.number,
+            "customer_name": it.sale.customer.name if it.sale.customer else "Umum"
         })
     return result
 
