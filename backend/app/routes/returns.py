@@ -17,11 +17,15 @@ def get_purchase_history_items(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     status: Optional[str] = None, # 'returned', 'not_returned', 'partial'
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
 ):
     query = db.query(models.PurchaseItem).join(models.Purchase).filter(
         models.Purchase.status != 'cancelled'
     )
+    
+    if current_user.active_branch_id:
+        query = query.filter(models.Purchase.branch_id == current_user.active_branch_id)
     
     if supplier_id:
         query = query.filter(models.Purchase.supplier_id == supplier_id)
@@ -79,11 +83,15 @@ def get_sale_history_items(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     status: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
 ):
     query = db.query(models.SaleItem).join(models.Sale).filter(
         models.Sale.status != 'cancelled'
     )
+    
+    if current_user.active_branch_id:
+        query = query.filter(models.Sale.branch_id == current_user.active_branch_id)
     
     if customer_id:
         query = query.filter(models.Sale.customer_id == customer_id)
@@ -146,11 +154,15 @@ def _next_number(db, prefix, model):
 
 @router.get("/sales")
 def get_sale_returns(skip: int = 0, limit: int = 100,
-                     db: Session = Depends(get_db), _=Depends(get_current_user)):
-    returns = db.query(models.SaleReturn).order_by(models.SaleReturn.id.desc()).offset(skip).limit(limit).all()
+                     db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    query = db.query(models.SaleReturn).join(models.Sale)
+    if current_user.active_branch_id:
+        query = query.filter(models.Sale.branch_id == current_user.active_branch_id)
+        
+    returns = query.order_by(models.SaleReturn.id.desc()).offset(skip).limit(limit).all()
     result = []
     for r in returns:
-        sale = db.query(models.Sale).get(r.sale_id)
+        sale = r.sale
         items_out = []
         for i in r.items:
             item = db.query(models.Item).get(i.item_id)
@@ -302,11 +314,15 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
 
 @router.get("/purchases")
 def get_purchase_returns(skip: int = 0, limit: int = 100,
-                          db: Session = Depends(get_db), _=Depends(get_current_user)):
-    returns = db.query(models.PurchaseReturn).order_by(models.PurchaseReturn.id.desc()).offset(skip).limit(limit).all()
+                          db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    query = db.query(models.PurchaseReturn).join(models.Purchase)
+    if current_user.active_branch_id:
+        query = query.filter(models.Purchase.branch_id == current_user.active_branch_id)
+        
+    returns = query.order_by(models.PurchaseReturn.id.desc()).offset(skip).limit(limit).all()
     result = []
     for r in returns:
-        purchase = db.query(models.Purchase).get(r.purchase_id)
+        purchase = r.purchase
         items_out = []
         for i in r.items:
             item = db.query(models.Item).get(i.item_id)

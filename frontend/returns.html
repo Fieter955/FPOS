@@ -250,6 +250,7 @@
 
         let url = `/returns/history/${type === "sales" ? "sales" : "purchases"}?start_date=${f.start_date}&end_date=${f.end_date}`;
         if (f.entity_id) url += `&${entityParam}=${f.entity_id}`;
+        if (f.status) url += `&status=${f.status}`;
 
         try {
           showLoading();
@@ -415,8 +416,9 @@
         allCustomers = await api("GET", "/customers/?limit=5000");
 
         const statusOpts = [
-          { label: "Retur", value: "returned" },
-          { label: "Tidak Retur", value: "not_returned" },
+          { label: "Belum Retur", value: "not_returned" },
+          { label: "Retur Sebagian", value: "partial" },
+          { label: "Retur Penuh", value: "returned" },
         ];
 
         mainFilter = createFilterBar("mainFilterContainer", {
@@ -424,7 +426,7 @@
           entities: allCustomers, // Default to sales
           statusOptions: statusOpts,
           useEntitySelect: true,
-          entityPlaceholder: "Semua Suplier...",
+          entityPlaceholder: "Semua Supplier/Pelanggan",
         });
       }
 
