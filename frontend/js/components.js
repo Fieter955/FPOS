@@ -803,8 +803,20 @@ async function createOrderManager(containerId, config = {}) {
                     </div>
                 </div>
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px">
-                    <div class="input-group"><label>Diskon Global (%)</label><input type="number" id="om-global-disc" class="input-control" value="0" /></div>
-                    <div class="input-group"><label>PPN (%)</label><input type="number" id="om-global-tax" class="input-control" value="0" /></div>
+                    <div class="input-group">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px">
+                            <label style="margin:0">Diskon Global (%)</label>
+                            <div id="om-toggle-disc" style="width:80px"></div>
+                        </div>
+                        <input type="number" id="om-global-disc" class="input-control" value="0" />
+                    </div>
+                    <div class="input-group">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px">
+                            <label style="margin:0">PPN (%)</label>
+                            <div id="om-toggle-tax" style="width:80px"></div>
+                        </div>
+                        <input type="number" id="om-global-tax" class="input-control" value="0" />
+                    </div>
                 </div>
                 <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(0,0,0,0.1); padding-top:16px">
                     <span style="font-weight:700; color:var(--text-main)">GRAND TOTAL</span>
@@ -896,6 +908,20 @@ async function createOrderManager(containerId, config = {}) {
   if (discInput) discInput.oninput = recalc;
   const taxInput = document.getElementById("om-global-tax");
   if (taxInput) taxInput.oninput = recalc;
+
+  // Initialize Toggle Buttons for Global Discount and PPN
+  createToggleButton("om-toggle-disc", {
+    targetId: "om-global-disc",
+    activeLabel: "Kunci",
+    inactiveLabel: "Buka",
+    isActive: true, // Default Terkunci
+  });
+  createToggleButton("om-toggle-tax", {
+    targetId: "om-global-tax",
+    activeLabel: "Kunci",
+    inactiveLabel: "Buka",
+    isActive: true, // Default Terkunci
+  });
 
   if (initialData) {
     document.getElementById("om-date").value = initialData.date;
@@ -1026,3 +1052,79 @@ function createItemChangeModal(nameChanges) {
     };
   });
 }
+
+/**
+ * createToggleButton
+ * Button serbaguna untuk mengaktifkan/mengunci fitur tertentu (misal: Diskon Global, PPN).
+ * Config: { label, targetId, activeLabel, inactiveLabel, onToggle }
+ */
+function createToggleButton(container, config = {}) {
+  const target =
+    typeof container === "string"
+      ? document.getElementById(container)
+      : container;
+  const {
+    targetId = null,
+    activeLabel = "🔒 Kunci",
+    inactiveLabel = "🔓 Aktifkan",
+    onToggle = null,
+    isActive = false,
+  } = config;
+
+  target.innerHTML = `
+    <button class="btn btn-toggle-component" style="padding: 4px 10px; font-size: 11px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.2s ease;">
+      <span class="toggle-icon">${isActive ? "🔒" : "🔓"}</span>
+      <span class="toggle-text">${isActive ? activeLabel : inactiveLabel}</span>
+    </button>
+  `;
+
+  const btn = target.querySelector(".btn-toggle-component");
+  const iconEl = btn.querySelector(".toggle-icon");
+  const textEl = btn.querySelector(".toggle-text");
+  const linkedInput = targetId ? document.getElementById(targetId) : null;
+
+  let state = isActive;
+
+  const updateUI = () => {
+    if (state) {
+      btn.style.background = "var(--primary)";
+      btn.style.color = "#fff";
+      iconEl.textContent = "🔒";
+      textEl.textContent = activeLabel;
+      if (linkedInput) {
+        linkedInput.readOnly = true;
+        linkedInput.style.background = "rgba(0,0,0,0.05)";
+        linkedInput.style.cursor = "not-allowed";
+      }
+    } else {
+      btn.style.background = "var(--bg-color)";
+      btn.style.color = "var(--text-main)";
+      btn.style.border = "1px solid var(--border-color)";
+      iconEl.textContent = "🔓";
+      textEl.textContent = inactiveLabel;
+      if (linkedInput) {
+        linkedInput.readOnly = false;
+        linkedInput.style.background = "";
+        linkedInput.style.cursor = "text";
+      }
+    }
+  };
+
+  btn.onclick = (e) => {
+    e.preventDefault();
+    state = !state;
+    updateUI();
+    if (onToggle) onToggle(state);
+  };
+
+  updateUI();
+
+  return {
+    isOn: () => state,
+    toggle: (s) => {
+      state = s;
+      updateUI();
+    },
+  };
+}
+

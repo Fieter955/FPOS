@@ -22,7 +22,7 @@ Dokumentasi ini dirancang agar AI (CLI Agent) dapat memahami struktur kerja sist
   - `/app/services`: Logika bisnis berat (Virtual Units, AI Engine).
 - `/frontend`: Antarmuka Pengguna (UI).
   - `/js/api.js`: Wrapper untuk komunikasi ke Backend.
-  - `/js/components.js`: UI Components reusable (Combobox, Grids, Manager).
+  - `/js/components.js`: UI Components reusable (Combobox, Grids, Manager, Toggle Button).
   - `/js/print.js`: Logika cetak thermal dan export PDF.
 - `/css`: Sistem desain berbasis CSS Variables.
 

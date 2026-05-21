@@ -180,7 +180,20 @@
             "
           >
             <div class="input-group">
-              <label style="margin-bottom: 6px">Diskon Global (%)</label>
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  margin-bottom: 6px;
+                "
+              >
+                <label style="margin: 0">Diskon Global (%)</label>
+                <div
+                  id="buttonDisc"
+                  style="width: 100px; display: flex; justify-content: flex-end"
+                ></div>
+              </div>
               <input
                 type="number"
                 id="bDisc"
@@ -190,7 +203,20 @@
               />
             </div>
             <div class="input-group">
-              <label style="margin-bottom: 6px">PPN (%)</label>
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  margin-bottom: 6px;
+                "
+              >
+                <label style="margin: 0">PPN (%)</label>
+                <div
+                  id="buttonPPN"
+                  style="width: 100px; display: flex; justify-content: flex-end"
+                ></div>
+              </div>
               <input
                 type="number"
                 id="bTax"
@@ -404,6 +430,20 @@
         document.getElementById("totalLabel").textContent = "Rp 0";
         draftId = existing ? existing.id : null;
 
+        // Inisialisasi Toggle Button
+        createToggleButton("buttonDisc", {
+          targetId: "bDisc",
+          activeLabel: "Kunci",
+          inactiveLabel: "Buka",
+          isActive: true, // Default Terkunci
+        });
+        createToggleButton("buttonPPN", {
+          targetId: "bTax",
+          activeLabel: "Kunci",
+          inactiveLabel: "Buka",
+          isActive: true, // Default Terkunci
+        });
+
         allSuppliers = await api(
           "GET",
           "/suppliers/?limit=5000&active_only=true",
@@ -462,11 +502,14 @@
           return showToast("Tambahkan minimal 1 barang", "error");
         try {
           showLoading();
+          taxValue = parseFloat(document.getElementById("bTax").value || 0);
           const payload = {
             date: document.getElementById("bDate").value,
             supplier_id: parseInt(sid),
             discount: parseFloat(document.getElementById("bDisc").value) || 0,
-            tax: parseFloat(document.getElementById("bTax").value) || 0,
+            tax: taxValue,
+            tax_percent: taxValue,
+            is_tax_included: taxValue > 0 ? true : false,
             notes: document.getElementById("bNotes").value || null,
             items: items,
             paid: 0,
