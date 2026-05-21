@@ -285,6 +285,8 @@ class PurchaseCreate(BaseModel):
     supplier_id: Optional[int] = None
     discount: float = 0
     tax: float = 0
+    tax_percent: float = 0
+    is_tax_included: bool = True
     notes: Optional[str] = None
     items: List[PurchaseItemCreate]
     paid: float = 0
@@ -317,6 +319,8 @@ class PurchaseOut(BaseModel):
     subtotal: float
     discount: float
     tax: float
+    tax_percent: float = 0
+    is_tax_included: bool = True
     total: float
     paid: float
     status: str
@@ -329,6 +333,77 @@ class PurchaseOut(BaseModel):
     target_branch: Optional[BranchOut] = None
     items: List[PurchaseItemOut] = []
     fulfillment_drafts: List["PurchaseOut"] = []
+    model_config = {"from_attributes": True}
+
+# ─── Returns ──────────────────────────────────────────────────────────────────
+class PurchaseReturnItemCreate(BaseModel):
+    item_id: int
+    qty: float
+    price: float
+
+class PurchaseReturnCreate(BaseModel):
+    number: Optional[str] = None
+    date: date
+    purchase_id: int
+    tax_percent: float = 0
+    is_tax_included: bool = True
+    reason: Optional[str] = None
+    items: List[PurchaseReturnItemCreate]
+
+class PurchaseReturnItemOut(BaseModel):
+    id: int
+    item_id: int
+    qty: float
+    price: float
+    total: float
+    item: Optional[ItemOut] = None
+    model_config = {"from_attributes": True}
+
+class PurchaseReturnOut(BaseModel):
+    id: int
+    number: str
+    date: date
+    purchase_id: int
+    tax_percent: float
+    is_tax_included: bool
+    total: float
+    reason: Optional[str]
+    items: List[PurchaseReturnItemOut] = []
+    model_config = {"from_attributes": True}
+
+class SaleReturnItemCreate(BaseModel):
+    item_id: int
+    qty: float
+    price: float
+
+class SaleReturnCreate(BaseModel):
+    number: Optional[str] = None
+    date: date
+    sale_id: int
+    tax_percent: float = 0
+    is_tax_included: bool = True
+    reason: Optional[str] = None
+    items: List[SaleReturnItemCreate]
+
+class SaleReturnItemOut(BaseModel):
+    id: int
+    item_id: int
+    qty: float
+    price: float
+    total: float
+    item: Optional[ItemOut] = None
+    model_config = {"from_attributes": True}
+
+class SaleReturnOut(BaseModel):
+    id: int
+    number: str
+    date: date
+    sale_id: int
+    tax_percent: float
+    is_tax_included: bool
+    total: float
+    reason: Optional[str]
+    items: List[SaleReturnItemOut] = []
     model_config = {"from_attributes": True}
 
 class PurchasePayment(BaseModel):
@@ -372,6 +447,8 @@ class SaleCreate(BaseModel):
     salesperson_id: Optional[int] = None
     discount: float = 0
     tax: float = 0
+    tax_percent: float = 0
+    is_tax_included: bool = True
     paid: float = 0
     payment_method: str = "cash"
     notes: Optional[str] = None
@@ -398,6 +475,8 @@ class SaleOut(BaseModel):
     subtotal: float
     discount: float
     tax: float
+    tax_percent: float = 0
+    is_tax_included: bool = True
     total: float
     paid: float
     change: float

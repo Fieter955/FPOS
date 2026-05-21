@@ -1,241 +1,921 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="id">
-<head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Retur - iPos 5.0</title>
-<link rel="stylesheet" href="/css/style.css">
-</head>
-<body>
-<div class="app-container"><main class="main-content">
-<button class="btn" style="background:transparent;color:var(--text-muted);padding:0;margin-bottom:16px" onclick="location.href='/dashboard'">← Kembali</button>
-<div class="pg-header">
-  <div><h1>🔙 Retur Barang</h1><p>Proses pengembalian dari pelanggan (retur jual) atau ke supplier (retur beli).</p></div>
-</div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Pembelian - FPOS</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/components.css" />
 
-<!-- Tab -->
-<div style="display:flex;gap:8px;margin-bottom:20px">
-  <button id="tbRS" onclick="switchTab('rs')" style="padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit">🔴 Retur Penjualan</button>
-  <button id="tbRP" onclick="switchTab('rp')" style="padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit">🔵 Retur Pembelian</button>
-</div>
+    <style>
+      input[type="number"]::-webkit-inner-spin-button,
+      input[type="number"]::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      input[type="number"] {
+        -moz-appearance: textfield;
+      }
 
-<!-- Panel Retur Jual -->
-<div id="pnlRS">
-  <!-- Buat Retur Jual -->
-  <div class="card" style="padding:24px;margin-bottom:20px">
-    <h3 style="margin:0 0 16px">📋 Buat Retur Penjualan</h3>
-    <div style="display:flex;gap:10px;margin-bottom:14px">
-      <input id="rsNoFaktur" class="input-control" style="flex:1;margin:0" placeholder="Masukkan No. Faktur Penjualan (INV...)">
-      <button class="btn btn-primary" onclick="cariSale()">🔍 Cari Faktur</button>
-    </div>
-    <div id="rsSaleInfo" style="display:none"></div>
-    <div id="rsItemsArea" style="display:none">
-      <div style="font-weight:700;margin:14px 0 10px">Pilih barang yang dikembalikan:</div>
-      <div id="rsItemList"></div>
-      <div class="input-group" style="margin-top:14px"><label>Alasan Retur *</label><textarea id="rsReason" class="input-control" rows="2" placeholder="Alasan pengembalian barang..."></textarea></div>
-      <button class="btn btn-primary" style="margin-top:8px" onclick="simpanRS()">✓ Proses Retur Penjualan</button>
-    </div>
-  </div>
-  <!-- Riwayat -->
-  <h3 style="margin:0 0 12px">📋 Riwayat Retur Penjualan</h3>
-  <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>No. Retur</th><th>Tanggal</th><th>Faktur Asal</th><th>Pelanggan</th><th>Total</th><th>Hapus</th></tr></thead>
-    <tbody id="tblRS"></tbody>
-  </table></div>
-</div>
+      .tabs .btn {
+        white-space: nowrap;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 14px;
+        padding: 8px 16px;
+      }
+      .tabs {
+        position: relative;
+        z-index: 100;
+        width: 100%;
+      }
+      .view-section {
+        animation: fadeIn 0.2s ease;
+      }
 
-<!-- Panel Retur Beli -->
-<div id="pnlRP" style="display:none">
-  <!-- Buat Retur Beli -->
-  <div class="card" style="padding:24px;margin-bottom:20px">
-    <h3 style="margin:0 0 16px">📋 Buat Retur Pembelian</h3>
-    <div style="display:flex;gap:10px;margin-bottom:14px">
-      <input id="rpNoFaktur" class="input-control" style="flex:1;margin:0" placeholder="Masukkan No. Faktur Pembelian (PB...)">
-      <button class="btn btn-primary" onclick="cariPurchase()">🔍 Cari Faktur</button>
-    </div>
-    <div id="rpPurchaseInfo" style="display:none"></div>
-    <div id="rpItemsArea" style="display:none">
-      <div style="font-weight:700;margin:14px 0 10px">Pilih barang yang dikembalikan:</div>
-      <div id="rpItemList"></div>
-      <div class="input-group" style="margin-top:14px"><label>Alasan Retur *</label><textarea id="rpReason" class="input-control" rows="2" placeholder="Alasan pengembalian ke supplier..."></textarea></div>
-      <button class="btn btn-primary" style="margin-top:8px" onclick="simpanRP()">✓ Proses Retur Pembelian</button>
-    </div>
-  </div>
-  <!-- Riwayat -->
-  <h3 style="margin:0 0 12px">📋 Riwayat Retur Pembelian</h3>
-  <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>No. Retur</th><th>Tanggal</th><th>Faktur Asal</th><th>Supplier</th><th>Total</th><th>Hapus</th></tr></thead>
-    <tbody id="tblRP"></tbody>
-  </table></div>
-</div>
-</main></div>
+      .modal-box.wide {
+        width: 95%;
+        margin: 16px auto;
+        max-height: calc(100vh - 40px);
+        overflow-y: auto;
+        padding: 24px;
+        background: var(--card-bg);
+        border-radius: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-container">
+      <main class="main-content">
+        <button
+          class="btn"
+          style="
+            background: transparent;
+            color: var(--text-muted);
+            padding: 0;
+            margin-bottom: 16px;
+          "
+          onclick="location.href = '/dashboard'"
+        >
+          ← Kembali
+        </button>
 
-<script src="/js/api.js"></script><script src="/js/theme.js"></script>
-<script>
-requireAuth();
-let curSale=null, curPurchase=null;
-const ON='padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit';
-const OFF='padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit';
-
-function switchTab(t){
-  document.getElementById('pnlRS').style.display=t==='rs'?'block':'none';
-  document.getElementById('pnlRP').style.display=t==='rp'?'block':'none';
-  document.getElementById('tbRS').style.cssText=t==='rs'?ON:OFF;
-  document.getElementById('tbRP').style.cssText=t==='rp'?ON:OFF;
-  if(t==='rp')loadRP();
-}
-
-/* ── Retur Jual ── */
-async function cariSale(){
-  const num=document.getElementById('rsNoFaktur').value.trim();
-  if(!num){showToast('Masukkan nomor faktur','error');return;}
-  try{
-    showLoading('Mencari...');
-    const list=await api('GET',`/sales/?limit=500`);
-    const found=list.find(x=>x.number===num||x.number.includes(num));
-    if(!found){hideLoading();showToast('Faktur tidak ditemukan','error');return;}
-    curSale=await api('GET',`/sales/${found.id}`);
-    hideLoading();
-    document.getElementById('rsSaleInfo').style.display='block';
-    document.getElementById('rsSaleInfo').innerHTML=`
-      <div style="background:var(--bg-color);border-radius:12px;padding:14px;font-size:15px">
-        Faktur: <b style="color:var(--primary)">${curSale.number}</b> &nbsp;|&nbsp;
-        Pelanggan: <b>${curSale.customer?.name||'Umum'}</b> &nbsp;|&nbsp;
-        Total: <b>${fmtRp(curSale.total)}</b> &nbsp;|&nbsp;
-        Tanggal: <b>${fmtDate(curSale.date)}</b>
-      </div>`;
-    document.getElementById('rsItemsArea').style.display='block';
-    document.getElementById('rsItemList').innerHTML=curSale.items.map((it,i)=>`
-      <div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border-color);border-radius:10px;margin-bottom:8px">
-        <input type="checkbox" id="rsChk${i}" style="width:18px;height:18px;cursor:pointer">
-        <div style="flex:1"><b>${it.item?.name||'-'}</b><div style="font-size:13px;color:var(--text-muted)">Dibeli: ${it.qty} × ${fmtRp(it.sell_price)}</div></div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <label style="font-size:13px;color:var(--text-muted)">Qty Retur:</label>
-          <input type="number" id="rsQty${i}" class="input-control" style="width:80px;margin:0;padding:8px;text-align:center" min="0" max="${it.qty}" value="0">
+        <div
+          class="pg-header"
+          style="flex-direction: column; align-items: flex-start; gap: 16px"
+        >
+          <div>
+            <h1>📥Retur Penjualan dan Pembelian</h1>
+            <p>Kelola retur penjualan dan retur pembelian.</p>
+          </div>
+          <div class="tabs">
+            <div
+              style="
+                display: flex;
+                gap: 8px;
+                overflow-x: auto;
+                width: 100%;
+                padding-bottom: 4px;
+              "
+            >
+              <button
+                id="btnTabList"
+                class="btn btn-primary"
+                onclick="switchTab('list')"
+              >
+                Retur Penjualan
+              </button>
+              <button
+                id="btnTabPurchase"
+                class="btn"
+                style="
+                  background: var(--bg-color);
+                  border: 1px solid var(--border-color);
+                  color: var(--text-main);
+                "
+                onclick="switchTab('purchase')"
+              >
+                Retur Pembelian
+              </button>
+            </div>
+          </div>
         </div>
-        <input type="hidden" id="rsItemId${i}" value="${it.item_id||it.item?.id}">
-        <input type="hidden" id="rsPrice${i}" value="${it.sell_price}">
-      </div>`).join('');
-  }catch(ex){hideLoading();showToast(ex.message,'error');}
-}
 
-async function simpanRS(){
-  if(!curSale){showToast('Cari faktur dulu','error');return;}
-  const reason=document.getElementById('rsReason').value.trim();
-  if(!reason){showToast('Alasan retur wajib diisi','error');return;}
-  const items=[];
-  curSale.items.forEach((it,i)=>{
-    const qty=parseFloat(document.getElementById(`rsQty${i}`).value)||0;
-    if(qty>0)items.push({item_id:parseInt(document.getElementById(`rsItemId${i}`).value),qty,sell_price:it.sell_price});
-  });
-  if(!items.length){showToast('Masukkan qty minimal 1 barang','error');return;}
-  try{
-    showLoading('Memproses retur...');
-    await api('POST','/returns/sales',{sale_id:curSale.id,reason,items});
-    hideLoading();showToast('Retur penjualan berhasil ✓');
-    curSale=null;
-    document.getElementById('rsSaleInfo').style.display='none';
-    document.getElementById('rsItemsArea').style.display='none';
-    document.getElementById('rsNoFaktur').value='';
-    document.getElementById('rsReason').value='';
-    loadRS();
-  }catch(ex){hideLoading();showToast(ex.message,'error');}
-}
-
-async function loadRS(){
-  try{
-    const d=await api('GET','/returns/sales?limit=100');
-    document.getElementById('tblRS').innerHTML=d.length?d.map(r=>`<tr>
-      <td style="font-family:monospace;font-size:13px;color:var(--primary)">${r.number}</td>
-      <td style="font-size:13px">${fmtDate(r.date)}</td>
-      <td style="font-family:monospace;font-size:13px">${r.sale?.number||'-'}</td>
-      <td>${r.sale?.customer?.name||'Umum'}</td>
-      <td style="font-weight:700;color:#ef4444">${fmtRp(r.total)}</td>
-      <td><button class="bsm bd" onclick="hapusRS(${r.id})">Hapus</button></td>
-    </tr>`).join(''):'<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada retur penjualan</td></tr>';
-  }catch(ex){showToast(ex.message,'error');}
-}
-
-async function hapusRS(id){
-  if(!await showConfirm('Hapus retur ini? Stok akan dikurangi kembali.'))return;
-  try{await api('DELETE',`/returns/sales/${id}`);showToast('Dihapus');loadRS();}
-  catch(ex){showToast(ex.message,'error');}
-}
-
-/* ── Retur Beli ── */
-async function cariPurchase(){
-  const num=document.getElementById('rpNoFaktur').value.trim();
-  if(!num){showToast('Masukkan nomor faktur','error');return;}
-  try{
-    showLoading('Mencari...');
-    const list=await api('GET',`/purchases/?limit=500`);
-    const found=list.find(x=>x.number===num||x.number.includes(num));
-    if(!found){hideLoading();showToast('Faktur tidak ditemukan','error');return;}
-    curPurchase=await api('GET',`/purchases/${found.id}`);
-    hideLoading();
-    document.getElementById('rpPurchaseInfo').style.display='block';
-    document.getElementById('rpPurchaseInfo').innerHTML=`
-      <div style="background:var(--bg-color);border-radius:12px;padding:14px;font-size:15px">
-        Faktur: <b style="color:var(--primary)">${curPurchase.number}</b> &nbsp;|&nbsp;
-        Supplier: <b>${curPurchase.supplier?.name||'-'}</b> &nbsp;|&nbsp;
-        Total: <b>${fmtRp(curPurchase.total)}</b>
-      </div>`;
-    document.getElementById('rpItemsArea').style.display='block';
-    document.getElementById('rpItemList').innerHTML=curPurchase.items.map((it,i)=>`
-      <div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border-color);border-radius:10px;margin-bottom:8px">
-        <div style="flex:1"><b>${it.item?.name||'-'}</b><div style="font-size:13px;color:var(--text-muted)">Dibeli: ${it.qty} × ${fmtRp(it.buy_price)}</div></div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <label style="font-size:13px;color:var(--text-muted)">Qty Retur:</label>
-          <input type="number" id="rpQty${i}" class="input-control" style="width:80px;margin:0;padding:8px;text-align:center" min="0" max="${it.qty}" value="0">
+        <div id="viewList" class="view-section">
+          <div id="mainFilterContainer"></div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>No. Faktur</th>
+                  <th>Tanggal</th>
+                  <th>Supplier</th>
+                  <th>Total</th>
+                  <th>Terbayar</th>
+                  <th>Status</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="tblBody"></tbody>
+            </table>
+          </div>
         </div>
-        <input type="hidden" id="rpItemId${i}" value="${it.item_id||it.item?.id}">
-        <input type="hidden" id="rpPrice${i}" value="${it.buy_price}">
-      </div>`).join('');
-  }catch(ex){hideLoading();showToast(ex.message,'error');}
-}
 
-async function simpanRP(){
-  if(!curPurchase){showToast('Cari faktur dulu','error');return;}
-  const reason=document.getElementById('rpReason').value.trim();
-  if(!reason){showToast('Alasan retur wajib diisi','error');return;}
-  const items=[];
-  curPurchase.items.forEach((it,i)=>{
-    const qty=parseFloat(document.getElementById(`rpQty${i}`).value)||0;
-    if(qty>0)items.push({item_id:parseInt(document.getElementById(`rpItemId${i}`).value),qty,buy_price:it.buy_price});
-  });
-  if(!items.length){showToast('Masukkan qty minimal 1 barang','error');return;}
-  try{
-    showLoading('Memproses retur...');
-    await api('POST','/returns/purchases',{purchase_id:curPurchase.id,reason,items});
-    hideLoading();showToast('Retur pembelian berhasil ✓');
-    curPurchase=null;
-    document.getElementById('rpPurchaseInfo').style.display='none';
-    document.getElementById('rpItemsArea').style.display='none';
-    document.getElementById('rpNoFaktur').value='';
-    document.getElementById('rpReason').value='';
-    loadRP();
-  }catch(ex){hideLoading();showToast(ex.message,'error');}
-}
+        <div
+          id="viewForm"
+          class="view-section"
+          style="display: none; padding-top: 16px"
+        >
+          <div class="modal-hdr">
+            <h2 id="formTitle">📥 Catat Pembelian</h2>
+          </div>
 
-async function loadRP(){
-  try{
-    const d=await api('GET','/returns/purchases?limit=100');
-    document.getElementById('tblRP').innerHTML=d.length?d.map(r=>`<tr>
-      <td style="font-family:monospace;font-size:13px;color:var(--primary)">${r.number}</td>
-      <td style="font-size:13px">${fmtDate(r.date)}</td>
-      <td style="font-family:monospace;font-size:13px">${r.purchase?.number||'-'}</td>
-      <td>${r.purchase?.supplier?.name||'-'}</td>
-      <td style="font-weight:700;color:#ef4444">${fmtRp(r.total)}</td>
-      <td><button class="bsm bd" onclick="hapusRP(${r.id})">Hapus</button></td>
-    </tr>`).join(''):'<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada retur pembelian</td></tr>';
-  }catch(ex){showToast(ex.message,'error');}
-}
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 16px;
+              margin-bottom: 16px;
+            "
+          >
+            <div class="input-group">
+              <label style="margin-bottom: 6px">Supplier *</label>
+              <div id="supplierCombobox"></div>
+            </div>
+            <div class="input-group">
+              <label style="margin-bottom: 6px">Tanggal *</label>
+              <input type="date" id="bDate" class="input-control" />
+            </div>
+          </div>
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 16px;
+              margin-bottom: 16px;
+            "
+          >
+            <div class="input-group">
+              <label style="margin-bottom: 6px">Diskon Global (%)</label>
+              <input
+                type="number"
+                id="bDisc"
+                class="input-control"
+                value="0"
+                oninput="hitungGrandTotal()"
+              />
+            </div>
+            <div class="input-group">
+              <label style="margin-bottom: 6px">PPN (%)</label>
+              <input
+                type="number"
+                id="bTax"
+                class="input-control"
+                value="0"
+                oninput="hitungGrandTotal()"
+              />
+            </div>
+          </div>
 
-async function hapusRP(id){
-  if(!await showConfirm('Hapus retur ini?'))return;
-  try{await api('DELETE',`/returns/purchases/${id}`);showToast('Dihapus');loadRP();}
-  catch(ex){showToast(ex.message,'error');}
-}
+          <div class="card" style="padding: 20px; margin-bottom: 20px">
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 16px;
+              "
+            >
+              <h3>Daftar Barang</h3>
+              <button
+                class="btn btn-primary"
+                id="btnAddRow"
+                onclick="formGrid.addRow()"
+              >
+                + Tambah Baris
+              </button>
+            </div>
+            <div id="formGridContainer"></div>
+          </div>
 
-loadRS();
-</script>
-</body></html>
+          <div
+            style="
+              background: var(--bg-color);
+              border-radius: 12px;
+              padding: 16px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 16px;
+            "
+          >
+            <span
+              style="
+                font-size: 15px;
+                font-weight: 600;
+                color: var(--text-muted);
+              "
+              >TOTAL AKHIR</span
+            >
+            <span
+              id="totalLabel"
+              style="font-size: 24px; font-weight: 900; color: var(--primary)"
+              >Rp 0</span
+            >
+          </div>
+
+          <div class="input-group">
+            <label style="margin-bottom: 6px">Catatan</label>
+            <textarea
+              id="bNotes"
+              class="input-control"
+              rows="2"
+              placeholder="Keterangan..."
+            ></textarea>
+          </div>
+
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 12px;
+              margin-top: 16px;
+            "
+          >
+            <button onclick="switchTab('list')" class="btn">← Batal</button>
+            <button
+              onclick="simpanPembelian()"
+              class="btn btn-primary"
+              id="btnSimpan"
+            >
+              ✓ Simpan
+            </button>
+          </div>
+        </div>
+
+        <div
+          id="viewPayment"
+          class="view-section"
+          style="display: none; padding-top: 16px"
+        >
+          <div id="paymentFilterContainer"></div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>No. Faktur</th>
+                  <th>Tanggal</th>
+                  <th>Supplier</th>
+                  <th style="text-align: right">Total</th>
+                  <th style="text-align: right">Terbayar</th>
+                  <th style="text-align: right">Sisa Hutang</th>
+                  <th>Status</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="paymentTblBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <div class="modal-overlay" id="mDetail">
+      <div class="modal-box wide">
+        <div class="modal-hdr">
+          <h2>Detail Pembelian</h2>
+          <button class="btn-x" onclick="closeModal('mDetail')">×</button>
+        </div>
+        <div id="mDetailBody"></div>
+      </div>
+    </div>
+
+    <!-- Modal Peringatan Mismatch -->
+    <div class="modal-overlay" id="mMismatch">
+      <div
+        class="modal-box"
+        style="max-width: 550px; border: 2px solid var(--border-color)"
+      >
+        <div class="modal-hdr">
+          <h2 style="color: var(--danger); font-size: 22px">
+            ⚠️ Mismatch Barang
+          </h2>
+          <button class="btn-x" onclick="closeModal('mMismatch')">×</button>
+        </div>
+        <div id="mMismatchBody" style="padding: 16px 0">
+          <!-- Content built by buildMismatchSummary -->
+        </div>
+        <div
+          id="mMismatchFooter"
+          style="
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 16px;
+          "
+        >
+          <!-- Buttons dynamically built -->
+        </div>
+      </div>
+    </div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/theme.js"></script>
+    <script src="/js/components.js"></script>
+    <script src="/js/print.js"></script>
+    <script>
+      requireAuth();
+      const myBranchId = localStorage.getItem("active_branch_id") || 1;
+      let currentTab = "list",
+        currentFormMode = "purchase",
+        draftId = null;
+      let mainFilter = null,
+        paymentFilter = null,
+        formGrid = null,
+        allSuppliers = [];
+      let pendingPaymentData = null; // To store data while mismatch modal is open
+
+      // Initialize Shared Payment Modal
+      const apModal = createPaymentModal({
+        type: "ap",
+        onSuccess: () => {
+          if (currentTab === "payment") loadPayments();
+          else load();
+        },
+      });
+
+      function switchTab(tab) {
+        currentTab = tab;
+        document
+          .querySelectorAll(".view-section")
+          .forEach((el) => (el.style.display = "none"));
+        document.querySelectorAll(".tabs .btn").forEach((btn) => {
+          btn.style.background = "var(--bg-color)";
+          btn.style.color = "var(--text-main)";
+        });
+        document.getElementById(
+          "view" +
+            (tab === "list" ? "List" : tab === "payment" ? "Payment" : "Form"),
+        ).style.display = "block";
+        if (tab === "list") load();
+        else if (tab === "po") {
+          currentFormMode = "po";
+          document.getElementById("formTitle").textContent =
+            "📝 Catat Pesanan (Draft)";
+          openForm();
+        } else if (tab === "purchase") {
+          currentFormMode = "purchase";
+          document.getElementById("formTitle").textContent =
+            "📥 Catat Pembelian";
+          openForm();
+        } else if (tab === "payment") openPaymentTab();
+      }
+
+      async function openForm(existing = null) {
+        document.getElementById("formGridContainer").innerHTML =
+          '<div id="gridTarget"></div>';
+        document.getElementById("bDate").value = today();
+        document.getElementById("bDisc").value = 0;
+        document.getElementById("bTax").value = 0;
+        document.getElementById("totalLabel").textContent = "Rp 0";
+        draftId = existing ? existing.id : null;
+
+        allSuppliers = await api(
+          "GET",
+          "/suppliers/?limit=5000&active_only=true",
+        );
+        createPremiumCombo("supplierCombobox", allSuppliers, {
+          onSelect: async (sel) => {
+            const items = await api(
+              "GET",
+              `/purchases/items/?supplier_id=${sel.id}`,
+            );
+            if (formGrid) formGrid.updateDataSource(items);
+          },
+        });
+
+        if (existing) {
+          document
+            .getElementById("supplierCombobox")
+            ._combo.set(existing.supplier_id, existing.supplier?.name || "");
+          const items = existing.items.map((it) => ({
+            id: it.item_id,
+            name: it.item?.name,
+            code: it.item?.code,
+            qty: it.qty,
+            buy_price: it.buy_price,
+            sell_price: it.item?.sell_price || 0,
+            profit_margin: it.item?.profit_margin || 0,
+          }));
+          formGrid = createPurchaseGrid("gridTarget", {
+            initialItems: items,
+            onChange: hitungGrandTotal,
+          });
+        } else {
+          formGrid = createPurchaseGrid("gridTarget", {
+            onChange: hitungGrandTotal,
+          });
+        }
+      }
+
+      function hitungGrandTotal() {
+        if (!formGrid) return;
+        const items = formGrid.getData();
+        let sub = items.reduce((acc, it) => acc + it.qty * it.buy_price, 0);
+        const disc = parseFloat(document.getElementById("bDisc").value) || 0;
+        const tax = parseFloat(document.getElementById("bTax").value) || 0;
+        const grand = (sub - (sub * disc) / 100) * (1 + tax / 100);
+        document.getElementById("totalLabel").textContent = fmtRp(grand);
+      }
+
+      async function simpanPembelian() {
+        const sid = document.querySelector(
+          "#supplierCombobox .combobox-value",
+        )?.value;
+        if (!sid) return showToast("Pilih supplier dulu", "error");
+        const items = formGrid.getData();
+        if (!items.length)
+          return showToast("Tambahkan minimal 1 barang", "error");
+        try {
+          showLoading();
+          const payload = {
+            date: document.getElementById("bDate").value,
+            supplier_id: parseInt(sid),
+            discount: parseFloat(document.getElementById("bDisc").value) || 0,
+            tax: parseFloat(document.getElementById("bTax").value) || 0,
+            notes: document.getElementById("bNotes").value || null,
+            items: items,
+            paid: 0,
+            status: currentFormMode === "po" ? "draft" : "unpaid",
+          };
+          if (draftId) await api("PUT", `/purchases/${draftId}`, payload);
+          else await api("POST", "/purchases/", payload);
+          hideLoading();
+          showToast("Berhasil disimpan ✓");
+          switchTab("list");
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function openPaymentTab() {
+        await loadPayments();
+      }
+      async function loadPayments() {
+        if (!paymentFilter) return;
+        const f = paymentFilter.getValues();
+        let url = `/purchases/?limit=500&start_date=${f.start_date}&end_date=${f.end_date}`;
+        if (f.entity_id) url += `&supplier_id=${f.entity_id}`;
+        if (f.status) url += `&status=${f.status}`;
+        try {
+          const data = await api("GET", url);
+          const tbody = document.getElementById("paymentTblBody");
+          tbody.innerHTML = data.length
+            ? data
+                .map(
+                  (p) =>
+                    `<tr><td>${p.number}</td><td>${fmtDate(p.date)}</td><td>${p.supplier?.name || "-"}</td><td style="text-align:right">${fmtRp(p.total)}</td><td style="text-align:right">${fmtRp(p.paid)}</td><td style="text-align:right">${fmtRp(p.total - p.paid)}</td><td>${sb(p.status, p)}</td><td><button class="btn btn-primary" onclick="startPaymentProcess(${p.id})">💸 Bayar</button></td></tr>`,
+                )
+                .join("")
+            : '<tr><td colspan="8" style="text-align:center">Tidak ada data</td></tr>';
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      const sb = (s, p) => {
+        let labels = "";
+        if (p && p.is_branch_request) {
+          labels +=
+            '<span style="background:rgba(37,99,235,0.15);color:#2563eb;padding:4px 10px;border-radius:6px;font-weight:700;margin-right:4px;">📦 PO</span>';
+        }
+
+        if (s === "paid")
+          return (
+            labels +
+            '<span style="background:rgba(16,185,129,0.15);color:#10b981;padding:4px 10px;border-radius:6px;font-weight:700;">✓ Lunas</span>'
+          );
+        if (s === "unpaid")
+          return (
+            labels +
+            '<span style="background:rgba(239,68,68,0.15);color:#ef4444;padding:4px 10px;border-radius:6px;font-weight:700;">✗ Belum Lunas</span>'
+          );
+        if (s === "draft")
+          return (
+            labels +
+            '<span style="background:rgba(100,116,139,0.15);color:#64748b;padding:4px 10px;border-radius:6px;font-weight:700;">📝 DRAFT</span>'
+          );
+        return (
+          labels +
+          `<span style="background:rgba(148,163,184,0.15);color:#94a3b8;padding:4px 10px;border-radius:6px;font-weight:700;">${String(s).toUpperCase()}</span>`
+        );
+      };
+
+      function today() {
+        return new Date().toISOString().split("T")[0];
+      }
+      function loadDraft(id) {
+        location.href = `catat-pembelian.html?id=${id}`;
+      }
+      function fmtRp(n) {
+        return new Intl.NumberFormat("id-ID", {
+          style: "currency",
+          currency: "IDR",
+          minimumFractionDigits: 0,
+        }).format(n || 0);
+      }
+      function fmtDate(d) {
+        if (!d) return "-";
+        return new Date(d + "T00:00:00").toLocaleDateString("id-ID", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        });
+      }
+
+      async function load() {
+        if (!mainFilter) return;
+        const f = mainFilter.getValues();
+        let url = `/purchases/?limit=200&start_date=${f.start_date}&end_date=${f.end_date}`;
+        if (f.status) url += `&status=${f.status}`;
+        if (f.entity_id) url += `&supplier_id=${f.entity_id}`;
+        try {
+          const d = await api("GET", url);
+          const tbody = document.getElementById("tblBody");
+          tbody.innerHTML = d.length
+            ? d
+                .map((p) => {
+                  const canPay = isMainStore() || !p.is_branch_request;
+                  const payBtn =
+                    p.status === "draft" && canPay
+                      ? `<button class="btn" style="padding:4px 8px;font-size:12px;background:var(--primary);color:white;border:none" onclick="startPaymentProcess(${p.id})">💸 Bayar</button>`
+                      : "";
+                  const prosesBtn =
+                    p.status === "draft"
+                      ? `<button class="btn btn-primary" style="padding:4px 8px;font-size:12px" onclick="loadDraft(${p.id})">Proses</button>`
+                      : "";
+
+                  return `<tr>
+              <td style="font-family:monospace;font-weight:700;color:var(--primary)">${p.number}</td>
+              <td>${fmtDate(p.date)}</td>
+              <td>${p.supplier?.name || "-"}</td>
+              <td>${fmtRp(p.total)}</td>
+              <td>${fmtRp(p.paid)}</td>
+              <td>${sb(p.status, p)}</td>
+              <td>
+                <div style="display:flex;gap:4px">
+                  ${prosesBtn}
+                  ${payBtn}
+                  <button class="btn" style="padding:4px 8px;font-size:12px" onclick="showDetail(${p.id})">Detail</button>
+                  <button class="btn" style="padding:4px 8px;font-size:12px;background:#e2e8f0;color:#475569;border:none" onclick="exportPurchasePDF(${p.id})">📄 PDF</button>
+                </div>
+              </td>
+            </tr>`;
+                })
+                .join("")
+            : '<tr><td colspan="7" style="text-align:center">Tidak ada data</td></tr>';
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function initFilters() {
+        const suppliers = await api(
+          "GET",
+          "/suppliers/?limit=5000&active_only=true",
+        );
+        const statusOpts = [
+          { label: "Retur", value: "draft" },
+          { label: "Tidak Retur", value: "unpaid" },
+        ];
+
+        mainFilter = createFilterBar("mainFilterContainer", {
+          onFilter: load,
+          statusOptions: statusOpts,
+          entities: suppliers,
+          useEntitySelect: true,
+          entityPlaceholder: "Semua Supplier",
+        });
+
+        paymentFilter = createFilterBar("paymentFilterContainer", {
+          onFilter: loadPayments,
+          statusOptions: statusOpts.slice(1),
+          entities: suppliers,
+          useEntitySelect: true,
+          entityPlaceholder: "Semua Supplier",
+        });
+      }
+
+      function parseNum(s) {
+        return parseFloat(String(s).replace(/\./g, "").replace(",", ".")) || 0;
+      }
+      async function showDetail(id) {
+        try {
+          const p = await api("GET", `/purchases/${id}`);
+          document.getElementById("mDetailBody").innerHTML =
+            `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+            <div><div style="font-size:13px;color:var(--text-muted)">Tanggal</div><div style="font-weight:700">${fmtDate(p.date)}</div></div>
+            <div><div style="font-size:13px;color:var(--text-muted)">Supplier</div><div style="font-weight:700">${p.supplier?.name || "-"}</div></div>
+            <div><div style="font-size:13px;color:var(--text-muted)">Status</div>${sb(p.status, p)}</div>
+            <div><div style="font-size:13px;color:var(--text-muted)">Catatan</div><div>${p.notes || "-"}</div></div>
+          </div>
+          <table class="tbl" style="margin-bottom:16px">
+            <thead><tr><th>Barang</th><th style="text-align:center">Qty</th><th style="text-align:right">Harga Beli</th><th style="text-align:center">Margin</th><th style="text-align:right">Harga Jual</th><th style="text-align:center">Diskon</th><th style="text-align:right">Total</th></tr></thead>
+            <tbody>${(p.items || [])
+              .map((i) => {
+                const sellPrice = i.item?.sell_price || 0;
+                const hb = i.buy_price || 0;
+                const d1 = i.disc1 || 0;
+                const d2 = i.disc2 || 0;
+                const discText =
+                  d2 > 0 ? `${d1}% + ${d2}%` : d1 > 0 ? `${d1}%` : "-";
+
+                const hargaNeto = hb * (1 - d1 / 100) * (1 - d2 / 100);
+                const margin =
+                  hargaNeto > 0
+                    ? (((sellPrice - hargaNeto) / hargaNeto) * 100).toFixed(1)
+                    : 0;
+
+                return `<tr>
+                    <td>${i.item?.name || "-"}</td>
+                    <td style="text-align:center">${i.qty}</td>
+                    <td style="text-align:right">${fmtRp(hb)}</td>
+                    <td style="text-align:center; color:var(--text-muted)">${margin}%</td>
+                    <td style="text-align:right">${fmtRp(sellPrice)}</td>
+                    <td style="text-align:center; color:var(--danger)">${discText}</td>
+                    <td style="text-align:right;font-weight:700">${fmtRp(i.total)}</td>
+                </tr>`;
+              })
+              .join("")}</tbody>
+          </table>
+          <div style="background:var(--bg-color);border-radius:12px;padding:16px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span>Subtotal</span><span>${fmtRp(p.subtotal)}</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:20px;font-weight:900;border-top:1px solid var(--border-color);padding-top:10px;margin-top:6px"><span>TOTAL</span><span style="color:var(--primary)">${fmtRp(p.total)}</span></div>
+            <div style="display:flex;justify-content:space-between;margin-top:8px"><span>Sudah Dibayar</span><span style="color:#10b981;font-weight:700">${fmtRp(p.paid)}</span></div>
+          </div>
+          <div style="margin-top:16px;display:flex;gap:12px">
+            ${p.status !== "paid" && p.status !== "draft" && (myBranchId == 1 || !p.is_branch_request) ? `<button onclick="startPaymentProcess(${p.id})" class="btn btn-primary">💸 Bayar Hutang</button>` : ""}
+            <button onclick="exportPurchasePDF(${p.id})" class="btn" style="background:var(--primary); color:white; border:none">📄 Export PDF</button>
+            <button onclick="hapus(${p.id})" class="btn btn-danger">🗑 Batalkan</button>
+          </div>`;
+          openModal("mDetail");
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      // --- LOGIKA VALIDASI MISMATCH & PEMBAYARAN CERDAS ---
+
+      async function startPaymentProcess(id) {
+        try {
+          showLoading("Mengecek data...");
+          const p = await api("GET", `/purchases/${id}`);
+          hideLoading();
+
+          const mismatchUnder = p.items.filter(
+            (it) => (it.qty_ordered || it.qty) > (it.qty_received || it.qty),
+          );
+          const mismatchOver = p.items.filter(
+            (it) => (it.qty_received || it.qty) > (it.qty_ordered || it.qty),
+          );
+
+          pendingPaymentData = p;
+
+          if (mismatchUnder.length > 0 || mismatchOver.length > 0) {
+            console.log("Mismatch detected:", {
+              under: mismatchUnder,
+              over: mismatchOver,
+            });
+            buildMismatchSummary(mismatchUnder, mismatchOver, p.supplier?.name);
+            openModal("mMismatch");
+          } else {
+            apModal.open({
+              id: p.id,
+              total: p.total,
+              paid: p.paid,
+              name: p.supplier?.name || "-",
+            });
+          }
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      function buildMismatchSummary(under, over, supplierName) {
+        const hasUnder = under.length > 0;
+        const hasOver = over.length > 0;
+
+        let title = "⚠️ Mismatch Barang Ditemukan";
+        let titleColor = "var(--danger)";
+        let msg = `Ditemukan ketidaksesuaian jumlah barang untuk supplier <b>${supplierName || "-"}</b>.`;
+
+        if (hasOver && !hasUnder) {
+          title = "📦 Barang Diterima Berlebih";
+          titleColor = "var(--primary)";
+          msg =
+            "Barang yang diterima <b>lebih banyak</b> dari pesanan awal. Stok akan bertambah sesuai jumlah yang diterima. Anda yakin?";
+        }
+
+        document.querySelector("#mMismatch h2").textContent = title;
+        document.querySelector("#mMismatch h2").style.color = titleColor;
+
+        let html = `<p style="font-size: 14px; color: var(--text-muted); margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">${msg}</p>`;
+
+        // Perbaikan Tabel untuk Dark Mode
+        const tableStyle = `style="font-size: 13px; width: 100%; border-collapse: collapse; border: 1px solid var(--border-color);"`;
+        const thStyle = `style="background: var(--border-color); color: var(--text-main); padding: 8px; text-align: left;"`;
+        const tdStyle = `style="padding: 8px; border-bottom: 1px solid var(--border-color); color: var(--text-main);"`;
+
+        if (hasOver) {
+          html += `<div style="color:var(--success); font-weight:700; margin-bottom:6px; font-size:12px">BARANG LEBIH (STOK AKAN BERTAMBAH):</div>
+            <div class="tbl-wrap" style="max-height: 150px; overflow-y: auto; margin-bottom: 16px; border-radius: 8px; overflow: hidden;">
+                <table ${tableStyle}>
+                    <thead><tr style="background: var(--bg-color);"><th ${thStyle}>Barang</th><th ${thStyle} style="text-align:center">Pesan</th><th ${thStyle} style="text-align:center">Terima</th></tr></thead>
+                    <tbody>
+                        ${over.map((it) => `<tr><td ${tdStyle} style="font-weight: 600;">${it.item?.name || "Barang"}</td><td ${tdStyle} style="text-align:center">${it.qty_ordered || it.qty}</td><td ${tdStyle} style="text-align:center; color: var(--success); font-weight: 700;">${it.qty_received || it.qty}</td></tr>`).join("")}
+                    </tbody>
+                </table>
+            </div>`;
+        }
+
+        if (hasUnder) {
+          html += `<div style="color:var(--danger); font-weight:700; margin-bottom:6px; font-size:12px">BARANG KURANG:</div>
+            <div class="tbl-wrap" style="max-height: 150px; overflow-y: auto; margin-bottom: 16px; border-radius: 8px; overflow: hidden;">
+                <table ${tableStyle}>
+                    <thead><tr style="background: var(--bg-color);"><th ${thStyle}>Barang</th><th ${thStyle} style="text-align:center">Pesan</th><th ${thStyle} style="text-align:center">Terima</th></tr></thead>
+                    <tbody>
+                        ${under.map((it) => `<tr><td ${tdStyle} style="font-weight: 600;">${it.item?.name || "Barang"}</td><td ${tdStyle} style="text-align:center">${it.qty_ordered || it.qty}</td><td ${tdStyle} style="text-align:center; color: var(--danger); font-weight: 700;">${it.qty_received || it.qty}</td></tr>`).join("")}
+                    </tbody>
+                </table>
+            </div>`;
+        }
+
+        document.getElementById("mMismatchBody").innerHTML = html;
+
+        // Bangun Tombol Footer (Iya Yakin, Reorder, Tidak)
+        let footerHtml = ``;
+
+        if (hasUnder) {
+          footerHtml += `<button class="btn btn-primary" onclick="handleReorderToOtherSupplier()" style="width:100%">Simpan & Buat Order Baru</button>`;
+          footerHtml += `<button class="btn" onclick="handleContinuePayment()" style="width:100%; background: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-main);">Tetap Lanjutkan (Abaikan Kurang)</button>`;
+        } else if (hasOver) {
+          footerHtml += `<button class="btn btn-primary" onclick="handleContinuePayment()" style="width:100%">Iya, Saya Yakin (Catat Lebih)</button>`;
+        }
+
+        footerHtml += `<button class="btn" onclick="closeModal('mMismatch')" style="width:100%; background: transparent; border: 1px solid var(--danger); color: var(--danger);">Tidak, Cek Lagi</button>`;
+
+        document.getElementById("mMismatchFooter").innerHTML = footerHtml;
+      }
+
+      async function handleContinuePayment() {
+        closeModal("mMismatch");
+        const p = pendingPaymentData;
+        if (!p) return;
+
+        // Jika status masih DRAFT, kita harus memfinalisasi agar stok & jurnal tercatat
+        if (p.status === "draft") {
+          try {
+            showLoading("Memfinalisasi pesanan...");
+            // Filter hanya item yang benar-benar diterima (qty_received > 0)
+            const itemsToSave = p.items
+              .filter((it) => (it.qty_received || it.qty) > 0)
+              .map((it) => ({
+                item_id: it.item_id,
+                qty: it.qty_received || it.qty,
+                qty_ordered: it.qty_ordered || it.qty,
+                qty_received: it.qty_received || it.qty,
+                buy_price: it.buy_price,
+              }));
+
+            const payload = {
+              date: p.date,
+              supplier_id: p.supplier_id,
+              discount: p.subtotal > 0 ? (p.discount / p.subtotal) * 100 : 0,
+              tax:
+                p.subtotal - p.discount > 0
+                  ? (p.tax / (p.subtotal - p.discount)) * 100
+                  : 0,
+              notes: p.notes,
+              items: itemsToSave,
+              status: "unpaid", // Ubah jadi Unpaid agar masuk ke stok
+            };
+
+            const updated = await api("PUT", `/purchases/${p.id}`, payload);
+            pendingPaymentData = updated; // Update local data with finalized version
+            hideLoading();
+          } catch (ex) {
+            hideLoading();
+            return showToast("Gagal memfinalisasi: " + ex.message, "error");
+          }
+        }
+
+        const finalP = pendingPaymentData;
+        apModal.open({
+          id: finalP.id,
+          total: finalP.total,
+          paid: finalP.paid,
+          name: finalP.supplier?.name || "-",
+        });
+      }
+
+      async function handleReorderToOtherSupplier() {
+        const p = pendingPaymentData;
+        if (!p) return;
+
+        try {
+          showLoading("Memproses reorder...");
+
+          // 1. Jika masih DRAFT, finalisasi dulu yang sekarang (hanya item yang ada)
+          if (p.status === "draft") {
+            const itemsToSave = p.items
+              .filter((it) => (it.qty_received || it.qty) > 0)
+              .map((it) => ({
+                item_id: it.item_id,
+                qty: it.qty_received || it.qty,
+                qty_ordered: it.qty_ordered || it.qty,
+                qty_received: it.qty_received || it.qty,
+                buy_price: it.buy_price,
+              }));
+
+            const payload = {
+              date: p.date,
+              supplier_id: p.supplier_id,
+              discount: p.subtotal > 0 ? (p.discount / p.subtotal) * 100 : 0,
+              tax:
+                p.subtotal - p.discount > 0
+                  ? (p.tax / (p.subtotal - p.discount)) * 100
+                  : 0,
+              notes: p.notes,
+              items: itemsToSave,
+              status: "unpaid",
+            };
+            await api("PUT", `/purchases/${p.id}`, payload);
+          }
+
+          // 2. Buat draft reorder di backend untuk item yang kurang
+          const newPurchase = await api(
+            "POST",
+            `/purchases/${p.id}/reorder-missing`,
+          );
+          hideLoading();
+
+          showToast("Draft pesanan baru untuk sisa barang berhasil dibuat ✓");
+          closeModal("mMismatch");
+
+          // 3. Tanya apakah mau bayar yang sekarang dulu
+          if (
+            await showConfirm(
+              "Draft pesanan baru sudah siap. Selesaikan pembayaran faktur saat ini dulu?",
+            )
+          ) {
+            // Refresh data p karena mungkin sudah difinalisasi
+            const currentP = await api("GET", `/purchases/${p.id}`);
+            apModal.open({
+              id: currentP.id,
+              total: currentP.total,
+              paid: currentP.paid,
+              name: currentP.supplier?.name || "-",
+              onSuccess: () => {
+                setTimeout(() => {
+                  location.href = `catat-pembelian.html?id=${newPurchase.id}`;
+                }, 1000);
+              },
+            });
+          } else {
+            location.href = `catat-pembelian.html?id=${newPurchase.id}`;
+          }
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function hapus(id) {
+        if (
+          !(await showConfirm(
+            "Yakin ingin membatalkan pembelian ini? Stok akan dikurangi dan jurnal akan dibalik.",
+          ))
+        )
+          return;
+        try {
+          showLoading("Membatalkan...");
+          await api("POST", `/purchases/${id}/cancel`);
+          hideLoading();
+          showToast("Berhasil dibatalkan ✓");
+          closeModal("mDetail");
+          load();
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      (async () => {
+        await initFilters();
+        load();
+      })();
+    </script>
+  </body>
+</html>

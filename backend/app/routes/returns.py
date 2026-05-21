@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import Optional
 from datetime import date
 from ..database import get_db
@@ -8,6 +9,124 @@ from ..auth import get_current_user, write_audit
 from ..services.virtual_units import get_required_stock_qty, is_virtual_variant
 
 router = APIRouter()
+
+
+@router.get("/history/purchases")
+def get_purchase_history_items(
+    supplier_id: Optional[int] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    status: Optional[str] = None, # 'returned', 'not_returned', 'partial'
+    db: Session = Depends(get_db)
+):
+    query = db.query(models.PurchaseItem).join(models.Purchase).filter(
+        models.Purchase.status != 'cancelled'
+    )
+    
+    if supplier_id:
+        query = query.filter(models.Purchase.supplier_id == supplier_id)
+    if start_date:
+        query = query.filter(models.Purchase.date >= start_date)
+    if end_date:
+        query = query.filter(models.Purchase.date <= end_date)
+        
+    items = query.order_by(models.Purchase.date.desc()).all()
+    
+    result = []
+    for it in items:
+        # Hitung berapa yang sudah diretur untuk baris ini
+        # Karena model kita PurchaseReturnItem merujuk ke purchase_id + item_id
+        # Kita aggregasi retur yang merujuk ke purchase yang sama dan item yang sama
+        returned_qty = db.query(func.sum(models.PurchaseReturnItem.qty)).join(models.PurchaseReturn).filter(
+            models.PurchaseReturn.purchase_id == it.purchase_id,
+            models.PurchaseReturnItem.item_id == it.item_id
+        ).scalar() or 0.0
+        
+        available_qty = it.qty - returned_qty
+        
+        # Filter berdasarkan status retur jika diminta
+        item_status = "not_returned"
+        if returned_qty >= it.qty: item_status = "returned"
+        elif returned_qty > 0: item_status = "partial"
+        
+        if status and status != item_status:
+            continue
+
+        result.append({
+            "item_id": it.item_id,
+            "item": {
+                "id": it.item_id,
+                "name": it.item.name,
+                "code": it.item.code,
+                "barcode": it.item.barcode,
+            },
+            "buy_price": it.buy_price,
+            "qty_bought": it.qty,
+            "qty_returned": returned_qty,
+            "qty_available": available_qty,
+            "status": item_status,
+            "purchase_date": str(it.purchase.date),
+            "purchase_id": it.purchase_id,
+            "purchase_number": it.purchase.number
+        })
+    return result
+
+
+@router.get("/history/sales")
+def get_sale_history_items(
+    customer_id: Optional[int] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    status: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(models.SaleItem).join(models.Sale).filter(
+        models.Sale.status != 'cancelled'
+    )
+    
+    if customer_id:
+        query = query.filter(models.Sale.customer_id == customer_id)
+    if start_date:
+        query = query.filter(models.Sale.date >= start_date)
+    if end_date:
+        query = query.filter(models.Sale.date <= end_date)
+
+    items = query.order_by(models.Sale.date.desc()).all()
+    
+    result = []
+    for it in items:
+        returned_qty = db.query(func.sum(models.SaleReturnItem.qty)).join(models.SaleReturn).filter(
+            models.SaleReturn.sale_id == it.sale_id,
+            models.SaleReturnItem.item_id == it.item_id
+        ).scalar() or 0.0
+        
+        available_qty = it.qty - returned_qty
+        
+        item_status = "not_returned"
+        if returned_qty >= it.qty: item_status = "returned"
+        elif returned_qty > 0: item_status = "partial"
+        
+        if status and status != item_status:
+            continue
+            
+        result.append({
+            "item_id": it.item_id,
+            "item": {
+                "id": it.item_id,
+                "name": it.item.name,
+                "code": it.item.code,
+                "barcode": it.item.barcode,
+            },
+            "sell_price": it.sell_price,
+            "qty_sold": it.qty,
+            "qty_returned": returned_qty,
+            "qty_available": available_qty,
+            "status": item_status,
+            "sale_date": str(it.sale.date),
+            "sale_id": it.sale_id,
+            "sale_number": it.sale.number
+        })
+    return result
 
 
 def _next_number(db, prefix, model):
@@ -64,12 +183,20 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
         ).first()
 
     number = _next_number(db, "RS", models.SaleReturn)
-    total = 0.0
+    total_sales = 0.0
+    total_tax = 0.0
+    total_cogs = 0.0
+    
+    # Ambil info pajak dari penjualan asli jika tidak dikirim dari frontend
+    is_tax_included = data.get("is_tax_included", sale.is_tax_included if hasattr(sale, 'is_tax_included') else True)
+    tax_percent = data.get("tax_percent", sale.tax_percent if hasattr(sale, 'tax_percent') else 0.0)
 
     retur = models.SaleReturn(
         number=number,
         date=data.get("date", str(date.today())),
         sale_id=sale_id,
+        tax_percent=tax_percent,
+        is_tax_included=is_tax_included,
         reason=data.get("reason"),
         notes=data.get("notes")
     )
@@ -96,12 +223,20 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
         if total_prev + it["qty"] > sale_item.qty:
             raise HTTPException(400, f"Qty retur {item.name} melebihi qty terjual ({sale_item.qty - total_prev} tersisa)")
 
-        line_total = it["qty"] * sale_item.sell_price
-        total += line_total
+        line_sales = it["qty"] * sale_item.sell_price
+        total_sales += line_sales
+        
+        line_tax = 0.0
+        if not is_tax_included:
+            line_tax = line_sales * (tax_percent / 100)
+        total_tax += line_tax
+        
+        # Hitung COGS (Harga Beli saat itu)
+        total_cogs += it["qty"] * (sale_item.buy_price or 0)
 
         db.add(models.SaleReturnItem(
             return_id=retur.id, item_id=it["item_id"],
-            qty=it["qty"], price=sale_item.sell_price, total=line_total
+            qty=it["qty"], price=sale_item.sell_price, total=line_sales + line_tax
         ))
 
         # Kembalikan stok
@@ -131,8 +266,27 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
             ),
         ))
 
+    total = total_sales + total_tax
     retur.total = total
     db.commit(); db.refresh(retur)
+    
+    # Buat Jurnal
+    try:
+        from ..services import journal_service
+        journal_service.create_sale_return_journal(
+            db,
+            date_val=retur.date,
+            number_ref=retur.number,
+            customer_name=sale.customer.name if sale.customer else "Umum",
+            total_sales=total_sales,
+            total_tax=total_tax,
+            total_cogs=total_cogs,
+            is_tax_included=is_tax_included,
+            user_id=current_user.id,
+            branch_id=sale.branch_id
+        )
+    except Exception as e:
+        print(f"⚠ Gagal buat jurnal retur: {e}")
 
     write_audit(db, current_user.id, "CREATE", "sale_returns", retur.id,
                 f"Retur penjualan {sale.number} sebesar {total}")
@@ -185,12 +339,19 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
         ).first()
 
     number = _next_number(db, "RP", models.PurchaseReturn)
-    total = 0.0
+    total_inventory = 0.0
+    total_tax = 0.0
+    
+    # Ambil info pajak dari pembelian asli jika tidak dikirim dari frontend
+    is_tax_included = data.get("is_tax_included", purchase.is_tax_included if hasattr(purchase, 'is_tax_included') else True)
+    tax_percent = data.get("tax_percent", purchase.tax_percent if hasattr(purchase, 'tax_percent') else 0.0)
 
     retur = models.PurchaseReturn(
         number=number,
         date=data.get("date", str(date.today())),
         purchase_id=purchase_id,
+        tax_percent=tax_percent,
+        is_tax_included=is_tax_included,
         reason=data.get("reason"),
         notes=data.get("notes")
     )
@@ -204,13 +365,20 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
         if not pur_item:
             raise HTTPException(400, f"Item {item.name} tidak ada di pembelian ini")
 
-        line_total = it["qty"] * pur_item.buy_price
-        total += line_total
+        line_inventory = it["qty"] * pur_item.buy_price
+        total_inventory += line_inventory
+        
+        line_tax = 0.0
+        if not is_tax_included:
+            line_tax = line_inventory * (tax_percent / 100)
+        total_tax += line_tax
 
         db.add(models.PurchaseReturnItem(
             return_id=retur.id, item_id=it["item_id"],
-            qty=it["qty"], price=pur_item.buy_price, total=line_total
+            qty=it["qty"], price=pur_item.buy_price, total=line_inventory + line_tax
         ))
+        
+        # ... rest of stock reduction logic ...
 
         # Kurangi stok
         if gudang_aktif:
@@ -235,8 +403,27 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
             reference=number, notes=f"Retur Pembelian {purchase.number}"
         ))
 
+    total = total_inventory + total_tax
     retur.total = total
     db.commit(); db.refresh(retur)
+    
+    # Buat Jurnal
+    try:
+        from ..services import journal_service
+        journal_service.create_purchase_return_journal(
+            db,
+            date_val=retur.date,
+            number_ref=retur.number,
+            supplier_name=purchase.supplier.name if purchase.supplier else "-",
+            total_inventory=total_inventory,
+            total_tax=total_tax,
+            is_tax_included=is_tax_included,
+            user_id=current_user.id,
+            branch_id=purchase.branch_id
+        )
+    except Exception as e:
+        print(f"⚠ Gagal buat jurnal retur: {e}")
+
     write_audit(db, current_user.id, "CREATE", "purchase_returns", retur.id, f"Retur {purchase.number}")
     db.commit()
     return {"id": retur.id, "number": retur.number, "total": total, "message": "Retur pembelian berhasil"}

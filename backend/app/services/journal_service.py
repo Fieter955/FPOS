@@ -8,10 +8,17 @@ from .. import models
 
 ACCOUNT_INVENTORY = "1-1400"
 ACCOUNT_CASH = "1-1100"
+ACCOUNT_BANK = "1-1200"
 ACCOUNT_PAYABLE = "2-1100"
+ACCOUNT_RECEIVABLE = "1-1300"
+ACCOUNT_SALDO_SUPPLIER = "1-1600"
+ACCOUNT_SALDO_CUSTOMER = "2-1300"
 ACCOUNT_TRANSFER_CLEARING = "3-2000"
 ACCOUNT_TRANSFER_IN = "3-2100"
 ACCOUNT_TRANSFER_OUT = "3-2200"
+ACCOUNT_SALES = "4-1000"
+ACCOUNT_COGS = "5-1000"
+ACCOUNT_TAX_EXPENSE = "5-2000" # Beban Pajak
 
 
 def _auto_journal(db: Session, date_val: date, number_ref: str, description: str,
@@ -204,5 +211,56 @@ def create_branch_fulfillment_reversal_journal(db: Session, *, date_val: date,
         entries_cabang,
         user_id,
         target_branch_id,
+    )
+
+
+def create_purchase_return_journal(db: Session, *, date_val: date, number_ref: str,
+                                   supplier_name: str, total_inventory: float,
+                                   total_tax: float, is_tax_included: bool,
+                                   user_id: int, branch_id: int):
+    # Total yang ditagihkan ke supplier (Saldo di Supplier)
+    total_to_supplier = total_inventory + total_tax
+    
+    entries = [
+        {"code": ACCOUNT_SALDO_SUPPLIER, "debit": total_to_supplier, "credit": 0},
+        {"code": ACCOUNT_INVENTORY, "debit": 0, "credit": total_inventory}
+    ]
+    
+    if total_tax > 0 and not is_tax_included:
+        # Jika Exclude, PPN diretur juga ke supplier
+        # Tapi karena "beban PPN ditanggung toko", maka kita kreditkan akun Beban PPN 
+        # (artinya membatalkan beban yang sudah dicatat saat beli)
+        entries.append({"code": ACCOUNT_TAX_EXPENSE, "debit": 0, "credit": total_tax})
+        
+    return _auto_journal(
+        db, date_val, number_ref,
+        f"Retur Pembelian {number_ref} - {supplier_name}",
+        entries, user_id, branch_id
+    )
+
+
+def create_sale_return_journal(db: Session, *, date_val: date, number_ref: str,
+                               customer_name: str, total_sales: float,
+                               total_tax: float, total_cogs: float,
+                               is_tax_included: bool, user_id: int, branch_id: int):
+    # Total yang menjadi hutang ke customer (Saldo di Customer)
+    total_to_customer = total_sales + total_tax
+    
+    entries = [
+        {"code": ACCOUNT_SALDO_CUSTOMER, "debit": 0, "credit": total_to_customer},
+        {"code": ACCOUNT_SALES, "debit": total_sales, "credit": 0},
+        # Kembalikan stok
+        {"code": ACCOUNT_INVENTORY, "debit": total_cogs, "credit": 0},
+        {"code": ACCOUNT_COGS, "debit": 0, "credit": total_cogs}
+    ]
+    
+    if total_tax > 0 and not is_tax_included:
+        # Beban PPN ditanggung toko
+        entries.append({"code": ACCOUNT_TAX_EXPENSE, "debit": total_tax, "credit": 0})
+        
+    return _auto_journal(
+        db, date_val, number_ref,
+        f"Retur Penjualan {number_ref} - {customer_name}",
+        entries, user_id, branch_id
     )
 

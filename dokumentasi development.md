@@ -764,3 +764,16 @@ Selain akun admin gaboleh bisa edit barang dan gabisa edit harga edit supplier
 Akun admin bisa milih menu terkait apa aja yang bisa dilakuin oleh akun selian admin
 
 Diskon global itu harus muncul tulisan 10% (missal) disamping kiri diskon perproduk
+
+ketika beli 2 barang dari suplier berbeda pas cabang acc salah satu suplier malah ada bug. barang dari 1 suplier itu masuk tapi barang yang 1 suplier lagi engga (ini bener) tapi maslaahnya ketika kita coba buat acc suplier ke 2 malah ga bisa
+
+bug notif:
+kalo belum semua suplier sampe tetep bikin statusnya dijalan
+
+yang toomatis nambah baru pastiin barcode dan kode barang berbeda
+
+ganti nama itu nonaktifkan dari sisi cabang (bisa diaktifkan nanti). pindahkan ke purchase
+
+retur
+palke barcode biar tau otomatis retur ke suplier mana atau bisa ketik manual
+yang diketik bukan faktur tapi nama barang atau kode barang

@@ -235,6 +235,8 @@ def create_purchase(
             subtotal=totals["subtotal"],
             discount=totals["discount"],
             tax=totals["tax"],
+            tax_percent=data.tax_percent or 0,
+            is_tax_included=data.is_tax_included if data.is_tax_included is not None else True,
             total=totals["total"],
             paid=0,
             status="draft",
@@ -299,7 +301,6 @@ def split_fulfill_request(
         
         # Calculate subtotal for this group
         subtotal = sum(it.qty * it.buy_price for it in items)
-        
         purchase = models.Purchase(
             number=number,
             date=tanggal,
@@ -309,6 +310,8 @@ def split_fulfill_request(
             subtotal=subtotal,
             discount=0,
             tax=0,
+            tax_percent=0,
+            is_tax_included=True,
             total=subtotal,
             paid=0,
             status="draft",
@@ -583,6 +586,8 @@ def reorder_missing_items(
         branch_id=source.branch_id,
         supplier_id=source.supplier_id,
         status="draft",
+        is_tax_included=source.is_tax_included,
+        tax_percent=source.tax_percent,
         notes=f"Pesanan kekurangan dari {source.number}",
         created_by=current_user.id,
         is_branch_request=False,

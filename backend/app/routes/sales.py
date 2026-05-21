@@ -190,6 +190,8 @@ def create_sale(
         subtotal=subtotal,
         discount=disc_amount,
         tax=tax_amount,
+        tax_percent=data.tax_percent or 0,
+        is_tax_included=data.is_tax_included if data.is_tax_included is not None else True,
         total=total,
         paid=data.paid,
         change=change,

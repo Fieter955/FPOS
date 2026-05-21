@@ -217,18 +217,21 @@ async def lifespan(app: FastAPI):
             
         # 👇 TAMBAHAN: Pastikan akun Setoran ke Pusat & Cabang ada 👇
         codes_to_ensure = [
-            ("3-2300", "Setoran ke Pusat"),
-            ("3-2400", "Setoran dari Cabang")
+            ("3-2300", "Setoran ke Pusat", "equity", "capital", "credit"),
+            ("3-2400", "Setoran dari Cabang", "equity", "capital", "credit"),
+            ("1-1600", "Saldo di Supplier", "asset", "current_asset", "debit"),
+            ("2-1300", "Saldo di Customer", "liability", "current_liability", "credit"),
+            ("5-2000", "Beban Pajak", "expense", "operating", "debit")
         ]
-        for code, name in codes_to_ensure:
+        for code, name, acc_type, subtype, balance in codes_to_ensure:
             acc = db.query(models.Account).filter(models.Account.code == code).first()
             if not acc:
                 db.add(models.Account(
                     code=code, 
                     name=name, 
-                    type="equity", 
-                    subtype="capital", 
-                    normal_balance="credit"
+                    type=acc_type, 
+                    subtype=subtype, 
+                    normal_balance=balance
                 ))
                 db.commit()
                 print(f"✅ Akun '{code} {name}' berhasil disiapkan.")

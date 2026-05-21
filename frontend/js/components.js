@@ -793,6 +793,15 @@ async function createOrderManager(containerId, config = {}) {
                 </div>
             </div>
             <div class="card" style="padding:24px; background: var(--primary-light); border: 1px solid var(--primary); display: flex; flex-direction: column; justify-content: center">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+                    <label style="font-weight:700">Status PPN</label>
+                    <div style="display:flex; background:var(--bg-color); padding:4px; border-radius:50px; border:1px solid var(--border-color)">
+                        <input type="radio" name="om-tax-type" id="om-tax-inc" value="include" checked style="display:none" />
+                        <label for="om-tax-inc" style="padding:4px 12px; border-radius:50px; cursor:pointer; font-size:11px">Include</label>
+                        <input type="radio" name="om-tax-type" id="om-tax-exc" value="exclude" style="display:none" />
+                        <label for="om-tax-exc" style="padding:4px 12px; border-radius:50px; cursor:pointer; font-size:11px">Exclude</label>
+                    </div>
+                </div>
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px">
                     <div class="input-group"><label>Diskon Global (%)</label><input type="number" id="om-global-disc" class="input-control" value="0" /></div>
                     <div class="input-group"><label>PPN (%)</label><input type="number" id="om-global-tax" class="input-control" value="0" /></div>
@@ -909,6 +918,12 @@ async function createOrderManager(containerId, config = {}) {
         initialData.supplier_id,
         initialData.supplier?.name || "Supplier",
       );
+
+    if (initialData.is_tax_included === false) {
+      document.getElementById("om-tax-exc").checked = true;
+    } else {
+      document.getElementById("om-tax-inc").checked = true;
+    }
   }
 
   return {
@@ -918,6 +933,11 @@ async function createOrderManager(containerId, config = {}) {
       date: document.getElementById("om-date").value,
       number: document.getElementById("om-number").value,
       due_date: document.getElementById("om-due-date").value || null,
+      is_tax_included:
+        document.querySelector('input[name="om-tax-type"]:checked').value ===
+        "include",
+      tax_percent:
+        parseFloat(document.getElementById("om-global-tax").value) || 0,
       discount:
         isBranchRequest || isSplitFulfillment
           ? 0
