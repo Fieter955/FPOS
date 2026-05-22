@@ -777,3 +777,9 @@ ganti nama itu nonaktifkan dari sisi cabang (bisa diaktifkan nanti). pindahkan k
 retur
 palke barcode biar tau otomatis retur ke suplier mana atau bisa ketik manual
 yang diketik bukan faktur tapi nama barang atau kode barang
+
+Menu
+Penjualan
+Bisa level harga dan level jumlah (kalo harga akir dibawah HPP otomatis harga normal berdasarkan lever jumlah)
+
+Perakitan

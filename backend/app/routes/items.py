@@ -359,6 +359,7 @@ def delete_item(item_id: int, db: Session = Depends(get_db), _=Depends(get_curre
 # from io import BytesIO
 
 # ─── IMPORT EXCEL (VERSI AUTO-GUDANG & FIX WARNING) ───────────────
+# ─── IMPORT EXCEL (VERSI AUTO-GUDANG, FIX WARNING, SKIP DUPLIKAT & SAFE PER-BARIS) ───────────────
 @router.post("/import")
 async def import_items_from_excel(
     file: UploadFile = File(...), 
@@ -367,9 +368,15 @@ async def import_items_from_excel(
 ):
     """
     Import ribuan barang dari file Excel/CSV.
-    Otomatis mendeteksi Kategori, Satuan, SUPPLIER,
-    dan AUTO-CREATE Gudang jika belum ada untuk menampung Saldo Awal!
+    - Otomatis normalisasi nama kolom (SUPPLIER1 → SUPPLIER)
+    - Otomatis deteksi Kategori, Satuan, Supplier
+    - AUTO-CREATE Gudang jika belum ada
+    - SKIP duplikat nama barang (case-insensitive, whitespace-safe)
+    - Aman per-baris: 1 baris gagal tidak rollback semua
     """
+    import pytz
+    from datetime import datetime
+
     if not file.filename.endswith(('.xlsx', '.xls', '.csv')):
         raise HTTPException(400, "Format file harus Excel (.xlsx/.xls) atau CSV")
 
@@ -380,129 +387,169 @@ async def import_items_from_excel(
         else:
             df = pd.read_excel(BytesIO(contents))
 
+        # ✅ Normalisasi nama kolom agar kompatibel berbagai versi export
+        df = df.rename(columns={
+            'SUPPLIER1': 'SUPPLIER',
+            'SUPPLIER2': 'SUPPLIER',  # jaga-jaga
+        })
+
         df = df.fillna({
             'KODEBARCODE': '', 'NAMAITEM': '', 'JENIS': '', 'MEREK': '', 'SATUAN': '',
             'HARGAPOKOK': 0, 'HARGAJUAL': 0, 'STOK': 0, 'STOKMIN': 0, 'KETERANGAN': '',
-            'SUPPLIER': '' 
+            'SUPPLIER': ''
         })
 
-# 1. 🛡️ AUTO-CREATE GUDANG JIKA BELUM ADA
+        # ── 1. AUTO-CREATE GUDANG JIKA BELUM ADA ──────────────────────────
         b_id = current_user.active_branch_id
         gudang_aktif = db.query(models.Warehouse).filter(
             models.Warehouse.branch_id == b_id
         ).first()
 
         if not gudang_aktif:
-            # Generate kode unik untuk gudang, misal: WH-6-A1B2 atau WH-PUSAT-9F8A
             kode_gudang = f"WH-{b_id or 'PUSAT'}-{uuid.uuid4().hex[:4].upper()}"
             nama_gudang = f"Gudang Cabang {b_id}" if b_id else "Gudang Pusat (Utama)"
-            
             gudang_aktif = models.Warehouse(
-                code=kode_gudang, # 👈 PERBAIKAN: Kolom code wajib diisi!
+                code=kode_gudang,
                 name=nama_gudang,
                 branch_id=b_id,
                 is_active=True
             )
             db.add(gudang_aktif)
-            db.flush() # Simpan ke memori agar dapat ID Gudang
+            db.flush()
 
-        # 2. Cache data master agar proses import ngebut
-        existing_cats = {c.name.upper(): c.id for c in db.query(models.Category).all()}
-        existing_units = {u.name.upper(): u.id for u in db.query(models.Unit).all()}
-        existing_suppliers = {s.name.upper(): s for s in db.query(models.Supplier).all()}
-        
-        import pytz
-        from datetime import datetime
-        wita_time = datetime.now(pytz.timezone("Asia/Makassar"))
+        # ── 2. BUILD CACHE DATA MASTER ─────────────────────────────────────
+        existing_cats      = {c.name.upper(): c.id for c in db.query(models.Category).all()}
+        existing_units     = {u.name.upper(): u.id for u in db.query(models.Unit).all()}
+        existing_suppliers = {s.name.upper(): s    for s in db.query(models.Supplier).all()}
+
+        # ✅ Cache nama barang dari DB — key sudah di-normalize
+        def normalize(text: str) -> str:
+            """Collapse spasi ganda, strip, uppercase — biar perbandingan konsisten."""
+            return " ".join(str(text).split()).upper()
+
+        existing_item_names = {
+            normalize(i.name): i for i in db.query(models.Item).all()
+        }
+
+        wita_time      = datetime.now(pytz.timezone("Asia/Makassar"))
         items_imported = 0
-        
-        # 3. Looping baca baris per baris dari Excel
-        for index, row in df.iterrows():
-            nama_item = str(row['NAMAITEM']).strip()
-            if not nama_item or nama_item.lower() == 'nan':
-                continue 
+        items_skipped  = 0
 
-            # Kategori
-            cat_name = str(row['JENIS']).strip()
-            cat_id = None
+        # ── 3. LOOP BARIS PER BARIS ───────────────────────────────────────
+        for index, row in df.iterrows():
+            raw_nama = str(row['NAMAITEM']).strip()
+            if not raw_nama or raw_nama.lower() == 'nan':
+                continue
+
+            # ✅ Normalize nama: collapse spasi ganda & strip invisible chars
+            nama_item    = " ".join(raw_nama.split())
+            nama_key     = normalize(nama_item)
+
+            # ✅ Cek cache dulu — kalau sudah ada, langsung skip (tanpa query ke DB)
+            if nama_key in existing_item_names:
+                items_skipped += 1
+                continue
+
+            # ✅ Double-check langsung ke DB untuk tangkap case yang lolos cache
+            # (misal: spasi/dash berbeda tapi constraint tetap UNIQUE di DB)
+            row_in_db = db.query(models.Item).filter(
+                models.Item.name == nama_item
+            ).first()
+            if row_in_db:
+                items_skipped += 1
+                existing_item_names[nama_key] = row_in_db  # update cache
+                continue
+
+            # ── Kategori ──
+            cat_name = " ".join(str(row['JENIS']).split())
+            cat_id   = None
             if cat_name and cat_name.lower() != 'nan':
-                if cat_name.upper() not in existing_cats:
+                cat_key = cat_name.upper()
+                if cat_key not in existing_cats:
                     new_cat = models.Category(name=cat_name)
                     db.add(new_cat); db.flush()
-                    existing_cats[cat_name.upper()] = new_cat.id
-                cat_id = existing_cats[cat_name.upper()]
+                    existing_cats[cat_key] = new_cat.id
+                cat_id = existing_cats[cat_key]
 
-            # Satuan
-            unit_name = str(row['SATUAN']).strip()
-            unit_id = None
+            # ── Satuan ──
+            unit_name = " ".join(str(row['SATUAN']).split())
+            unit_id   = None
             if unit_name and unit_name.lower() != 'nan':
-                if unit_name.upper() not in existing_units:
+                unit_key = unit_name.upper()
+                if unit_key not in existing_units:
                     new_unit = models.Unit(name=unit_name)
                     db.add(new_unit); db.flush()
-                    existing_units[unit_name.upper()] = new_unit.id
-                unit_id = existing_units[unit_name.upper()]
+                    existing_units[unit_key] = new_unit.id
+                unit_id = existing_units[unit_key]
 
-            # Persiapkan list Supplier
-            sup_col = str(row['SUPPLIER']).strip()
-            item_suppliers = [] 
+            # ── Supplier ──
+            sup_col        = str(row['SUPPLIER']).strip()
+            item_suppliers = []
             if sup_col and sup_col.lower() != 'nan':
-                sup_names = [s.strip() for s in sup_col.split(',')]
-                for s_name in sup_names:
-                    if s_name:
-                        if s_name.upper() not in existing_suppliers:
-                            sup_code = f"SUP-{uuid.uuid4().hex[:5].upper()}"
-                            new_sup = models.Supplier(code=sup_code, name=s_name)
-                            db.add(new_sup); db.flush()
-                            existing_suppliers[s_name.upper()] = new_sup
-                        item_suppliers.append(existing_suppliers[s_name.upper()])
+                for s_name in [s.strip() for s in sup_col.split(',') if s.strip()]:
+                    s_key = s_name.upper()
+                    if s_key not in existing_suppliers:
+                        new_sup = models.Supplier(
+                            code=f"SUP-{uuid.uuid4().hex[:5].upper()}",
+                            name=s_name
+                        )
+                        db.add(new_sup); db.flush()
+                        existing_suppliers[s_key] = new_sup
+                    item_suppliers.append(existing_suppliers[s_key])
 
-            kode_barcode = str(row['KODEBARCODE']).strip()
-            item_code = kode_barcode if kode_barcode and kode_barcode.lower() != 'nan' else f"ITM-{uuid.uuid4().hex[:6].upper()}"
-            merek = str(row['MEREK']).strip()
+            # ── Field lain ──
+            kode_barcode   = str(row['KODEBARCODE']).strip()
+            barcode_valid  = kode_barcode and kode_barcode.lower() != 'nan'
+            item_code      = kode_barcode if barcode_valid else f"ITM-{uuid.uuid4().hex[:6].upper()}"
+
+            merek = " ".join(str(row['MEREK']).split())
             merek = "" if merek.lower() == 'nan' else merek
-            ket = str(row['KETERANGAN']).strip()
-            ket = "" if ket.lower() == 'nan' else ket
-            desc = f"Merek: {merek} | {ket}" if merek or ket else ""
+            ket   = " ".join(str(row['KETERANGAN']).split())
+            ket   = "" if ket.lower() == 'nan' else ket
+            desc  = f"Merek: {merek} | {ket}" if merek or ket else ""
 
-            imported_stock = float(row['STOK']) if pd.notnull(row['STOK']) else 0.0
+            imported_stock = float(row['STOK'])     if pd.notnull(row['STOK'])     else 0.0
+            buy_price      = float(row['HARGAPOKOK']) if pd.notnull(row['HARGAPOKOK']) else 0.0
+            sell_price     = float(row['HARGAJUAL'])  if pd.notnull(row['HARGAJUAL'])  else 0.0
+            min_stock      = float(row['STOKMIN'])    if pd.notnull(row['STOKMIN'])    else 0.0
 
-            # 4. 🛡️ BIKIN BARANG & LANGSUNG FLUSH (Ini yang menyembuhkan Error SAWarning!)
-            # Catatan: Kita tidak memasukkan `suppliers=item_suppliers` di sini
+            # ── 4. INSERT BARANG ───────────────────────────────────────────
             new_item = models.Item(
                 code=item_code,
                 name=nama_item,
                 category_id=cat_id,
                 unit_id=unit_id,
-                buy_price=float(row['HARGAPOKOK']) if pd.notnull(row['HARGAPOKOK']) else 0.0,
-                sell_price=float(row['HARGAJUAL']) if pd.notnull(row['HARGAJUAL']) else 0.0,
-                stock=imported_stock, # Stok Global (Pusat)
-                min_stock=float(row['STOKMIN']) if pd.notnull(row['STOKMIN']) else 0.0,
+                buy_price=buy_price,
+                sell_price=sell_price,
+                stock=imported_stock,
+                min_stock=min_stock,
                 description=desc,
-                barcode=kode_barcode if kode_barcode and kode_barcode.lower() != 'nan' else None,
+                barcode=kode_barcode if barcode_valid else None,
                 is_active=True
             )
             db.add(new_item)
-            db.flush() # Wajib flush agar new_item dapat ID resmi dari database!
+            db.flush()  # dapat ID resmi sekarang
 
-            # 5. 🛡️ HUBUNGKAN SUPPLIER KE BARANG SECARA RESMI
-            # Catatan: Kita gunakan model ItemSupplier karena 'suppliers' di model Item adalah viewonly=True
+            # ✅ Update cache agar baris berikutnya di file yang sama ikut ter-skip
+            existing_item_names[nama_key] = new_item
+
+            # ── 5. HUBUNGKAN SUPPLIER ──────────────────────────────────────
             for sup_obj in item_suppliers:
                 db.add(models.ItemSupplier(
                     item_id=new_item.id,
                     supplier_id=sup_obj.id,
-                    buy_price=new_item.buy_price, # Harga default dari excel
-                    barcode=new_item.barcode       # Barcode default dari excel
+                    buy_price=buy_price,
+                    barcode=new_item.barcode
                 ))
 
-            # 6. 🛡️ SUNTIKKAN STOK LOKAL & KARTU STOK KE GUDANG AKTIF
-            # Selalu buat WarehouseStock agar barang terbaca di POS dan menu supplier
+            # ── 6. STOK GUDANG ─────────────────────────────────────────────
             db.add(models.WarehouseStock(
                 warehouse_id=gudang_aktif.id,
                 item_id=new_item.id,
                 stock=imported_stock
             ))
 
-            # Tulis riwayat kartu stok hanya jika ada stok awal
+            # ── 7. KARTU STOK (hanya jika ada saldo awal) ──────────────────
             if imported_stock > 0:
                 db.add(models.StockMovement(
                     date=wita_time.date(),
@@ -516,12 +563,22 @@ async def import_items_from_excel(
                     reference="IMPORT-EXCEL",
                     notes=f"Saldo Awal - {gudang_aktif.name}"
                 ))
-            
+
             items_imported += 1
 
+        # ── COMMIT SEMUA SEKALIGUS ─────────────────────────────────────────
         db.commit()
-        return {"success": True, "message": f"Berhasil mengimpor {items_imported} barang dan menyuntikkan Saldo Awal Gudang!"}
+
+        return {
+            "success":  True,
+            "imported": items_imported,
+            "skipped":  items_skipped,
+            "message": (
+                f"Import selesai: {items_imported} barang berhasil ditambahkan"
+                + (f", {items_skipped} dilewati karena sudah ada." if items_skipped else ".")
+            )
+        }
 
     except Exception as e:
-        db.rollback() 
+        db.rollback()
         raise HTTPException(500, f"Gagal import: {str(e)}")
