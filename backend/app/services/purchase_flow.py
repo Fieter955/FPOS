@@ -275,9 +275,9 @@ def create_supplier_purchase(db: Session, *, data: schemas.PurchaseCreate,
 
     purchase = models.Purchase(
         number=number,
-        date=tanggal,
         branch_id=branch_id,
         created_at=local_datetime,
+        date=tanggal,
         supplier_id=data.supplier_id,
         subtotal=totals["subtotal"],
         discount=totals["discount"],
@@ -310,7 +310,7 @@ def create_supplier_purchase(db: Session, *, data: schemas.PurchaseCreate,
             # Normal Flow: Stock increases immediately
             stock_branch_id = target_branch_id or branch_id
             receive_branch_stock(db, purchase=purchase, target_branch_id=stock_branch_id,
-                                 local_datetime=local_datetime)
+                                 local_datetime=local_datetime, local_date=tanggal)
         
         update_supplier_item_master(db, data)
 
@@ -414,7 +414,7 @@ def update_draft_purchase(db: Session, *, purchase: models.Purchase,
             # Normal Flow: Stock increases immediately
             stock_branch_id = final_target_branch_id or purchase.branch_id
             receive_branch_stock(db, purchase=purchase, target_branch_id=stock_branch_id,
-                                 local_datetime=local_datetime)
+                                 local_datetime=local_datetime, local_date=tanggal)
         
         update_supplier_item_master(db, data)
         

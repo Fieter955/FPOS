@@ -44,11 +44,17 @@ Dokumentasi ini dirancang agar AI (CLI Agent) dapat memahami struktur kerja sist
 3. **Payment**: Pembayaran hutang cicil/lunas, Arus Kas berkurang, Hutang di Neraca berkurang.
 4. **Export PDF**: Faktur profesional dengan alamat tujuan cabang otomatis.
 5. **Dokumentasi API**: Seluruh endpoint di `backend/app/routes/purchases.py` kini telah dilengkapi dengan komentar deskriptif bahasa Indonesia untuk menjelaskan logika operasional (Request Cabang, Fulfillment PO, dan Akuntansi).
-
 ### 3. Penjualan (Sales Cycle)
 1. **POS**: Transaksi kasir realtime. Scan barcode -> Pilih Group Diskon -> Bayar.
 2. **Realtime Stock**: Stok dipotong dari Gudang Default Cabang (mendukung kuantitas desimal untuk multi-satuan).
 3. **Auto-Journal**: Mencatat Pendapatan, Kas/Bank, dan HPP (Harga Pokok Penjualan) secara instan.
+
+### 4. Fitur Barcode Scanner (Global Auto-Cursor)
+- **Logika Deteksi**: Menggunakan komponen `setupBarcodeScanner` yang mendeteksi kecepatan ketikan (hardware scanner) vs pengetikan manual manusia menggunakan jeda waktu (`Date.now()`).
+- **Auto-Cursor**: Scanner bekerja secara global di background. Pengguna tidak perlu memfokuskan kursor pada input box tertentu; hasil scan akan langsung diproses oleh halaman yang aktif (POS, Pembelian, atau PO).
+- **Fallback**: Jika scanner gagal atau ingin input manual, pengguna tetap bisa menggunakan bar pencarian seperti biasa.
+
+### 5. Skema Database (Highlight)
 
 #### D. Inter-Branch PO (Pemenuhan Permintaan Cabang)
 - **Workflow**: Cabang membuat Request (`is_branch_request=true`) -> Pusat proses di `po.html` -> Simpan Draft atau Bayar.

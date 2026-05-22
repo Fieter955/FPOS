@@ -1,14 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException
+import pytz
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional
-from datetime import date
+from datetime import date, datetime
 from ..database import get_db
 from .. import models
 from ..auth import get_current_user, write_audit
 from ..services.virtual_units import get_required_stock_qty, is_virtual_variant
 
 router = APIRouter()
+WITA = pytz.timezone("Asia/Makassar")
+
+
+def get_local_date() -> date:
+    return datetime.now(WITA).date()
 
 
 @router.get("/history/purchases")
@@ -366,7 +372,7 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
 
     retur = models.PurchaseReturn(
         number=number,
-        date=data.get("date", str(date.today())),
+        date=get_local_date(),
         purchase_id=purchase_id,
         tax_percent=tax_percent,
         is_tax_included=is_tax_included,
@@ -412,7 +418,7 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
         if gudang_aktif:
             adjust_warehouse_stock(db, gudang_aktif.id, item.id, -it["qty"])
         db.add(models.StockMovement(
-            date=data.get("date", str(date.today())),
+            date=get_local_date(),
             item_id=item.id,
             branch_id=purchase.branch_id,
             type="out",

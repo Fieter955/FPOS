@@ -229,6 +229,147 @@
       </div>
     </div>
 
+    <!-- Modal Form Retur Manual -->
+    <div class="modal-overlay" id="mManualReturn">
+      <div class="modal-box" style="max-width: 800px; width: 95%">
+        <div class="modal-hdr">
+          <h2 id="mManualReturnTitle">Buat Retur Pembelian</h2>
+          <button class="btn-x" onclick="closeModal('mManualReturn')">×</button>
+        </div>
+        <div class="modal-body" style="padding: 16px 0">
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 16px;
+              margin-bottom: 16px;
+            "
+          >
+            <div class="input-group">
+              <label id="lblManualEntity">Pilih Supplier *</label>
+              <div id="mManualEntityCombo"></div>
+            </div>
+            <div class="input-group">
+              <label>Pilih Nomor Faktur *</label>
+              <div id="mManualFakturCombo"></div>
+            </div>
+          </div>
+
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 16px;
+              margin-bottom: 16px;
+            "
+          >
+            <div class="input-group">
+              <label>Tanggal Retur *</label>
+              <input type="date" id="mManualDate" class="input-control" />
+            </div>
+            <div class="input-group">
+              <label>Alasan Retur</label>
+              <input
+                type="text"
+                id="mManualReason"
+                class="input-control"
+                placeholder="Contoh: Barang Rusak"
+              />
+            </div>
+          </div>
+
+          <div
+            id="mManualPpnInfo"
+            style="
+              background: rgba(16, 185, 129, 0.1);
+              color: #059669;
+              padding: 10px;
+              border-radius: 8px;
+              font-size: 13px;
+              margin-bottom: 16px;
+              display: none;
+              border: 1px solid rgba(16, 185, 129, 0.2);
+            "
+          >
+            <!-- Info PPN muncul di sini -->
+          </div>
+
+          <div
+            class="tbl-wrap"
+            style="border: 1px solid var(--border-color); border-radius: 8px"
+          >
+            <table class="tbl" style="margin-bottom: 0">
+              <thead>
+                <tr>
+                  <th>Nama Barang</th>
+                  <th style="width: 80px; text-align: center">Sisa</th>
+                  <th style="width: 100px; text-align: center">Qty Retur</th>
+                  <th style="width: 120px; text-align: right">Harga</th>
+                  <th style="width: 120px; text-align: right">Total</th>
+                  <th style="width: 40px"></th>
+                </tr>
+              </thead>
+              <tbody id="mManualGridBody">
+                <!-- Baris barang ditambahkan di sini -->
+              </tbody>
+            </table>
+            <div
+              style="
+                padding: 12px;
+                border-top: 1px solid var(--border-color);
+                background: var(--bg-color);
+              "
+            >
+              <button
+                class="btn"
+                onclick="addManualReturnRow()"
+                style="font-size: 13px; padding: 6px 12px"
+              >
+                ➕ Tambah Barang
+              </button>
+            </div>
+          </div>
+
+          <div
+            style="
+              margin-top: 16px;
+              display: flex;
+              justify-content: flex-end;
+              gap: 20px;
+              align-items: center;
+            "
+          >
+            <div style="text-align: right">
+              <div style="font-size: 12px; color: var(--text-muted)">
+                Grand Total Retur
+              </div>
+              <div
+                id="mManualGrandTotal"
+                style="font-size: 20px; font-weight: 800; color: var(--primary)"
+              >
+                Rp 0
+              </div>
+            </div>
+          </div>
+        </div>
+        <div
+          style="
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 16px;
+          "
+        >
+          <button onclick="closeModal('mManualReturn')" class="btn">
+            Batal
+          </button>
+          <button onclick="saveManualReturn()" class="btn btn-primary">
+            ✓ Proses Retur
+          </button>
+        </div>
+      </div>
+    </div>
+
     <script src="/js/api.js"></script>
     <script src="/js/theme.js"></script>
     <script src="/js/components.js"></script>
@@ -239,6 +380,12 @@
       let activeItem = null;
       let allSuppliers = [];
       let allCustomers = [];
+
+      let mManualMode = "purchase"; // 'purchase' or 'sales'
+      let mManualEntityCombo = null;
+      let mManualFakturCombo = null;
+      let mManualFakturItems = [];
+      let mManualSelectedFaktur = null;
 
       function switchTab(tab) {
         currentTab = tab;
@@ -269,19 +416,224 @@
       }
 
       function buatReturPembelian() {
-        switchTab("purchase");
-        showToast(
-          "Silakan cari barang dari riwayat pembelian di bawah, lalu klik tombol '↩ Retur'",
-          "info",
-        );
+        mManualMode = "purchase";
+        openManualReturnModal();
       }
 
       function buatReturPenjualan() {
-        switchTab("sales");
-        showToast(
-          "Silakan cari barang dari riwayat penjualan di bawah, lalu klik tombol '↩ Retur'",
-          "info",
+        mManualMode = "sales";
+        openManualReturnModal();
+      }
+
+      function openManualReturnModal() {
+        const isPurchase = mManualMode === "purchase";
+        document.getElementById("mManualReturnTitle").textContent = isPurchase
+          ? "Buat Retur Pembelian"
+          : "Buat Retur Penjualan";
+        document.getElementById("lblManualEntity").textContent = isPurchase
+          ? "Pilih Supplier *"
+          : "Pilih Pelanggan *";
+        document.getElementById("mManualDate").value = new Date()
+          .toISOString()
+          .split("T")[0];
+        document.getElementById("mManualReason").value = "";
+        document.getElementById("mManualGridBody").innerHTML = "";
+        document.getElementById("mManualGrandTotal").textContent = "Rp 0";
+        document.getElementById("mManualPpnInfo").style.display = "none";
+
+        mManualSelectedFaktur = null;
+        mManualFakturItems = [];
+
+        // Reset Combos
+        if (mManualEntityCombo) mManualEntityCombo.clear();
+        if (mManualFakturCombo) mManualFakturCombo.clear();
+
+        // Initialize Entity Combo
+        if (!mManualEntityCombo) {
+          mManualEntityCombo = createPremiumCombo(
+            "mManualEntityCombo",
+            isPurchase ? allSuppliers : allCustomers,
+            {
+              onSelect: (sel) => onManualEntitySelected(sel),
+            },
+          );
+        } else {
+          mManualEntityCombo.updateData(
+            isPurchase ? allSuppliers : allCustomers,
+          );
+        }
+
+        // Initialize Faktur Combo
+        if (!mManualFakturCombo) {
+          mManualFakturCombo = createPremiumCombo("mManualFakturCombo", [], {
+            onSelect: (sel) => onManualFakturSelected(sel),
+          });
+        } else {
+          mManualFakturCombo.updateData([]);
+        }
+
+        openModal("mManualReturn");
+      }
+
+      async function onManualEntitySelected(entity) {
+        if (!entity) return;
+        const type = mManualMode === "purchase" ? "purchases" : "sales";
+        const entityParam =
+          mManualMode === "purchase" ? "supplier_id" : "customer_id";
+
+        showLoading("Mengambil riwayat faktur...");
+        try {
+          const history = await api(
+            "GET",
+            `/returns/history/${type}?${entityParam}=${entity.id}`,
+          );
+          hideLoading();
+
+          const faktuMap = {};
+          history.forEach((it) => {
+            const num =
+              mManualMode === "purchase" ? it.purchase_number : it.sale_number;
+            const id = mManualMode === "purchase" ? it.purchase_id : it.sale_id;
+            if (!faktuMap[num]) {
+              faktuMap[num] = { id: id, label: num, items: [], raw: it };
+            }
+            faktuMap[num].items.push(it);
+          });
+
+          const fakturList = Object.values(faktuMap);
+          mManualFakturCombo.updateData(fakturList);
+          if (fakturList.length === 0) {
+            showToast(
+              "Tidak ada faktur yang tersedia untuk diretur.",
+              "warning",
+            );
+          }
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function onManualFakturSelected(faktur) {
+        if (!faktur) return;
+        mManualSelectedFaktur = faktur;
+        mManualFakturItems = faktur.items;
+
+        const type = mManualMode === "purchase" ? "purchases" : "sales";
+        try {
+          const detail = await api("GET", `/${type}/${faktur.id}`);
+          const hasTax = detail.tax > 0;
+          const ppnInfo = document.getElementById("mManualPpnInfo");
+          ppnInfo.style.display = "block";
+          ppnInfo.innerHTML = `<strong>Keterangan:</strong> Faktur ini ${hasTax ? "termasuk PPN" : "tidak termasuk PPN"}. Harga di bawah adalah harga beli akhir (termasuk proporsi PPN).`;
+        } catch (e) {}
+
+        document.getElementById("mManualGridBody").innerHTML = "";
+        addManualReturnRow();
+      }
+
+      function addManualReturnRow() {
+        if (!mManualSelectedFaktur)
+          return showToast("Pilih faktur terlebih dahulu", "warning");
+
+        const body = document.getElementById("mManualGridBody");
+        const idx = body.children.length;
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td><div id="mRowCombo-${idx}"></div></td>
+          <td style="text-align: center; font-weight: 700" class="row-avail">-</td>
+          <td><input type="number" class="input-control row-qty" value="0" style="text-align: center" oninput="calculateManualReturnTotal()" /></td>
+          <td style="text-align: right" class="row-price">Rp 0</td>
+          <td style="text-align: right; font-weight: 700" class="row-total">Rp 0</td>
+          <td><button class="btn" style="color:var(--danger); background:transparent; padding:0" onclick="this.closest('tr').remove(); calculateManualReturnTotal()">✕</button></td>
+        `;
+        body.appendChild(row);
+
+        createPremiumCombo(
+          `mRowCombo-${idx}`,
+          mManualFakturItems.map((it) => ({
+            id: it.item_id,
+            label: it.item.name,
+            item: it,
+          })),
+          {
+            onSelect: (sel) => {
+              if (sel) {
+                row.querySelector(".row-avail").textContent =
+                  sel.item.qty_available;
+                row.querySelector(".row-qty").value = sel.item.qty_available;
+                const price =
+                  mManualMode === "purchase"
+                    ? sel.item.buy_price
+                    : sel.item.sell_price;
+                row.querySelector(".row-price").textContent = fmtRp(price);
+                row.dataset.itemId = sel.id;
+                row.dataset.price = price;
+                calculateManualReturnTotal();
+              }
+            },
+          },
         );
+      }
+
+      function calculateManualReturnTotal() {
+        let grand = 0;
+        document.querySelectorAll("#mManualGridBody tr").forEach((row) => {
+          const qty = parseFloat(row.querySelector(".row-qty").value) || 0;
+          const price = parseFloat(row.dataset.price) || 0;
+          const total = qty * price;
+          row.querySelector(".row-total").textContent = fmtRp(total);
+          grand += total;
+        });
+        document.getElementById("mManualGrandTotal").textContent = fmtRp(grand);
+      }
+
+      async function saveManualReturn() {
+        const faktur = mManualSelectedFaktur;
+        if (!faktur) return showToast("Pilih faktur terlebih dahulu", "error");
+
+        const items = [];
+        let hasError = false;
+        document.querySelectorAll("#mManualGridBody tr").forEach((row) => {
+          const itemId = row.dataset.itemId;
+          const qty = parseFloat(row.querySelector(".row-qty").value) || 0;
+          const avail =
+            parseFloat(row.querySelector(".row-avail").textContent) || 0;
+
+          if (!itemId) return;
+          if (qty <= 0) return;
+          if (qty > avail) {
+            hasError = true;
+            showToast("Jumlah retur melebihi sisa tersedia", "error");
+          }
+          items.push({ item_id: parseInt(itemId), qty: qty });
+        });
+
+        if (hasError) return;
+        if (items.length === 0)
+          return showToast("Tambahkan minimal 1 barang", "error");
+
+        const payload = {
+          date: document.getElementById("mManualDate").value,
+          reason: document.getElementById("mManualReason").value,
+          items: items,
+        };
+
+        if (mManualMode === "purchase") payload.purchase_id = faktur.id;
+        else payload.sale_id = faktur.id;
+
+        try {
+          showLoading("Memproses retur...");
+          const type = mManualMode === "purchase" ? "purchases" : "sales";
+          const res = await api("POST", `/returns/${type}`, payload);
+          hideLoading();
+          showToast(`Berhasil! No. Retur: ${res.number}`);
+          closeModal("mManualReturn");
+          load();
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
       }
 
       async function load() {
@@ -387,7 +739,7 @@
         const entityName = isSales
           ? item.customer_name || "Umum"
           : item.supplier_name || "-";
-        const price = isSales ? item.sell_price : item.buy_price;
+        const price = isSales ? item.sell_price : item.buy_price + item.tax;
 
         document.getElementById("mReturnItemInfo").innerHTML = `
           <div style="font-weight: 700; font-size: 16px; margin-bottom: 4px; color: var(--primary)">${item.item.name}</div>
