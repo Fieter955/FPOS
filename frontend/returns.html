@@ -108,6 +108,32 @@
                 Retur Pembelian
               </button>
             </div>
+            <div id="tombolReturContainer">
+              <div
+                style="
+                  display: flex;
+                  justify-content: flex-end;
+                  gap: 10px;
+                  margin-bottom: 14px;
+                "
+              >
+                <button
+                  class="btn"
+                  style="
+                    background: #10b981;
+                    color: white;
+                    border: none;
+                    font-weight: bold;
+                  "
+                  onclick="buatReturPembelian()"
+                >
+                  ➕ Buat Retur Pembelian
+                </button>
+                <button class="btn btn-primary" onclick="buatReturPenjualan()">
+                  ➕ Buat Retur Penjualan
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -240,6 +266,22 @@
         }
 
         load();
+      }
+
+      function buatReturPembelian() {
+        switchTab("purchase");
+        showToast(
+          "Silakan cari barang dari riwayat pembelian di bawah, lalu klik tombol '↩ Retur'",
+          "info",
+        );
+      }
+
+      function buatReturPenjualan() {
+        switchTab("sales");
+        showToast(
+          "Silakan cari barang dari riwayat penjualan di bawah, lalu klik tombol '↩ Retur'",
+          "info",
+        );
       }
 
       async function load() {
