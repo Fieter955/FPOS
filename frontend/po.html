@@ -850,6 +850,27 @@
         }
       }
 
+      // Setup Global Barcode Scanner
+      setupBarcodeScanner(async (scode) => {
+        if (!orderManager || !orderManager.itemsGrid) return;
+        // Hanya aktif jika sedang di tab Buat PO / Form
+        if (!document.getElementById("buatTab").classList.contains("active"))
+          return;
+
+        try {
+          const items = await api("GET", "/items/?limit=1&search=" + scode);
+          if (items && items.length > 0) {
+            const item = items[0];
+            orderManager.itemsGrid.addRow(item);
+            showToast("Berhasil menambah: " + item.name);
+          } else {
+            showToast("Barcode " + scode + " tidak ditemukan!", "error");
+          }
+        } catch (e) {
+          console.error("Scanner Error:", e);
+        }
+      });
+
       async function resetForm() {
         if (confirm("Kosongkan semua input?")) {
           currentPOId = null;

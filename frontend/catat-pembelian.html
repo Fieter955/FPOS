@@ -171,6 +171,25 @@
         }
       }
 
+      // Setup Global Barcode Scanner
+      setupBarcodeScanner(async (scode) => {
+        if (!orderManager || !orderManager.itemsGrid) return;
+
+        try {
+          // Cari item berdasarkan barcode/kode
+          const items = await api("GET", "/items/?limit=1&search=" + scode);
+          if (items && items.length > 0) {
+            const item = items[0];
+            orderManager.itemsGrid.addRow(item);
+            showToast("Berhasil menambah: " + item.name);
+          } else {
+            showToast("Barcode " + scode + " tidak ditemukan!", "error");
+          }
+        } catch (e) {
+          console.error("Scanner Error:", e);
+        }
+      });
+
       async function finalisasi(status) {
         if (!orderManager) return;
         const data = orderManager.getData();

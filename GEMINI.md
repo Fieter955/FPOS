@@ -48,6 +48,13 @@ Always reuse existing components instead of re-implementing them. Files: `fronte
 - **Function**: `createPaymentModal(config)`.
 - **Features**: Handles split payments (Cash/Bank), saldo verification, and automated API submission.
 
+### 6. Barcode Scanner Hook
+
+- **Function**: `setupBarcodeScanner(onScan, config)`.
+- **Purpose**: Global listener to detect rapid keystrokes (scanners) without needing focused input.
+- **Config**: `{ minLength: 2, interval: 50 }`.
+- **Logic**: Automatically distinguishes between human typing and hardware scanner using character timing (`Date.now()`).
+
 ## 🎨 Design System
 
 - **Colors**: Use variables like `--primary`, `--bg-color`, `--card-bg`, etc.

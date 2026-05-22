@@ -896,6 +896,7 @@
 
     <script src="/js/api.js"></script>
     <script src="/js/theme.js"></script>
+    <script src="/js/components.js"></script>
     <script>
       requireAuth();
 
@@ -919,27 +920,11 @@
       let payModalIdx = 1;
       let rcptIdx = 2;
 
-      // Variabel Khusus Scanner
-      let barcodeBuffer = "";
-      let lastKeyTime = today();
-
       // =======================================================================
       // 📡 MASTER CONTROLLER: SENSOR KEYBOARD & SCANNER (PENGATUR LALU LINTAS)
       // =======================================================================
       document.addEventListener("keydown", function (e) {
-        const currentTime = today();
-        const timeDiff = currentTime - lastKeyTime;
-        lastKeyTime = currentTime;
-
-        // 1. DETEKSI MESIN SCANNER (Ketikan super cepat < 50ms)
-        if (timeDiff > 50) {
-          barcodeBuffer = ""; // Jika lambat, berarti manusia. Reset buffer.
-        }
-        if (e.key.length === 1) {
-          barcodeBuffer += e.key; // Simpan karakter ke penampung
-        }
-
-        // 2. KONTROL MODAL QTY (JUMLAH BARANG)
+        // 1. KONTROL MODAL QTY (JUMLAH BARANG)
         if (activeModal === "qty") {
           if (e.key === "Escape") {
             closeModals();
@@ -1025,58 +1010,6 @@
 
         // 5. KONTROL LAYAR UTAMA POS
         if (activeModal === null) {
-          // A. EKSEKUSI SCANNER (Prioritas Tertinggi)
-          if (e.key === "Enter" && barcodeBuffer.length > 2) {
-            e.preventDefault();
-            const scode = barcodeBuffer.toLowerCase().trim();
-
-            // Cari yang benar-benar cocok 100% (Kebal String/Number)
-            let matchedSupplierId = null;
-            const matchedItem = allItems.find((i) => {
-              // 1. Cek Barcode Utama
-              if (
-                String(i.barcode || "")
-                  .toLowerCase()
-                  .trim() === scode
-              )
-                return true;
-              // 2. Cek Kode Barang
-              if (
-                String(i.code || "")
-                  .toLowerCase()
-                  .trim() === scode
-              )
-                return true;
-              // 3. Cek Barcode Khusus Supplier
-              if (i.supplier_details && i.supplier_details.length > 0) {
-                const sd = i.supplier_details.find(
-                  (s) =>
-                    String(s.barcode || "")
-                      .toLowerCase()
-                      .trim() === scode,
-                );
-                if (sd) {
-                  matchedSupplierId = sd.supplier_id;
-                  return true;
-                }
-              }
-              return false;
-            });
-
-            barcodeBuffer = ""; // Kosongkan buffer
-
-            if (matchedItem) {
-              promptQty(matchedItem.id, matchedSupplierId);
-              document.getElementById("searchInp").value = "";
-              filterItems();
-            } else {
-              showToast("Barcode " + scode + " tidak terdaftar!", "error");
-              document.getElementById("searchInp").value = "";
-              filterItems();
-            }
-            return;
-          }
-
           // B. SHORTCUT TOMBOL BAYAR (F8 / INSERT)
           if (e.key === "F8" || e.key === "Insert" || e.key === "End") {
             e.preventDefault();
@@ -1313,6 +1246,40 @@
             groupSelect.appendChild(o);
           });
           filterItems();
+
+          // Setup Global Barcode Scanner
+          setupBarcodeScanner((scode) => {
+            if (activeModal !== null) return;
+            scode = String(scode).toLowerCase().trim();
+            
+            let matchedSupplierId = null;
+            const matchedItem = allItems.find((i) => {
+              const bCode = String(i.barcode || "").toLowerCase().trim();
+              const iCode = String(i.code || "").toLowerCase().trim();
+              
+              if (bCode === scode) return true;
+              if (iCode === scode) return true;
+              
+              if (i.supplier_details && i.supplier_details.length > 0) {
+                const sd = i.supplier_details.find(
+                  (s) => String(s.barcode || "").toLowerCase().trim() === scode,
+                );
+                if (sd) {
+                  matchedSupplierId = sd.supplier_id;
+                  return true;
+                }
+              }
+              return false;
+            });
+
+            if (matchedItem) {
+              promptQty(matchedItem.id, matchedSupplierId);
+              document.getElementById("searchInp").value = "";
+              filterItems();
+            } else {
+              showToast("Barcode " + scode + " tidak terdaftar!", "error");
+            }
+          });
         } catch (e) {
           showToast("Gagal memuat data!", "error");
         }

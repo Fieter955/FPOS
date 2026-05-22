@@ -385,6 +385,28 @@
         allSuppliers = [];
       let pendingPaymentData = null; // To store data while mismatch modal is open
 
+      // Setup Global Barcode Scanner
+      setupBarcodeScanner(async (scode) => {
+        // Hanya aktif jika sedang di tab form (po atau purchase)
+        if (currentTab !== "po" && currentTab !== "purchase") return;
+
+        try {
+          // Cari item berdasarkan barcode/kode
+          const items = await api("GET", "/items/?limit=1&search=" + scode);
+          if (items && items.length > 0) {
+            const item = items[0];
+            if (formGrid) {
+              formGrid.addRow(item);
+              showToast("Berhasil menambah: " + item.name);
+            }
+          } else {
+            showToast("Barcode " + scode + " tidak ditemukan!", "error");
+          }
+        } catch (e) {
+          console.error("Scanner Error:", e);
+        }
+      });
+
       // Initialize Shared Payment Modal
       const apModal = createPaymentModal({
         type: "ap",

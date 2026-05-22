@@ -1128,3 +1128,44 @@ function createToggleButton(container, config = {}) {
   };
 }
 
+/**
+ * setupBarcodeScanner (Global Scanner Hook)
+ * Mendeteksi ketikan cepat (khas scanner) dan memicu callback.
+ * Memperbaiki bug perhitungan waktu dari today() menjadi Date.now().
+ */
+function setupBarcodeScanner(onScan, config = {}) {
+  const { minLength = 2, interval = 50 } = config;
+  let buffer = "";
+  let lastKeyTime = Date.now();
+
+  document.addEventListener("keydown", (e) => {
+    // Abaikan jika tombol fungsi atau navigasi
+    if (e.key.length > 1 && e.key !== "Enter") return;
+
+    const currentTime = Date.now();
+    const timeDiff = currentTime - lastKeyTime;
+    lastKeyTime = currentTime;
+
+    // Jika jeda terlalu lama, berarti input manual (manusia), reset buffer
+    if (timeDiff > interval) {
+      buffer = "";
+    }
+
+    if (e.key === "Enter") {
+      if (buffer.length >= minLength) {
+        e.preventDefault();
+        const scanned = buffer.trim();
+        buffer = "";
+        if (onScan) onScan(scanned);
+      } else {
+        buffer = ""; // Reset jika Enter ditekan tapi buffer pendek
+      }
+      return;
+    }
+
+    if (e.key.length === 1) {
+      buffer += e.key;
+    }
+  });
+}
+
