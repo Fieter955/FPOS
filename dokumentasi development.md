@@ -684,31 +684,6 @@ done
 done
 **Knowledge Base (GEMINI.md & README.md)**: Membuat dokumentasi terpusat agar AI CLI berikutnya lebih pintar memahami alur logika proyek (seperti sinkronisasi schema dan validasi alamat).
 
-#### 10 Mei 2026 (Fixing PO & Documentation)
-
-- **Fix po.html**: Memperbaiki mismatch nama fungsi `hitungTotal` -> `hitungGrandTotal` yang menyebabkan error pada input diskon/PPN.
-- **Improved Export PDF**: Mengaktifkan tombol Export PDF secara default dengan validasi internal (toast warning) jika data belum disimpan, meningkatkan user experience.
-- **Documentation Update**: Menambahkan standar "Event Handler Precision" dan "State-Based UI" di `README.md` sebagai panduan pengembangan UI ke depannya.
-
-- **Fix UNIQUE Constraint Error**: Memperbaiki error `IntegrityError: UNIQUE constraint failed: purchases.number` saat memproses PO menjadi Pembelian. Masalah disebabkan karena nomor PO terbawa ke form Pembelian baru. Sekarang `createOrderManager` akan mengosongkan kolom nomor jika mendeteksi mode `from_po`, sehingga backend akan men-generate nomor faktur baru yang unik.
-- **Improved OrderManager Logic**: Memperbaiki konversi nominal diskon/tax dari database menjadi persentase di UI agar perhitungan Grand Total tetap akurat saat mengedit atau memproses draft/PO.
-
-- **Fix Alamat Cabang di PDF**: Memperbaiki logika `generatePurchaseHTML` di `js/print.js` agar selalu menampilkan alamat cabang yang memesan (requester) pada dokumen PO, dan alamat cabang tujuan pada dokumen Faktur Pembelian (fulfillment). Sebelumnya, PDF seringkali salah menampilkan alamat Pusat jika request ditujukan ke Pusat.
-- **PO Fulfillment Enhancement**: `catat-pembelian.html` sekarang otomatis menangkap `branch_id` dari PO asal dan menyimpannya sebagai `target_branch_id` pada faktur baru. Hal ini memungkinkan sistem untuk melacak tujuan pengiriman barang meskipun transaksi dicatat oleh admin di Pusat.
-
-- **Payment Restriction for Branch Requests**: Membatasi tombol "Bayar" pada `purchases.html`. Jika transaksi ditandai sebagai **📦 PO** (is_branch_request), maka tombol bayar hanya akan muncul bagi user di **Toko Pusat (ID 1)**. User Cabang tidak bisa membayar transaksi ini karena secara akuntansi Pusat-lah yang menalangi pembayarannya ke supplier.
-- **Automated PO Routing**: Halaman `po.html` sekarang otomatis mengarahkan permintaan ke Pusat (ID 1) jika diakses oleh Cabang, menyembunyikan pilihan target cabang untuk menyederhanakan alur kerja.
-
-- **Fix PO Finalization Logic**: Memperbaiki error "Hanya faktur draft yang bisa diedit" saat Pusat memproses permintaan (PO) dari cabang. Sekarang backend mengizinkan status `pending` untuk diupdate menjadi `paid` atau `draft` Pusat. Proses ini secara otomatis memindahkan kepemilikan faktur ke Pusat namun tetap mengirimkan stok ke cabang pemesan.
-- **Dashboard PO Badge**: Menambahkan notifikasi angka _real-time_ pada menu Pre-Order di `dashboard.html` untuk memberitahu Toko Utama jika ada permintaan baru dari cabang yang perlu diproses.
-
-#### 10 Mei 2026 (Finalisasi PO Workflow & Inter-Branch Accounting)
-
-- **Inter-Branch Accounting**: Berhasil mengimplementasikan pemisahan jurnal otomatis. Pusat menalangi pembayaran (`Mutasi Keluar`), Cabang menerima barang (`Mutasi Masuk`). Saldo kas Cabang tetap aman, sedangkan stok bertambah di gudang yang benar.
-- **Ownership & Routing**: Permintaan cabang otomatis diarahkan ke Pusat (ID 1). Saat Pusat memproses, `branch_id` faktur otomatis berpindah ke Pusat untuk keperluan administratif keuangan, namun `target_branch_id` tetap mencatat asal permintaan.
-- **UI Protection**: Menghilangkan tombol bayar bagi Cabang pada faktur bertanda **📦 PO** untuk mencegah kesalahan prosedur keuangan.
-- **Standardisasi**: Seluruh logika alur PO dan akuntansi antar-cabang telah didokumentasikan di `GEMINI.md` sebagai standar baku sistem.
-
 done
 BUG LOGIC (JANGAN RUBAH TAMPILAN APAPUN):
 Pembelian malah tercatat di cabang juga ketiika request PO, tapi ketika pusat acc di cabang hilang pembeliannya
@@ -783,3 +758,57 @@ Penjualan
 Bisa level harga dan level jumlah (kalo harga akir dibawah HPP otomatis harga normal berdasarkan lever jumlah)
 
 Perakitan
+
+BUG PEMBELIAN
+
+1. ketika sudah isi PPN di catat-pesanan, di catat-pembelian.html masih ke kunci
+2. ketika langsung isi di catat-pembelian purchase.html malah ga ke isi PPN nya
+
+BUG RETUR
+Ketika retur barang yang ada PPN, pastikan udh harga akhir itu versi gabungan dengan PPN
+
+
+
+function simulateScanner(barcodeText, speedMs = 10) {
+  let index = 0;
+
+  // Mengetik karakter satu per satu seperti scanner barcode
+  function typeNextChar() {
+    if (index < barcodeText.length) {
+      const char = barcodeText.charAt(index);
+
+      const event = new KeyboardEvent("keydown", {
+        key: char,
+        bubbles: true,
+        cancelable: true,
+      });
+
+      document.dispatchEvent(event);
+
+      index++;
+      setTimeout(typeNextChar, speedMs);
+    } else {
+      // Kirim Enter setelah seluruh barcode selesai diketik
+      const enterEvent = new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        cancelable: true,
+      });
+
+      document.dispatchEvent(enterEvent);
+
+      console.log(
+        `%c[Scanner Simulator] Berhasil scan: ${barcodeText}`,
+        "color: #10b981; font-weight: bold;"
+      );
+    }
+  }
+
+  console.log(
+    `%c[Scanner Simulator] Mulai scan: ${barcodeText}...`,
+    "color: #3b82f6;"
+  );
+
+  typeNextChar();
+}
+

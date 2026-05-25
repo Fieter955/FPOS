@@ -184,3 +184,72 @@ def create_salesperson(
     db.commit()
     db.refresh(obj)
     return obj
+
+
+# ─── PURCHASE HISTORY & VALIDATION FOR RETURNS ────────────────────────────────
+
+@router.get("/{sid}/purchased-items")
+def get_supplier_purchased_items(
+    sid: int,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user)
+):
+    """
+    Mengambil daftar unik item yang PERNAH dibeli dari supplier ini.
+    Digunakan untuk validasi retur manual agar user tidak meretur barang yang tidak pernah dibeli.
+    """
+    items = db.query(models.Item).join(models.PurchaseItem).join(models.Purchase).filter(
+        models.Purchase.supplier_id == sid,
+        models.Purchase.status.in_(["unpaid", "paid", "partial"])
+    ).distinct().all()
+    
+    return [
+        {"id": i.id, "code": i.code, "name": i.name, "barcode": i.barcode} 
+        for i in items
+    ]
+
+
+@router.get("/{sid}/items/{iid}/history")
+def get_supplier_item_purchase_history(
+    sid: int,
+    iid: int,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user)
+):
+    """
+    Mengambil riwayat harga beli item tertentu dari supplier tertentu.
+    Membantu user menentukan harga retur berdasarkan faktur lama.
+    """
+    history = db.query(
+        models.Purchase.id, # 👈 TAMBAHKAN ID
+        models.Purchase.number,
+        models.Purchase.date,
+        models.PurchaseItem.qty_received,
+        models.PurchaseItem.buy_price,
+        models.Purchase.tax_percent
+    ).join(models.PurchaseItem, models.Purchase.id == models.PurchaseItem.purchase_id).filter(
+        models.Purchase.supplier_id == sid,
+        models.PurchaseItem.item_id == iid,
+        models.Purchase.status.in_(["unpaid", "paid", "partial"])
+    ).order_by(models.Purchase.date.desc()).all()
+    
+    # Hitung qty_available untuk tiap faktur (qty - yang sudah diretur)
+    results = []
+    from sqlalchemy import func
+    for h in history:
+        returned_qty = db.query(func.sum(models.PurchaseReturnItem.qty)).join(models.PurchaseReturn).filter(
+            models.PurchaseReturn.purchase_id == h.id,
+            models.PurchaseReturnItem.item_id == iid
+        ).scalar() or 0.0
+        
+        results.append({
+            "purchase_id": h.id,
+            "number": h.number,
+            "date": h.date.isoformat() if h.date else None,
+            "qty": h.qty_received,
+            "qty_available": h.qty_received - returned_qty,
+            "price": h.buy_price,
+            "tax_percent": h.tax_percent
+        })
+    
+    return results

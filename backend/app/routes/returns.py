@@ -78,7 +78,9 @@ def get_purchase_history_items(
             "purchase_date": str(it.purchase.date),
             "purchase_id": it.purchase_id,
             "purchase_number": it.purchase.number,
-            "supplier_name": it.purchase.supplier.name if it.purchase.supplier else "-"
+            "supplier_name": it.purchase.supplier.name if it.purchase.supplier else "-",
+            "is_tax_included": it.purchase.is_tax_included,
+            "tax_percent": it.purchase.tax_percent
         })
     return result
 
@@ -140,7 +142,9 @@ def get_sale_history_items(
             "sale_date": str(it.sale.date),
             "sale_id": it.sale_id,
             "sale_number": it.sale.number,
-            "customer_name": it.sale.customer.name if it.sale.customer else "Umum"
+            "customer_name": it.sale.customer.name if it.sale.customer else "Umum",
+            "is_tax_included": it.sale.is_tax_included,
+            "tax_percent": it.sale.tax_percent
         })
     return result
 
