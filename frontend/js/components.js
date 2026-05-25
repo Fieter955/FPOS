@@ -933,12 +933,19 @@ async function createOrderManager(containerId, config = {}) {
         ? (initialData.discount / initialData.subtotal) * 100
         : initialData.discount || 0;
     const taxPct =
-      initialData.subtotal - initialData.discount > 0
-        ? (initialData.tax / (initialData.subtotal - initialData.discount)) *
-          100
-        : initialData.tax || 0;
-    if (discInput) discInput.value = discPct.toFixed(2);
-    if (taxInput) taxInput.value = taxPct.toFixed(2);
+      initialData.tax_percent !== undefined && initialData.tax_percent !== 0
+        ? initialData.tax_percent
+        : initialData.subtotal - initialData.discount > 0
+          ? (initialData.tax / (initialData.subtotal - initialData.discount)) *
+            100
+          : initialData.tax || 0;
+
+    const fmtPct = (v) =>
+      v % 1 === 0 ? v.toString() : parseFloat(v.toFixed(2)).toString();
+
+    if (discInput) discInput.value = fmtPct(discPct);
+    if (taxInput) taxInput.value = fmtPct(taxPct);
+
     if (initialData.supplier_id && supplierCombo)
       supplierCombo.set(
         initialData.supplier_id,
@@ -950,6 +957,7 @@ async function createOrderManager(containerId, config = {}) {
     } else {
       document.getElementById("om-tax-inc").checked = true;
     }
+    recalc(); // Ensure grand total is updated after loading percentages
   }
 
   return {

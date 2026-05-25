@@ -79,3 +79,69 @@ def delete_customer(cid: int, db: Session = Depends(get_db), _=Depends(get_curre
     obj.is_active = False
     db.commit()
     return {"message": "Pelanggan dinonaktifkan"}
+
+
+@router.get("/{cid}/sold-items")
+def get_customer_sold_items(
+    cid: int,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user)
+):
+    """
+    Mengambil daftar unik item yang PERNAH dibeli oleh customer ini.
+    Digunakan untuk validasi retur manual agar user tidak meretur barang yang tidak pernah dibeli.
+    """
+    items = db.query(models.Item).join(models.SaleItem).join(models.Sale).filter(
+        models.Sale.customer_id == cid,
+        models.Sale.status != "cancelled"
+    ).distinct().all()
+
+    return [
+        {"id": i.id, "code": i.code, "name": i.name, "barcode": i.barcode}
+        for i in items
+    ]
+
+
+@router.get("/{cid}/items/{iid}/history")
+def get_customer_item_sale_history(
+    cid: int,
+    iid: int,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user)
+):
+    """
+    Mengambil riwayat harga jual item tertentu kepada customer tertentu.
+    Membantu user menentukan harga retur berdasarkan faktur lama.
+    """
+    history = db.query(
+        models.Sale.id,
+        models.Sale.number,
+        models.Sale.date,
+        models.SaleItem.qty,
+        models.SaleItem.sell_price,
+        models.Sale.tax_percent
+    ).join(models.SaleItem, models.Sale.id == models.SaleItem.sale_id).filter(
+        models.Sale.customer_id == cid,
+        models.SaleItem.item_id == iid,
+        models.Sale.status != "cancelled"
+    ).order_by(models.Sale.date.desc()).all()
+
+    results = []
+    from sqlalchemy import func
+    for h in history:
+        returned_qty = db.query(func.sum(models.SaleReturnItem.qty)).join(models.SaleReturn).filter(
+            models.SaleReturn.sale_id == h.id,
+            models.SaleReturnItem.item_id == iid
+        ).scalar() or 0.0
+        
+        results.append({
+            "purchase_id": h.id, # Mapping to same key as purchase for frontend consistency
+            "number": h.number,
+            "date": h.date.isoformat() if h.date else None,
+            "qty": h.qty,
+            "qty_available": h.qty - returned_qty,
+            "price": h.sell_price,
+            "tax_percent": h.tax_percent
+        })
+    
+    return results

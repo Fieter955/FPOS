@@ -767,15 +767,13 @@ BUG PEMBELIAN
 BUG RETUR
 Ketika retur barang yang ada PPN, pastikan udh harga akhir itu versi gabungan dengan PPN
 
-
-
 function simulateScanner(barcodeText, speedMs = 10) {
-  let index = 0;
+let index = 0;
 
-  // Mengetik karakter satu per satu seperti scanner barcode
-  function typeNextChar() {
-    if (index < barcodeText.length) {
-      const char = barcodeText.charAt(index);
+// Mengetik karakter satu per satu seperti scanner barcode
+function typeNextChar() {
+if (index < barcodeText.length) {
+const char = barcodeText.charAt(index);
 
       const event = new KeyboardEvent("keydown", {
         key: char,
@@ -802,13 +800,20 @@ function simulateScanner(barcodeText, speedMs = 10) {
         "color: #10b981; font-weight: bold;"
       );
     }
-  }
 
-  console.log(
-    `%c[Scanner Simulator] Mulai scan: ${barcodeText}...`,
-    "color: #3b82f6;"
-  );
-
-  typeNextChar();
 }
 
+console.log(
+`%c[Scanner Simulator] Mulai scan: ${barcodeText}...`,
+"color: #3b82f6;"
+);
+
+typeNextChar();
+}
+
+BUG:
+Purcahse.html
+menu pesan pembelian dan catat pembelian kolom terima nya selalu dianggap 0
+
+catat-pembelian.html
+barang yang diprposes ga otomatis ke update PPN nya, kalo di setting PPN di catat pembelian ga ngaruh dan kolom terima barangnya selalu dianggap 0

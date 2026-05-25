@@ -16,8 +16,9 @@ ACCOUNT_SALDO_CUSTOMER = "2-1300"
 ACCOUNT_TRANSFER_CLEARING = "3-2000"
 ACCOUNT_TRANSFER_IN = "3-2100"
 ACCOUNT_TRANSFER_OUT = "3-2200"
-ACCOUNT_SALES = "4-1000"
-ACCOUNT_COGS = "5-1000"
+ACCOUNT_SALES = "4-1100"
+ACCOUNT_SALES_RETURN = "4-1200"
+ACCOUNT_COGS = "5-1100"
 ACCOUNT_TAX_EXPENSE = "5-2000" # Beban Pajak
 
 
@@ -248,7 +249,7 @@ def create_sale_return_journal(db: Session, *, date_val: date, number_ref: str,
     
     entries = [
         {"code": ACCOUNT_SALDO_CUSTOMER, "debit": 0, "credit": total_to_customer},
-        {"code": ACCOUNT_SALES, "debit": total_sales, "credit": 0},
+        {"code": ACCOUNT_SALES_RETURN, "debit": total_sales, "credit": 0},
         # Kembalikan stok
         {"code": ACCOUNT_INVENTORY, "debit": total_cogs, "credit": 0},
         {"code": ACCOUNT_COGS, "debit": 0, "credit": total_cogs}

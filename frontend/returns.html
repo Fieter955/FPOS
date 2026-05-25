@@ -231,7 +231,7 @@
 
     <!-- Modal Form Retur Manual -->
     <div class="modal-overlay" id="mManualReturn">
-      <div class="modal-box" style="max-width: 800px; width: 95%">
+      <div class="modal-box" style="max-width: 80vw; width: 80vw">
         <div class="modal-hdr">
           <h2 id="mManualReturnTitle">Buat Retur Pembelian</h2>
           <button class="btn-x" onclick="closeModal('mManualReturn')">×</button>
@@ -250,8 +250,16 @@
               <div id="mManualEntityCombo"></div>
             </div>
             <div class="input-group">
-              <label id="lblManualItemSearch">Cari Barang (Scan / Ketik) *</label>
-              <input type="text" id="mManualItemSearch" class="input-control" placeholder="Pilih supplier dulu..." disabled />
+              <label id="lblManualItemSearch"
+                >Cari Barang (Scan / Ketik) *</label
+              >
+              <input
+                type="text"
+                id="mManualItemSearch"
+                class="input-control"
+                placeholder="Pilih supplier dulu..."
+                disabled
+              />
             </div>
           </div>
 
@@ -304,7 +312,9 @@
                   <th>Nama Barang</th>
                   <th style="width: 80px; text-align: center">Sisa</th>
                   <th style="width: 100px; text-align: center">Qty Retur</th>
-                  <th style="width: 120px; text-align: right">Harga</th>
+                  <th style="width: 120px; text-align: right">Harga Dasar</th>
+                  <th style="width: 80px; text-align: center">PPN (%)</th>
+                  <th style="width: 120px; text-align: right">Harga + PPN</th>
                   <th style="width: 120px; text-align: right">Total</th>
                   <th style="width: 40px"></th>
                 </tr>
@@ -492,8 +502,10 @@
               `/suppliers/${entity.id}/purchased-items`,
             );
           } else {
-            // Untuk penjualan, sementara list semua barang (atau implementasikan backend serupa)
-            mManualValidItems = await api("GET", "/items/?limit=1000");
+            mManualValidItems = await api(
+              "GET",
+              `/customers/${entity.id}/sold-items`,
+            );
           }
           hideLoading();
         } catch (ex) {
@@ -537,6 +549,11 @@
       }
 
       async function addManualReturnRow(item) {
+        if (!item) {
+          document.getElementById("mManualItemSearch").focus();
+          return;
+        }
+
         const body = document.getElementById("mManualGridBody");
 
         // Cek jika sudah ada
@@ -550,7 +567,6 @@
           return;
         }
 
-        const idx = body.children.length;
         const row = document.createElement("tr");
         row.dataset.itemId = item.id;
         row.innerHTML = `
@@ -563,31 +579,38 @@
           <td><input type="number" class="input-control row-qty" value="1" style="text-align: center" oninput="calculateManualReturnTotal()" /></td>
           <td style="text-align: right">
             <div style="display:flex; align-items:center; gap:4px; justify-content:flex-end">
-                <input type="number" class="input-control row-price-inp" value="0" style="text-align:right; width:90px; padding:4px" oninput="calculateManualReturnTotal()" />
+                <input type="number" class="input-control row-price-awal" value="0" style="text-align:right; width:90px; padding:4px" oninput="calculateManualReturnTotal()" />
                 <button class="btn" onclick="showPriceHistory(${item.id}, this)" style="padding:4px; background:var(--bg-color); border:1px solid var(--border-color)" title="Cari Faktur">📜</button>
             </div>
           </td>
+          <td style="text-align: center"><input type="number" class="input-control row-ppn" value="0" style="text-align: center; width:60px; padding:4px" oninput="calculateManualReturnTotal()" /></td>
+          <td style="text-align: right"><input type="number" class="input-control row-price-akhir" value="0" style="text-align:right; width:100px; padding:4px; background:var(--bg-color)" readonly /></td>
           <td style="text-align: right; font-weight: 700" class="row-total">Rp 0</td>
           <td><button class="btn" style="color:var(--danger); background:transparent; padding:0" onclick="this.closest('tr').remove(); calculateManualReturnTotal()">✕</button></td>
         `;
         body.appendChild(row);
 
-        // Auto-fetch history and pick latest if purchase
-        if (mManualMode === "purchase") {
-          try {
-            const history = await api(
-              "GET",
-              `/suppliers/${mManualSelectedEntity.id}/items/${item.id}/history`,
-            );
-            if (history && history.length > 0) {
-              const latest = history[0];
-              row.querySelector(".row-price-inp").value = latest.price;
-              row.querySelector(".row-avail").textContent =
-                latest.qty_available;
-              row.querySelector(".row-factur-info").textContent = latest.number;
-              row.dataset.purchaseId = latest.purchase_id;
-            }
-          } catch (e) {}
+        // Auto-fetch history and pick latest
+        try {
+          const endpoint =
+            mManualMode === "purchase"
+              ? `/suppliers/${mManualSelectedEntity.id}/items/${item.id}/history`
+              : `/customers/${mManualSelectedEntity.id}/items/${item.id}/history`;
+
+          console.log("Fetching history from:", endpoint);
+          const history = await api("GET", endpoint);
+          console.log("History received:", history);
+
+          if (history && history.length > 0) {
+            const latest = history[0];
+            row.querySelector(".row-price-awal").value = latest.price;
+            row.querySelector(".row-ppn").value = latest.tax_percent || 0;
+            row.querySelector(".row-avail").textContent = latest.qty_available;
+            row.querySelector(".row-factur-info").textContent = latest.number;
+            row.dataset.purchaseId = latest.purchase_id;
+          }
+        } catch (e) {
+          console.error("Gagal autofill riwayat:", e);
         }
 
         calculateManualReturnTotal();
@@ -598,38 +621,21 @@
         const row = btn.closest("tr");
         showLoading("Mengambil riwayat harga...");
         try {
-          let history = [];
-          if (mManualMode === "purchase") {
-            history = await api(
-              "GET",
-              `/suppliers/${mManualSelectedEntity.id}/items/${itemId}/history`,
-            );
-          } else {
-            // Untuk penjualan, ambil dari /returns/history/sales filter entity & item
-            const allHistory = await api(
-              "GET",
-              `/returns/history/sales?customer_id=${mManualSelectedEntity.id}`,
-            );
-            history = allHistory
-              .filter((h) => h.item_id === itemId)
-              .map((h) => ({
-                purchase_id: h.sale_id,
-                number: h.sale_number,
-                date: h.sale_date,
-                qty: h.qty_sold,
-                qty_available: h.qty_available,
-                price: h.sell_price,
-              }));
-          }
+          const endpoint =
+            mManualMode === "purchase"
+              ? `/suppliers/${mManualSelectedEntity.id}/items/${itemId}/history`
+              : `/customers/${mManualSelectedEntity.id}/items/${itemId}/history`;
+
+          const history = await api("GET", endpoint);
           hideLoading();
 
-          if (history.length === 0)
+          if (!history || history.length === 0)
             return showToast("Tidak ada riwayat transaksi.", "warning");
 
           const listHtml = history
             .map(
               (h) => `
-                <div onclick="selectPrice(this, ${h.purchase_id}, ${h.price}, '${h.number}', ${h.qty_available})" 
+                <div onclick="selectPrice(this, ${h.purchase_id}, ${h.price}, '${h.number}', ${h.qty_available}, ${h.tax_percent || 0})" 
                      style="padding:10px; border-bottom:1px solid var(--border-color); cursor:pointer"
                      onmouseover="this.style.background='rgba(0,0,0,0.05)'"
                      onmouseout="this.style.background='transparent'">
@@ -637,7 +643,7 @@
                         <strong>${h.number}</strong>
                         <span style="color:var(--primary); font-weight:700">${fmtRp(h.price)}</span>
                     </div>
-                    <div style="font-size:11px; color:var(--text-muted)">Tgl: ${fmtDate(h.date)} | Sisa: ${h.qty_available} / ${h.qty}</div>
+                    <div style="font-size:11px; color:var(--text-muted)">Tgl: ${fmtDate(h.date)} | Sisa: ${h.qty_available} / ${h.qty} | PPN: ${h.tax_percent || 0}%</div>
                 </div>
               `,
             )
@@ -662,14 +668,16 @@
           document.body.appendChild(div);
 
           // Helper function global agar bisa dipanggil dari HTML string
-          window.selectPrice = (el, pid, price, num, avail) => {
-            row.querySelector(".row-price-inp").value = price;
+          window.selectPrice = (el, pid, price, num, avail, taxPercent) => {
+            row.querySelector(".row-price-awal").value = price;
+            row.querySelector(".row-ppn").value = taxPercent || 0;
             row.querySelector(".row-avail").textContent = avail;
             row.querySelector(".row-factur-info").textContent = num;
             row.dataset.purchaseId = pid;
 
             // Pastikan qty retur tidak melebihi sisa faktur yang baru dipilih
-            let currentQty = parseFloat(row.querySelector(".row-qty").value) || 0;
+            let currentQty =
+              parseFloat(row.querySelector(".row-qty").value) || 0;
             if (currentQty > avail) {
               row.querySelector(".row-qty").value = avail;
             }
@@ -687,9 +695,14 @@
         let grand = 0;
         document.querySelectorAll("#mManualGridBody tr").forEach((row) => {
           const qty = parseFloat(row.querySelector(".row-qty").value) || 0;
-          const price =
-            parseFloat(row.querySelector(".row-price-inp").value) || 0;
-          const total = qty * price;
+          const priceAwal =
+            parseFloat(row.querySelector(".row-price-awal").value) || 0;
+          const ppn = parseFloat(row.querySelector(".row-ppn").value) || 0;
+
+          const priceAkhir = priceAwal + (priceAwal * ppn) / 100;
+          row.querySelector(".row-price-akhir").value = priceAkhir;
+
+          const total = qty * priceAkhir;
           row.querySelector(".row-total").textContent = fmtRp(total);
           grand += total;
         });
@@ -714,6 +727,9 @@
           const itemId = row.dataset.itemId;
           const pid = row.dataset.purchaseId;
           const qty = parseFloat(row.querySelector(".row-qty").value) || 0;
+          const priceAwal =
+            parseFloat(row.querySelector(".row-price-awal").value) || 0;
+          const ppn = parseFloat(row.querySelector(".row-ppn").value) || 0;
           const avail =
             parseFloat(row.querySelector(".row-avail").textContent) || 0;
 
@@ -726,14 +742,22 @@
             );
             return;
           }
-          if (row.querySelector(".row-avail").textContent !== "-" && qty > avail) {
+          if (
+            row.querySelector(".row-avail").textContent !== "-" &&
+            qty > avail
+          ) {
             hasError = true;
             showToast("Qty retur melebihi sisa tersedia di faktur", "error");
             return;
           }
 
           if (!groups[pid]) groups[pid] = [];
-          groups[pid].push({ item_id: parseInt(itemId), qty: qty });
+          groups[pid].push({
+            item_id: parseInt(itemId),
+            qty: qty,
+            price: priceAwal,
+            tax_percent: ppn,
+          });
         });
 
         if (hasError) return;
@@ -747,6 +771,7 @@
               date: document.getElementById("mManualDate").value,
               reason: document.getElementById("mManualReason").value,
               items: groups[pid],
+              is_tax_included: false, // UI hitung manual (Dasar + PPN)
             };
             if (mManualMode === "purchase") payload.purchase_id = parseInt(pid);
             else payload.sale_id = parseInt(pid);
@@ -899,14 +924,20 @@
         const notes = document.getElementById("mReturnNotes").value;
         const type = currentTab; // sales or purchase
 
+        const isSales = type === "sales";
+        const basePrice = isSales ? activeItem.sell_price : activeItem.buy_price;
+
         const payload = {
           date: new Date().toISOString().split("T")[0],
           reason: reason,
           notes: notes,
+          is_tax_included: activeItem.is_tax_included,
+          tax_percent: activeItem.tax_percent || 0,
           items: [
             {
               item_id: activeItem.item_id,
               qty: qty,
+              price: basePrice,
             },
           ],
         };

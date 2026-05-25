@@ -217,7 +217,7 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
 
     retur = models.SaleReturn(
         number=number,
-        date=data.get("date", str(date.today())),
+        date=get_local_date(),
         sale_id=sale_id,
         tax_percent=tax_percent,
         is_tax_included=is_tax_included,
@@ -247,7 +247,11 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
         if total_prev + it["qty"] > sale_item.qty:
             raise HTTPException(400, f"Qty retur {item.name} melebihi qty terjual ({sale_item.qty - total_prev} tersisa)")
 
-        line_sales = it["qty"] * sale_item.sell_price
+        # Prioritaskan harga dari frontend jika ada
+        input_price = it.get("price")
+        actual_price = input_price if input_price is not None else sale_item.sell_price
+
+        line_sales = it["qty"] * actual_price
         total_sales += line_sales
         
         line_tax = 0.0
@@ -260,7 +264,7 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
 
         db.add(models.SaleReturnItem(
             return_id=retur.id, item_id=it["item_id"],
-            qty=it["qty"], price=sale_item.sell_price, total=line_sales + line_tax
+            qty=it["qty"], price=actual_price, total=line_sales + line_tax
         ))
 
         # Kembalikan stok
@@ -275,7 +279,7 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
             from .warehouse import adjust_warehouse_stock
             adjust_warehouse_stock(db, gudang_aktif.id, stock_item.id, required_qty)
         db.add(models.StockMovement(
-            date=data.get("date", str(date.today())),
+            date=get_local_date(),
             item_id=stock_item.id,
             branch_id=sale.branch_id,
             type="in",
@@ -393,7 +397,11 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
         if not pur_item:
             raise HTTPException(400, f"Item {item.name} tidak ada di pembelian ini")
 
-        line_inventory = it["qty"] * pur_item.buy_price
+        # Prioritaskan harga dari frontend jika ada
+        input_price = it.get("price")
+        actual_price = input_price if input_price is not None else pur_item.buy_price
+
+        line_inventory = it["qty"] * actual_price
         total_inventory += line_inventory
         
         line_tax = 0.0
@@ -403,7 +411,7 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
 
         db.add(models.PurchaseReturnItem(
             return_id=retur.id, item_id=it["item_id"],
-            qty=it["qty"], price=pur_item.buy_price, total=line_inventory + line_tax
+            qty=it["qty"], price=actual_price, total=line_inventory + line_tax
         ))
         
         # ... rest of stock reduction logic ...
