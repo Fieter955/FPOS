@@ -1703,6 +1703,18 @@ def setup_initial_balance(
             branch_id=b_id,
         )
 
+    # 7. Pastikan pelanggan 'Umum' tersedia
+    umum_cust = db.query(models.Customer).filter(func.lower(models.Customer.name) == "umum").first()
+    if not umum_cust:
+        new_umum = models.Customer(
+            code="CUST-UMUM",
+            name="Umum",
+            phone="-",
+            is_active=True
+        )
+        db.add(new_umum)
+        db.flush()
+
     # 6. Kunci Cabang agar tidak bisa di-setup dua kali
     # 🔥 FIX: Pastikan nama kolom sesuai dengan models.py (is_setup_complete)
     branch.is_setup_complete = True

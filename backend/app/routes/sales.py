@@ -6,6 +6,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import Optional
 from datetime import datetime, date
 import pytz
@@ -177,6 +178,21 @@ def create_sale(
     change      = max(0, data.paid - total)
     status      = "paid" if data.paid >= total else ("partial" if data.paid > 0 else "unpaid")
 
+    # ── Resolve Customer 'Umum' if empty ──────────────────────────────────────
+    customer_id = data.customer_id
+    if not customer_id:
+        umum = db.query(models.Customer).filter(func.lower(models.Customer.name) == "umum").first()
+        if not umum:
+            umum = models.Customer(
+                code="CUST-UMUM",
+                name="Umum",
+                phone="-",
+                is_active=True
+            )
+            db.add(umum)
+            db.flush()
+        customer_id = umum.id
+
     # ── Simpan Header Sale ────────────────────────────────────────────────────
     sale = models.Sale(
         number=number,
@@ -185,7 +201,7 @@ def create_sale(
         created_at=local_datetime,
         created_by=current_user.id,
         shift_id=active_shift.id,
-        customer_id=data.customer_id,
+        customer_id=customer_id,
         salesperson_id=data.salesperson_id,
         subtotal=subtotal,
         discount=disc_amount,
