@@ -149,6 +149,46 @@ def get_sale_history_items(
     return result
 
 
+@router.get("/history/broken")
+def get_broken_history_items(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Mengambil daftar barang yang rusak/broken dari transaksi Tukar Tambah.
+    Ini nantinya bisa diproses untuk retur ke supplier.
+    """
+    query = db.query(models.TradeInReturnItem).join(models.TradeIn).filter(
+        models.TradeInReturnItem.condition != 'good'
+    )
+    
+    if current_user.active_branch_id:
+        query = query.filter(models.TradeIn.branch_id == current_user.active_branch_id)
+        
+    items = query.order_by(models.TradeIn.date.desc()).all()
+    
+    result = []
+    for it in items:
+        result.append({
+            "item_id": it.item_id,
+            "item": {
+                "id": it.item_id,
+                "name": it.item.name,
+                "code": it.item.code,
+                "barcode": it.item.barcode,
+            },
+            "return_price": it.return_price,
+            "qty": it.qty,
+            "qty_available": it.qty, # Sementara anggap semua tersedia untuk diretur ke supplier
+            "condition": it.condition,
+            "date": str(it.trade_in.date),
+            "trade_in_id": it.trade_in_id,
+            "trade_in_number": it.trade_in.number,
+            "customer_name": it.trade_in.customer.name if it.trade_in.customer else "Umum"
+        })
+    return result
+
+
 def _next_number(db, prefix, model):
     from datetime import date as d
     today = d.today().strftime("%Y%m%d")

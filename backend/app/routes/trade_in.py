@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from ..database import get_db
 from ..auth import get_current_user, write_audit
 from .. import models
+from .accounting import create_auto_journal, resolve_active_branch_id
 
 router = APIRouter()
 
@@ -47,9 +48,11 @@ class NewItemIn(BaseModel):
 
 class TradeInCreate(BaseModel):
     date: date
-    customer_id: Optional[int] = None
+    customer_id: int  # Mandatory
     notes: Optional[str] = None
     payment_method: str = "cash"
+    cash_amount: float = 0
+    bank_amount: float = 0
     return_items: List[ReturnItemIn]
     new_items: List[NewItemIn]
 
@@ -119,8 +122,15 @@ def create_trade_in(
     if not data.return_items and not data.new_items:
         raise HTTPException(400, "Harus ada barang yang dikembalikan atau diambil")
 
+    customer = db.query(models.Customer).get(data.customer_id)
+    if not customer:
+        raise HTTPException(404, "Pelanggan wajib dipilih")
+
+    b_id = resolve_active_branch_id(db, current_user)
+
     # Validasi & hitung subtotal barang kembali
     return_subtotal = 0.0
+    total_modal_return = 0.0
     for ri in data.return_items:
         item = db.query(models.Item).get(ri.item_id)
         if not item:
@@ -130,9 +140,13 @@ def create_trade_in(
         if ri.return_price < 0:
             raise HTTPException(400, f"Harga retur {item.name} tidak boleh negatif")
         return_subtotal += ri.qty * ri.return_price
+        # Modal return tetap dicatat untuk inventory, tapi jurnal menggunakan return_price? 
+        # Sesuai rencana: Debit Inventory senilai return_price (karena itu nilai 'beli' dari pelanggan)
+        # Jadi total_modal_return tidak terlalu kritikal untuk jurnal tapi ri.qty * ri.return_price yang dipakai.
 
     # Validasi & hitung subtotal barang baru
     new_subtotal = 0.0
+    total_modal_new = 0.0
     for ni in data.new_items:
         item = db.query(models.Item).get(ni.item_id)
         if not item:
@@ -142,9 +156,10 @@ def create_trade_in(
         if item.stock < ni.qty:
             raise HTTPException(400, f"Stok {item.name} tidak cukup ({item.stock} tersedia)")
         new_subtotal += ni.qty * ni.sell_price
+        total_modal_new += ni.qty * (item.buy_price or 0)
 
     # difference > 0: pelanggan harus bayar
-    # difference < 0: toko kembalikan uang ke pelanggan
+    # difference < 0: toko kembalikan uang ke pelanggan (masuk saldo)
     difference = new_subtotal - return_subtotal
 
     number = next_trade_in_number(db)
@@ -158,9 +173,14 @@ def create_trade_in(
         new_subtotal=new_subtotal,
         difference=difference,
         created_by=current_user.id,
+        branch_id=b_id,
     )
     db.add(trade)
     db.flush()
+
+    # Update Saldo Pelanggan jika Toko kembalikan uang
+    if difference < 0:
+        customer.deposit_balance += abs(difference)
 
     # Proses barang yang dikembalikan → tambah ke stok
     for ri in data.return_items:
@@ -177,7 +197,7 @@ def create_trade_in(
         before = item.stock
         item.stock += ri.qty
         db.add(models.StockMovement(
-            branch_id=current_user.active_branch_id,
+            branch_id=b_id,
             date=data.date, item_id=item.id,
             type="in", qty=ri.qty,
             qty_before=before, qty_after=item.stock,
@@ -198,17 +218,51 @@ def create_trade_in(
         before = item.stock
         item.stock -= ni.qty
         db.add(models.StockMovement(
-            branch_id=current_user.active_branch_id,
+            branch_id=b_id,
             date=data.date, item_id=item.id,
             type="out", qty=ni.qty,
             qty_before=before, qty_after=item.stock,
             reference=number, notes="Tukar tambah - barang keluar"
         ))
 
+    # AKUNTANSI: Jurnal Otomatis
+    entries = []
+    # 1. Penjualan & Modal Barang Baru
+    if new_subtotal > 0:
+        entries.append({"code": "4-1100", "debit": 0, "credit": new_subtotal})  # Penjualan
+        entries.append({"code": "1-1400", "debit": 0, "credit": total_modal_new}) # Stok Keluar
+        entries.append({"code": "5-1100", "debit": total_modal_new, "credit": 0}) # HPP
+
+    # 2. Barang Kembali (Nilai Terima & Stok Masuk)
+    if return_subtotal > 0:
+        entries.append({"code": "1-1400", "debit": return_subtotal, "credit": 0}) # Stok Masuk (Nilai Terima)
+
+    # 3. Pembayaran (Kas/Bank) atau Saldo (Refund)
+    if difference > 0:
+        # Pelanggan bayar selisih
+        if data.cash_amount > 0:
+            entries.append({"code": "1-1100", "debit": data.cash_amount, "credit": 0})
+        if data.bank_amount > 0:
+            entries.append({"code": "1-1200", "debit": data.bank_amount, "credit": 0})
+        # Jika ada sisa selisih yang belum teralokasi (misal lupa input), masukkan ke kas
+        alokasi = data.cash_amount + data.bank_amount
+        if alokasi < difference:
+            entries.append({"code": "1-1100", "debit": difference - alokasi, "credit": 0})
+    elif difference < 0:
+        # Toko kembalikan uang (Masuk Saldo Pelanggan)
+        entries.append({"code": "2-1200", "debit": 0, "credit": abs(difference)}) # Hutang/Deposit Pelanggan
+
+    if entries:
+        create_auto_journal(
+            db=db, date_val=data.date, number_ref=number,
+            description=f"Tukar tambah {number} - {customer.name}",
+            entries=entries, user_id=current_user.id, branch_id=b_id
+        )
+
     db.commit()
     write_audit(db, current_user.id, "CREATE", "trade_ins", trade.id,
                 f"Tukar tambah {number}: selisih Rp {abs(difference):,.0f} "
-                f"({'dibayar pelanggan' if difference > 0 else 'dikembalikan ke pelanggan'})")
+                f"({'dibayar pelanggan' if difference > 0 else 'masuk saldo pelanggan'})")
     db.commit()
 
     return {
@@ -217,7 +271,7 @@ def create_trade_in(
         "return_subtotal": return_subtotal,
         "new_subtotal": new_subtotal,
         "difference": difference,
-        "difference_label": "Pelanggan bayar" if difference > 0 else "Toko kembalikan uang",
+        "difference_label": "Pelanggan bayar" if difference > 0 else "Masuk saldo pelanggan",
         "message": f"Tukar tambah {number} berhasil diproses",
     }
 

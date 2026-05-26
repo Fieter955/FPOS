@@ -894,6 +894,7 @@ class TradeIn(Base):
     difference = Column(Float, default=0)  # positif = pelanggan bayar, negatif = toko kembalikan uang
     payment_method = Column(String(20), default="cash")
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     return_items = relationship("TradeInReturnItem", back_populates="trade_in",

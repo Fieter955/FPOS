@@ -4,6 +4,7 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Tukar Tambah - iPos 5.0</title>
 <link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/css/components.css">
 </head>
 <body>
 <div class="app-container"><main class="main-content">
@@ -27,7 +28,7 @@
   <div class="modal-hdr"><h2>🔄 Buat Transaksi Tukar Tambah</h2><button class="btn-x" onclick="closeModal('mBuat')">×</button></div>
   <div class="row2" style="margin-bottom:16px">
     <div class="input-group"><label>Tanggal *</label><input id="ttDate" type="date" class="input-control"></div>
-    <div class="input-group"><label>Pelanggan</label><select id="ttCust" class="input-control"><option value="">-- Umum / Tunai --</option></select></div>
+    <div class="input-group"><label>Pelanggan *</label><div id="custComboContainer"></div></div>
   </div>
 
   <!-- Barang Kembali -->
@@ -36,8 +37,8 @@
       <div style="font-size:16px;font-weight:800;color:#ef4444">📤 Barang Dikembalikan (dari pelanggan)</div>
       <button onclick="addReturnRow()" class="btn" style="padding:8px 14px;background:rgba(239,68,68,.15);color:#ef4444;border:none;border-radius:10px;font-weight:700;font-size:13px">+ Tambah</button>
     </div>
-    <div style="display:grid;grid-template-columns:3fr 1fr 2fr 36px;gap:8px;margin-bottom:6px;font-size:12px;font-weight:600;color:var(--text-muted)">
-      <span>Barang</span><span>Qty</span><span>Harga Kembali</span><span></span>
+    <div style="display:grid;grid-template-columns:3fr 1fr 2fr 1fr 36px;gap:8px;margin-bottom:6px;font-size:12px;font-weight:600;color:var(--text-muted)">
+      <span>Barang</span><span>Qty</span><span>Harga Kembali</span><span>Kondisi</span><span></span>
     </div>
     <div id="returnRows"></div>
     <div style="display:flex;justify-content:space-between;font-size:16px;font-weight:800;margin-top:12px;padding-top:10px;border-top:1px solid rgba(239,68,68,.2)">
@@ -62,17 +63,35 @@
     </div>
   </div>
 
-  <!-- Selisih -->
-  <div style="background:var(--primary-light);border:2px solid var(--primary);border-radius:14px;padding:16px;margin-bottom:16px;text-align:center" id="selisihBox">
-    <div style="font-size:14px;color:var(--text-muted);margin-bottom:6px">Selisih (+ = pelanggan tambah bayar, - = toko kembalikan uang)</div>
-    <div id="selisihVal" style="font-size:32px;font-weight:900;color:var(--primary)">Rp 0</div>
-    <div id="selisihLabel" style="font-size:14px;margin-top:4px;font-weight:700"></div>
+  <!-- Selisih & Pembayaran -->
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px">
+    <div style="background:var(--primary-light);border:2px solid var(--primary);border-radius:14px;padding:16px;text-align:center" id="selisihBox">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">TOTAL SELISIH</div>
+      <div id="selisihVal" style="font-size:32px;font-weight:900;color:var(--primary)">Rp 0</div>
+      <div id="selisihLabel" style="font-size:13px;margin-top:4px;font-weight:700"></div>
+    </div>
+    
+    <div id="paymentArea" style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:14px; padding:16px;">
+        <div id="payExtra" style="display:none">
+            <div style="font-weight:700; margin-bottom:8px; font-size:14px">Metode Pembayaran (Pelanggan Bayar)</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px">
+                <div class="input-group"><label>Tunai (Kas)</label><input type="text" id="payCash" class="input-control" placeholder="0" oninput="formatAndRecalc(this)"></div>
+                <div class="input-group"><label>Bank (Transfer)</label><input type="text" id="payBank" class="input-control" placeholder="0" oninput="formatAndRecalc(this)"></div>
+            </div>
+            <div id="payStatus" style="font-size:12px; font-weight:700; margin-top:4px; text-align:right"></div>
+        </div>
+        <div id="payRefund" style="display:none; height:100%; display:flex; flex-direction:column; justify-content:center; text-align:center">
+            <div style="font-size:24px; margin-bottom:4px">📥</div>
+            <div style="font-weight:800; color:var(--primary)">Refund ke Saldo Pelanggan</div>
+            <p style="font-size:12px; color:var(--text-muted)">Uang akan otomatis ditambahkan ke saldo deposit pelanggan.</p>
+        </div>
+    </div>
   </div>
 
   <div class="input-group"><label>Catatan</label><textarea id="ttNote" class="input-control" rows="2" placeholder="Keterangan transaksi tukar tambah..."></textarea></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px">
     <button onclick="closeModal('mBuat')" class="btn" style="background:var(--bg-color);border:1px solid var(--border-color);color:var(--text-main)">Batal</button>
-    <button onclick="simpan()" class="btn btn-primary">✓ Proses Tukar Tambah</button>
+    <button id="btnSimpan" onclick="simpan()" class="btn btn-primary">✓ Proses Tukar Tambah</button>
   </div>
 </div></div>
 
@@ -83,14 +102,19 @@
 </div></div>
 
 <script src="/js/api.js"></script><script src="/js/theme.js"></script>
+<script src="/js/components.js"></script>
 <script>
 requireAuth();
-let allItems=[], allCusts=[], retIdx=0, newIdx=0;
+let allItems=[], allCusts=[], retIdx=0, newIdx=0, custCombo=null;
 
 async function init(){
   [allItems,allCusts]=await Promise.all([api('GET','/items/?limit=500'),api('GET','/customers/?limit=300')]);
-  const sel=document.getElementById('ttCust');
-  allCusts.forEach(c=>sel.insertAdjacentHTML('beforeend',`<option value="${c.id}">${c.name}</option>`));
+  
+  custCombo = createPremiumCombo('custComboContainer', allCusts, {
+    placeholder: 'Pilih Pelanggan (Wajib)...',
+    onSelect: (sel) => { recalc(); }
+  });
+  
   load();
 }
 
@@ -102,11 +126,11 @@ async function load(){
       return`<tr>
         <td style="font-family:monospace;font-size:13px;font-weight:700;color:var(--primary)">${t.number}</td>
         <td style="font-size:13px">${fmtDate(t.date)}</td>
-        <td>${t.customer?.name||'Umum'}</td>
+        <td>${t.customer||'Umum'}</td>
         <td style="color:#ef4444;font-weight:700">${fmtRp(t.return_subtotal)}</td>
         <td style="color:#10b981;font-weight:700">${fmtRp(t.new_subtotal)}</td>
         <td><span style="font-size:16px;font-weight:900;color:${diff>=0?'var(--primary)':'#3b82f6'}">${diff>=0?'+':''} ${fmtRp(Math.abs(diff))}</span>
-          <div style="font-size:12px;color:var(--text-muted)">${diff>0?'Pelanggan bayar':diff<0?'Toko kembalikan':'Impas'}</div>
+          <div style="font-size:12px;color:var(--text-muted)">${diff>0?'Pelanggan bayar':diff<0?'Masuk Saldo':'Impas'}</div>
         </td>
         <td style="white-space:nowrap">
           <button class="bsm bv" onclick="showDetail(${t.id})">Detail</button>
@@ -123,10 +147,15 @@ function makeItemOpts(defId=''){
 function addReturnRow(){
   const idx=retIdx++;
   document.getElementById('returnRows').insertAdjacentHTML('beforeend',`
-    <div style="display:grid;grid-template-columns:3fr 1fr 2fr 36px;gap:8px;margin-bottom:8px;align-items:center" id="rrow${idx}">
+    <div style="display:grid;grid-template-columns:3fr 1fr 2fr 1fr 36px;gap:8px;margin-bottom:8px;align-items:center" id="rrow${idx}">
       <select class="input-control" style="margin:0;padding:10px 12px;font-size:14px" onchange="fillReturnPrice(${idx},this);recalc()">${makeItemOpts()}</select>
       <input type="number" value="1" min="1" class="input-control" style="margin:0;padding:10px;text-align:center;font-weight:700" oninput="recalc()">
       <input type="number" value="0" min="0" class="input-control rp" style="margin:0;padding:10px;font-size:14px" oninput="recalc()">
+      <select class="input-control condition-sel" style="margin:0;padding:10px;font-size:12px">
+        <option value="good">Bagus</option>
+        <option value="damaged">Rusak (Broken)</option>
+        <option value="partial">Parsial</option>
+      </select>
       <button onclick="document.getElementById('rrow${idx}').remove();recalc()" style="width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,.15);color:#ef4444;border:none;cursor:pointer;font-size:16px;font-weight:700">✕</button>
     </div>`);
 }
@@ -152,7 +181,7 @@ function fillNewPrice(idx,sel){
   recalc();
 }
 
-function sumRows(containerId, priceClass){
+function sumRows(containerId){
   let total=0;
   document.querySelectorAll(`#${containerId} > div`).forEach(row=>{
     const inputs=row.querySelectorAll('input[type=number]');
@@ -160,46 +189,118 @@ function sumRows(containerId, priceClass){
   });
   return total;
 }
+
+function toAngka(s){ return parseFloat(String(s).replace(/\./g,'').replace(',','.'))||0; }
+function toRibuan(n){ return (n||0).toLocaleString('id-ID'); }
+
+function formatAndRecalc(inp){
+    inp.value = toRibuan(toAngka(inp.value));
+    recalc();
+}
+
 function recalc(){
   const ret=sumRows('returnRows'), nw=sumRows('newRows');
   document.getElementById('returnTotal').textContent=fmtRp(ret);
   document.getElementById('newTotal').textContent=fmtRp(nw);
+  
   const diff=nw-ret;
   document.getElementById('selisihVal').textContent=(diff>=0?'+':'')+fmtRp(Math.abs(diff));
-  document.getElementById('selisihLabel').textContent=diff>0?'💰 Pelanggan perlu tambah bayar':diff<0?'💵 Toko kembalikan uang ke pelanggan':'✓ Impas';
+  document.getElementById('selisihLabel').textContent=diff>0?'💰 Pelanggan perlu tambah bayar':diff<0?'💵 Refund ke Saldo Pelanggan':'✓ Impas';
   document.getElementById('selisihVal').style.color=diff>=0?'var(--primary)':'#3b82f6';
+  
+  const payExtra = document.getElementById('payExtra');
+  const payRefund = document.getElementById('payRefund');
+  const payCash = document.getElementById('payCash');
+  const payBank = document.getElementById('payBank');
+  const btnSimpan = document.getElementById('btnSimpan');
+  const payStatus = document.getElementById('payStatus');
+
+  if(diff > 0){
+      payExtra.style.display = 'block';
+      payRefund.style.display = 'none';
+      
+      const c = toAngka(payCash.value), b = toAngka(payBank.value);
+      const totalPay = c + b;
+      const sisa = diff - totalPay;
+      
+      if(sisa > 0){
+          payStatus.textContent = `Kurang: ${fmtRp(sisa)}`;
+          payStatus.style.color = '#ef4444';
+          btnSimpan.disabled = true;
+          btnSimpan.style.opacity = '0.5';
+      } else if(sisa < 0){
+          payStatus.textContent = `Lebih: ${fmtRp(Math.abs(sisa))}`;
+          payStatus.style.color = 'var(--primary)';
+          btnSimpan.disabled = false;
+          btnSimpan.style.opacity = '1';
+      } else {
+          payStatus.textContent = '✓ Pas';
+          payStatus.style.color = '#10b981';
+          btnSimpan.disabled = false;
+          btnSimpan.style.opacity = '1';
+      }
+  } else if(diff < 0){
+      payExtra.style.display = 'none';
+      payRefund.style.display = 'flex';
+      btnSimpan.disabled = false;
+      btnSimpan.style.opacity = '1';
+  } else {
+      payExtra.style.display = 'none';
+      payRefund.style.display = 'none';
+      btnSimpan.disabled = false;
+      btnSimpan.style.opacity = '1';
+  }
 }
 
 const _origOM=openModal;
 window.openModal=function(id){
   if(id==='mBuat'){
     document.getElementById('ttDate').value=today();
-    document.getElementById('ttCust').value='';
+    if(custCombo) custCombo.clear();
     document.getElementById('ttNote').value='';
     document.getElementById('returnRows').innerHTML=''; retIdx=0;
     document.getElementById('newRows').innerHTML=''; newIdx=0;
+    document.getElementById('payCash').value = '';
+    document.getElementById('payBank').value = '';
     addReturnRow(); addNewRow(); recalc();
   }
   _origOM(id);
 };
 
 async function simpan(){
+  const custId = custCombo?.val();
+  if(!custId){ showToast('Pilih pelanggan dulu','warning'); return; }
+
   const returnItems=[], newItems=[];
   document.querySelectorAll('#returnRows > div').forEach(row=>{
     const sel=row.querySelector('select'); const inps=row.querySelectorAll('input[type=number]');
-    if(sel.value) returnItems.push({item_id:parseInt(sel.value),qty:parseFloat(inps[0]?.value)||1,return_price:parseFloat(inps[1]?.value)||0});
+    const cond = row.querySelector('.condition-sel').value;
+    if(sel.value) returnItems.push({
+        item_id:parseInt(sel.value),
+        qty:parseFloat(inps[0]?.value)||1,
+        return_price:parseFloat(inps[1]?.value)||0,
+        condition: cond
+    });
   });
   document.querySelectorAll('#newRows > div').forEach(row=>{
     const sel=row.querySelector('select'); const inps=row.querySelectorAll('input[type=number]');
-    if(sel.value) newItems.push({item_id:parseInt(sel.value),qty:parseFloat(inps[0]?.value)||1,sell_price:parseFloat(inps[1]?.value)||0});
+    if(sel.value) newItems.push({
+        item_id:parseInt(sel.value),
+        qty:parseFloat(inps[0]?.value)||1,
+        sell_price:parseFloat(inps[1]?.value)||0
+    });
   });
+  
   if(!returnItems.length&&!newItems.length){showToast('Tambahkan barang dulu','error');return;}
+  
   try{
     showLoading('Memproses...');
     await api('POST','/trade-in/',{
       date:document.getElementById('ttDate').value,
-      customer_id:parseInt(document.getElementById('ttCust').value)||null,
+      customer_id:parseInt(custId),
       notes:document.getElementById('ttNote').value||null,
+      cash_amount: toAngka(document.getElementById('payCash').value),
+      bank_amount: toAngka(document.getElementById('payBank').value),
       return_items:returnItems, new_items:newItems
     });
     hideLoading();showToast('Tukar tambah berhasil ✓');closeModal('mBuat');load();
@@ -219,19 +320,25 @@ async function showDetail(id){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
         <div style="background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:12px;padding:14px">
           <div style="font-size:14px;font-weight:800;color:#ef4444;margin-bottom:10px">📤 Barang Dikembalikan</div>
-          ${(t.return_items||[]).map(i=>`<div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px"><span>${i.item_name||'-'} ×${i.qty}</span><span style="font-weight:700">${fmtRp(i.return_price*i.qty)}</span></div>`).join('')}
+          ${(t.return_items||[]).map(i=>`<div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px">
+            <span>${i.item_name||'-'} ×${i.qty} <small>(${i.condition})</small></span>
+            <span style="font-weight:700">${fmtRp(i.return_price*i.qty)}</span>
+          </div>`).join('')}
           <div style="font-weight:800;color:#ef4444;border-top:1px solid rgba(239,68,68,.2);padding-top:8px;margin-top:6px;display:flex;justify-content:space-between"><span>Total</span><span>${fmtRp(t.return_subtotal)}</span></div>
         </div>
         <div style="background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.2);border-radius:12px;padding:14px">
           <div style="font-size:14px;font-weight:800;color:#10b981;margin-bottom:10px">📥 Barang Baru Dibeli</div>
-          ${(t.new_items||[]).map(i=>`<div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px"><span>${i.item_name||'-'} ×${i.qty}</span><span style="font-weight:700">${fmtRp(i.sell_price*i.qty)}</span></div>`).join('')}
+          ${(t.new_items||[]).map(i=>`<div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px">
+            <span>${i.item_name||'-'} ×${i.qty}</span>
+            <span style="font-weight:700">${fmtRp(i.sell_price*i.qty)}</span>
+          </div>`).join('')}
           <div style="font-weight:800;color:#10b981;border-top:1px solid rgba(16,185,129,.2);padding-top:8px;margin-top:6px;display:flex;justify-content:space-between"><span>Total</span><span>${fmtRp(t.new_subtotal)}</span></div>
         </div>
       </div>
       <div style="background:var(--primary-light);border:2px solid var(--primary);border-radius:12px;padding:16px;text-align:center;margin-bottom:16px">
         <div style="font-size:13px;color:var(--text-muted)">SELISIH</div>
         <div style="font-size:28px;font-weight:900;color:var(--primary)">${diff>=0?'+':''}${fmtRp(Math.abs(diff))}</div>
-        <div style="font-size:14px;font-weight:700;margin-top:4px">${diff>0?'💰 Pelanggan bayar selisih':diff<0?'💵 Toko kembalikan uang':'✓ Impas'}</div>
+        <div style="font-size:14px;font-weight:700;margin-top:4px">${diff>0?'💰 Pelanggan bayar selisih':diff<0?'💵 Refund ke Saldo Pelanggan':'✓ Impas'}</div>
       </div>
       ${t.notes?`<div style="color:var(--text-muted);font-size:14px">Catatan: ${t.notes}</div>`:''}
       <div style="margin-top:16px">
