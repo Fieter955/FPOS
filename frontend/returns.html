@@ -107,6 +107,18 @@
               >
                 Retur Pembelian
               </button>
+              <button
+                id="btnTabPurchase"
+                class="btn"
+                style="
+                  background: var(--bg-color);
+                  border: 1px solid var(--border-color);
+                  color: var(--text-main);
+                "
+                onclick="switchTab('broken')"
+              >
+                Retur Barang Rusak
+              </button>
             </div>
             <div id="tombolReturContainer">
               <div
@@ -306,16 +318,19 @@
             class="tbl-wrap"
             style="border: 1px solid var(--border-color); border-radius: 8px"
           >
-            <table class="tbl" style="margin-bottom: 0">
+            <table
+              class="tbl"
+              style="margin-bottom: 0; table-layout: fixed; width: 100%"
+            >
               <thead>
                 <tr>
-                  <th>Nama Barang</th>
-                  <th style="width: 80px; text-align: center">Sisa</th>
-                  <th style="width: 100px; text-align: center">Qty Retur</th>
-                  <th style="width: 120px; text-align: right">Harga Dasar</th>
-                  <th style="width: 80px; text-align: center">PPN (%)</th>
-                  <th style="width: 120px; text-align: right">Harga + PPN</th>
-                  <th style="width: 120px; text-align: right">Total</th>
+                  <th style="width: auto">Nama Barang</th>
+                  <th style="width: 8%; text-align: center">Sisa</th>
+                  <th style="width: 10%; text-align: center">Qty Retur</th>
+                  <th style="width: 18%; text-align: right">Harga Dasar</th>
+                  <th style="width: 10%; text-align: center">PPN (%)</th>
+                  <th style="width: 20%; text-align: right">Harga + PPN</th>
+                  <th style="width: 20%; text-align: right">Total</th>
                   <th style="width: 40px"></th>
                 </tr>
               </thead>
@@ -576,15 +591,15 @@
             <div class="row-factur-info" style="font-size:10px; color:var(--primary); margin-top:4px"></div>
           </td>
           <td style="text-align: center; font-weight: 700" class="row-avail">-</td>
-          <td><input type="number" class="input-control row-qty" value="1" style="text-align: center" oninput="calculateManualReturnTotal()" /></td>
+          <td><input type="number" class="input-control row-qty" value="1" style="text-align: center; width: 100%; box-sizing: border-box;" oninput="calculateManualReturnTotal()" /></td>
           <td style="text-align: right">
-            <div style="display:flex; align-items:center; gap:4px; justify-content:flex-end">
-                <input type="number" class="input-control row-price-awal" value="0" style="text-align:right; width:90px; padding:4px" oninput="calculateManualReturnTotal()" />
-                <button class="btn" onclick="showPriceHistory(${item.id}, this)" style="padding:4px; background:var(--bg-color); border:1px solid var(--border-color)" title="Cari Faktur">📜</button>
+            <div style="display:flex; align-items:center; gap:4px; justify-content:flex-end; width: 100%;">
+                <input type="text" class="input-control row-price-awal" value="0" style="text-align:right; width: 100%; box-sizing: border-box; padding:4px" oninput="onPriceInput(this)" />
+                <button class="btn" onclick="showPriceHistory(${item.id}, this)" style="padding:4px; background:var(--bg-color); border:1px solid var(--border-color); flex-shrink: 0;" title="Cari Faktur">📜</button>
             </div>
           </td>
-          <td style="text-align: center"><input type="number" class="input-control row-ppn" value="0" style="text-align: center; width:60px; padding:4px" oninput="calculateManualReturnTotal()" /></td>
-          <td style="text-align: right"><input type="number" class="input-control row-price-akhir" value="0" style="text-align:right; width:100px; padding:4px; background:var(--bg-color)" readonly /></td>
+          <td style="text-align: center"><input type="number" class="input-control row-ppn" value="0" style="text-align: center; width: 100%; box-sizing: border-box; padding:4px" oninput="calculateManualReturnTotal()" /></td>
+          <td style="text-align: right"><input type="text" class="input-control row-price-akhir" value="0" style="text-align:right; width: 100%; box-sizing: border-box; padding:4px; background:var(--bg-color)" readonly /></td>
           <td style="text-align: right; font-weight: 700" class="row-total">Rp 0</td>
           <td><button class="btn" style="color:var(--danger); background:transparent; padding:0" onclick="this.closest('tr').remove(); calculateManualReturnTotal()">✕</button></td>
         `;
@@ -603,7 +618,9 @@
 
           if (history && history.length > 0) {
             const latest = history[0];
-            row.querySelector(".row-price-awal").value = latest.price;
+            row.querySelector(".row-price-awal").value = formatRibuan(
+              latest.price,
+            );
             row.querySelector(".row-ppn").value = latest.tax_percent || 0;
             row.querySelector(".row-avail").textContent = latest.qty_available;
             row.querySelector(".row-factur-info").textContent = latest.number;
@@ -695,12 +712,14 @@
         let grand = 0;
         document.querySelectorAll("#mManualGridBody tr").forEach((row) => {
           const qty = parseFloat(row.querySelector(".row-qty").value) || 0;
-          const priceAwal =
-            parseFloat(row.querySelector(".row-price-awal").value) || 0;
+          const priceAwal = parseRibuan(
+            row.querySelector(".row-price-awal").value,
+          );
           const ppn = parseFloat(row.querySelector(".row-ppn").value) || 0;
 
           const priceAkhir = priceAwal + (priceAwal * ppn) / 100;
-          row.querySelector(".row-price-akhir").value = priceAkhir;
+          row.querySelector(".row-price-akhir").value =
+            formatRibuan(priceAkhir);
 
           const total = qty * priceAkhir;
           row.querySelector(".row-total").textContent = fmtRp(total);
@@ -727,8 +746,9 @@
           const itemId = row.dataset.itemId;
           const pid = row.dataset.purchaseId;
           const qty = parseFloat(row.querySelector(".row-qty").value) || 0;
-          const priceAwal =
-            parseFloat(row.querySelector(".row-price-awal").value) || 0;
+          const priceAwal = parseRibuan(
+            row.querySelector(".row-price-awal").value,
+          );
           const ppn = parseFloat(row.querySelector(".row-ppn").value) || 0;
           const avail =
             parseFloat(row.querySelector(".row-avail").textContent) || 0;
@@ -925,7 +945,9 @@
         const type = currentTab; // sales or purchase
 
         const isSales = type === "sales";
-        const basePrice = isSales ? activeItem.sell_price : activeItem.buy_price;
+        const basePrice = isSales
+          ? activeItem.sell_price
+          : activeItem.buy_price;
 
         const payload = {
           date: new Date().toISOString().split("T")[0],
@@ -995,6 +1017,28 @@
           minimumFractionDigits: 0,
         }).format(n || 0);
       }
+
+      function formatRibuan(val) {
+        if (val === undefined || val === null || val === "") return "";
+        let num = parseFloat(val.toString().replace(/[^0-9.-]/g, "")) || 0;
+        return num.toLocaleString("id-ID");
+      }
+
+      function parseRibuan(s) {
+        if (!s) return 0;
+        return parseFloat(s.toString().replace(/\./g, "")) || 0;
+      }
+
+      function onPriceInput(inp) {
+        let val = inp.value.replace(/[^0-9]/g, "");
+        if (val === "") {
+          inp.value = "";
+        } else {
+          inp.value = parseInt(val).toLocaleString("id-ID");
+        }
+        calculateManualReturnTotal();
+      }
+
       function fmtDate(d) {
         if (!d) return "-";
         return new Date(d + "T00:00:00").toLocaleDateString("id-ID", {
