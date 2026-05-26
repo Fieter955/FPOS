@@ -147,6 +147,14 @@
             <div class="kpi-val" id="kPur">—</div>
           </div>
           <div class="kpi-card">
+            <div class="kpi-lbl">Deposit Pelanggan</div>
+            <div class="kpi-val" id="kCustDep">—</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-lbl">Deposit ke Supplier</div>
+            <div class="kpi-val" id="kSuppDep">—</div>
+          </div>
+          <div class="kpi-card">
             <div class="kpi-lbl">Stok Menipis</div>
             <div class="kpi-val" id="kLow" style="color: #ef4444">—</div>
           </div>
@@ -320,6 +328,12 @@
             (d.total_transactions_today || 0) + " transaksi";
           document.getElementById("kPur").textContent = fmtRp(
             d.total_purchases_today || 0,
+          );
+          document.getElementById("kCustDep").textContent = fmtRp(
+            d.total_customer_deposit || 0,
+          );
+          document.getElementById("kSuppDep").textContent = fmtRp(
+            d.total_supplier_deposit || 0,
           );
           document.getElementById("kLow").textContent =
             (d.low_stock_count || 0) + " item";

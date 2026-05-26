@@ -108,6 +108,10 @@ def get_dashboard_data(db: Session = Depends(get_db), current_user: models.User 
     
     top_items = [{"name": r[0], "qty": r[1], "amount": r[2]} for r in top_items_raw]
 
+    # Total Deposit
+    total_cust_deposit = db.query(func.sum(models.Customer.deposit_balance)).scalar() or 0
+    total_supp_deposit = db.query(func.sum(models.Supplier.deposit_balance)).scalar() or 0
+
     # 5 Penjualan Terbaru (Filter Cabang)
     recent_sales = [{
         "number": s.number, 
@@ -134,6 +138,8 @@ def get_dashboard_data(db: Session = Depends(get_db), current_user: models.User 
         "total_transactions_today": int(total_tx_today),
         "net_profit_monthly": float(net_profit_month), # 👈 Data Net Profit Akurat
         "low_stock_count": int(low_stock_count),
+        "total_customer_deposit": float(total_cust_deposit),
+        "total_supplier_deposit": float(total_supp_deposit),
         "top_items": top_items,
         "recent_sales": recent_sales,
         "monthly_sales": monthly
@@ -409,6 +415,29 @@ def get_top_items(
     ).group_by(models.Item.id).order_by(func.sum(models.SaleItem.qty).desc()).limit(limit).all()
     
     return [{"name": r[0], "qty": r[1], "revenue": r[2]} for r in top_items_raw]
+
+# ─── 8. DEPOSIT & RETUR BALANCE ─────────────────────────────────────────────
+@router.get("/deposits/customers")
+def get_customer_deposits(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    _require_financial_report_access(current_user)
+    customers = db.query(models.Customer).filter(models.Customer.deposit_balance > 0).all()
+    return [{
+        "id": c.id,
+        "code": c.code,
+        "name": c.name,
+        "deposit_balance": c.deposit_balance
+    } for c in customers]
+
+@router.get("/deposits/suppliers")
+def get_supplier_deposits(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    _require_financial_report_access(current_user)
+    suppliers = db.query(models.Supplier).filter(models.Supplier.deposit_balance > 0).all()
+    return [{
+        "id": s.id,
+        "code": s.code,
+        "name": s.name,
+        "deposit_balance": s.deposit_balance
+    } for s in suppliers]
 
 # ─── 4. EXPORT EXCEL SALES ───────────────────────────────────────────────────
 @router.get("/export/sales")

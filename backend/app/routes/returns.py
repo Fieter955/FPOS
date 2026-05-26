@@ -296,6 +296,13 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
 
     total = total_sales + total_tax
     retur.total = total
+    
+    # Update Customer Deposit Balance
+    if sale.customer_id:
+        cust = db.query(models.Customer).with_for_update().get(sale.customer_id)
+        if cust:
+            cust.deposit_balance = (cust.deposit_balance or 0) + total
+            
     db.commit(); db.refresh(retur)
     
     # Buat Jurnal
@@ -441,6 +448,13 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
 
     total = total_inventory + total_tax
     retur.total = total
+    
+    # Update Supplier Deposit Balance
+    if purchase.supplier_id:
+        supp = db.query(models.Supplier).with_for_update().get(purchase.supplier_id)
+        if supp:
+            supp.deposit_balance = (supp.deposit_balance or 0) + total
+            
     db.commit(); db.refresh(retur)
     
     # Buat Jurnal

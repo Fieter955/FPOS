@@ -267,6 +267,7 @@
               <tr>
                 <th>Nama Supplier</th>
                 <th>Telepon</th>
+                <th>Deposit</th>
                 <th>Email</th>
                 <th>Kontak</th>
                 <th>Status</th>
@@ -341,6 +342,15 @@
               value="0"
             />
           </div>
+        </div>
+        <div class="input-group" style="margin-bottom: 16px">
+          <label>Saldo Deposit (Dari Retur)</label>
+          <input
+            id="sDeposit"
+            class="input-control"
+            readonly
+            style="background: var(--primary-light); color: var(--primary); font-weight: 700; border: 1px solid var(--primary);"
+          />
         </div>
         <div class="input-group" style="margin-bottom: 16px">
           <label>Catatan</label>
@@ -618,6 +628,7 @@
                   (s) => `<tr>
                 <td><b style="font-size:16px">${s.name}</b></td>
                 <td>${s.phone || "-"}</td>
+                <td style="font-weight:700;color:var(--primary)">${fmtRp(s.deposit_balance || 0)}</td>
                 <td>${s.email || "-"}</td>
                 <td>${s.contact_person || "-"}</td>
                 <td><span style="color:${s.is_active !== false ? "#10b981" : "#ef4444"};font-weight:700">${s.is_active !== false ? "● Aktif" : "✗ Nonaktif"}</span></td>
@@ -629,7 +640,7 @@
               </tr>`,
                 )
                 .join("")
-            : '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada supplier</td></tr>';
+            : '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada supplier</td></tr>';
         } catch (ex) {
           showToast(ex.message, "error");
         }
@@ -661,6 +672,7 @@
         document.getElementById("sAlamat").value = s.address || "";
         document.getElementById("sContact").value = s.contact_person || "";
         document.getElementById("sCredit").value = s.credit_limit || 0;
+        document.getElementById("sDeposit").value = fmtRp(s.deposit_balance || 0);
         document.getElementById("sNotes").value = s.notes || "";
         try {
           const items = await api("GET", `/suppliers/${s.id}/items`);

@@ -99,6 +99,7 @@
                   <th>Nama</th>
                   <th>Telepon</th>
                   <th>Grup Diskon</th>
+                  <th>Deposit</th>
                   <th>Poin</th>
                   <th>Total Beli</th>
                   <th>Aksi</th>
@@ -305,6 +306,7 @@
       <td><b>${c.name}</b></td>
       <td>${c.phone || "-"}</td>
       <td>${c.group?.name || "—"}</td>
+      <td style="font-weight:700;color:var(--primary)">${fmtRp(c.deposit_balance || 0)}</td>
       <td><span style="background:var(--primary-light);color:var(--primary);padding:4px 10px;border-radius:8px;font-weight:700;font-size:13px">⭐ ${c.loyalty_points || 0}</span></td>
       <td style="font-weight:600">${fmtRp(c.total_purchase || 0)}</td>
       <td style="white-space:nowrap">
@@ -313,7 +315,7 @@
       </td></tr>`,
                 )
                 .join("")
-            : '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada pelanggan</td></tr>';
+            : '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada pelanggan</td></tr>';
         } catch (ex) {
           showToast(ex.message, "error");
         }

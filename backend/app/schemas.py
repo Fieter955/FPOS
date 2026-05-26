@@ -212,6 +212,7 @@ class CustomerOut(BaseModel):
     group_id: Optional[int]
     points: float
     credit_limit: float
+    deposit_balance: float = 0
     is_active: bool
     group: Optional[CustomerGroupOut] = None
     model_config = {"from_attributes": True}
@@ -249,6 +250,7 @@ class SupplierOut(BaseModel):
     email: Optional[str]
     contact_person: Optional[str]
     credit_limit: float
+    deposit_balance: float = 0
     is_active: bool
     items: List[ItemOut] = []
     model_config = {"from_attributes": True}
