@@ -177,6 +177,7 @@ def create_trade_in(
         before = item.stock
         item.stock += ri.qty
         db.add(models.StockMovement(
+            branch_id=current_user.active_branch_id,
             date=data.date, item_id=item.id,
             type="in", qty=ri.qty,
             qty_before=before, qty_after=item.stock,
@@ -197,6 +198,7 @@ def create_trade_in(
         before = item.stock
         item.stock -= ni.qty
         db.add(models.StockMovement(
+            branch_id=current_user.active_branch_id,
             date=data.date, item_id=item.id,
             type="out", qty=ni.qty,
             qty_before=before, qty_after=item.stock,

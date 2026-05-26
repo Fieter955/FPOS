@@ -49,21 +49,19 @@ Dokumentasi ini dirancang agar AI (CLI Agent) dapat memahami struktur kerja sist
 2. **Realtime Stock**: Stok dipotong dari Gudang Default Cabang (mendukung kuantitas desimal untuk multi-satuan).
 3. **Auto-Journal**: Mencatat Pendapatan, Kas/Bank, dan HPP (Harga Pokok Penjualan) secara instan.
 
-#### C. Siklus Retur (Return Cycle) - Enhanced Manual Return
-Fitur Retur Manual telah ditingkatkan untuk akurasi akuntansi dan kenyamanan operasional:
-1. **Dukungan PPN & Pajak**:
-   - Menambahkan kolom **Harga Dasar**, **PPN (%)**, dan **Harga + PPN** pada form retur.
-   - **Auto-Fill PPN**: Sistem otomatis mendeteksi persentase pajak dari transaksi asli barang tersebut (baik pembelian maupun penjualan) dan mengisinya ke kolom PPN secara *real-time*.
-   - **Sinkronisasi Backend**: Backend kini menerima data `price`, `tax_percent`, dan `is_tax_included` dari frontend untuk memastikan Jurnal Retur mencatat nilai PPN yang akurat sesuai input pengguna.
-2. **UI Responsif & Dinamis**:
-   - **Lebar Kolom (%)**: Tabel retur menggunakan sistem lebar berbasis persentase (dinamis) agar tidak memotong angka pada nominal besar (jutaan).
-   - **Input Elastis**: Kotak input harga meregang otomatis memenuhi kolom dan mendukung pemisah ribuan (titik) secara *real-time* saat diketik.
-   - **Pembulatan Otomatis**: Hasil perhitungan pajak dibulatkan ke angka terdekat untuk kerapian laporan.
-3. **Integritas Akuntansi (CoA Sync)**:
-   - Jurnal Retur Penjualan kini diarahkan secara otomatis ke akun **Retur Penjualan (4-1200)** (Kontra-Pendapatan), bukan langsung memotong akun Penjualan, untuk laporan laba rugi yang lebih detail.
-   - Memperbaiki konstanta akun di `journal_service.py` (Penjualan: 4-1100, HPP: 5-1100) agar sesuai dengan Chart of Accounts utama.
-4. **Endpoint Riwayat Cerdas**:
-   - Menambahkan endpoint khusus `/customers/{id}/items/{item_id}/history` untuk menarik riwayat harga jual per item bagi pelanggan tertentu secara instan saat retur manual.
+#### D. Siklus Tukar Tambah (Trade-In Cycle)
+Fitur Tukar Tambah memungkinkan pelanggan mengembalikan barang lama dan mengambil barang baru dalam satu transaksi terpadu:
+1. **Mekanisme Stok Ganda**:
+   - **Barang Kembali**: Menambah stok gudang (sebagai barang masuk) dengan pencatatan kondisi (bagus/rusak).
+   - **Barang Baru**: Mengurangi stok gudang (sebagai barang keluar).
+2. **Perhitungan Selisih Otomatis**: 
+   - Sistem menghitung `Total Nilai Baru - Total Nilai Kembali`.
+   - **Selisih Positif**: Pelanggan membayar sisa ke toko.
+   - **Selisih Negatif**: Toko mengembalikan uang ke pelanggan.
+3. **Integritas Data & Branch Awareness**:
+   - Setiap mutasi stok (`StockMovement`) yang dihasilkan dari tukar tambah kini wajib mencatat `branch_id` untuk memastikan laporan persediaan per cabang akurat.
+   - Sinkronisasi field name antara frontend (`return_price`, `sell_price`) dan backend Pydantic schemas untuk mencegah error validasi data.
+4. **Detail Transaksi**: Riwayat lengkap tersedia dengan rincian barang yang masuk dan keluar beserta harga per itemnya.
 
 ### 4. Fitur Barcode Scanner (Global Auto-Cursor)
 - **Logika Deteksi**: Menggunakan komponen `setupBarcodeScanner` yang mendeteksi kecepatan ketikan (hardware scanner) vs pengetikan manual manusia menggunakan jeda waktu (`Date.now()`).
