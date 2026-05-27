@@ -416,16 +416,41 @@
         const activeBtn =
           tab === "sales"
             ? document.getElementById("btnTabSales")
-            : document.getElementById("btnTabPurchase");
+            : tab === "purchase"
+              ? document.getElementById("btnTabPurchase")
+              : document.getElementById("btnTabBroken");
+
         activeBtn.classList.add("btn-primary");
         activeBtn.style.background = ""; // Reset inline style to use class style
         activeBtn.style.color = "";
 
-        // Update Filter Entities
+        // Update Filter Entities & Status Options
         if (mainFilter) {
-          mainFilter.updateEntities(
-            tab === "sales" ? allCustomers : allSuppliers,
+          const filterContainer = document.getElementById(
+            "mainFilterContainer",
           );
+          const entitySelectWrap = filterContainer.querySelector(
+            ".f-entity-container",
+          );
+
+          if (tab === "broken") {
+            if (entitySelectWrap) entitySelectWrap.style.display = "none";
+            mainFilter.updateStatusOptions([
+              { label: "Belum Diretur ke Suplier", value: "not_returned" },
+              { label: "Retur Sebagian", value: "partial" },
+              { label: "Retur Penuh", value: "returned" },
+            ]);
+          } else {
+            if (entitySelectWrap) entitySelectWrap.style.display = "block";
+            mainFilter.updateEntities(
+              tab === "sales" ? allCustomers : allSuppliers,
+            );
+            mainFilter.updateStatusOptions([
+              { label: "Belum Retur", value: "not_returned" },
+              { label: "Retur Sebagian", value: "partial" },
+              { label: "Retur Penuh", value: "returned" },
+            ]);
+          }
         }
 
         load();
@@ -441,6 +466,15 @@
         openManualReturnModal();
       }
 
+      let pendingBrokenItem = null;
+
+      function openBrokenReturnModal(item) {
+        pendingBrokenItem = item;
+        mManualMode = "purchase";
+        openManualReturnModal();
+        showToast("Pilih Supplier untuk meretur barang rusak ini", "info");
+      }
+
       function openManualReturnModal() {
         const isPurchase = mManualMode === "purchase";
         document.getElementById("mManualReturnTitle").textContent = isPurchase
@@ -452,7 +486,9 @@
         document.getElementById("mManualDate").value = new Date()
           .toISOString()
           .split("T")[0];
-        document.getElementById("mManualReason").value = "";
+        document.getElementById("mManualReason").value = pendingBrokenItem
+          ? `Retur Barang Rusak: ${pendingBrokenItem.trade_in_number}`
+          : "";
         document.getElementById("mManualGridBody").innerHTML = "";
         document.getElementById("mManualGrandTotal").textContent = "Rp 0";
         document.getElementById("mManualPpnInfo").style.display = "none";
@@ -484,7 +520,12 @@
           );
         }
 
-        openModal("mManualReturn");
+        if (!pendingBrokenItem) {
+          openModal("mManualReturn");
+        } else {
+          // Jika dari broken item, pastikan modal terbuka dulu
+          openModal("mManualReturn");
+        }
       }
 
       async function onManualEntitySelected(entity) {
@@ -515,6 +556,34 @@
             );
           }
           hideLoading();
+
+          // Jika ada barang rusak yang menunggu, tambahkan otomatis
+          if (pendingBrokenItem) {
+            const itemMatch = mManualValidItems.find(
+              (i) => i.id === pendingBrokenItem.item_id,
+            );
+            if (itemMatch) {
+              await addManualReturnRow(itemMatch);
+              // Set trade_in_return_item_id ke row dataset
+              const row = document.querySelector(
+                `#mManualGridBody tr[data-item-id="${itemMatch.id}"]`,
+              );
+              if (row) {
+                row.dataset.tradeInReturnItemId =
+                  pendingBrokenItem.trade_in_return_item_id;
+                // Set qty retur sesuai qty rusak
+                const qtyInp = row.querySelector(".row-qty");
+                qtyInp.value = pendingBrokenItem.qty_available;
+                calculateManualReturnTotal();
+              }
+              pendingBrokenItem = null;
+            } else {
+              showToast(
+                "Barang ini tidak memiliki riwayat pembelian dari supplier terpilih.",
+                "warning",
+              );
+            }
+          }
         } catch (ex) {
           hideLoading();
           showToast("Gagal memuat daftar barang.", "error");
@@ -720,95 +789,21 @@
         document.getElementById("mManualGrandTotal").textContent = fmtRp(grand);
       }
 
-      async function saveManualReturn() {
-        if (!mManualSelectedEntity)
-          return showToast("Pilih supplier/pelanggan terlebih dahulu", "error");
-
-        const rows = Array.from(
-          document.querySelectorAll("#mManualGridBody tr"),
-        );
-        if (rows.length === 0)
-          return showToast("Tambahkan minimal 1 barang", "error");
-
-        // Kelompokkan item berdasarkan purchase_id karena backend memproses per faktur
-        const groups = {};
-        let hasError = false;
-
-        rows.forEach((row) => {
-          const itemId = row.dataset.itemId;
-          const pid = row.dataset.purchaseId;
-          const qty = parseFloat(row.querySelector(".row-qty").value) || 0;
-          const priceAwal = parseRibuan(
-            row.querySelector(".row-price-awal").value,
-          );
-          const ppn = parseFloat(row.querySelector(".row-ppn").value) || 0;
-          const avail =
-            parseFloat(row.querySelector(".row-avail").textContent) || 0;
-
-          if (!itemId || qty <= 0) return;
-          if (!pid) {
-            hasError = true;
-            showToast(
-              "Ada barang yang belum dipilih fakturnya (klik icon 📜)",
-              "error",
-            );
-            return;
-          }
-          if (
-            row.querySelector(".row-avail").textContent !== "-" &&
-            qty > avail
-          ) {
-            hasError = true;
-            showToast("Qty retur melebihi sisa tersedia di faktur", "error");
-            return;
-          }
-
-          if (!groups[pid]) groups[pid] = [];
-          groups[pid].push({
-            item_id: parseInt(itemId),
-            qty: qty,
-            price: priceAwal,
-            tax_percent: ppn,
-          });
-        });
-
-        if (hasError) return;
-
-        showLoading("Memproses retur...");
-        try {
-          const type = mManualMode === "purchase" ? "purchases" : "sales";
-          // Proses setiap grup faktur secara berurutan
-          for (const pid in groups) {
-            const payload = {
-              date: document.getElementById("mManualDate").value,
-              reason: document.getElementById("mManualReason").value,
-              items: groups[pid],
-              is_tax_included: false, // UI hitung manual (Dasar + PPN)
-            };
-            if (mManualMode === "purchase") payload.purchase_id = parseInt(pid);
-            else payload.sale_id = parseInt(pid);
-
-            await api("POST", `/returns/${type}`, payload);
-          }
-          hideLoading();
-          showToast("Semua retur berhasil diproses!");
-          closeModal("mManualReturn");
-          load();
-        } catch (ex) {
-          hideLoading();
-          showToast(ex.message, "error");
-        }
-      }
-
       async function load() {
         if (!mainFilter) return;
         const f = mainFilter.getValues();
-        const type = currentTab; // sales or purchase
+        const type = currentTab; // sales, purchase, or broken
         const entityParam = type === "sales" ? "customer_id" : "supplier_id";
 
-        let url = `/returns/history/${type === "sales" ? "sales" : "purchases"}?start_date=${f.start_date}&end_date=${f.end_date}`;
-        if (f.entity_id) url += `&${entityParam}=${f.entity_id}`;
-        if (f.status) url += `&status=${f.status}`;
+        let url = "";
+        if (type === "broken") {
+          url = `/returns/history/broken?start_date=${f.start_date}&end_date=${f.end_date}`;
+        } else {
+          url = `/returns/history/${type === "sales" ? "sales" : "purchases"}?start_date=${f.start_date}&end_date=${f.end_date}`;
+          if (f.entity_id && f.entity_id !== "all")
+            url += `&${entityParam}=${f.entity_id}`;
+        }
+        if (f.status && f.status !== "all") url += `&status=${f.status}`;
 
         try {
           showLoading();
@@ -825,17 +820,30 @@
         const header = document.getElementById("tblHeader");
         const body = document.getElementById("tblBody");
 
-        const isSales = type === "sales";
-        header.innerHTML = `
-          <th>Nama Barang</th>
-          <th style="text-align:center">Tgl Faktur</th>
-          <th style="text-align:center">No. Faktur</th>
-          <th>${isSales ? "Pelanggan" : "Supplier"}</th>
-          <th style="text-align:center">Qty Beli</th>
-          <th style="text-align:center">Tersisa</th>
-          <th style="text-align:right">Harga</th>
-          <th style="text-align:center">Aksi</th>
-        `;
+        if (type === "broken") {
+          header.innerHTML = `
+            <th>Nama Barang</th>
+            <th style="text-align:center">Tgl T.Tambah</th>
+            <th style="text-align:center">No. T.Tambah</th>
+            <th>Pelanggan</th>
+            <th style="text-align:center">Qty Rusak</th>
+            <th style="text-align:center">Belum Diretur</th>
+            <th style="text-align:right">Harga Terima</th>
+            <th style="text-align:center">Aksi</th>
+          `;
+        } else {
+          const isSales = type === "sales";
+          header.innerHTML = `
+            <th>Nama Barang</th>
+            <th style="text-align:center">Tgl Faktur</th>
+            <th style="text-align:center">No. Faktur</th>
+            <th>${isSales ? "Pelanggan" : "Supplier"}</th>
+            <th style="text-align:center">Qty Beli</th>
+            <th style="text-align:center">Tersisa</th>
+            <th style="text-align:right">Harga</th>
+            <th style="text-align:center">Aksi</th>
+          `;
+        }
 
         if (!data || data.length === 0) {
           body.innerHTML = `<tr><td colspan="8" style="text-align:center; padding: 40px; color: var(--text-muted)">Tidak ada riwayat barang yang ditemukan.</td></tr>`;
@@ -844,16 +852,33 @@
 
         body.innerHTML = data
           .map((it) => {
-            const price = isSales ? it.sell_price : it.buy_price;
-            const date = isSales ? it.sale_date : it.purchase_date;
-            const number = isSales ? it.sale_number : it.purchase_number;
-            const entity = isSales
-              ? it.customer_name || "Umum"
-              : it.supplier_name || "-";
-            const qtyTotal = isSales ? it.qty_sold : it.qty_bought;
-            const qtyLeft = it.qty_available;
+            let price,
+              date,
+              number,
+              entity,
+              qtyTotal,
+              qtyLeft,
+              statusBadge = "";
 
-            let statusBadge = "";
+            if (type === "broken") {
+              price = it.return_price;
+              date = it.date;
+              number = it.trade_in_number;
+              entity = it.customer_name || "Umum";
+              qtyTotal = it.qty;
+              qtyLeft = it.qty_available;
+            } else {
+              const isSales = type === "sales";
+              price = isSales ? it.sell_price : it.buy_price;
+              date = isSales ? it.sale_date : it.purchase_date;
+              number = isSales ? it.sale_number : it.purchase_number;
+              entity = isSales
+                ? it.customer_name || "Umum"
+                : it.supplier_name || "-";
+              qtyTotal = isSales ? it.qty_sold : it.qty_bought;
+              qtyLeft = it.qty_available;
+            }
+
             if (it.status === "returned")
               statusBadge =
                 '<span class="badge badge-danger">Retur Full</span>';
@@ -863,7 +888,7 @@
 
             const canReturn = qtyLeft > 0;
             const returBtn = canReturn
-              ? `<button class="btn btn-primary" style="padding: 4px 10px; font-size: 12px" onclick='openReturnModal(${JSON.stringify(it).replace(/'/g, "&apos;")})'>↩ Retur</button>`
+              ? `<button class="btn btn-primary" style="padding: 4px 10px; font-size: 12px" onclick='${type === "broken" ? "openBrokenReturnModal" : "openReturnModal"}(${JSON.stringify(it).replace(/'/g, "&apos;")})'>↩ Retur</button>`
               : `<button class="btn" disabled style="padding: 4px 10px; font-size: 12px; opacity: 0.5">Sudah Habis</button>`;
 
             return `
@@ -908,8 +933,6 @@
         const price = item.is_tax_included
           ? basePrice
           : basePrice + (basePrice * tax) / 100;
-        tax > 0 ? console.log("PPN") : console.log("No PPN");
-        console.log(item.tax_percent, item.is_tax_included, price);
 
         document.getElementById("mReturnItemInfo").innerHTML = `
           <div style="font-weight: 700; font-size: 16px; margin-bottom: 4px; color: var(--primary)">${item.item.name}</div>
@@ -1038,6 +1061,91 @@
           month: "short",
           year: "numeric",
         });
+      }
+
+      async function saveManualReturn() {
+        if (!mManualSelectedEntity)
+          return showToast("Pilih supplier/pelanggan terlebih dahulu", "error");
+
+        const rows = Array.from(
+          document.querySelectorAll("#mManualGridBody tr"),
+        );
+        if (rows.length === 0)
+          return showToast("Tambahkan minimal 1 barang", "error");
+
+        // Kelompokkan item berdasarkan purchase_id karena backend memproses per faktur
+        const groups = {};
+        let hasError = false;
+
+        rows.forEach((row) => {
+          const itemId = row.dataset.itemId;
+          const pid = row.dataset.purchaseId;
+          const qty = parseFloat(row.querySelector(".row-qty").value) || 0;
+          const priceAwal = parseRibuan(
+            row.querySelector(".row-price-awal").value,
+          );
+          const ppn = parseFloat(row.querySelector(".row-ppn").value) || 0;
+          const avail =
+            parseFloat(row.querySelector(".row-avail").textContent) || 0;
+
+          if (!itemId || qty <= 0) return;
+          if (!pid) {
+            hasError = true;
+            showToast(
+              "Ada barang yang belum dipilih fakturnya (klik icon 📜)",
+              "error",
+            );
+            return;
+          }
+          if (
+            row.querySelector(".row-avail").textContent !== "-" &&
+            qty > avail
+          ) {
+            hasError = true;
+            showToast("Qty retur melebihi sisa tersedia di faktur", "error");
+            return;
+          }
+
+          if (!groups[pid]) groups[pid] = [];
+          const itemData = {
+            item_id: parseInt(itemId),
+            qty: qty,
+            price: priceAwal,
+            tax_percent: ppn,
+          };
+          const tradeInReturnItemId = row.dataset.tradeInReturnItemId;
+          if (tradeInReturnItemId) {
+            itemData.trade_in_return_item_id = parseInt(tradeInReturnItemId);
+          }
+          groups[pid].push(itemData);
+        });
+
+        if (hasError) return;
+
+        showLoading("Memproses retur...");
+        try {
+          const type = mManualMode === "purchase" ? "purchases" : "sales";
+          // Proses setiap grup faktur secara berurutan
+          for (const pid in groups) {
+            const payload = {
+              date: document.getElementById("mManualDate").value,
+              reason: document.getElementById("mManualReason").value,
+              items: groups[pid],
+              is_tax_included: false, // UI hitung manual (Dasar + PPN)
+            };
+            if (mManualMode === "purchase") payload.purchase_id = parseInt(pid);
+            else payload.sale_id = parseInt(pid);
+
+            await api("POST", `/returns/${type}`, payload);
+          }
+          hideLoading();
+          showToast("Semua retur berhasil diproses!");
+          closeModal("mManualReturn");
+          load();
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
       }
 
       (async () => {

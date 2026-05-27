@@ -625,6 +625,13 @@ function createFilterBar(container, config = {}) {
       if (useEntitySelect) combo.updateData(data);
       else combo.updateData([{ id: "", name: "Semua" }, ...data]);
     },
+    updateStatusOptions: (options) => {
+      statusInp.innerHTML =
+        '<option value="all">Semua Status</option>' +
+        options
+          .map((o) => `<option value="${o.value}">${o.label}</option>`)
+          .join("");
+    },
   };
   target._filter = methods;
   return methods;
@@ -1176,4 +1183,3 @@ function setupBarcodeScanner(onScan, config = {}) {
     }
   });
 }
-

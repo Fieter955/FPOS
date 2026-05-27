@@ -912,6 +912,7 @@ class TradeInReturnItem(Base):
     trade_in_id = Column(Integer, ForeignKey("trade_ins.id"), nullable=False)
     item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
     qty = Column(Float, nullable=False)
+    returned_qty = Column(Float, default=0) # Jumlah yang sudah diretur ke supplier
     return_price = Column(Float, nullable=False)  # harga yang diterima toko dari pelanggan
     condition = Column(String(50), default="good")  # good | damaged | partial
     total = Column(Float, nullable=False)

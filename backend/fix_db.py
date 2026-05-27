@@ -96,6 +96,9 @@ add("delivery_notes", "driver_name",    "TEXT")
 add("delivery_notes", "vehicle_no",     "TEXT")
 add("delivery_notes", "notes",          "TEXT")
 
+print("\n=== trade_in_return_items ===")
+add("trade_in_return_items", "returned_qty", "REAL DEFAULT 0")
+
 print("\n=== licenses ===")
 add("licenses", "max_users",   "INTEGER DEFAULT 3")
 add("licenses", "owner_name",  "TEXT")

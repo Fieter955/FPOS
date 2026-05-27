@@ -151,6 +151,9 @@ def get_sale_history_items(
 
 @router.get("/history/broken")
 def get_broken_history_items(
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    status: Optional[str] = None, # 'returned', 'not_returned', 'partial'
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
@@ -165,11 +168,27 @@ def get_broken_history_items(
     if current_user.active_branch_id:
         query = query.filter(models.TradeIn.branch_id == current_user.active_branch_id)
         
+    if start_date:
+        query = query.filter(models.TradeIn.date >= start_date)
+    if end_date:
+        query = query.filter(models.TradeIn.date <= end_date)
+
     items = query.order_by(models.TradeIn.date.desc()).all()
     
     result = []
     for it in items:
+        returned_qty = it.returned_qty or 0.0
+        available_qty = it.qty - returned_qty
+        
+        item_status = "not_returned"
+        if returned_qty >= it.qty: item_status = "returned"
+        elif returned_qty > 0: item_status = "partial"
+        
+        if status and status != item_status:
+            continue
+
         result.append({
+            "trade_in_return_item_id": it.id,
             "item_id": it.item_id,
             "item": {
                 "id": it.item_id,
@@ -179,12 +198,14 @@ def get_broken_history_items(
             },
             "return_price": it.return_price,
             "qty": it.qty,
-            "qty_available": it.qty, # Sementara anggap semua tersedia untuk diretur ke supplier
-            "condition": it.condition,
+            "qty_returned": returned_qty,
+            "qty_available": available_qty,
+            "status": item_status,
             "date": str(it.trade_in.date),
             "trade_in_id": it.trade_in_id,
             "trade_in_number": it.trade_in.number,
-            "customer_name": it.trade_in.customer.name if it.trade_in.customer else "Umum"
+            "customer_name": it.trade_in.customer.name if it.trade_in.customer else "Umum",
+            "condition": it.condition
         })
     return result
 
@@ -460,9 +481,13 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
             return_id=retur.id, item_id=it["item_id"],
             qty=it["qty"], price=actual_price, total=line_inventory + line_tax
         ))
-        
-        # ... rest of stock reduction logic ...
 
+        # Jika retur ini berasal dari barang rusak (Tukar Tambah)
+        if it.get("trade_in_return_item_id"):
+            trade_in_item = db.query(models.TradeInReturnItem).with_for_update().get(it["trade_in_return_item_id"])
+            if trade_in_item:
+                trade_in_item.returned_qty = (trade_in_item.returned_qty or 0) + it["qty"]
+        
         # Kurangi stok
         if gudang_aktif:
             from .warehouse import get_warehouse_stock, adjust_warehouse_stock

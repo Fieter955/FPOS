@@ -63,6 +63,16 @@ Fitur Tukar Tambah memungkinkan pelanggan mengembalikan barang lama dan mengambi
    - Sinkronisasi field name antara frontend (`return_price`, `sell_price`) dan backend Pydantic schemas untuk mencegah error validasi data.
 4. **Detail Transaksi**: Riwayat lengkap tersedia dengan rincian barang yang masuk dan keluar beserta harga per itemnya.
 
+#### E. Siklus Retur Barang Rusak (Broken Items Return)
+Khusus untuk barang yang masuk melalui Tukar Tambah dengan kondisi **Rusak/Damaged**, sistem menyediakan alur khusus untuk mengembalikan barang tersebut ke Supplier:
+1. **Tracking Status**: Setiap barang rusak hasil Tukar Tambah dilacak menggunakan kolom `returned_qty` di backend untuk mengetahui berapa banyak yang sudah diproses retur ke supplier.
+2. **Alur Retur ke Supplier**:
+   - **Tab Retur Barang Rusak**: Menyediakan daftar inventori barang rusak yang siap diretur.
+   - **Proses Manual**: Karena barang rusak berasal dari pelanggan, pengguna harus memilih Supplier secara manual. 
+   - **Validasi Riwayat**: Sistem mewajibkan pemilihan Faktur Pembelian historis (icon 📜) dari supplier tersebut untuk memastikan integritas data (barang hanya bisa diretur ke supplier tempat kita membelinya).
+   - **Integrasi Stok**: Proses ini secara otomatis memotong stok inventori barang rusak dan membuat record `PurchaseReturn` di sistem akuntansi.
+3. **Visual Feedback**: Label status akan berubah otomatis menjadi "Retur Sebagian" atau "Retur Full" pada daftar barang rusak segera setelah transaksi berhasil diproses.
+
 ### 4. Fitur Barcode Scanner (Global Auto-Cursor)
 - **Logika Deteksi**: Menggunakan komponen `setupBarcodeScanner` yang mendeteksi kecepatan ketikan (hardware scanner) vs pengetikan manual manusia menggunakan jeda waktu (`Date.now()`).
 - **Auto-Cursor**: Scanner bekerja secara global di background. Pengguna tidak perlu memfokuskan kursor pada input box tertentu; hasil scan akan langsung diproses oleh halaman yang aktif (POS, Pembelian, atau PO).

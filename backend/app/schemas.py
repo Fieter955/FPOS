@@ -342,6 +342,7 @@ class PurchaseReturnItemCreate(BaseModel):
     item_id: int
     qty: float
     price: float
+    trade_in_return_item_id: Optional[int] = None
 
 class PurchaseReturnCreate(BaseModel):
     number: Optional[str] = None

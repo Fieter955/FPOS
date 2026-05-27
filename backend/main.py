@@ -366,7 +366,7 @@ def run_cmd(args: list[str]) -> tuple[int, str, str]:
 
 def cek_tailscale_status() -> bool:
     code, out, _ = run_cmd(["tailscale", "status"])
-    return code == 0 and "desktop-b0e6dv6" in out
+    return code == 0
 
 def reset_serve(publik: bool):
     run_cmd(["tailscale", "funnel" if publik else "serve", "reset"])
@@ -448,7 +448,6 @@ if __name__ == "__main__":
     cek_dan_tanya_autostart()
 
     PORT = 8010
-    DOMAIN_TS = "desktop-b0e6dv6.balinese-alhena.ts.net"
     PUBLIK = True
 
     def is_server_running(port: int) -> bool:
