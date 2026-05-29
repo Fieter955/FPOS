@@ -410,6 +410,7 @@
           </td>
           <td style="white-space:nowrap">
             <button class="bsm bv" onclick="showDetail(${t.id})">Detail</button>
+            <button class="bsm bv" style="background:white" onclick="printReceipt(${t.id})">Cetak</button>
             <button class="bsm bd" onclick="hapus(${t.id})">Hapus</button>
           </td></tr>`;
                 })
@@ -691,7 +692,8 @@
           <div style="font-size:14px;font-weight:700;margin-top:4px">${diff > 0 ? "💰 Pelanggan bayar selisih" : diff < 0 ? "💵 Refund ke Saldo Pelanggan" : "✓ Impas"}</div>
         </div>
         ${t.notes ? `<div style="color:var(--text-muted);font-size:14px">Catatan: ${t.notes}</div>` : ""}
-        <div style="margin-top:16px">
+        <div style="margin-top:16px; display: flex; gap: 8px;">
+          <button onclick="printReceipt(${t.id})" class="btn" style="background:#3b82f6; color:white">🖨 Cetak Struk</button>
           <button onclick="hapus(${t.id})" class="btn btn-danger">🗑 Hapus Transaksi</button>
         </div>`;
           openModal("mDetail");
@@ -717,6 +719,18 @@
         } catch (ex) {
           hideLoading();
           showToast(ex.message, "error");
+        }
+      }
+
+      async function printReceipt(tradeId) {
+        try {
+          const ps = JSON.parse(
+            localStorage.getItem("ipos_print_settings") || "{}",
+          );
+          await api("POST", `/trade-in/print/${tradeId}`, { settings: ps });
+          showToast("Struk dikirim ke antrean printer!");
+        } catch (e) {
+          showToast("Gagal print: " + e.message, "error");
         }
       }
 

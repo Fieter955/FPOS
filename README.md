@@ -61,7 +61,10 @@ Fitur Tukar Tambah memungkinkan pelanggan mengembalikan barang lama dan mengambi
 3. **Integritas Data & Branch Awareness**:
    - Setiap mutasi stok (`StockMovement`) yang dihasilkan dari tukar tambah kini wajib mencatat `branch_id` untuk memastikan laporan persediaan per cabang akurat.
    - Sinkronisasi field name antara frontend (`return_price`, `sell_price`) dan backend Pydantic schemas untuk mencegah error validasi data.
-4. **Detail Transaksi**: Riwayat lengkap tersedia dengan rincian barang yang masuk dan keluar beserta harga per itemnya.
+4. **Cetak Struk Thermal (ESC/POS)**:
+   - Sistem mendukung cetak struk khusus untuk transaksi tukar tambah dengan format dua kolom: **Barang Kembali** dan **Barang Baru**.
+   - Menampilkan selisih nilai secara transparan serta keterangan status pembayaran (Lunas/Saldo).
+5. **Detail Transaksi**: Riwayat lengkap tersedia dengan rincian barang yang masuk dan keluar beserta harga per itemnya.
 
 #### E. Siklus Retur Barang Rusak (Broken Items Return)
 Khusus untuk barang yang masuk melalui Tukar Tambah dengan kondisi **Rusak/Damaged**, sistem menyediakan alur khusus untuk mengembalikan barang tersebut ke Supplier:
@@ -80,7 +83,16 @@ Khusus untuk barang yang masuk melalui Tukar Tambah dengan kondisi **Rusak/Damag
 
 ### 5. Skema Database (Highlight)
 
-#### D. Inter-Branch PO (Pemenuhan Permintaan Cabang)
+#### D. Manajemen Saldo Pelanggan (Deposit & Transfer)
+Sistem mendukung pengelolaan saldo pelanggan yang berasal dari selisih Tukar Tambah atau Retur Penjualan:
+1. **Transfer Saldo (Admin Only)**: Saldo dapat dipindahkan antar pelanggan melalui tombol 💸 di tabel Pelanggan.
+   - **Jurnal**: Debit `2-1300 Titipan Pelanggan` (Asal), Kredit `2-1300 Titipan Pelanggan` (Tujuan).
+2. **Proteksi Penghapusan**: Akun pelanggan yang memiliki saldo tidak dapat dihapus secara tidak sengaja.
+3. **Penghapusan & Penghangusan (Write-off)**: Jika pelanggan bersaldo tetap dihapus (menggunakan opsi *Force Delete*), sistem otomatis menghanguskan saldo tersebut.
+   - **Jurnal**: Debit `2-1300 Titipan Pelanggan` (Hutang berkurang), Kredit `4-1400 Pendapatan Lain-lain` (Penghapusan Saldo).
+   - Hal ini memastikan **Neraca tetap seimbang** meskipun ada akun pelanggan yang dinonaktifkan.
+
+#### E. Inter-Branch PO (Pemenuhan Permintaan Cabang)
 - **Workflow**: Cabang membuat Request (`is_branch_request=true`) -> Pusat proses di `po.html` -> Simpan Draft atau Bayar.
 - **Reciprocal Accounting**: 
   - Saat Pusat memproses PO untuk Cabang, sistem otomatis mencatat **dua jurnal sekaligus**:

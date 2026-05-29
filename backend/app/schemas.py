@@ -202,6 +202,10 @@ class CustomerUpdate(BaseModel):
     credit_limit: Optional[float] = None
     is_active: Optional[bool] = None
 
+class CustomerTransferBalance(BaseModel):
+    target_customer_id: int
+    amount: float
+
 class CustomerOut(BaseModel):
     id: int
     code: str

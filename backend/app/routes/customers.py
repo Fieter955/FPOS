@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional
+from datetime import datetime
 from ..database import get_db
 from .. import models, schemas
-from ..auth import get_current_user
+from ..auth import get_current_user, require_admin
 
 router = APIRouter()
 
@@ -73,12 +74,79 @@ def update_customer(cid: int, c: schemas.CustomerUpdate, db: Session = Depends(g
     db.commit(); db.refresh(obj); return obj
 
 @router.delete("/{cid}")
-def delete_customer(cid: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+def delete_customer(cid: int, force: bool = False, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     obj = db.query(models.Customer).get(cid)
     if not obj: raise HTTPException(404, "Pelanggan tidak ditemukan")
+    
+    # Validasi Saldo sebelum hapus
+    if obj.deposit_balance > 0:
+        if not force:
+            raise HTTPException(
+                status_code=400, 
+                detail={
+                    "error_code": "HAS_BALANCE", 
+                    "balance": obj.deposit_balance,
+                    "message": f"Pelanggan ini memiliki saldo Rp {obj.deposit_balance:,.0f}. Saldo harus dipindahkan atau dihanguskan sebelum menghapus."
+                }
+            )
+        else:
+            # Hanguskan saldo (Jurnal ke Pendapatan Lain-lain)
+            from ..services import journal_service
+            journal_service.create_customer_balance_write_off_journal(
+                db, 
+                date_val=datetime.now().date(),
+                amount=obj.deposit_balance,
+                customer_name=obj.name,
+                user_id=current_user.id,
+                branch_id=current_user.active_branch_id or 1
+            )
+            obj.deposit_balance = 0
+
     obj.is_active = False
     db.commit()
     return {"message": "Pelanggan dinonaktifkan"}
+
+
+@router.post("/{cid}/transfer-balance")
+def transfer_customer_balance(
+    cid: int,
+    data: schemas.CustomerTransferBalance,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_admin)
+):
+    source = db.query(models.Customer).with_for_update().get(cid)
+    if not source: raise HTTPException(404, "Pelanggan asal tidak ditemukan")
+    
+    target = db.query(models.Customer).with_for_update().get(data.target_customer_id)
+    if not target: raise HTTPException(404, "Pelanggan tujuan tidak ditemukan")
+    
+    if source.id == target.id:
+        raise HTTPException(400, "Tidak bisa transfer ke diri sendiri")
+        
+    if data.amount <= 0:
+        raise HTTPException(400, "Jumlah transfer harus lebih dari 0")
+        
+    if source.deposit_balance < data.amount:
+        raise HTTPException(400, f"Saldo tidak mencukupi (Tersedia: {source.deposit_balance:,.0f})")
+        
+    # Proses Transfer
+    source.deposit_balance -= data.amount
+    target.deposit_balance = (target.deposit_balance or 0) + data.amount
+    
+    # Catat Jurnal
+    from ..services import journal_service
+    journal_service.create_customer_balance_transfer_journal(
+        db,
+        date_val=datetime.now().date(),
+        amount=data.amount,
+        source_name=source.name,
+        target_name=target.name,
+        user_id=current_user.id,
+        branch_id=current_user.active_branch_id or 1
+    )
+    
+    db.commit()
+    return {"message": f"Saldo Rp {data.amount:,.0f} berhasil ditransfer ke {target.name}"}
 
 
 @router.get("/{cid}/sold-items")

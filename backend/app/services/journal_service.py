@@ -13,6 +13,7 @@ ACCOUNT_PAYABLE = "2-1100"
 ACCOUNT_RECEIVABLE = "1-1300"
 ACCOUNT_SALDO_SUPPLIER = "1-1600"
 ACCOUNT_SALDO_CUSTOMER = "2-1300"
+ACCOUNT_WRITE_OFF_INCOME = "4-1400"
 ACCOUNT_TRANSFER_CLEARING = "3-2000"
 ACCOUNT_TRANSFER_IN = "3-2100"
 ACCOUNT_TRANSFER_OUT = "3-2200"
@@ -33,7 +34,36 @@ def _auto_journal(db: Session, date_val: date, number_ref: str, description: str
         description=description,
         entries=entries,
         user_id=user_id,
-        branch_id=branch_id,
+        branch_id=branch_id
+    )
+
+
+def create_customer_balance_transfer_journal(db: Session, *, date_val: date, amount: float,
+                                           source_name: str, target_name: str,
+                                           user_id: int, branch_id: int):
+    """Jurnal transfer saldo deposit antar pelanggan (Mutasi di akun Hutang/Titipan Pelanggan)"""
+    entries = [
+        {"code": ACCOUNT_SALDO_CUSTOMER, "debit": amount, "credit": 0},  # Source Customer (Liability decreases)
+        {"code": ACCOUNT_SALDO_CUSTOMER, "debit": 0, "credit": amount}, # Target Customer (Liability increases)
+    ]
+    return _auto_journal(
+        db, date_val, f"TRF-{date_val.strftime('%Y%m%d')}",
+        f"Transfer Saldo: {source_name} ke {target_name}",
+        entries, user_id, branch_id
+    )
+
+
+def create_customer_balance_write_off_journal(db: Session, *, date_val: date, amount: float,
+                                            customer_name: str, user_id: int, branch_id: int):
+    """Jurnal penghapusan saldo deposit pelanggan (Liability ke Revenue)"""
+    entries = [
+        {"code": ACCOUNT_SALDO_CUSTOMER, "debit": amount, "credit": 0},    # Liability decreases
+        {"code": ACCOUNT_WRITE_OFF_INCOME, "debit": 0, "credit": amount}, # Other Income increases
+    ]
+    return _auto_journal(
+        db, date_val, f"WO-{date_val.strftime('%Y%m%d')}",
+        f"Penghapusan Saldo Pelanggan: {customer_name}",
+        entries, user_id, branch_id
     )
 
 
