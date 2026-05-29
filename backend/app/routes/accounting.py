@@ -1497,13 +1497,13 @@ def get_opening_inventory_value(
 def get_setup_status(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """Mengecek apakah cabang aktif saat ini sudah setup saldo awal"""
     b_id = current_user.active_branch_id
-    
+
     # 🛡️ FIX: Jika belum ada cabang aktif (Admin baru), cek cabang pertama (Pusat)
     if not b_id:
         first_branch = db.query(models.Branch).order_by(models.Branch.id).first()
         if not first_branch:
             return {"is_setup_completed": False} # Belum ada cabang sama sekali
-        
+
         # Cek status asli cabang pertama
         status = getattr(first_branch, 'is_setup_complete', False)
         return {"is_setup_completed": status}
@@ -1517,11 +1517,17 @@ def get_setup_status(db: Session = Depends(get_db), current_user: models.User = 
         branch = db.query(models.Branch).get(b_id)
         if not branch:
             raise HTTPException(400, "Cabang aktif tidak ditemukan. Silakan restart aplikasi.")
+
+    # 🏢 CABANG NON-PUSAT GAUSAH ONBOARDING
+    # Cabang gausah setup saldo awal jika bukan ID 1 dan statusnya bukan 'Toko Utama'
+    if branch.id != 1 and branch.status != "Toko Utama":
+        return {"is_setup_completed": True}
+
     if not branch:
         return {"is_setup_completed": False}
-        
+
     # 🛡️ FIX TYPO: Sesuai dengan nama kolom di models.py (tanpa 'd')
-    status = getattr(branch, 'is_setup_complete', False) 
+    status = getattr(branch, 'is_setup_complete', False)
     return {"is_setup_completed": status}
 
 

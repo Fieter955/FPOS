@@ -706,6 +706,20 @@
     <script src="/js/theme.js"></script>
     <script>
       requireAuth();
+
+      // 🛡️ PENJAGA GERBANG: Jika setup sudah selesai (atau jika ini Cabang), tendang ke Dashboard
+      async function checkGatekeeper() {
+        try {
+          const res = await api("GET", "/accounting/setup-status");
+          if (res.is_setup_completed) {
+            window.location.replace("/dashboard");
+          }
+        } catch (e) {
+          console.error("Gagal mengecek status setup", e);
+        }
+      }
+      checkGatekeeper();
+
       let supplierOptions = [];
 
       function normalizeSupplierText(value) {
