@@ -210,32 +210,53 @@
     </div>
 
     <!-- Modal: Grup -->
-    <div class="modal-overlay" id="mGrup">
-      ...
-    </div>
+    <div class="modal-overlay" id="mGrup">...</div>
 
     <!-- Modal: Transfer Saldo -->
     <div class="modal-overlay" id="mTransferSaldo">
       <div class="modal-box">
         <div class="modal-hdr">
           <h2 id="mTrfTitle">Transfer Saldo Pelanggan</h2>
-          <button class="btn-x" onclick="closeModal('mTransferSaldo')">×</button>
+          <button class="btn-x" onclick="closeModal('mTransferSaldo')">
+            ×
+          </button>
         </div>
-        <p id="trfSourceInfo" style="margin-bottom: 20px; color: var(--text-muted); font-size: 14px;"></p>
-        
+        <p
+          id="trfSourceInfo"
+          style="margin-bottom: 20px; color: var(--text-muted); font-size: 14px"
+        ></p>
+
         <div class="input-group">
           <label>Kirim Ke Pelanggan *</label>
           <div id="trfTargetCombo"></div>
         </div>
-        
+
         <div class="input-group">
           <label>Nominal Transfer *</label>
-          <input id="trfAmount" type="number" class="input-control" placeholder="0" min="1">
+          <input
+            id="trfAmount"
+            type="number"
+            class="input-control"
+            placeholder="0"
+            min="1"
+          />
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
-          <button onclick="closeModal('mTransferSaldo')" class="btn" style="background:var(--bg-color); border:1px solid var(--border-color); color:var(--text-main);">Batal</button>
-          <button onclick="saveTransfer()" class="btn btn-primary">✓ Proses Transfer</button>
+          <button
+            onclick="closeModal('mTransferSaldo')"
+            class="btn"
+            style="
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              color: var(--text-main);
+            "
+          >
+            Batal
+          </button>
+          <button onclick="saveTransfer()" class="btn btn-primary">
+            ✓ Proses Transfer
+          </button>
         </div>
       </div>
     </div>
@@ -300,7 +321,7 @@
       <td><span style="background:var(--primary-light);color:var(--primary);padding:4px 10px;border-radius:8px;font-weight:700;font-size:13px">⭐ ${c.loyalty_points || 0}</span></td>
       <td style="font-weight:600">${fmtRp(c.total_purchase || 0)}</td>
       <td style="white-space:nowrap">
-        ${(c.deposit_balance > 0) ? `<button class="bsm bp" onclick='openTransferModal(${JSON.stringify(c).replace(/"/g, "&quot;")})' title="Transfer Saldo">💸</button>` : ""}
+        ${c.deposit_balance > 0 ? `<button class="bsm bp" onclick='openTransferModal(${JSON.stringify(c).replace(/"/g, "&quot;")})' title="Transfer Saldo">Transfer Saldo💸</button>` : ""}
         <button class="bsm be" onclick='editCust(${JSON.stringify(c).replace(/"/g, "&quot;")})'>Edit</button>
         <button class="bsm bd" onclick="delCust(${c.id},'${c.name}')">Hapus</button>
       </td></tr>`,
@@ -376,12 +397,18 @@
         } catch (ex) {
           if (ex.message.includes("HAS_BALANCE")) {
             const err = JSON.parse(ex.message);
-            if (await showConfirm(`Pelanggan ini memiliki saldo ${fmtRp(err.balance)}.\n\nJika dihapus, saldo akan dihanguskan ke Pendapatan.\nTetap hapus?`)) {
+            if (
+              await showConfirm(
+                `Pelanggan ini memiliki saldo ${fmtRp(err.balance)}.\n\nJika dihapus, saldo akan dihanguskan ke Pendapatan.\nTetap hapus?`,
+              )
+            ) {
               try {
                 await api("DELETE", `/customers/${id}?force=true`);
                 showToast("Dihapus & Saldo dihanguskan");
                 loadCust();
-              } catch (ex2) { showToast(ex2.message, "error"); }
+              } catch (ex2) {
+                showToast(ex2.message, "error");
+              }
             }
           } else {
             showToast(ex.message, "error");
@@ -391,38 +418,41 @@
 
       async function openTransferModal(c) {
         trfSourceId = c.id;
-        document.getElementById("trfSourceInfo").textContent = 
+        document.getElementById("trfSourceInfo").textContent =
           `Sumber: ${c.name} (Saldo: ${fmtRp(c.deposit_balance)})`;
         document.getElementById("trfAmount").value = c.deposit_balance;
-        
+
         // Load all customers for target
         const all = await api("GET", "/customers/?limit=1000");
+        // Ensure data format matches createPremiumCombo expectations (default labField is 'name')
         const options = all
-          .filter(x => x.id !== c.id)
-          .map(x => ({ id: x.id, text: `${x.name} (${x.phone || "-"})` }));
+          .filter((x) => x.id !== c.id)
+          .map((x) => ({ id: x.id, name: `${x.name} (${x.phone || "-"})` }));
 
         const container = document.getElementById("trfTargetCombo");
         container.innerHTML = "";
         trfCombo = createPremiumCombo(container, options, {
           placeholder: "Pilih pelanggan tujuan...",
-          onSelect: () => {}
+          labField: "name", // Explicitly use 'name'
+          onSelect: () => {},
         });
-        
+
         openModal("mTransferSaldo");
       }
 
       async function saveTransfer() {
-        const targetId = trfCombo.getSelectedValue();
+        const targetId = trfCombo.val();
         const amount = parseFloat(document.getElementById("trfAmount").value);
-        
+
         if (!targetId) return showToast("Pilih pelanggan tujuan", "error");
-        if (!amount || amount <= 0) return showToast("Masukkan nominal valid", "error");
-        
+        if (!amount || amount <= 0)
+          return showToast("Masukkan nominal valid", "error");
+
         try {
           showLoading("Memproses transfer...");
           await api("POST", `/customers/${trfSourceId}/transfer-balance`, {
             target_customer_id: parseInt(targetId),
-            amount: amount
+            amount: amount,
           });
           showToast("Transfer berhasil ✓");
           closeModal("mTransferSaldo");

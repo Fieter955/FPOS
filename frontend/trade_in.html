@@ -378,8 +378,8 @@
 
       async function init() {
         [allItems, allCusts] = await Promise.all([
-          api("GET", "/items/?limit=500"),
-          api("GET", "/customers/?limit=300"),
+          api("GET", "/items/?limit=2000"),
+          api("GET", "/customers/?limit=2000"),
         ]);
 
         custCombo = createPremiumCombo("custComboContainer", allCusts, {
@@ -411,7 +411,6 @@
           <td style="white-space:nowrap">
             <button class="bsm bv" onclick="showDetail(${t.id})">Detail</button>
             <button class="bsm bv" style="background:white" onclick="printReceipt(${t.id})">Cetak</button>
-            <button class="bsm bd" onclick="hapus(${t.id})">Hapus</button>
           </td></tr>`;
                 })
                 .join("")
@@ -454,7 +453,7 @@
       function fillReturnPrice(idx, sel) {
         const opt = sel.options[sel.selectedIndex];
         document.querySelector(`#rrow${idx} .rp`).value =
-          opt?.dataset?.buy || 0;
+          opt?.dataset?.sell || 0;
         recalc();
       }
 
@@ -694,7 +693,6 @@
         ${t.notes ? `<div style="color:var(--text-muted);font-size:14px">Catatan: ${t.notes}</div>` : ""}
         <div style="margin-top:16px; display: flex; gap: 8px;">
           <button onclick="printReceipt(${t.id})" class="btn" style="background:#3b82f6; color:white">🖨 Cetak Struk</button>
-          <button onclick="hapus(${t.id})" class="btn btn-danger">🗑 Hapus Transaksi</button>
         </div>`;
           openModal("mDetail");
         } catch (ex) {

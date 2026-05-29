@@ -84,13 +84,13 @@ Khusus untuk barang yang masuk melalui Tukar Tambah dengan kondisi **Rusak/Damag
 ### 5. Skema Database (Highlight)
 
 #### D. Manajemen Saldo Pelanggan (Deposit & Transfer)
-Sistem mendukung pengelolaan saldo pelanggan yang berasal dari selisih Tukar Tambah atau Retur Penjualan:
-1. **Transfer Saldo (Admin Only)**: Saldo dapat dipindahkan antar pelanggan melalui tombol 💸 di tabel Pelanggan.
+Sistem mendukung pengelolaan saldo pelanggan (`deposit_balance`) yang berasal dari selisih Tukar Tambah atau Retur Penjualan:
+1. **Transfer Saldo (Admin Only)**: Saldo dapat dipindahkan antar pelanggan melalui tombol aksi 💸 di halaman `customers.html`. Antarmuka menggunakan komponen `createPremiumCombo` dengan pencarian dinamis berbasis nama/telepon pelanggan tujuan.
    - **Jurnal**: Debit `2-1300 Titipan Pelanggan` (Asal), Kredit `2-1300 Titipan Pelanggan` (Tujuan).
-2. **Proteksi Penghapusan**: Akun pelanggan yang memiliki saldo tidak dapat dihapus secara tidak sengaja.
-3. **Penghapusan & Penghangusan (Write-off)**: Jika pelanggan bersaldo tetap dihapus (menggunakan opsi *Force Delete*), sistem otomatis menghanguskan saldo tersebut.
-   - **Jurnal**: Debit `2-1300 Titipan Pelanggan` (Hutang berkurang), Kredit `4-1400 Pendapatan Lain-lain` (Penghapusan Saldo).
-   - Hal ini memastikan **Neraca tetap seimbang** meskipun ada akun pelanggan yang dinonaktifkan.
+2. **Proteksi Penghapusan**: Akun pelanggan yang memiliki saldo aktif ditahan oleh sistem agar tidak terhapus tanpa sengaja (Error 400 `HAS_BALANCE`).
+3. **Penghapusan & Penghangusan (Write-off)**: Jika pelanggan bersaldo terpaksa dihapus (melalui konfirmasi pop-up *Force Delete*), sistem otomatis mengosongkan saldo dan mencatat pembukuannya ke akun laba rugi.
+   - **Jurnal**: Debit `2-1300 Titipan Pelanggan` (Hutang Toko berkurang), Kredit `4-1400 Pendapatan Lain-lain (Penghapusan Saldo)` (Keuntungan Toko bertambah).
+   - Hal ini memastikan **Laporan Neraca (Balance Sheet) tetap seimbang** meskipun akun di-softdelete.
 
 #### E. Inter-Branch PO (Pemenuhan Permintaan Cabang)
 - **Workflow**: Cabang membuat Request (`is_branch_request=true`) -> Pusat proses di `po.html` -> Simpan Draft atau Bayar.
