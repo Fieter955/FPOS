@@ -58,10 +58,10 @@ Fitur Tukar Tambah memungkinkan pelanggan mengembalikan barang lama dan mengambi
    - **Wajib Ada**: Transaksi dianggap valid hanya jika terdapat minimal satu barang lama (kembali) dan satu barang baru (beli).
    - **Default Harga Jual**: Barang yang dikembalikan otomatis dihargai sebesar **Harga Jual (`sell_price`)** aslinya, bukan harga modal. Hal ini dilakukan untuk menjaga keadilan nilai bagi pelanggan dan konsistensi pembukuan retur.
 3. **Penyelesaian Selisih & Jurnal Otomatis**:
-   - Sistem menghitung `Net Balance = (Total Baru - Total Kembali) - Pembayaran Kas/Bank`.
-   - **Kekurangan Bayar**: Jika pelanggan belum melunasi selisih, sisa nilai otomatis dianggap sebagai Kas Masuk (Piutang lunas).
-   - **Kelebihan Bayar/Nilai (Deposit)**: Jika total nilai (Barang Kembali + Kas) melebihi harga Barang Baru, selisihnya otomatis dimasukkan ke akun **2-1300 Uang Muka Penjualan** dan menambah `deposit_balance` pelanggan.
-   - **Double-Entry Balance**: Logika ini menjamin Debit dan Kredit selalu balance meskipun terjadi overpayment atau nilai tukar yang lebih tinggi dari barang baru.
+   - Sistem menghitung `Surplus/Defisit = (Total Nilai Barang Kembali + Pembayaran Fisik) - Total Nilai Barang Baru`.
+   - **Defisit (Kurang Bayar)**: Jika total nilai yang diberikan pelanggan (barang + uang) lebih kecil dari harga barang baru, sisa kekurangannya otomatis dianggap sebagai Kas Masuk (asumsi pelunasan di tempat).
+   - **Surplus (Kelebihan Nilai/Bayar)**: Jika pelanggan memberikan nilai lebih (misal: barang lama sangat mahal atau ada kelebihan bayar cash), selisih surplus tersebut otomatis dimasukkan ke akun **2-1300 Uang Muka Penjualan** dan menambah `deposit_balance` pelanggan.
+   - **Double-Entry Balance**: Logika ini menjamin Debit dan Kredit selalu balance dengan mengalokasikan selisih ke akun Kas (jika defisit) atau akun Deposit (jika surplus).
 4. **Cetak Struk Thermal (ESC/POS)**:
    - Sistem mendukung cetak struk khusus dengan format dua kolom: **Barang Kembali** dan **Barang Baru**.
    - Menampilkan selisih nilai secara transparan serta keterangan status pembayaran (Lunas/Saldo).
