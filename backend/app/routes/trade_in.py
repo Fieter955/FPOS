@@ -182,9 +182,15 @@ def create_trade_in(
     db.add(trade)
     db.flush()
 
-    # Update Saldo Pelanggan jika Toko kembalikan uang
-    if difference < 0:
-        customer.deposit_balance += abs(difference)
+    # Total yang dibayarkan pelanggan secara fisik (Kas/Bank)
+    total_paid_physical = data.cash_amount + data.bank_amount
+
+    # Selisih akhir setelah memperhitungkan pembayaran fisik
+    # Jika net_balance < 0, artinya toko berhutang ke pelanggan (masuk saldo)
+    net_balance = difference - total_paid_physical
+
+    if net_balance < 0:
+        customer.deposit_balance += abs(net_balance)
 
     # Proses barang yang dikembalikan → tambah ke stok
     for ri in data.return_items:
@@ -241,20 +247,22 @@ def create_trade_in(
     if return_subtotal > 0:
         entries.append({"code": "1-1400", "debit": return_subtotal, "credit": 0}) # Stok Masuk (Nilai Terima)
 
-    # 3. Pembayaran (Kas/Bank) atau Saldo (Refund)
-    if difference > 0:
-        # Pelanggan bayar selisih
+    # 3. Pembayaran (Kas/Bank) & Penyesuaian Saldo
+    if total_paid_physical > 0:
         if data.cash_amount > 0:
             entries.append({"code": "1-1100", "debit": data.cash_amount, "credit": 0})
         if data.bank_amount > 0:
             entries.append({"code": "1-1200", "debit": data.bank_amount, "credit": 0})
-        # Jika ada sisa selisih yang belum teralokasi (misal lupa input), masukkan ke kas
-        alokasi = data.cash_amount + data.bank_amount
-        if alokasi < difference:
-            entries.append({"code": "1-1100", "debit": difference - alokasi, "credit": 0})
-    elif difference < 0:
-        # Toko kembalikan uang (Masuk Saldo Pelanggan)
-        entries.append({"code": "2-1200", "debit": 0, "credit": abs(difference)}) # Hutang/Deposit Pelanggan
+
+    # 4. Keseimbangan Jurnal
+    # Jika ada kekurangan bayar (pelanggan belum bayar sisa selisih), masukkan ke Kas (asumsi piutang tertutup kas)
+    # Jika ada kelebihan bayar/nilai barang (net_balance < 0), masukkan ke Uang Muka Penjualan (2-1300)
+    if net_balance > 0.01:
+        # Masih kurang bayar -> asumsikan sisa masuk ke Kas (atau bisa Piutang 1-1300)
+        entries.append({"code": "1-1100", "debit": net_balance, "credit": 0})
+    elif net_balance < -0.01:
+        # Kelebihan bayar/nilai -> masuk ke Uang Muka Penjualan (Hutang Toko ke Pelanggan)
+        entries.append({"code": "2-1300", "debit": 0, "credit": abs(net_balance)})
 
     if entries:
         create_auto_journal(

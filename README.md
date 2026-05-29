@@ -54,15 +54,16 @@ Fitur Tukar Tambah memungkinkan pelanggan mengembalikan barang lama dan mengambi
 1. **Mekanisme Stok Ganda**:
    - **Barang Kembali**: Menambah stok gudang (sebagai barang masuk) dengan pencatatan kondisi (bagus/rusak).
    - **Barang Baru**: Mengurangi stok gudang (sebagai barang keluar).
-2. **Perhitungan Selisih Otomatis**: 
-   - Sistem menghitung `Total Nilai Baru - Total Nilai Kembali`.
-   - **Selisih Positif**: Pelanggan membayar sisa ke toko.
-   - **Selisih Negatif**: Toko mengembalikan uang ke pelanggan.
-3. **Integritas Data & Branch Awareness**:
-   - Setiap mutasi stok (`StockMovement`) yang dihasilkan dari tukar tambah kini wajib mencatat `branch_id` untuk memastikan laporan persediaan per cabang akurat.
-   - Sinkronisasi field name antara frontend (`return_price`, `sell_price`) dan backend Pydantic schemas untuk mencegah error validasi data.
+2. **Logika Harga & Validasi**:
+   - **Wajib Ada**: Transaksi dianggap valid hanya jika terdapat minimal satu barang lama (kembali) dan satu barang baru (beli).
+   - **Default Harga Jual**: Barang yang dikembalikan otomatis dihargai sebesar **Harga Jual (`sell_price`)** aslinya, bukan harga modal. Hal ini dilakukan untuk menjaga keadilan nilai bagi pelanggan dan konsistensi pembukuan retur.
+3. **Penyelesaian Selisih & Jurnal Otomatis**:
+   - Sistem menghitung `Net Balance = (Total Baru - Total Kembali) - Pembayaran Kas/Bank`.
+   - **Kekurangan Bayar**: Jika pelanggan belum melunasi selisih, sisa nilai otomatis dianggap sebagai Kas Masuk (Piutang lunas).
+   - **Kelebihan Bayar/Nilai (Deposit)**: Jika total nilai (Barang Kembali + Kas) melebihi harga Barang Baru, selisihnya otomatis dimasukkan ke akun **2-1300 Uang Muka Penjualan** dan menambah `deposit_balance` pelanggan.
+   - **Double-Entry Balance**: Logika ini menjamin Debit dan Kredit selalu balance meskipun terjadi overpayment atau nilai tukar yang lebih tinggi dari barang baru.
 4. **Cetak Struk Thermal (ESC/POS)**:
-   - Sistem mendukung cetak struk khusus untuk transaksi tukar tambah dengan format dua kolom: **Barang Kembali** dan **Barang Baru**.
+   - Sistem mendukung cetak struk khusus dengan format dua kolom: **Barang Kembali** dan **Barang Baru**.
    - Menampilkan selisih nilai secara transparan serta keterangan status pembayaran (Lunas/Saldo).
 5. **Detail Transaksi**: Riwayat lengkap tersedia dengan rincian barang yang masuk dan keluar beserta harga per itemnya.
 
