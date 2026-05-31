@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Satu Harga - Pengaturan Harga Jual</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="/js/theme.js"></script>
+    <style>
+        .setting-header {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            margin-bottom: 24px;
+            padding: 16px;
+            background: var(--card-bg);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            flex-wrap: wrap;
+        }
+        .radio-group {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .radio-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+        .radio-item input[type="radio"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary);
+        }
+        .form-section {
+            background: var(--card-bg);
+            padding: 24px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            max-width: 800px;
+        }
+        .alert-info {
+            color: #ef4444;
+            font-size: 13px;
+            margin-top: -8px;
+            margin-bottom: 16px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <main class="main-content">
+            <button
+                class="btn"
+                style="
+                    background: transparent;
+                    color: var(--text-muted);
+                    padding: 0;
+                    margin-bottom: 16px;
+                "
+                onclick="location.href = '/dashboard'"
+            >
+                ← Kembali
+            </button>
+            <div class="pg-header">
+                <div>
+                    <h1>⚙️ Pengaturan Harga Jual</h1>
+                    <p>Konfigurasi metode penetapan harga jual barang.</p>
+                </div>
+            </div>
+
+            <!-- Navigasi Pilihan Harga Jual -->
+            <div class="setting-header">
+                <div class="radio-group">
+                    <span style="font-weight: bold; color: var(--text-muted);">Pilihan Harga Jual :</span>
+                    <label class="radio-item">
+                        <input type="radio" name="price_mode" checked onclick="window.location.href='dashboard.html'"> Satu Harga
+                    </label>
+                    <label class="radio-item">
+                        <input type="radio" name="price_mode" onclick="window.location.href='satuan.html'"> Berdasarkan Satuan
+                    </label>
+                    <label class="radio-item">
+                        <input type="radio" name="price_mode" onclick="window.location.href='levelHarga.html'"> Berdasar Level Harga
+                    </label>
+                    <label class="radio-item">
+                        <input type="radio" name="price_mode" onclick="window.location.href='levelJumlah.html'"> Berdasarkan Jumlah
+                    </label>
+                </div>
+                <div style="border-left: 1px solid var(--border-color); height: 24px; margin: 0 8px;"></div>
+                <label class="radio-item">
+                    <input type="checkbox"> Harga Jual di pilih saat transaksi (Flexible)
+                </label>
+            </div>
+
+            <div class="form-section">
+                <div class="row2" style="margin-bottom: 16px;">
+                    <div class="input-group">
+                        <label>Satuan Dasar :</label>
+                        <select class="input-control">
+                            <option value="">-- Pilih Satuan --</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; align-items: flex-end;">
+                        <p class="alert-info">Disarankan untuk tidak mengubah satuan jika sudah terdapat transaksi yang berhubungan dengan item ini.</p>
+                    </div>
+                </div>
+
+                <div class="row2" style="margin-bottom: 16px;">
+                    <div class="input-group">
+                        <label>Harga Pokok :</label>
+                        <input type="text" class="input-control" placeholder="0,00" style="text-align: right;">
+                    </div>
+                    <div class="input-group">
+                        <label>Margin (%) & Harga Jual :</label>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <input type="text" class="input-control" placeholder="0,00" style="width: 80px; text-align: center;">
+                            <span style="font-weight: bold;">% =</span>
+                            <input type="text" class="input-control" placeholder="0,00" style="flex: 1; text-align: right;">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row2" style="margin-bottom: 16px;">
+                    <div class="input-group">
+                        <label>Barcode :</label>
+                        <input type="text" class="input-control" placeholder="Masukkan Barcode">
+                    </div>
+                    <div class="input-group">
+                        <label>Poin Dasar :</label>
+                        <input type="number" class="input-control" value="0" style="text-align: right;">
+                    </div>
+                </div>
+
+                <div class="row2" style="margin-bottom: 16px;">
+                    <div class="input-group">
+                        <label>Komisi Sales :</label>
+                        <input type="text" class="input-control" placeholder="0,00" style="text-align: right;">
+                    </div>
+                    <div></div>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; margin-top: 24px; gap: 12px;">
+                    <button class="btn" style="background: var(--bg-color); border: 1px solid var(--border-color);">Batal</button>
+                    <button class="btn btn-primary">Simpan Pengaturan</button>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+</html>

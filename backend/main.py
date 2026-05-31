@@ -340,6 +340,19 @@ if FRONTEND_DIR.exists():
             app.add_api_route(f"/{page}", make_handler(page), methods=["GET"])
             app.add_api_route(f"/{page}.html", make_handler(page), methods=["GET"])
 
+    # Serve pages in item subdirectory
+    ITEM_PAGES = ["dashboard", "satuan", "levelHarga", "levelJumlah"]
+    for page in ITEM_PAGES:
+        html_file = FRONTEND_DIR / "item" / f"{page}.html"
+        if html_file.exists():
+            def make_item_handler(p):
+                async def handler():
+                    return FileResponse(str(FRONTEND_DIR / "item" / f"{p}.html"))
+                handler.__name__ = f"page_item_{p}"
+                return handler
+            app.add_api_route(f"/item/{page}", make_item_handler(page), methods=["GET"])
+            app.add_api_route(f"/item/{page}.html", make_item_handler(page), methods=["GET"])
+
 def cari_tailscale_exe() -> str | None:
     kandidat = [
         r"C:\Program Files\Tailscale\tailscale.exe",

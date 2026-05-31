@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Berdasar Level Harga - Pengaturan Harga Jual</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="/js/theme.js"></script>
+    <style>
+        .setting-header {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            margin-bottom: 24px;
+            padding: 16px;
+            background: var(--card-bg);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            flex-wrap: wrap;
+        }
+        .radio-group {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .radio-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+        .radio-item input[type="radio"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary);
+        }
+        .tbl-wrap {
+            overflow-x: auto;
+        }
+        .tbl th {
+            font-size: 11px;
+            padding: 8px 4px;
+            white-space: nowrap;
+            background: var(--primary-light);
+            color: var(--primary);
+        }
+        .tbl td {
+            padding: 4px;
+        }
+        .tbl .input-control {
+            padding: 4px 6px;
+            font-size: 12px;
+            border-radius: 4px;
+            min-width: 60px;
+        }
+        .alert-info {
+            color: #ef4444;
+            font-size: 13px;
+            font-weight: 500;
+            margin-left: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <main class="main-content">
+            <button
+                class="btn"
+                style="
+                    background: transparent;
+                    color: var(--text-muted);
+                    padding: 0;
+                    margin-bottom: 16px;
+                "
+                onclick="location.href = '/dashboard'"
+            >
+                ← Kembali
+            </button>
+            <div class="pg-header">
+                <div>
+                    <h1>⚙️ Pengaturan Harga Jual</h1>
+                    <p>Konfigurasi metode penetapan harga jual barang.</p>
+                </div>
+            </div>
+
+            <!-- Navigasi Pilihan Harga Jual -->
+            <div class="setting-header">
+                <div class="radio-group">
+                    <span style="font-weight: bold; color: var(--text-muted);">Pilihan Harga Jual :</span>
+                    <label class="radio-item">
+                        <input type="radio" name="price_mode" onclick="window.location.href='dashboard.html'"> Satu Harga
+                    </label>
+                    <label class="radio-item">
+                        <input type="radio" name="price_mode" onclick="window.location.href='satuan.html'"> Berdasarkan Satuan
+                    </label>
+                    <label class="radio-item">
+                        <input type="radio" name="price_mode" checked onclick="window.location.href='levelHarga.html'"> Berdasar Level Harga
+                    </label>
+                    <label class="radio-item">
+                        <input type="radio" name="price_mode" onclick="window.location.href='levelJumlah.html'"> Berdasarkan Jumlah
+                    </label>
+                </div>
+                <div style="border-left: 1px solid var(--border-color); height: 24px; margin: 0 8px;"></div>
+                <label class="radio-item">
+                    <input type="checkbox"> Harga Jual di pilih saat transaksi (Flexible)
+                </label>
+            </div>
+
+            <div style="display: flex; align-items: center; margin-bottom: 16px;">
+                <label style="font-weight: bold; min-width: 120px;">Satuan Dasar :</label>
+                <select class="input-control" style="width: 200px; margin-right: 12px;">
+                    <option value="">-- Pilih Satuan --</option>
+                </select>
+                <p class="alert-info">Disarankan untuk tidak mengubah satuan jika sudah terdapat transaksi yang berhubungan dengan item ini.</p>
+            </div>
+
+            <div class="tbl-wrap">
+                <table class="tbl">
+                    <thead>
+                        <tr>
+                            <th style="width: 30px;"></th>
+                            <th>Satuan</th>
+                            <th>Jns Satuan</th>
+                            <th>Konversi</th>
+                            <th>Poin</th>
+                            <th>Barcode</th>
+                            <th>Harga Pokok</th>
+                            <th>Proc 1(%)</th>
+                            <th>Proc 2(%)</th>
+                            <th>Proc 3(%)</th>
+                            <th>Proc 4(%)</th>
+                            <th>Proc 5(%)</th>
+                            <th>Proc 6(%)</th>
+                            <th>HJ Level 1</th>
+                            <th>HJ Level 2</th>
+                            <th>HJ Level 3</th>
+                            <th>HJ Level 4</th>
+                            <th>HJ Level 5</th>
+                            <th>HJ Level 6</th>
+                            <th>Komisi Sales</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="text-align: center;">▶</td>
+                            <td><select class="input-control"><option>Pcs</option></select></td>
+                            <td><select class="input-control"><option>Satuan Dasar</option></select></td>
+                            <td><input type="text" class="input-control" value="1,00" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" value="0" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control"></td>
+                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
+                            <!-- Procs -->
+                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
+                            <!-- HJ Levels -->
+                            <td><input type="text" class="input-control" value="0,00" style="text-align: right; color: var(--primary); font-weight: bold;"></td>
+                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: center;">*</td>
+                            <td><select class="input-control"><option></option></select></td>
+                            <td><select class="input-control"><option></option></select></td>
+                            <td><input type="text" class="input-control" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control"></td>
+                            <td><input type="text" class="input-control" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" style="text-align: right;"></td>
+                            <td><input type="text" class="input-control" style="text-align: right;"></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; margin-top: 24px; gap: 12px;">
+                <button class="btn" style="background: var(--bg-color); border: 1px solid var(--border-color);">Batal</button>
+                <button class="btn btn-primary">Simpan Pengaturan</button>
+            </div>
+        </main>
+    </div>
+</body>
+</html>
