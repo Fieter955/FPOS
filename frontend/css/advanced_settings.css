@@ -98,8 +98,23 @@
   min-width: 120px;
 }
 
-/* Style untuk Pemisah Cluster di Level Jumlah */
+/* Style untuk Pemisah Cluster di Level Jumlah & Level Harga */
 .advanced-container .tbl th.sep,
 .advanced-container .tbl td.sep {
   border-right: 2px solid var(--primary) !important;
+}
+
+.advanced-container .group-label {
+  text-align: center !important;
+  background: #f59e0b !important; /* Gold/Orange color */
+  color: #fff !important;
+  font-weight: 800 !important;
+  font-size: 10px !important;
+  letter-spacing: 1.5px;
+  padding: 6px !important;
+  text-transform: uppercase;
+}
+
+.advanced-container .header-spacer {
+  background: var(--primary-light) !important;
 }

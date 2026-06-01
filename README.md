@@ -41,6 +41,13 @@ Sistem menggunakan pendekatan **Component-Based Architecture** secara manual tan
 3.  **In-Modal Page Navigation**: Fitur "Pengaturan Harga Lanjutan" di dalam modal barang memungkinkan pemuatan sub-halaman (Level Harga, Level Jumlah, dll) tanpa berpindah layar. Sistem mengekstrak bagian tabel (`.tbl-wrap`) dari file HTML eksternal menggunakan `DOMParser` dan menerapkannya secara instan.
 4.  **Full-Screen Focus UI**: Modal tambah barang dirancang full-screen (`100vw/vh`) untuk menghilangkan distraksi latar belakang dan memberikan area kerja yang maksimal.
 
+#### B. Optimasi UI/UX Pengaturan Harga Lanjutan
+Tabel pengaturan harga (Satuan, Level Harga, Level Jumlah) telah dioptimasi untuk kecepatan input:
+- **Logical Grouping**: Kolom dikelompokkan berdasarkan relasi data (misal: `Proc X %` bersebelahan langsung dengan `HJ Lvl X`).
+- **Visual Separation**: Menggunakan garis vertikal tebal (`.sep`) untuk memisahkan cluster data utama, memudahkan mata pengguna mengikuti baris data yang panjang.
+- **Ramping & Fokus**: Kolom yang jarang digunakan (seperti Poin, Barcode, Komisi) telah dihilangkan untuk memberikan ruang lebih luas pada input harga utama.
+- **Cache-Busting Fetch**: Sistem pemuatan dinamis dilengkapi dengan timestamp unik (`?_t=...`) untuk memastikan pengguna selalu mendapatkan versi tabel terbaru tanpa masalah cache browser.
+
 - **Identity**: Setiap user memiliki `active_branch_id`.
 - **Toko Utama (Main Store)**: Didefinisikan secara dinamis sebagai cabang di mana `id == 1` ATAU memiliki `status == 'Toko Utama'`.
 - **Logic**: Menggunakan helper global `isMainStore()` di frontend dan pengecekan status di backend untuk mengizinkan fitur pusat (monitoring setoran, approval permintaan barang) pada cabang yang ditunjuk.
