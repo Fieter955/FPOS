@@ -97,3 +97,9 @@
   font-weight: bold;
   min-width: 120px;
 }
+
+/* Style untuk Pemisah Cluster di Level Jumlah */
+.advanced-container .tbl th.sep,
+.advanced-container .tbl td.sep {
+  border-right: 2px solid var(--primary) !important;
+}
