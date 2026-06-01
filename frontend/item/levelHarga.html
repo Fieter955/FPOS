@@ -119,78 +119,209 @@
 
             <div class="tbl-wrap">
                 <table class="tbl">
-                    <thead>
-                        <tr>
-                            <th style="width: 30px;"></th>
-                            <th>Satuan</th>
-                            <th>Jns Satuan</th>
-                            <th>Konversi</th>
-                            <th>Poin</th>
-                            <th>Barcode</th>
-                            <th>Harga Pokok</th>
-                            <th>Proc 1(%)</th>
-                            <th>Proc 2(%)</th>
-                            <th>Proc 3(%)</th>
-                            <th>Proc 4(%)</th>
-                            <th>Proc 5(%)</th>
-                            <th>Proc 6(%)</th>
-                            <th>HJ Level 1</th>
-                            <th>HJ Level 2</th>
-                            <th>HJ Level 3</th>
-                            <th>HJ Level 4</th>
-                            <th>HJ Level 5</th>
-                            <th>HJ Level 6</th>
-                            <th>Komisi Sales</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td style="text-align: center;">▶</td>
-                            <td><select class="input-control"><option>Pcs</option></select></td>
-                            <td><select class="input-control"><option>Satuan Dasar</option></select></td>
-                            <td><input type="text" class="input-control" value="1,00" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" value="0" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control"></td>
-                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
-                            <!-- Procs -->
-                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
-                            <!-- HJ Levels -->
-                            <td><input type="text" class="input-control" value="0,00" style="text-align: right; color: var(--primary); font-weight: bold;"></td>
-                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
-                        </tr>
-                        <tr>
-                            <td style="text-align: center;">*</td>
-                            <td><select class="input-control"><option></option></select></td>
-                            <td><select class="input-control"><option></option></select></td>
-                            <td><input type="text" class="input-control" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control"></td>
-                            <td><input type="text" class="input-control" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" style="text-align: right;"></td>
-                        </tr>
-                    </tbody>
+            <thead>
+              <tr>
+                <th style="width: 30px"></th>
+                <th>Satuan</th>
+                <th>Jns Satuan</th>
+                <th>Konv</th>
+                <th class="sep">H. Pokok</th>
+                <th>Proc 1(%)</th>
+                <th class="sep">HJ Lvl 1</th>
+                <th>Proc 2(%)</th>
+                <th class="sep">HJ Lvl 2</th>
+                <th>Proc 3(%)</th>
+                <th class="sep">HJ Lvl 3</th>
+                <th>Proc 4(%)</th>
+                <th class="sep">HJ Lvl 4</th>
+                <th>Proc 5(%)</th>
+                <th class="sep">HJ Lvl 5</th>
+                <th>Proc 6(%)</th>
+                <th>HJ Lvl 6</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="text-align: center">▶</td>
+                <td>
+                  <select class="input-control">
+                    <option>Pcs</option>
+                  </select>
+                </td>
+                <td>
+                  <select class="input-control">
+                    <option>Satuan Dasar</option>
+                  </select>
+                </td>
+                <td>
+                  <input
+                    type="text"
+                    class="input-control"
+                    value="1,00"
+                    style="text-align: right"
+                  />
+                </td>
+                <td class="sep">
+                  <input
+                    type="text"
+                    class="input-control"
+                    value="0,00"
+                    style="text-align: right"
+                  />
+                </td>
+                <!-- Level 1 Group -->
+                <td>
+                  <input
+                    type="text"
+                    class="input-control"
+                    value="0,00"
+                    style="text-align: right"
+                  />
+                </td>
+                <td class="sep">
+                  <input
+                    type="text"
+                    class="input-control"
+                    value="0,00"
+                    style="
+                      text-align: right;
+                      color: var(--primary);
+                      font-weight: bold;
+                    "
+                  />
+                </td>
+                <!-- Level 2 Group -->
+                <td>
+                  <input
+                    type="text"
+                    class="input-control"
+                    value="0,00"
+                    style="text-align: right"
+                  />
+                </td>
+                <td class="sep">
+                  <input
+                    type="text"
+                    class="input-control"
+                    value="0,00"
+                    style="text-align: right"
+                  />
+                </td>
+                <!-- Level 3 Group -->
+                <td>
+                  <input
+                    type="text"
+                    class="input-control"
+                    value="0,00"
+                    style="text-align: right"
+                  />
+                </td>
+                <td class="sep">
+                  <input
+                    type="text"
+                    class="input-control"
+                    value="0,00"
+                    style="text-align: right"
+                  />
+                </td>
+                <!-- Level 4 Group -->
+                <td>
+                  <input
+                    type="text"
+                    class="input-control"
+                    value="0,00"
+                    style="text-align: right"
+                  />
+                </td>
+                <td class="sep">
+                  <input
+                    type="text"
+                    class="input-control"
+                    value="0,00"
+                    style="text-align: right"
+                  />
+                </td>
+                <!-- Level 5 Group -->
+                <td>
+                  <input
+                    type="text"
+                    class="input-control"
+                    value="0,00"
+                    style="text-align: right"
+                  />
+                </td>
+                <td class="sep">
+                  <input
+                    type="text"
+                    class="input-control"
+                    value="0,00"
+                    style="text-align: right"
+                  />
+                </td>
+                <!-- Level 6 Group -->
+                <td>
+                  <input
+                    type="text"
+                    class="input-control"
+                    value="0,00"
+                    style="text-align: right"
+                  />
+                </td>
+                <td>
+                  <input
+                    type="text"
+                    class="input-control"
+                    value="0,00"
+                    style="text-align: right"
+                  />
+                </td>
+              </tr>
+              <tr>
+                <td style="text-align: center">*</td>
+                <td>
+                  <select class="input-control">
+                    <option></option>
+                  </select>
+                </td>
+                <td>
+                  <select class="input-control">
+                    <option></option>
+                  </select>
+                </td>
+                <td>
+                  <input
+                    type="text"
+                    class="input-control"
+                    style="text-align: right"
+                  />
+                </td>
+                <td class="sep">
+                  <input
+                    type="text"
+                    class="input-control"
+                    style="text-align: right"
+                  />
+                </td>
+                <!-- Level 1 Group Template -->
+                <td><input type="text" class="input-control" style="text-align: right" /></td>
+                <td class="sep"><input type="text" class="input-control" style="text-align: right" /></td>
+                <!-- Level 2 Group Template -->
+                <td><input type="text" class="input-control" style="text-align: right" /></td>
+                <td class="sep"><input type="text" class="input-control" style="text-align: right" /></td>
+                <!-- Level 3 Group Template -->
+                <td><input type="text" class="input-control" style="text-align: right" /></td>
+                <td class="sep"><input type="text" class="input-control" style="text-align: right" /></td>
+                <!-- Level 4 Group Template -->
+                <td><input type="text" class="input-control" style="text-align: right" /></td>
+                <td class="sep"><input type="text" class="input-control" style="text-align: right" /></td>
+                <!-- Level 5 Group Template -->
+                <td><input type="text" class="input-control" style="text-align: right" /></td>
+                <td class="sep"><input type="text" class="input-control" style="text-align: right" /></td>
+                <!-- Level 6 Group Template -->
+                <td><input type="text" class="input-control" style="text-align: right" /></td>
+                <td><input type="text" class="input-control" style="text-align: right" /></td>
+              </tr>
+            </tbody>
                 </table>
             </div>
 
