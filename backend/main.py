@@ -323,7 +323,7 @@ if FRONTEND_DIR.exists():
 
     HTML_PAGES = [
         "index", "dashboard", "pos", "sales", "purchases", "catat-pembelian", "returns",
-        "items", "customers", "suppliers", "inventory", "reports",
+        "customers", "suppliers", "inventory", "reports",
         "accounting", "shifts", "konsinyasi", "ai_advisor",
         "settings", "warehouse", "assembly", "discounts", "onboarding",
         "unit_conversion", "delivery", "trade_in", "ai_bangunan", "branches", "users", "barcode", "po", "setor", "setoran", "pembayaran",
@@ -341,7 +341,7 @@ if FRONTEND_DIR.exists():
             app.add_api_route(f"/{page}.html", make_handler(page), methods=["GET"])
 
     # Serve pages in item subdirectory
-    ITEM_PAGES = ["dashboard", "satuan", "levelHarga", "levelJumlah"]
+    ITEM_PAGES = ["dashboard", "satuan", "levelHarga", "levelJumlah", "items", "popUp", "kategori", "units"]
     for page in ITEM_PAGES:
         html_file = FRONTEND_DIR / "item" / f"{page}.html"
         if html_file.exists():

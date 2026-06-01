@@ -21,14 +21,26 @@ Dokumentasi ini dirancang agar AI (CLI Agent) dapat memahami struktur kerja sist
   - `/app/routes`: Endpoint API modular (Sales, Purchase, Inventory, dll).
   - `/app/services`: Logika bisnis berat (Virtual Units, AI Engine).
 - `/frontend`: Antarmuka Pengguna (UI).
+  - `/item`: Modul manajemen barang terfragmentasi (SPA Style).
+    - `items.html`: Halaman utama daftar barang & dashboard stok.
+    - `popUp.html`: Komponen modal full-screen untuk tambah/edit barang.
+    - `kategori.html` & `units.html`: Komponen manajemen referensi kategori/satuan.
   - `/js/api.js`: Wrapper untuk komunikasi ke Backend.
   - `/js/components.js`: UI Components reusable (Combobox, Grids, Manager, Toggle Button).
+  - `/js/kategori.js` & `/js/units.js`: Logika bisnis frontend khusus modul terkait.
   - `/js/print.js`: Logika cetak thermal dan export PDF.
 - `/css`: Sistem desain berbasis CSS Variables.
+  - `advanced_settings.css`: Standarisasi tampilan tabel pengaturan harga lanjutan.
 
 ### 3. Alur Kerja Inti (Core Workflows)
 
-#### A. Multi-Cabang (Multi-Branch) & Toko Utama
+#### A. Arsitektur Komponen & SPA (Single Page Application)
+Sistem menggunakan pendekatan **Component-Based Architecture** secara manual tanpa framework (Vanilla SPA):
+1.  **Dynamic Component Loading**: Halaman `items.html` tidak lagi berisi kode modal raksasa. HTML komponen (seperti `popUp.html`) dimuat secara dinamis menggunakan `fetch()` dan diinjeksikan ke dalam DOM saat runtime.
+2.  **Modular Logic**: JavaScript dipisahkan berdasarkan fungsi (`kategori.js`, `units.js`) untuk menjaga skalabilitas dan kemudahan debugging.
+3.  **In-Modal Page Navigation**: Fitur "Pengaturan Harga Lanjutan" di dalam modal barang memungkinkan pemuatan sub-halaman (Level Harga, Level Jumlah, dll) tanpa berpindah layar. Sistem mengekstrak bagian tabel (`.tbl-wrap`) dari file HTML eksternal menggunakan `DOMParser` dan menerapkannya secara instan.
+4.  **Full-Screen Focus UI**: Modal tambah barang dirancang full-screen (`100vw/vh`) untuk menghilangkan distraksi latar belakang dan memberikan area kerja yang maksimal.
+
 - **Identity**: Setiap user memiliki `active_branch_id`.
 - **Toko Utama (Main Store)**: Didefinisikan secara dinamis sebagai cabang di mana `id == 1` ATAU memiliki `status == 'Toko Utama'`.
 - **Logic**: Menggunakan helper global `isMainStore()` di frontend dan pengecekan status di backend untuk mengizinkan fitur pusat (monitoring setoran, approval permintaan barang) pada cabang yang ditunjuk.

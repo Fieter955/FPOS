@@ -1,0 +1,488 @@
+<style>
+  #mBarang {
+    padding: 0 !important;
+    background: var(
+      --bg-color
+    ) !important; /* Biar benar-benar menutup background */
+  }
+  #mBarang .modal-box {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: none !important;
+    max-height: none !important;
+    border-radius: 0 !important;
+    border: none !important;
+    display: flex;
+    flex-direction: column;
+    padding: 24px 32px !important;
+    background: var(--card-bg);
+  }
+  #mBarang .modal-hdr {
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-color);
+  }
+  #mBarang form {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 8px; /* For scrollbar space */
+  }
+  /* Ensure the footer buttons stay visible or are part of the scroll */
+  .modal-footer {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-color);
+    background: var(--card-bg);
+  }
+  @media (min-width: 768px) {
+    #mBarang .row-price {
+      display: grid;
+      grid-template-columns: 1fr 0.6fr 1fr 2.8fr !important;
+      gap: 12px;
+    }
+  }
+</style>
+
+<div class="modal-overlay" id="mBarang">
+  <div class="modal-box wide">
+    <div class="modal-hdr">
+      <h2 id="mBarangTitle">Tambah Barang</h2>
+      <button class="btn-x" onclick="closeModal('mBarang')">×</button>
+    </div>
+    <form id="fBarang" onsubmit="saveItem(event)">
+      <input type="hidden" id="fId" />
+
+      <div class="row2" style="margin-bottom: 16px">
+        <div class="input-group">
+          <label>Nama Barang *</label>
+          <input
+            id="fNama"
+            class="input-control"
+            required
+            placeholder="Contoh: Semen Gresik 50kg"
+          />
+        </div>
+        <div class="input-group">
+          <label>Sistem Barcode</label>
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              margin-bottom: 6px;
+            "
+          >
+            <input
+              type="checkbox"
+              id="autoBarcode"
+              onchange="toggleBarcodeUI()"
+              checked
+              style="width: 16px; height: 16px"
+            />
+            <label
+              for="autoBarcode"
+              style="
+                margin: 0;
+                cursor: pointer;
+                color: var(--text-main);
+                font-weight: bold;
+              "
+              >Sistem Buatkan Otomatis</label
+            >
+          </div>
+          <input
+            id="fBarcode"
+            class="input-control"
+            placeholder="Tembak Scanner / Ketik Manual"
+            style="display: none"
+          />
+          <div
+            id="lblScanner"
+            style="
+              font-size: 11px;
+              color: #10b981;
+              margin-top: 4px;
+              font-weight: bold;
+            "
+          >
+            (Atau Anda bisa langsung tembak Scanner Anda)
+          </div>
+        </div>
+      </div>
+
+      <div class="row2" style="margin-bottom: 16px">
+        <div class="input-group">
+          <label>Kategori</label>
+          <div style="display: flex; gap: 8px">
+            <select id="fKat" class="input-control" style="flex: 1; margin: 0">
+              <option value="">-- Pilih --</option>
+            </select>
+            <button
+              type="button"
+              onclick="quickAddKat()"
+              class="btn"
+              style="
+                padding: 12px 16px;
+                background: var(--primary-light);
+                color: var(--primary);
+                border: none;
+                border-radius: 12px;
+                font-weight: 700;
+              "
+            >
+              +
+            </button>
+          </div>
+        </div>
+        <div class="input-group">
+          <label>Satuan</label>
+          <div style="display: flex; gap: 8px">
+            <select id="fSat" class="input-control" style="flex: 1; margin: 0">
+              <option value="">-- Pilih --</option>
+            </select>
+            <button
+              type="button"
+              onclick="quickAddSat()"
+              class="btn"
+              style="
+                padding: 12px 16px;
+                background: var(--primary-light);
+                color: var(--primary);
+                border: none;
+                border-radius: 12px;
+                font-weight: 700;
+              "
+            >
+              +
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="row-price" style="margin-bottom: 16px">
+        <div
+          class="input-group"
+          style="
+            grid-column: 1 / -1;
+            background: var(--bg-color);
+            padding: 12px;
+            border-radius: 12px;
+            border: 1px dashed var(--primary);
+          "
+        >
+          <label
+            style="
+              color: var(--primary);
+              font-weight: bold;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+            "
+          >
+            Setelan Harga & Barcode Khusus Supplier
+          </label>
+          <div
+            style="
+              display: flex;
+              gap: 12px;
+              align-items: center;
+              margin-top: 8px;
+            "
+          >
+            <select
+              id="fSupplierContext"
+              class="input-control"
+              style="flex: 1; margin: 0"
+              onchange="onSupplierContextChange()"
+            >
+              <option value="">
+                -- Harga Umum (Default Semua Supplier) --
+              </option>
+            </select>
+            <div style="font-size: 12px; color: var(--text-muted); flex: 1.5">
+              Pilih supplier untuk mengatur <b>Harga Modal</b> dan
+              <b>Barcode</b> khusus dari supplier tersebut. Jika dibiarkan umum,
+              semua supplier menggunakan harga yang sama.
+            </div>
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label>Harga Modal (Beli)</label>
+          <input
+            id="fHBeli"
+            type="text"
+            inputmode="numeric"
+            class="input-control"
+            value="0"
+            oninput="
+              formatInputRibuan(this);
+              calcHJualFromMargin();
+            "
+          />
+        </div>
+        <div class="input-group">
+          <label>Margin (%)</label>
+          <input
+            id="fMargin"
+            type="number"
+            step="0.01"
+            class="input-control"
+            value="0"
+            oninput="calcHJualFromMargin()"
+          />
+        </div>
+        <div class="input-group">
+          <label style="color: var(--primary); font-weight: bold"
+            >Harga Jual (Normal) *</label
+          >
+          <input
+            id="fHJual"
+            type="text"
+            inputmode="numeric"
+            class="input-control"
+            value="0"
+            required
+            oninput="
+              formatInputRibuan(this);
+              calcMarginFromHJual();
+              updateDiscountPreview();
+            "
+          />
+        </div>
+        <div class="input-group">
+          <label style="color: #f59e0b; font-weight: bold"
+            >Harga Diskon / Grosir</label
+          >
+          <div style="display: flex; flex-direction: column; gap: 8px">
+            <div style="display: flex; align-items: center; gap: 10px">
+              <input
+                id="fHJualDiskon"
+                type="text"
+                inputmode="numeric"
+                class="input-control"
+                style="flex: 1; max-width: 200px; margin: 0"
+                value="0"
+                oninput="
+                  formatInputRibuan(this);
+                  updateDiscountPreview();
+                "
+              />
+              <label
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 6px;
+                  font-size: 0.85em;
+                  cursor: pointer;
+                  color: var(--text-main);
+                  white-space: nowrap;
+                  font-weight: 600;
+                "
+              >
+                <input
+                  type="checkbox"
+                  id="fIsDiscountable"
+                  onchange="updateDiscountPreview()"
+                  style="width: 16px; height: 16px"
+                />
+                Dapat Diskon Member
+              </label>
+            </div>
+
+            <div
+              id="groupDiscountSection"
+              style="
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                background: var(--bg);
+                padding: 12px;
+                border-radius: 8px;
+                border: 1px dashed var(--border-color);
+              "
+            >
+              <div style="display: flex; gap: 8px; align-items: center">
+                <select
+                  id="fDiscountGroupSelect"
+                  class="input-control"
+                  style="flex: 1.5; margin: 0"
+                  onchange="onGroupSelectChange()"
+                >
+                  <option value="">Pilih Grup (Set Harga)</option>
+                </select>
+                <div
+                  style="display: flex; align-items: center; gap: 4px; flex: 1"
+                >
+                  <input
+                    id="fGroupPercentInput"
+                    type="number"
+                    step="0.01"
+                    class="input-control"
+                    style="width: 65px; text-align: center; margin: 0"
+                    placeholder="%"
+                    oninput="onGroupPercentInput()"
+                  />
+                  <span style="font-weight: bold; font-size: 0.9em">%</span>
+                </div>
+                <span style="font-weight: 900; color: #f59e0b; font-size: 1.2em"
+                  >➜</span
+                >
+                <div style="flex: 2; position: relative">
+                  <span
+                    style="
+                      position: absolute;
+                      left: 8px;
+                      top: 50%;
+                      transform: translateY(-50%);
+                      color: var(--text-muted);
+                      font-size: 0.85em;
+                    "
+                    >Rp</span
+                  >
+                  <input
+                    id="fGroupPriceInput"
+                    type="text"
+                    inputmode="numeric"
+                    class="input-control"
+                    style="
+                      padding-left: 28px;
+                      background-color: var(--bg);
+                      color: #10b981;
+                      font-weight: bold;
+                      text-align: right;
+                      margin: 0;
+                    "
+                    placeholder="Harga Final"
+                    oninput="
+                      formatInputRibuan(this);
+                      onGroupPriceInput();
+                    "
+                  />
+                </div>
+              </div>
+              <div
+                id="groupHint"
+                style="
+                  font-size: 11px;
+                  color: var(--text-muted);
+                  font-style: italic;
+                  margin-left: 4px;
+                "
+              >
+                Pilih grup untuk mengatur harga khusus (Default Bronze: 5%)
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="advancedSettings" style="background: var(--bg-color); padding: 16px; border-radius: 12px; border: 1px dashed var(--border-color); margin-bottom: 16px;">
+        <div style="font-weight: 600; color: var(--primary); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+          ⚙️ Pengaturan Harga Lanjutan (Opsional)
+        </div>
+        <div id="advancedButton" style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+          <button
+            type="button"
+            class="btn adv-btn"
+            id="btnAdvSatuan"
+            style="background: var(--card-bg); color: var(--text-main); border: 1px solid var(--border-color);"
+            onclick="loadAdvancedContent('satuan')"
+          >
+            Berdasarkan Satuan
+          </button>
+          <button
+            type="button"
+            class="btn adv-btn"
+            id="btnAdvHarga"
+            style="background: var(--card-bg); color: var(--text-main); border: 1px solid var(--border-color);"
+            onclick="loadAdvancedContent('levelHarga')"
+          >
+            Level Harga
+          </button>
+          <button
+            type="button"
+            class="btn adv-btn"
+            id="btnAdvJumlah"
+            style="background: var(--card-bg); color: var(--text-main); border: 1px solid var(--border-color);"
+            onclick="loadAdvancedContent('levelJumlah')"
+          >
+            Level Jumlah
+          </button>
+        </div>
+        <div id="advancedContent" style="display: none; padding-top: 16px; border-top: 1px solid var(--border-color); overflow-x: auto;">
+          <!-- Konten dinamis akan dimuat di sini -->
+        </div>
+      </div>
+
+      <div class="row2" style="margin-bottom: 16px">
+        <div class="input-group">
+          <label>Peringatan Stok Menipis</label>
+          <input
+            id="fStokMin"
+            type="text"
+            inputmode="numeric"
+            class="input-control"
+            value="0"
+            oninput="formatInputRibuan(this)"
+          />
+        </div>
+        <div class="input-group">
+          <label>Catatan Tambahan</label>
+          <textarea
+            id="fDesk"
+            class="input-control"
+            rows="1"
+            style="resize: vertical"
+          ></textarea>
+        </div>
+      </div>
+
+      <!-- === PILIH SUPPLIER === -->
+      <div class="sup-selection-section">
+        <div class="sup-selection-header">
+          <label>🚚 Supplier Barang Ini</label>
+          <div class="sup-search-box">
+            <span class="sup-search-icon">🔍</span>
+            <input
+              type="text"
+              id="supSearchInput"
+              class="sup-search-input"
+              placeholder="Ketik nama supplier..."
+              autocomplete="off"
+            />
+            <div id="supDropdown" class="sup-dropdown"></div>
+          </div>
+        </div>
+        <div id="selectedSupsContainer" class="selected-sups-container">
+          <span style="color: var(--text-muted); font-size: 13px; padding: 4px"
+            >Belum ada supplier dipilih</span
+          >
+        </div>
+      </div>
+
+      <div
+        class="modal-footer"
+        style="
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+          margin-top: 8px;
+        "
+      >
+        <button
+          type="button"
+          onclick="closeModal('mBarang')"
+          class="btn"
+          style="
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+          "
+        >
+          Batal
+        </button>
+        <button type="submit" class="btn btn-primary">Simpan Barang</button>
+      </div>
+    </form>
+  </div>
+</div>

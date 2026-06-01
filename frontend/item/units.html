@@ -1,0 +1,59 @@
+<div id="pnlSat" style="display: none">
+  <div
+    style="
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 14px;
+    "
+  >
+    <button class="btn btn-primary" onclick="openSatModal()">
+      ➕ Tambah Satuan
+    </button>
+  </div>
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>Nama Satuan</th>
+          <th>Singkatan</th>
+          <th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody id="tblSat"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal-overlay" id="mSat">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <h2 id="mSatTitle">Tambah Satuan</h2>
+      <button class="btn-x" onclick="closeModal('mSat')">×</button>
+    </div>
+    <div class="input-group">
+      <label>Nama *</label
+      ><input
+        id="sNama"
+        class="input-control"
+        placeholder="contoh: Kilogram"
+      />
+    </div>
+    <div class="input-group">
+      <label>Singkatan</label
+      ><input id="sAbr" class="input-control" placeholder="kg" />
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+      <button
+        onclick="closeModal('mSat')"
+        class="btn"
+        style="
+          background: var(--bg-color);
+          border: 1px solid var(--border-color);
+        "
+      >
+        Batal
+      </button>
+      <button onclick="saveSat()" class="btn btn-primary">Simpan</button>
+    </div>
+  </div>
+</div>

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Data Barang - FPOS</title>
     <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/advanced_settings.css" />
   </head>
   <body>
     <div class="app-container">
@@ -156,57 +157,8 @@
           </div>
         </div>
 
-        <div id="pnlKat" style="display: none">
-          <div
-            style="
-              display: flex;
-              justify-content: flex-end;
-              margin-bottom: 14px;
-            "
-          >
-            <button class="btn btn-primary" onclick="openKatModal()">
-              ➕ Tambah Kategori
-            </button>
-          </div>
-          <div class="tbl-wrap">
-            <table class="tbl">
-              <thead>
-                <tr>
-                  <th>Nama Kategori</th>
-                  <th>Deskripsi</th>
-                  <th>Aksi</th>
-                </tr>
-              </thead>
-              <tbody id="tblKat"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div id="pnlSat" style="display: none">
-          <div
-            style="
-              display: flex;
-              justify-content: flex-end;
-              margin-bottom: 14px;
-            "
-          >
-            <button class="btn btn-primary" onclick="openSatModal()">
-              ➕ Tambah Satuan
-            </button>
-          </div>
-          <div class="tbl-wrap">
-            <table class="tbl">
-              <thead>
-                <tr>
-                  <th>Nama Satuan</th>
-                  <th>Singkatan</th>
-                  <th>Aksi</th>
-                </tr>
-              </thead>
-              <tbody id="tblSat"></tbody>
-            </table>
-          </div>
-        </div>
+        <div id="katContainer"></div>
+        <div id="unitsContainer"></div>
       </main>
     </div>
 
@@ -221,17 +173,6 @@
         -moz-appearance: textfield;
       }
 
-      #mBarang .modal-box.wide {
-        width: 85% !important;
-        max-width: 1400px !important;
-      }
-      @media (min-width: 768px) {
-        #mBarang .row-price {
-          display: grid;
-          grid-template-columns: 1fr 0.6fr 1fr 2.8fr !important;
-          gap: 12px;
-        }
-      }
       /* === KOMPONEN SUPPLIER === */
       .sup-selection-section {
         margin: 16px 0;
@@ -366,500 +307,72 @@
         opacity: 0.7;
       }
     </style>
-    <div class="modal-overlay" id="mBarang">
-      <div class="modal-box wide">
-        <div class="modal-hdr">
-          <h2 id="mBarangTitle">Tambah Barang</h2>
-          <button class="btn-x" onclick="closeModal('mBarang')">×</button>
-        </div>
-        <form id="fBarang" onsubmit="saveItem(event)">
-          <input type="hidden" id="fId" />
-
-          <div class="row2" style="margin-bottom: 16px">
-            <div class="input-group">
-              <label>Nama Barang *</label>
-              <input
-                id="fNama"
-                class="input-control"
-                required
-                placeholder="Contoh: Semen Gresik 50kg"
-              />
-            </div>
-            <div class="input-group">
-              <label>Sistem Barcode</label>
-              <div
-                style="
-                  display: flex;
-                  align-items: center;
-                  gap: 8px;
-                  margin-bottom: 6px;
-                "
-              >
-                <input
-                  type="checkbox"
-                  id="autoBarcode"
-                  onchange="toggleBarcodeUI()"
-                  checked
-                  style="width: 16px; height: 16px"
-                />
-                <label
-                  for="autoBarcode"
-                  style="
-                    margin: 0;
-                    cursor: pointer;
-                    color: var(--text-main);
-                    font-weight: bold;
-                  "
-                  >Sistem Buatkan Otomatis</label
-                >
-              </div>
-              <input
-                id="fBarcode"
-                class="input-control"
-                placeholder="Tembak Scanner / Ketik Manual"
-                style="display: none"
-              />
-              <div
-                id="lblScanner"
-                style="
-                  font-size: 11px;
-                  color: #10b981;
-                  margin-top: 4px;
-                  font-weight: bold;
-                "
-              >
-                (Atau Anda bisa langsung tembak Scanner Anda)
-              </div>
-            </div>
-          </div>
-
-          <div class="row2" style="margin-bottom: 16px">
-            <div class="input-group">
-              <label>Kategori</label>
-              <div style="display: flex; gap: 8px">
-                <select
-                  id="fKat"
-                  class="input-control"
-                  style="flex: 1; margin: 0"
-                >
-                  <option value="">-- Pilih --</option>
-                </select>
-                <button
-                  type="button"
-                  onclick="quickAddKat()"
-                  class="btn"
-                  style="
-                    padding: 12px 16px;
-                    background: var(--primary-light);
-                    color: var(--primary);
-                    border: none;
-                    border-radius: 12px;
-                    font-weight: 700;
-                  "
-                >
-                  +
-                </button>
-              </div>
-            </div>
-            <div class="input-group">
-              <label>Satuan</label>
-              <div style="display: flex; gap: 8px">
-                <select
-                  id="fSat"
-                  class="input-control"
-                  style="flex: 1; margin: 0"
-                >
-                  <option value="">-- Pilih --</option>
-                </select>
-                <button
-                  type="button"
-                  onclick="quickAddSat()"
-                  class="btn"
-                  style="
-                    padding: 12px 16px;
-                    background: var(--primary-light);
-                    color: var(--primary);
-                    border: none;
-                    border-radius: 12px;
-                    font-weight: 700;
-                  "
-                >
-                  +
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div class="row-price" style="margin-bottom: 16px">
-            <div
-              class="input-group"
-              style="
-                grid-column: 1 / -1;
-                background: var(--bg-color);
-                padding: 12px;
-                border-radius: 12px;
-                border: 1px dashed var(--primary);
-              "
-            >
-              <label
-                style="
-                  color: var(--primary);
-                  font-weight: bold;
-                  display: flex;
-                  align-items: center;
-                  gap: 8px;
-                "
-              >
-                Setelan Harga & Barcode Khusus Supplier
-              </label>
-              <div
-                style="
-                  display: flex;
-                  gap: 12px;
-                  align-items: center;
-                  margin-top: 8px;
-                "
-              >
-                <select
-                  id="fSupplierContext"
-                  class="input-control"
-                  style="flex: 1; margin: 0"
-                  onchange="onSupplierContextChange()"
-                >
-                  <option value="">
-                    -- Harga Umum (Default Semua Supplier) --
-                  </option>
-                </select>
-                <div
-                  style="font-size: 12px; color: var(--text-muted); flex: 1.5"
-                >
-                  Pilih supplier untuk mengatur <b>Harga Modal</b> dan
-                  <b>Barcode</b> khusus dari supplier tersebut. Jika dibiarkan
-                  umum, semua supplier menggunakan harga yang sama.
-                </div>
-              </div>
-            </div>
-
-            <div class="input-group">
-              <label>Harga Modal (Beli)</label>
-              <input
-                id="fHBeli"
-                type="text"
-                inputmode="numeric"
-                class="input-control"
-                value="0"
-                oninput="
-                  formatInputRibuan(this);
-                  calcHJualFromMargin();
-                "
-              />
-            </div>
-            <div class="input-group">
-              <label>Margin (%)</label>
-              <input
-                id="fMargin"
-                type="number"
-                step="0.01"
-                class="input-control"
-                value="0"
-                oninput="calcHJualFromMargin()"
-              />
-            </div>
-            <div class="input-group">
-              <label style="color: var(--primary); font-weight: bold"
-                >Harga Jual (Normal) *</label
-              >
-              <input
-                id="fHJual"
-                type="text"
-                inputmode="numeric"
-                class="input-control"
-                value="0"
-                required
-                oninput="
-                  formatInputRibuan(this);
-                  calcMarginFromHJual();
-                  updateDiscountPreview();
-                "
-              />
-            </div>
-            <div class="input-group">
-              <label style="color: #f59e0b; font-weight: bold"
-                >Harga Diskon / Grosir</label
-              >
-              <div style="display: flex; flex-direction: column; gap: 8px">
-                <div style="display: flex; align-items: center; gap: 10px">
-                  <input
-                    id="fHJualDiskon"
-                    type="text"
-                    inputmode="numeric"
-                    class="input-control"
-                    style="flex: 1; max-width: 200px; margin: 0"
-                    value="0"
-                    oninput="
-                      formatInputRibuan(this);
-                      updateDiscountPreview();
-                    "
-                  />
-                  <label
-                    style="
-                      display: flex;
-                      align-items: center;
-                      gap: 6px;
-                      font-size: 0.85em;
-                      cursor: pointer;
-                      color: var(--text-main);
-                      white-space: nowrap;
-                      font-weight: 600;
-                    "
-                  >
-                    <input
-                      type="checkbox"
-                      id="fIsDiscountable"
-                      onchange="updateDiscountPreview()"
-                      style="width: 16px; height: 16px"
-                    />
-                    Dapat Diskon Member
-                  </label>
-                </div>
-
-                <div
-                  id="groupDiscountSection"
-                  style="
-                    display: flex;
-                    flex-direction: column;
-                    gap: 8px;
-                    background: var(--bg);
-                    padding: 12px;
-                    border-radius: 8px;
-                    border: 1px dashed var(--border-color);
-                  "
-                >
-                  <div style="display: flex; gap: 8px; align-items: center">
-                    <select
-                      id="fDiscountGroupSelect"
-                      class="input-control"
-                      style="flex: 1.5; margin: 0"
-                      onchange="onGroupSelectChange()"
-                    >
-                      <option value="">Pilih Grup (Set Harga)</option>
-                    </select>
-                    <div
-                      style="
-                        display: flex;
-                        align-items: center;
-                        gap: 4px;
-                        flex: 1;
-                      "
-                    >
-                      <input
-                        id="fGroupPercentInput"
-                        type="number"
-                        step="0.01"
-                        class="input-control"
-                        style="width: 65px; text-align: center; margin: 0"
-                        placeholder="%"
-                        oninput="onGroupPercentInput()"
-                      />
-                      <span style="font-weight: bold; font-size: 0.9em">%</span>
-                    </div>
-                    <span
-                      style="font-weight: 900; color: #f59e0b; font-size: 1.2em"
-                      >➜</span
-                    >
-                    <div style="flex: 2; position: relative">
-                      <span
-                        style="
-                          position: absolute;
-                          left: 8px;
-                          top: 50%;
-                          transform: translateY(-50%);
-                          color: var(--text-muted);
-                          font-size: 0.85em;
-                        "
-                        >Rp</span
-                      >
-                      <input
-                        id="fGroupPriceInput"
-                        type="text"
-                        inputmode="numeric"
-                        class="input-control"
-                        style="
-                          padding-left: 28px;
-                          background-color: var(--bg);
-                          color: #10b981;
-                          font-weight: bold;
-                          text-align: right;
-                          margin: 0;
-                        "
-                        placeholder="Harga Final"
-                        oninput="
-                          formatInputRibuan(this);
-                          onGroupPriceInput();
-                        "
-                      />
-                    </div>
-                  </div>
-                  <div
-                    id="groupHint"
-                    style="
-                      font-size: 11px;
-                      color: var(--text-muted);
-                      font-style: italic;
-                      margin-left: 4px;
-                    "
-                  >
-                    Pilih grup untuk mengatur harga khusus (Default Bronze: 5%)
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="row2" style="margin-bottom: 16px">
-            <div class="input-group">
-              <label>Peringatan Stok Menipis</label>
-              <input
-                id="fStokMin"
-                type="text"
-                inputmode="numeric"
-                class="input-control"
-                value="0"
-                oninput="formatInputRibuan(this)"
-              />
-            </div>
-            <div class="input-group">
-              <label>Catatan Tambahan</label>
-              <textarea
-                id="fDesk"
-                class="input-control"
-                rows="1"
-                style="resize: vertical"
-              ></textarea>
-            </div>
-          </div>
-
-          <!-- === PILIH SUPPLIER === -->
-          <div class="sup-selection-section">
-            <div class="sup-selection-header">
-              <label>🚚 Supplier Barang Ini</label>
-              <div class="sup-search-box">
-                <span class="sup-search-icon">🔍</span>
-                <input
-                  type="text"
-                  id="supSearchInput"
-                  class="sup-search-input"
-                  placeholder="Ketik nama supplier..."
-                  autocomplete="off"
-                />
-                <div id="supDropdown" class="sup-dropdown"></div>
-              </div>
-            </div>
-            <div id="selectedSupsContainer" class="selected-sups-container">
-              <span
-                style="color: var(--text-muted); font-size: 13px; padding: 4px"
-                >Belum ada supplier dipilih</span
-              >
-            </div>
-          </div>
-
-          <div
-            style="
-              display: grid;
-              grid-template-columns: 1fr 1fr;
-              gap: 12px;
-              margin-top: 8px;
-            "
-          >
-            <button
-              type="button"
-              onclick="closeModal('mBarang')"
-              class="btn"
-              style="
-                background: var(--bg-color);
-                border: 1px solid var(--border-color);
-                color: var(--text-main);
-              "
-            >
-              Batal
-            </button>
-            <button type="submit" class="btn btn-primary">Simpan Barang</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <div class="modal-overlay" id="mKat">
-      <div class="modal-box">
-        <div class="modal-hdr">
-          <h2 id="mKatTitle">Tambah Kategori</h2>
-          <button class="btn-x" onclick="closeModal('mKat')">×</button>
-        </div>
-        <div class="input-group">
-          <label>Nama *</label
-          ><input
-            id="kNama"
-            class="input-control"
-            placeholder="contoh: Semen & Pasir"
-          />
-        </div>
-        <div class="input-group">
-          <label>Deskripsi</label
-          ><textarea id="kDesk" class="input-control" rows="2"></textarea>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
-          <button
-            onclick="closeModal('mKat')"
-            class="btn"
-            style="
-              background: var(--bg-color);
-              border: 1px solid var(--border-color);
-            "
-          >
-            Batal
-          </button>
-          <button onclick="saveKat()" class="btn btn-primary">Simpan</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal-overlay" id="mSat">
-      <div class="modal-box">
-        <div class="modal-hdr">
-          <h2 id="mSatTitle">Tambah Satuan</h2>
-          <button class="btn-x" onclick="closeModal('mSat')">×</button>
-        </div>
-        <div class="input-group">
-          <label>Nama *</label
-          ><input
-            id="sNama"
-            class="input-control"
-            placeholder="contoh: Kilogram"
-          />
-        </div>
-        <div class="input-group">
-          <label>Singkatan</label
-          ><input id="sAbr" class="input-control" placeholder="kg" />
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
-          <button
-            onclick="closeModal('mSat')"
-            class="btn"
-            style="
-              background: var(--bg-color);
-              border: 1px solid var(--border-color);
-            "
-          >
-            Batal
-          </button>
-          <button onclick="saveSat()" class="btn btn-primary">Simpan</button>
-        </div>
-      </div>
-    </div>
+    <div id="popUpContainer"></div>
 
     <script src="/js/api.js"></script>
     <script src="/js/theme.js"></script>
+    <script src="/js/kategori.js"></script>
+    <script src="/js/units.js"></script>
     <script>
+      // Load Components
+      const components = [
+        { url: "/item/popUp.html", id: "popUpContainer" },
+        { url: "/item/kategori.html", id: "katContainer" },
+        { url: "/item/units.html", id: "unitsContainer" },
+      ];
+
+      components.forEach((c) => {
+        fetch(c.url)
+          .then((r) => r.text())
+          .then((html) => {
+            document.getElementById(c.id).innerHTML = html;
+          });
+      });
+
+      let currentAdvancedType = null;
+      async function loadAdvancedContent(type) {
+        const container = document.getElementById("advancedContent");
+        const buttons = document.querySelectorAll(".adv-btn");
+
+        // Toggle: Jika klik tombol yang sama, tutup panelnya
+        if (currentAdvancedType === type) {
+          container.style.display = "none";
+          currentAdvancedType = null;
+          buttons.forEach((b) => {
+            b.style.background = "var(--card-bg)";
+            b.style.color = "var(--text-main)";
+            b.style.borderColor = "var(--border-color)";
+          });
+          return;
+        }
+
+        try {
+          const res = await fetch(`/item/${type}.html`);
+          const text = await res.text();
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(text, "text/html");
+          const tableWrap = doc.querySelector(".tbl-wrap");
+
+          if (tableWrap) {
+            container.innerHTML = `<div class="advanced-container">${tableWrap.outerHTML}</div>`;
+            container.style.display = "block";
+            currentAdvancedType = type;
+
+            // Update UI Button Active
+            buttons.forEach((b) => {
+              const isActive = b.id.toLowerCase().includes(type.toLowerCase());
+              b.style.background = isActive ? "var(--primary)" : "var(--card-bg)";
+              b.style.color = isActive ? "#fff" : "var(--text-main)";
+              b.style.borderColor = isActive
+                ? "var(--primary)"
+                : "var(--border-color)";
+            });
+          }
+        } catch (e) {
+          showToast("Gagal memuat konten lanjutan", "error");
+        }
+      }
+
       requireAuth();
       let editItemId = null,
         editKatId = null,
@@ -1637,154 +1150,6 @@
         }
       }
 
-      async function loadKat() {
-        const cats = await api("GET", "/items/categories");
-        document.getElementById("tblKat").innerHTML =
-          cats
-            .map(
-              (c) => `<tr>
-            <td><b>${c.name}</b></td><td style="color:var(--text-muted)">${c.description || "-"}</td>
-            <td style="white-space:nowrap"><button class="bsm be" onclick='editKat(${JSON.stringify(c).replace(/"/g, "&quot;")})'>Edit</button> <button class="bsm bd" onclick="delKat(${c.id},'${c.name}')">Hapus</button></td>
-          </tr>`,
-            )
-            .join("") ||
-          '<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text-muted)">Belum ada kategori</td></tr>';
-      }
-      function openKatModal(item = null) {
-        editKatId = null;
-        document.getElementById("mKatTitle").textContent = "Tambah Kategori";
-        document.getElementById("kNama").value = "";
-        document.getElementById("kDesk").value = "";
-        if (item) {
-          editKatId = item.id;
-          document.getElementById("mKatTitle").textContent = "Edit Kategori";
-          document.getElementById("kNama").value = item.name;
-          document.getElementById("kDesk").value = item.description || "";
-        }
-        openModal("mKat");
-      }
-      function editKat(c) {
-        openKatModal(c);
-      }
-      async function saveKat() {
-        const name = document.getElementById("kNama").value.trim();
-        if (!name) {
-          showToast("Nama wajib diisi", "error");
-          return;
-        }
-        try {
-          let saved;
-          if (editKatId)
-            saved = await api("PUT", `/items/categories/${editKatId}`, {
-              name,
-              description: document.getElementById("kDesk").value || null,
-            });
-          else
-            saved = await api("POST", "/items/categories", {
-              name,
-              description: document.getElementById("kDesk").value || null,
-            });
-          showToast("Kategori disimpan ✓");
-          await refreshSelects();
-          if (fromItemModal) {
-            document.getElementById("fKat").value = saved.id;
-            openModal("mBarang");
-          }
-          closeModal("mKat");
-          fromItemModal = false;
-          loadKat();
-        } catch (ex) {
-          showToast(ex.message, "error");
-        }
-      }
-      async function delKat(id, name) {
-        if (!(await showConfirm(`Hapus kategori "${name}"?`))) return;
-        try {
-          await api("DELETE", `/items/categories/${id}`);
-          showToast("Dihapus");
-          loadKat();
-          refreshSelects();
-        } catch (ex) {
-          showToast(ex.message, "error");
-        }
-      }
-      function quickAddKat() {
-        fromItemModal = true;
-        closeModal("mBarang");
-        openKatModal();
-      }
-
-      async function loadSat() {
-        const units = await api("GET", "/items/units");
-        document.getElementById("tblSat").innerHTML =
-          units
-            .map(
-              (u) => `<tr>
-            <td><b>${u.name}</b></td><td style="color:var(--text-muted)">${u.abbreviation || "-"}</td>
-            <td style="white-space:nowrap"><button class="bsm be" onclick='editSat(${JSON.stringify(u).replace(/"/g, "&quot;")})'>Edit</button> <button class="bsm bd" onclick="delSat(${u.id},'${u.name}')">Hapus</button></td>
-          </tr>`,
-            )
-            .join("") ||
-          '<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text-muted)">Belum ada satuan</td></tr>';
-      }
-      function openSatModal(item = null) {
-        editSatId = null;
-        document.getElementById("mSatTitle").textContent = "Tambah Satuan";
-        document.getElementById("sNama").value = "";
-        document.getElementById("sAbr").value = "";
-        if (item) {
-          editSatId = item.id;
-          document.getElementById("mSatTitle").textContent = "Edit Satuan";
-          document.getElementById("sNama").value = item.name;
-          document.getElementById("sAbr").value = item.abbreviation || "";
-        }
-        openModal("mSat");
-      }
-      function editSat(u) {
-        openSatModal(u);
-      }
-      async function saveSat() {
-        const name = document.getElementById("sNama").value.trim();
-        if (!name) {
-          showToast("Nama wajib diisi", "error");
-          return;
-        }
-        try {
-          let saved;
-          if (editSatId)
-            saved = await api("PUT", `/items/units/${editSatId}`, {
-              name,
-              abbreviation: document.getElementById("sAbr").value || null,
-            });
-          else
-            saved = await api("POST", "/items/units", {
-              name,
-              abbreviation: document.getElementById("sAbr").value || null,
-            });
-          showToast("Satuan disimpan ✓");
-          await refreshSelects();
-          if (fromItemModal) {
-            document.getElementById("fSat").value = saved.id;
-            openModal("mBarang");
-          }
-          closeModal("mSat");
-          fromItemModal = false;
-          loadSat();
-        } catch (ex) {
-          showToast(ex.message, "error");
-        }
-      }
-      async function delSat(id, name) {
-        if (!(await showConfirm(`Hapus satuan "${name}"?`))) return;
-        try {
-          await api("DELETE", `/items/units/${id}`);
-          showToast("Dihapus");
-          loadSat();
-          refreshSelects();
-        } catch (ex) {
-          showToast(ex.message, "error");
-        }
-      }
       function quickAddSat() {
         fromItemModal = true;
         closeModal("mBarang");

@@ -1,0 +1,59 @@
+<div id="pnlKat" style="display: none">
+  <div
+    style="
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 14px;
+    "
+  >
+    <button class="btn btn-primary" onclick="openKatModal()">
+      ➕ Tambah Kategori
+    </button>
+  </div>
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>Nama Kategori</th>
+          <th>Deskripsi</th>
+          <th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody id="tblKat"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal-overlay" id="mKat">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <h2 id="mKatTitle">Tambah Kategori</h2>
+      <button class="btn-x" onclick="closeModal('mKat')">×</button>
+    </div>
+    <div class="input-group">
+      <label>Nama *</label
+      ><input
+        id="kNama"
+        class="input-control"
+        placeholder="contoh: Semen & Pasir"
+      />
+    </div>
+    <div class="input-group">
+      <label>Deskripsi</label
+      ><textarea id="kDesk" class="input-control" rows="2"></textarea>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+      <button
+        onclick="closeModal('mKat')"
+        class="btn"
+        style="
+          background: var(--bg-color);
+          border: 1px solid var(--border-color);
+        "
+      >
+        Batal
+      </button>
+      <button onclick="saveKat()" class="btn btn-primary">Simpan</button>
+    </div>
+  </div>
+</div>

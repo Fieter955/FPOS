@@ -817,5 +817,3 @@ menu pesan pembelian dan catat pembelian kolom terima nya selalu dianggap 0
 
 catat-pembelian.html
 barang yang diprposes ga otomatis ke update PPN nya, kalo di setting PPN di catat pembelian ga ngaruh dan kolom terima barangnya selalu dianggap 0
-
-

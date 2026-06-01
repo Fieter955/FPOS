@@ -1,0 +1,99 @@
+/* 
+   Styles for Advanced Settings Tables (Satuan, Level Harga, Level Jumlah)
+   Ensures they look exactly like the original designs when loaded into modals.
+*/
+
+.advanced-container .setting-header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 24px;
+  padding: 16px;
+  background: var(--card-bg);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  flex-wrap: wrap;
+}
+
+.advanced-container .radio-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.advanced-container .radio-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.advanced-container .radio-item input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+}
+
+.advanced-container .tbl-wrap {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.advanced-container .tbl th {
+  font-size: 11px;
+  padding: 10px 6px;
+  white-space: nowrap;
+  background: var(--primary-light);
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.advanced-container .tbl td {
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.advanced-container .tbl .input-control {
+  padding: 6px 8px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-color);
+  color: var(--text-main);
+  min-width: 60px;
+  width: 100%;
+}
+
+.advanced-container .tbl .input-control:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.advanced-container .alert-info {
+  color: #ef4444;
+  font-size: 13px;
+  font-weight: 500;
+  margin-left: 12px;
+  background: rgba(239, 68, 68, 0.05);
+  padding: 8px 12px;
+  border-radius: 8px;
+  display: inline-block;
+}
+
+.advanced-container .satuan-dasar-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.advanced-container .satuan-dasar-row label {
+  font-weight: bold;
+  min-width: 120px;
+}
