@@ -52,109 +52,119 @@
     <form id="fBarang" onsubmit="saveItem(event)">
       <input type="hidden" id="fId" />
 
-      <div class="row2" style="margin-bottom: 16px">
-        <div class="input-group">
-          <label>Nama Barang *</label>
-          <input
-            id="fNama"
-            class="input-control"
-            required
-            placeholder="Contoh: Semen Gresik 50kg"
-          />
-        </div>
-        <div class="input-group">
-          <label>Sistem Barcode</label>
-          <div
-            style="
-              display: flex;
-              align-items: center;
-              gap: 8px;
-              margin-bottom: 6px;
-            "
-          >
+      <div id="detaiBarang">
+        <div class="row2" style="margin-bottom: 16px">
+          <div class="input-group">
+            <label>Nama Barang *</label>
             <input
-              type="checkbox"
-              id="autoBarcode"
-              onchange="toggleBarcodeUI()"
-              checked
-              style="width: 16px; height: 16px"
+              id="fNama"
+              class="input-control"
+              required
+              placeholder="Contoh: Semen Gresik 50kg"
             />
-            <label
-              for="autoBarcode"
+          </div>
+          <div class="input-group">
+            <label>Sistem Barcode</label>
+            <div
               style="
-                margin: 0;
-                cursor: pointer;
-                color: var(--text-main);
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin-bottom: 6px;
+              "
+            >
+              <input
+                type="checkbox"
+                id="autoBarcode"
+                onchange="toggleBarcodeUI()"
+                checked
+                style="width: 16px; height: 16px"
+              />
+              <label
+                for="autoBarcode"
+                style="
+                  margin: 0;
+                  cursor: pointer;
+                  color: var(--text-main);
+                  font-weight: bold;
+                "
+                >Sistem Buatkan Otomatis</label
+              >
+            </div>
+            <input
+              id="fBarcode"
+              class="input-control"
+              placeholder="Tembak Scanner / Ketik Manual"
+              style="display: none"
+            />
+            <div
+              id="lblScanner"
+              style="
+                font-size: 11px;
+                color: #10b981;
+                margin-top: 4px;
                 font-weight: bold;
               "
-              >Sistem Buatkan Otomatis</label
             >
-          </div>
-          <input
-            id="fBarcode"
-            class="input-control"
-            placeholder="Tembak Scanner / Ketik Manual"
-            style="display: none"
-          />
-          <div
-            id="lblScanner"
-            style="
-              font-size: 11px;
-              color: #10b981;
-              margin-top: 4px;
-              font-weight: bold;
-            "
-          >
-            (Atau Anda bisa langsung tembak Scanner Anda)
+              (Atau Anda bisa langsung tembak Scanner Anda)
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="row2" style="margin-bottom: 16px">
-        <div class="input-group">
-          <label>Kategori</label>
-          <div style="display: flex; gap: 8px">
-            <select id="fKat" class="input-control" style="flex: 1; margin: 0">
-              <option value="">-- Pilih --</option>
-            </select>
-            <button
-              type="button"
-              onclick="quickAddKat()"
-              class="btn"
-              style="
-                padding: 12px 16px;
-                background: var(--primary-light);
-                color: var(--primary);
-                border: none;
-                border-radius: 12px;
-                font-weight: 700;
-              "
-            >
-              +
-            </button>
+        <div class="row2" style="margin-bottom: 16px">
+          <div class="input-group">
+            <label>Kategori</label>
+            <div style="display: flex; gap: 8px">
+              <select
+                id="fKat"
+                class="input-control"
+                style="flex: 1; margin: 0"
+              >
+                <option value="">-- Pilih --</option>
+              </select>
+              <button
+                type="button"
+                onclick="quickAddKat()"
+                class="btn"
+                style="
+                  padding: 12px 16px;
+                  background: var(--primary-light);
+                  color: var(--primary);
+                  border: none;
+                  border-radius: 12px;
+                  font-weight: 700;
+                "
+              >
+                +
+              </button>
+            </div>
           </div>
-        </div>
-        <div class="input-group">
-          <label>Satuan</label>
-          <div style="display: flex; gap: 8px">
-            <select id="fSat" class="input-control" style="flex: 1; margin: 0">
-              <option value="">-- Pilih --</option>
-            </select>
-            <button
-              type="button"
-              onclick="quickAddSat()"
-              class="btn"
-              style="
-                padding: 12px 16px;
-                background: var(--primary-light);
-                color: var(--primary);
-                border: none;
-                border-radius: 12px;
-                font-weight: 700;
-              "
-            >
-              +
-            </button>
+          <div class="input-group">
+            <label>Satuan</label>
+            <div style="display: flex; gap: 8px">
+              <select
+                id="fSat"
+                class="input-control"
+                style="flex: 1; margin: 0"
+              >
+                <option value="">-- Pilih --</option>
+              </select>
+              <button
+                type="button"
+                onclick="quickAddSat()"
+                class="btn"
+                style="
+                  padding: 12px 16px;
+                  background: var(--primary-light);
+                  color: var(--primary);
+                  border: none;
+                  border-radius: 12px;
+                  font-weight: 700;
+                "
+              >
+                +
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -376,16 +386,41 @@
           </div>
         </div>
       </div>
-      <div id="advancedSettings" style="background: var(--bg-color); padding: 16px; border-radius: 12px; border: 1px dashed var(--border-color); margin-bottom: 16px;">
-        <div style="font-weight: 600; color: var(--primary); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+      <div
+        id="advancedSettings"
+        style="
+          background: var(--bg-color);
+          padding: 16px;
+          border-radius: 12px;
+          border: 1px dashed var(--border-color);
+          margin-bottom: 16px;
+        "
+      >
+        <div
+          style="
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          "
+        >
           ⚙️ Pengaturan Harga Lanjutan (Opsional)
         </div>
-        <div id="advancedButton" style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+        <div
+          id="advancedButton"
+          style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap"
+        >
           <button
             type="button"
             class="btn adv-btn"
             id="btnAdvSatuan"
-            style="background: var(--card-bg); color: var(--text-main); border: 1px solid var(--border-color);"
+            style="
+              background: var(--card-bg);
+              color: var(--text-main);
+              border: 1px solid var(--border-color);
+            "
             onclick="loadAdvancedContent('satuan')"
           >
             Berdasarkan Satuan
@@ -394,7 +429,11 @@
             type="button"
             class="btn adv-btn"
             id="btnAdvHarga"
-            style="background: var(--card-bg); color: var(--text-main); border: 1px solid var(--border-color);"
+            style="
+              background: var(--card-bg);
+              color: var(--text-main);
+              border: 1px solid var(--border-color);
+            "
             onclick="loadAdvancedContent('levelHarga')"
           >
             Level Harga
@@ -403,13 +442,25 @@
             type="button"
             class="btn adv-btn"
             id="btnAdvJumlah"
-            style="background: var(--card-bg); color: var(--text-main); border: 1px solid var(--border-color);"
+            style="
+              background: var(--card-bg);
+              color: var(--text-main);
+              border: 1px solid var(--border-color);
+            "
             onclick="loadAdvancedContent('levelJumlah')"
           >
             Level Jumlah
           </button>
         </div>
-        <div id="advancedContent" style="display: none; padding-top: 16px; border-top: 1px solid var(--border-color); overflow-x: auto;">
+        <div
+          id="advancedContent"
+          style="
+            display: none;
+            padding-top: 16px;
+            border-top: 1px solid var(--border-color);
+            overflow-x: auto;
+          "
+        >
           <!-- Konten dinamis akan dimuat di sini -->
         </div>
       </div>
