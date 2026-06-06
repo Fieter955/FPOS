@@ -45,6 +45,16 @@
                 background: var(--bg-color);
                 border: 1px solid var(--border-color);
               "
+              onclick="switchTab('merek')"
+            >
+              🏢 Merek
+            </button>
+            <button
+              class="btn"
+              style="
+                background: var(--bg-color);
+                border: 1px solid var(--border-color);
+              "
               onclick="switchTab('sat')"
             >
               📐 Satuan
@@ -87,6 +97,22 @@
             "
           >
             Kategori
+          </button>
+          <button
+            id="tbMerek"
+            class="cat-btn"
+            onclick="switchTab('merek')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+            "
+          >
+            Merek
           </button>
           <button
             id="tbSat"
@@ -158,6 +184,7 @@
         </div>
 
         <div id="katContainer"></div>
+        <div id="merekContainer"></div>
         <div id="unitsContainer"></div>
       </main>
     </div>
@@ -312,12 +339,14 @@
     <script src="/js/api.js"></script>
     <script src="/js/theme.js"></script>
     <script src="/js/kategori.js"></script>
+    <script src="/js/merek.js"></script>
     <script src="/js/units.js"></script>
     <script>
       // Load Components
       const components = [
         { url: "/item/popUp.html", id: "popUpContainer" },
         { url: "/item/kategori.html", id: "katContainer" },
+        { url: "/item/merek.html", id: "merekContainer" },
         { url: "/item/units.html", id: "unitsContainer" },
       ];
 
@@ -377,6 +406,7 @@
       requireAuth();
       let editItemId = null,
         editKatId = null,
+        editMerekId = null,
         editSatId = null,
         fromItemModal = false,
         curTab = "brg",
@@ -456,15 +486,15 @@
 
       function switchTab(t) {
         curTab = t;
-        ["pnlBrg", "pnlKat", "pnlSat"].forEach(
+        ["pnlBrg", "pnlKat", "pnlMerek", "pnlSat"].forEach(
           (id) => (document.getElementById(id).style.display = "none"),
         );
-        const map = { brg: "pnlBrg", kat: "pnlKat", sat: "pnlSat" };
+        const map = { brg: "pnlBrg", kat: "pnlKat", merek: "pnlMerek", sat: "pnlSat" };
         document.getElementById(map[t]).style.display = "block";
-        ["tbBarang", "tbKat", "tbSat"].forEach((id) => {
+        ["tbBarang", "tbKat", "tbMerek", "tbSat"].forEach((id) => {
           const el = document.getElementById(id);
           const active =
-            id === "tb" + { brg: "Barang", kat: "Kat", sat: "Sat" }[t];
+            id === "tb" + { brg: "Barang", kat: "Kat", merek: "Merek", sat: "Sat" }[t];
           el.style.background = active ? "var(--primary)" : "transparent";
           el.style.borderColor = active
             ? "var(--primary)"
@@ -472,12 +502,14 @@
           el.style.color = active ? "#fff" : "var(--text-muted)";
         });
         if (t === "kat") loadKat();
+        if (t === "merek") loadMerek();
         if (t === "sat") loadSat();
       }
 
       async function refreshSelects() {
-        const [cats, units] = await Promise.all([
+        const [cats, brands, units] = await Promise.all([
           api("GET", "/items/categories"),
+          api("GET", "/items/brands"),
           api("GET", "/items/units"),
         ]);
         const fk = document.getElementById("filterKat");
@@ -492,11 +524,20 @@
         const fKat = document.getElementById("fKat");
         const fKatPrev = fKat.value;
         fKat.innerHTML =
-          '<option value="">-- Pilih Kategori --</option>' +
+          '<option value="">-- Pilih Jenis --</option>' +
           cats
             .map((c) => `<option value="${c.id}">${c.name}</option>`)
             .join("");
         fKat.value = fKatPrev;
+
+        const fMerek = document.getElementById("fMerek");
+        const fMerekPrev = fMerek.value;
+        fMerek.innerHTML =
+          '<option value="">-- Pilih Merek --</option>' +
+          brands
+            .map((b) => `<option value="${b.id}">${b.name}</option>`)
+            .join("");
+        fMerek.value = fMerekPrev;
 
         const fSat = document.getElementById("fSat");
         const fSatPrev = fSat.value;
@@ -923,6 +964,7 @@
         document.getElementById("fBarang").reset();
         document.getElementById("autoBarcode").checked = true;
         toggleBarcodeUI();
+        document.getElementById("fKodeItem").value = "";
         document.getElementById("fHBeli").value = "0";
         document.getElementById("fMargin").value = "0";
         document.getElementById("fHJual").value = "0";
@@ -945,8 +987,10 @@
         if (item) {
           editItemId = item.id;
           document.getElementById("mBarangTitle").textContent = "Edit Barang";
+          document.getElementById("fKodeItem").value = item.code || "";
           document.getElementById("fNama").value = item.name;
           document.getElementById("fKat").value = item.category_id || "";
+          document.getElementById("fMerek").value = item.brand_id || "";
           document.getElementById("fSat").value = item.unit_id || "";
           if (item.is_discountable !== undefined)
             document.getElementById("fIsDiscountable").checked =
@@ -1107,10 +1151,11 @@
         });
 
         const p = {
-          code: "AUTO",
+          code: document.getElementById("fKodeItem").value || "AUTO",
           barcode: generalBarcode || "AUTO",
           name: document.getElementById("fNama").value,
           category_id: parseInt(document.getElementById("fKat").value) || null,
+          brand_id: parseInt(document.getElementById("fMerek").value) || null,
           unit_id: parseInt(document.getElementById("fSat").value) || null,
           buy_price: generalBuyPrice,
           sell_price: sellPrice,

@@ -53,6 +53,16 @@ class CategoryOut(CategoryCreate):
     model_config = {"from_attributes": True}
 
 
+# ─── Brand ────────────────────────────────────────────────────────────────────
+class BrandCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+class BrandOut(BrandCreate):
+    id: int
+    model_config = {"from_attributes": True}
+
+
 # ─── Unit ─────────────────────────────────────────────────────────────────────
 class UnitCreate(BaseModel):
     name: str
@@ -118,6 +128,7 @@ class ItemCreate(BaseModel):
     code: str
     name: str
     category_id: Optional[int] = None
+    brand_id: Optional[int] = None
     unit_id: Optional[int] = None
     buy_price: float = 0
     sell_price: float = 0
@@ -134,6 +145,7 @@ class ItemCreate(BaseModel):
 class ItemUpdate(BaseModel):
     name: Optional[str] = None
     category_id: Optional[int] = None
+    brand_id: Optional[int] = None
     unit_id: Optional[int] = None
     buy_price: Optional[float] = None
     sell_price: Optional[float] = None
@@ -152,6 +164,7 @@ class ItemOut(BaseModel):
     code: str
     name: str
     category_id: Optional[int]
+    brand_id: Optional[int] = None
     unit_id: Optional[int]
     parent_item_id: Optional[int] = None
     conversion_factor_to_parent: float = 1
@@ -166,6 +179,7 @@ class ItemOut(BaseModel):
     is_discountable: bool
     is_active: bool
     category: Optional[CategoryOut] = None
+    brand: Optional[BrandOut] = None
     unit: Optional[UnitOut] = None
     prices: List[ItemPriceOut] = []
     suppliers: List[SupplierSimpleOut] = []

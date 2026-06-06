@@ -144,6 +144,14 @@ class Category(Base):
     items = relationship("Item", back_populates="category")
 
 
+class Brand(Base):
+    __tablename__ = "brands"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(Text)
+    items = relationship("Item", back_populates="brand")
+
+
 class Unit(Base):
     __tablename__ = "units"
     id = Column(Integer, primary_key=True, index=True)
@@ -158,6 +166,7 @@ class Item(Base):
     code = Column(String(50), unique=True, nullable=False)
     name = Column(String(200), unique=True, nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+    brand_id = Column(Integer, ForeignKey("brands.id"), nullable=True)
     unit_id = Column(Integer, ForeignKey("units.id"), nullable=True)
     buy_price = Column(Float, default=0)
     sell_price = Column(Float, default=0)
@@ -175,6 +184,7 @@ class Item(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     category = relationship("Category", back_populates="items")
+    brand = relationship("Brand", back_populates="items")
     unit = relationship("Unit", back_populates="items")
     prices = relationship("ItemPrice", back_populates="item", cascade="all, delete-orphan")
     sale_items = relationship("SaleItem", back_populates="item")

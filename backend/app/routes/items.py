@@ -103,6 +103,32 @@ def delete_category(cat_id: int, db: Session = Depends(get_db), _=Depends(get_cu
     return {"message": "Kategori dihapus"}
 
 
+# ─── Brands ───────────────────────────────────────────────────────────────────
+@router.get("/brands", response_model=list[schemas.BrandOut])
+def get_brands(db: Session = Depends(get_db), _=Depends(get_current_user)):
+    return db.query(models.Brand).all()
+
+@router.post("/brands", response_model=schemas.BrandOut)
+def create_brand(brand: schemas.BrandCreate, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    obj = models.Brand(**brand.model_dump())
+    db.add(obj); db.commit(); db.refresh(obj)
+    return obj
+
+@router.put("/brands/{brand_id}", response_model=schemas.BrandOut)
+def update_brand(brand_id: int, brand: schemas.BrandCreate, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    obj = db.query(models.Brand).get(brand_id)
+    if not obj: raise HTTPException(404, "Merek tidak ditemukan")
+    for k, v in brand.model_dump().items(): setattr(obj, k, v)
+    db.commit(); db.refresh(obj); return obj
+
+@router.delete("/brands/{brand_id}")
+def delete_brand(brand_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    obj = db.query(models.Brand).get(brand_id)
+    if not obj: raise HTTPException(404, "Merek tidak ditemukan")
+    db.delete(obj); db.commit()
+    return {"message": "Merek dihapus"}
+
+
 # ─── Units ────────────────────────────────────────────────────────────────────
 @router.get("/units", response_model=list[schemas.UnitOut])
 def get_units(db: Session = Depends(get_db), _=Depends(get_current_user)):
