@@ -475,13 +475,30 @@
       });
 
       function toggleBarcodeUI() {
-        const auto = document.getElementById("autoBarcode").checked;
-        document.getElementById("fBarcode").style.display = auto
-          ? "none"
-          : "block";
-        document.getElementById("lblScanner").style.display = auto
-          ? "block"
-          : "none";
+        const autoEl = document.getElementById("autoBarcode");
+        const barcodeEl = document.getElementById("fBarcode");
+        const scannerEl = document.getElementById("lblScanner");
+
+        if (barcodeEl) {
+          // Barcode manual sekarang selalu ditampilkan sesuai request "Barcode Tambahan / Pabrik"
+          barcodeEl.style.display = "block";
+        }
+
+        if (scannerEl && autoEl) {
+          scannerEl.style.display = autoEl.checked ? "block" : "none";
+        }
+      }
+
+      function togglePpnPercent() {
+        const ppnSelect = document.getElementById("fPpn");
+        const ppnGroup = document.getElementById("ppnPercentGroup");
+        if (ppnSelect && ppnGroup) {
+          if (ppnSelect.value === "excluded") {
+            ppnGroup.style.display = "block";
+          } else {
+            ppnGroup.style.display = "none";
+          }
+        }
       }
 
       function switchTab(t) {
@@ -898,15 +915,21 @@
 
       function updateSupplierContextDropdown() {
         const select = document.getElementById("fSupplierContext");
+        if (!select) return;
         const oldVal = select.value;
         let html =
           '<option value="">-- Harga Umum (Default Semua Supplier) --</option>';
-        selectedSups.forEach((s) => {
+        
+        const listToShow = (editItemId === null) ? allSups : Array.from(selectedSups.values());
+        
+        listToShow.forEach((s) => {
           html += `<option value="${s.id}">🚚 ${s.name}</option>`;
         });
         select.innerHTML = html;
+        
+        const validIds = listToShow.map(s => String(s.id));
         // Pastikan nilai terpilih masih ada, jika tidak reset ke umum
-        if (Array.from(selectedSups.keys()).map(String).includes(oldVal)) {
+        if (validIds.includes(oldVal)) {
           select.value = oldVal;
         } else {
           select.value = "";
@@ -964,16 +987,29 @@
         document.getElementById("fBarang").reset();
         document.getElementById("autoBarcode").checked = true;
         toggleBarcodeUI();
-        document.getElementById("fKodeItem").value = "";
-        document.getElementById("fHBeli").value = "0";
-        document.getElementById("fMargin").value = "0";
-        document.getElementById("fHJual").value = "0";
-        document.getElementById("fHJualDiskon").value = "0";
-        document.getElementById("fStokMin").value = "0";
-        document.getElementById("fIsDiscountable").checked = false;
-        document.getElementById("fDiscountGroupSelect").selectedIndex = 0;
-        document.getElementById("fGroupPriceInput").value = "";
-        document.getElementById("fGroupPercentInput").value = "";
+        
+        const setVal = (id, val) => {
+          const el = document.getElementById(id);
+          if (el) el.value = val;
+        };
+
+        setVal("fKodeItem", "");
+        setVal("fHBeli", "0");
+        setVal("fMargin", "0");
+        setVal("fHJual", "0");
+        setVal("fHJualDiskon", "0");
+        setVal("fStokMin", "0");
+        setVal("fPpn", "non_ppn");
+        togglePpnPercent();
+
+        const disc = document.getElementById("fIsDiscountable");
+        if(disc) disc.checked = false;
+        
+        const grp = document.getElementById("fDiscountGroupSelect");
+        if(grp) grp.selectedIndex = 0;
+        
+        setVal("fGroupPriceInput", "");
+        setVal("fGroupPercentInput", "");
         groupPrices = {};
         selectedSups.clear();
         supplierSettingsMap = {};

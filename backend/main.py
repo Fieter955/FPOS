@@ -103,6 +103,7 @@ def run_migrations():
     add_col("items", "barcode",     "TEXT")
     add_col("items", "description", "TEXT")
     add_col("items", "updated_at",  "TEXT")
+    add_col("items", "brand_id",   "INTEGER")
     add_col("items", "parent_item_id", "INTEGER")
     add_col("items", "conversion_factor_to_parent", "REAL DEFAULT 1")
     add_col("items", "is_virtual_variant", "INTEGER DEFAULT 0")

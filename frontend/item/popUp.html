@@ -34,7 +34,7 @@
     border-top: 1px solid var(--border-color);
     background: var(--card-bg);
   }
-  
+
   #detaiBarang {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -42,10 +42,22 @@
     margin-bottom: 24px;
   }
 
-  .col-left, .col-right {
+  .col-left,
+  .col-right {
     display: flex;
     flex-direction: column;
     gap: 16px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1.5fr;
+    grid-template-areas:
+      "ppn ppn_pct ."
+      "sat . ."
+      "modal margin jual";
+    gap: 16px;
+    grid-column: 1 / -1;
   }
 
   @media (min-width: 768px) {
@@ -75,6 +87,7 @@
               id="fKodeItem"
               class="input-control"
               placeholder="AUTO"
+              disabled
             />
           </div>
           <div class="input-group">
@@ -114,38 +127,15 @@
             </div>
           </div>
           <div class="input-group">
-            <label>barcode</label>
-            <div
-              style="
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                margin-bottom: 6px;
-              "
-            >
-              <input
-                type="checkbox"
-                id="autoBarcode"
-                onchange="toggleBarcodeUI()"
-                checked
-                style="width: 16px; height: 16px"
-              />
-              <label
-                for="autoBarcode"
-                style="
-                  margin: 0;
-                  cursor: pointer;
-                  color: var(--text-main);
-                  font-weight: bold;
-                "
-                >Sistem Buatkan Otomatis</label
-              >
+            <label>Barcode Tambahan / Pabrik</label>
+            <div style="display: none">
+              <input type="checkbox" id="autoBarcode" checked />
             </div>
             <input
               id="fBarcode"
               class="input-control"
               placeholder="Tembak Scanner / Ketik Manual"
-              style="display: none"
+              style="display: block"
             />
             <div
               id="lblScanner"
@@ -163,6 +153,15 @@
 
         <!-- KOLOM KANAN -->
         <div class="col-right">
+          <!-- Spacer agar Merek sejajar dengan Nama Barang -->
+          <div
+            class="input-group"
+            style="visibility: hidden; pointer-events: none"
+          >
+            <label>Spacer</label>
+            <input class="input-control" />
+          </div>
+
           <div class="input-group">
             <label>Merek</label>
             <div style="display: flex; gap: 8px">
@@ -176,35 +175,6 @@
               <button
                 type="button"
                 onclick="quickAddMerek()"
-                class="btn"
-                style="
-                  padding: 12px 16px;
-                  background: var(--primary-light);
-                  color: var(--primary);
-                  border: none;
-                  border-radius: 12px;
-                  font-weight: 700;
-                "
-              >
-                +
-              </button>
-            </div>
-          </div>
-          
-          <!-- Field Satuan (DI-HIDE sesuai instruksi) -->
-          <div class="input-group" style="display: none;">
-            <label>Satuan</label>
-            <div style="display: flex; gap: 8px">
-              <select
-                id="fSat"
-                class="input-control"
-                style="flex: 1; margin: 0"
-              >
-                <option value="">-- Pilih --</option>
-              </select>
-              <button
-                type="button"
-                onclick="quickAddSat()"
                 class="btn"
                 style="
                   padding: 12px 16px;
@@ -270,50 +240,114 @@
           </div>
         </div>
 
-        <div class="input-group">
-          <label>Harga Modal (Beli)</label>
-          <input
-            id="fHBeli"
-            type="text"
-            inputmode="numeric"
-            class="input-control"
-            value="0"
-            oninput="
-              formatInputRibuan(this);
-              calcHJualFromMargin();
-            "
-          />
-        </div>
-        <div class="input-group">
-          <label>Margin (%)</label>
-          <input
-            id="fMargin"
-            type="number"
-            step="0.01"
-            class="input-control"
-            value="0"
-            oninput="calcHJualFromMargin()"
-          />
-        </div>
-        <div class="input-group">
-          <label style="color: var(--primary); font-weight: bold"
-            >Harga Jual (Normal) *</label
+        <div class="grid">
+          <div class="input-group" style="grid-area: ppn">
+            <label>PPN</label>
+            <select
+              id="fPpn"
+              class="input-control"
+              style="margin: 0"
+              onchange="togglePpnPercent()"
+            >
+              <option value="non_ppn">-- Non PPN --</option>
+              <option value="included">-- PPN Included --</option>
+              <option value="excluded">-- PPN Excluded --</option>
+            </select>
+          </div>
+
+          <div
+            class="input-group"
+            id="ppnPercentGroup"
+            style="grid-area: ppn_pct; display: none"
           >
-          <input
-            id="fHJual"
-            type="text"
-            inputmode="numeric"
-            class="input-control"
-            value="0"
-            required
-            oninput="
-              formatInputRibuan(this);
-              calcMarginFromHJual();
-              updateDiscountPreview();
-            "
-          />
+            <label>Besaran PPN (%)</label>
+            <div style="display: flex; align-items: center; gap: 8px">
+              <input
+                id="fPpnPercent"
+                type="number"
+                step="0.1"
+                class="input-control"
+                value="11"
+                style="text-align: center"
+              />
+              <span style="font-weight: 700; color: var(--text-muted)">%</span>
+            </div>
+          </div>
+
+          <div class="input-group" style="grid-area: sat">
+            <label>Satuan</label>
+            <div style="display: flex; gap: 8px">
+              <select
+                id="fSat"
+                class="input-control"
+                style="flex: 1; margin: 0"
+              >
+                <option value="">-- Pilih --</option>
+              </select>
+              <button
+                type="button"
+                onclick="quickAddSat()"
+                class="btn"
+                style="
+                  padding: 12px 16px;
+                  background: var(--primary-light);
+                  color: var(--primary);
+                  border: none;
+                  border-radius: 12px;
+                  font-weight: 700;
+                "
+              >
+                +
+              </button>
+            </div>
+          </div>
+
+          <div class="input-group" style="grid-area: modal">
+            <label>Harga Modal (Beli)</label>
+            <input
+              id="fHBeli"
+              type="text"
+              inputmode="numeric"
+              class="input-control"
+              value="0"
+              oninput="
+                formatInputRibuan(this);
+                calcHJualFromMargin();
+              "
+            />
+          </div>
+          <div class="input-group" style="grid-area: margin">
+            <label>Margin (%)</label>
+            <input
+              id="fMargin"
+              type="number"
+              step="0.01"
+              class="input-control"
+              value="0"
+              oninput="calcHJualFromMargin()"
+            />
+          </div>
+          <div class="input-group" style="grid-area: jual">
+            <label style="color: var(--primary); font-weight: bold"
+              >Harga Jual (Normal) *</label
+            >
+            <input
+              id="fHJual"
+              type="text"
+              inputmode="numeric"
+              class="input-control"
+              value="0"
+              required
+              oninput="
+                formatInputRibuan(this);
+                calcMarginFromHJual();
+                updateDiscountPreview();
+              "
+            />
+          </div>
         </div>
-        <div class="input-group">
+
+        <div class="input-group" style="display: none">
           <label style="color: #f59e0b; font-weight: bold"
             >Harga Diskon / Grosir</label
           >

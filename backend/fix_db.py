@@ -61,6 +61,7 @@ add("items", "description",  "TEXT")
 add("items", "updated_at",   "TEXT")
 add("items", "min_stock",    "REAL DEFAULT 0")
 add("items", "is_active",    "INTEGER DEFAULT 1")
+add("items", "brand_id",     "INTEGER")
 
 print("\n=== customers ===")
 add("customers", "credit_limit",    "REAL DEFAULT 0")
