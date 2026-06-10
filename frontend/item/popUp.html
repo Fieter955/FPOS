@@ -69,6 +69,9 @@
   }
 </style>
 
+<!-- Container untuk Modal Supplier Cepat -->
+<div id="quickSupContainer"></div>
+
 <div class="modal-overlay" id="mBarang">
   <div class="modal-box wide">
     <div class="modal-hdr">
@@ -222,16 +225,33 @@
               margin-top: 8px;
             "
           >
-            <select
-              id="fSupplierContext"
-              class="input-control"
-              style="flex: 1; margin: 0"
-              onchange="onSupplierContextChange()"
-            >
-              <option value="">
-                -- Harga Umum (Default Semua Supplier) --
-              </option>
-            </select>
+            <div style="display: flex; gap: 8px; flex: 1">
+              <select
+                id="fSupplierContext"
+                class="input-control"
+                style="flex: 1; margin: 0"
+                onchange="onSupplierContextChange()"
+              >
+                <option value="">
+                  -- Harga Umum (Default Semua Supplier) --
+                </option>
+              </select>
+              <button
+                type="button"
+                onclick="quickAddSup()"
+                class="btn"
+                style="
+                  padding: 12px 16px;
+                  background: var(--primary-light);
+                  color: var(--primary);
+                  border: none;
+                  border-radius: 12px;
+                  font-weight: 700;
+                "
+              >
+                +
+              </button>
+            </div>
             <div style="font-size: 12px; color: var(--text-muted); flex: 1.5">
               Pilih supplier untuk mengatur <b>Harga Modal</b> dan
               <b>Barcode</b> khusus dari supplier tersebut. Jika dibiarkan umum,
@@ -239,6 +259,9 @@
             </div>
           </div>
         </div>
+
+        <!-- Container untuk Modal Supplier Cepat -->
+        <div id="quickSupContainer"></div>
 
         <div class="grid">
           <div class="input-group" style="grid-area: ppn">
@@ -249,7 +272,6 @@
               style="margin: 0"
               onchange="togglePpnPercent()"
             >
-              <option value="non_ppn">-- Non PPN --</option>
               <option value="included">-- PPN Included --</option>
               <option value="excluded">-- PPN Excluded --</option>
             </select>

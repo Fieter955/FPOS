@@ -167,10 +167,10 @@ def load_demo_data(db: Session = Depends(get_db),
     ]
     sup_list = []
     for code, name, phone, contact in suppliers_data:
-        s = models.Supplier(code=code, name=name, phone=phone,
-                            contact_person=contact, is_active=True)
-        db.add(s); db.flush()
-        sup_list.append(s)
+        sup = models.Supplier(code=code, name=name, phone=phone, email=contact, is_active=True)
+        db.add(sup)
+        db.flush()
+        sup_list.append(sup)
 
     # ── Demo Sales (7 hari terakhir) ──────────────────────────────────────────
     sale_items_pool = [

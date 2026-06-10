@@ -135,7 +135,7 @@ function showToast(msg, type = "success") {
   };
   const el = document.createElement("div");
   el.id = "_t";
-  el.style.cssText = `position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:99999;
+  el.style.cssText = `position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:9999999;
     background:${c[type] || c.success};color:#fff;padding:14px 28px;border-radius:12px;
     font-size:15px;font-weight:700;box-shadow:0 8px 32px rgba(0,0,0,.35);
     max-width:420px;text-align:center;font-family:inherit;white-space:pre-line;line-height:1.5;`;
@@ -227,6 +227,9 @@ function openModal(id) {
   if (m) {
     m.style.display = "flex";
     document.body.style.overflow = "hidden";
+    // Lock scroll for .main-content layout
+    const main = document.querySelector(".main-content");
+    if (main) main.style.overflow = "hidden";
   }
 }
 
@@ -235,6 +238,9 @@ function closeModal(id) {
   if (m) {
     m.style.display = "none";
     document.body.style.overflow = "";
+    // Restore scroll for .main-content layout
+    const main = document.querySelector(".main-content");
+    if (main) main.style.overflow = "auto";
   }
 }
 

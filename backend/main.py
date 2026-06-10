@@ -236,6 +236,19 @@ async def lifespan(app: FastAPI):
                 ))
                 db.commit()
                 print(f"✅ Akun '{code} {name}' berhasil disiapkan.")
+
+        # 👇 TAMBAHAN SEED DATA MASTER (Agar tidak error saat awal) 👇
+        if not db.query(models.Category).first():
+            db.add(models.Category(name="Umum", description="Kategori Default"))
+            print("📦 ✓ Seed Category: Umum")
+        if not db.query(models.Brand).first():
+            db.add(models.Brand(name="Tanpa Merek", description="Default Brand"))
+            print("📦 ✓ Seed Brand: Tanpa Merek")
+        if not db.query(models.Unit).first():
+            db.add(models.Unit(name="Pcs", abbreviation="pcs"))
+            print("📦 ✓ Seed Unit: Pcs")
+        db.commit()
+
     except Exception as e:
         print(f"⚠️ Gagal inisialisasi data awal: {e}")
     finally:
@@ -342,7 +355,7 @@ if FRONTEND_DIR.exists():
             app.add_api_route(f"/{page}.html", make_handler(page), methods=["GET"])
 
     # Serve pages in item subdirectory
-    ITEM_PAGES = ["dashboard", "satuan", "levelHarga", "levelJumlah", "items", "popUp", "kategori", "units"]
+    ITEM_PAGES = ["dashboard", "satuan", "levelHarga", "levelJumlah", "items", "popUp", "kategori", "units", "merek"]
     for page in ITEM_PAGES:
         html_file = FRONTEND_DIR / "item" / f"{page}.html"
         if html_file.exists():
@@ -353,6 +366,19 @@ if FRONTEND_DIR.exists():
                 return handler
             app.add_api_route(f"/item/{page}", make_item_handler(page), methods=["GET"])
             app.add_api_route(f"/item/{page}.html", make_item_handler(page), methods=["GET"])
+
+    # Serve pages in supplier subdirectory
+    SUPPLIER_PAGES = ["dashboard", "tambahSuplier"]
+    for page in SUPPLIER_PAGES:
+        html_file = FRONTEND_DIR / "supplier" / f"{page}.html"
+        if html_file.exists():
+            def make_supplier_handler(p):
+                async def handler():
+                    return FileResponse(str(FRONTEND_DIR / "supplier" / f"{p}.html"))
+                handler.__name__ = f"page_supplier_{p}"
+                return handler
+            app.add_api_route(f"/supplier/{page}", make_supplier_handler(page), methods=["GET"])
+            app.add_api_route(f"/supplier/{page}.html", make_supplier_handler(page), methods=["GET"])
 
 def cari_tailscale_exe() -> str | None:
     kandidat = [

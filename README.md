@@ -155,3 +155,18 @@ python cleanup_duplicates.py
 
 ---
 *README ini adalah panduan navigasi utama untuk pemeliharaan dan pengembangan fitur baru.*
+
+---
+
+## 🛠️ Update Terakhir (Juni 2026)
+
+### 1. Perbaikan Modul Merek (Brand)
+- **Fix 404 Route**: Menambahkan `merek` ke dalam daftar `ITEM_PAGES` di `backend/main.py` agar file `merek.html` dapat diakses secara benar oleh frontend.
+- **Safety Checks**: Menambahkan validasi `null pointer` pada `merek.js` dan `items.html` (fungsi `switchTab`) untuk mencegah error JavaScript saat komponen dimuat secara asinkron.
+- **Auto-Seeding**: Sistem sekarang otomatis membuat data awal "Tanpa Merek", "Umum" (Kategori), dan "Pcs" (Satuan) saat pertama kali dijalankan untuk mencegah error pada dropdown kosong.
+
+### 2. Peningkatan Manajemen Supplier
+- **Standalone Page**: Mengubah `tambahSuplier.html` dari komponen fragment menjadi halaman mandiri yang lengkap dengan UI modern dan logika validasi input.
+- **Dashboard Integration**: Menambahkan tombol pintas "Tambah Supplier" langsung di Dashboard Utama untuk mempercepat registrasi pemasok baru.
+- **Routing**: Mengaktifkan routing otomatis untuk seluruh file di folder `frontend/supplier/` melalui backend FastAPI.
+

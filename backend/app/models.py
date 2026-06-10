@@ -240,7 +240,7 @@ class Supplier(Base):
     address = Column(Text)
     phone = Column(String(20))
     email = Column(String(100))
-    contact_person = Column(String(100))
+    PpnSupplier = Column(Float, default=0)
     credit_limit = Column(Float, default=0)
     deposit_balance = Column(Float, default=0)
     is_active = Column(Boolean, default=True)

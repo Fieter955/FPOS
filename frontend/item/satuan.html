@@ -1,165 +1,55 @@
-<!DOCTYPE html>
-<html lang="id">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Berdasarkan Satuan - Pengaturan Harga Jual</title>
-    <link rel="stylesheet" href="/css/style.css">
-    <script src="/js/theme.js"></script>
-    <style>
-        .setting-header {
-            display: flex;
-            align-items: center;
-            gap: 24px;
-            margin-bottom: 24px;
-            padding: 16px;
-            background: var(--card-bg);
-            border-radius: 12px;
-            border: 1px solid var(--border-color);
-            flex-wrap: wrap;
-        }
-        .radio-group {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-        }
-        .radio-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--text-main);
-        }
-        .radio-item input[type="radio"] {
-            width: 18px;
-            height: 18px;
-            accent-color: var(--primary);
-        }
-        .tbl th {
-            font-size: 12px;
-            padding: 8px 4px;
-            white-space: nowrap;
-        }
-        .tbl td {
-            padding: 4px;
-        }
-        .tbl .input-control {
-            padding: 6px 8px;
-            font-size: 13px;
-            border-radius: 4px;
-        }
-        .alert-info {
-            color: #ef4444;
-            font-size: 13px;
-            font-weight: 500;
-            margin-left: 12px;
-        }
-    </style>
-</head>
-<body>
-    <div class="app-container">
-        <main class="main-content">
-            <button
-                class="btn"
-                style="
-                    background: transparent;
-                    color: var(--text-muted);
-                    padding: 0;
-                    margin-bottom: 16px;
-                "
-                onclick="location.href = '/dashboard'"
-            >
-                ← Kembali
-            </button>
-            <div class="pg-header">
-                <div>
-                    <h1>⚙️ Pengaturan Harga Jual</h1>
-                    <p>Konfigurasi metode penetapan harga jual barang.</p>
-                </div>
-            </div>
+<div class="tbl-wrap">
+  <div style="margin-bottom: 16px; display: flex; align-items: center;">
+    <label style="font-weight: bold; min-width: 120px;">Satuan Dasar :</label>
+    <select id="fSatuanDasarGrid" class="input-control" style="width: 200px;" disabled>
+      <!-- Diisi otomatis dari fSat induk -->
+    </select>
+  </div>
 
-            <!-- Navigasi Pilihan Harga Jual -->
-            <div class="setting-header">
-                <div class="radio-group">
-                    <span style="font-weight: bold; color: var(--text-muted);">Pilihan Harga Jual :</span>
-                    <label class="radio-item">
-                        <input type="radio" name="price_mode" onclick="window.location.href='dashboard.html'"> Satu Harga
-                    </label>
-                    <label class="radio-item">
-                        <input type="radio" name="price_mode" checked onclick="window.location.href='satuan.html'"> Berdasarkan Satuan
-                    </label>
-                    <label class="radio-item">
-                        <input type="radio" name="price_mode" onclick="window.location.href='levelHarga.html'"> Berdasar Level Harga
-                    </label>
-                    <label class="radio-item">
-                        <input type="radio" name="price_mode" onclick="window.location.href='levelJumlah.html'"> Berdasarkan Jumlah
-                    </label>
-                </div>
-                <div style="border-left: 1px solid var(--border-color); height: 24px; margin: 0 8px;"></div>
-                <label class="radio-item">
-                    <input type="checkbox"> Harga Jual di pilih saat transaksi (Flexible)
-                </label>
-            </div>
+  <table class="tbl" id="satuanGridTable">
+    <thead>
+      <tr>
+        <th style="width: 30px;"></th>
+        <th>Satuan</th>
+        <th>Jns Satuan</th>
+        <th style="width: 80px;">Konv</th>
+        <th class="sep">H. Pokok</th>
+        <th style="width: 100px;">Proc (%)</th>
+        <th>Harga Jual</th>
+      </tr>
+    </thead>
+    <tbody id="satuanGridBody">
+      <!-- Dinamis diisi JS -->
+    </tbody>
+  </table>
+  <div style="margin-top: 12px; font-size: 12px; color: var(--text-muted); line-height: 1.5;">
+    ℹ️ Ketik pada baris kosong paling bawah untuk menambah satuan baru secara otomatis. <br>
+    H. Pokok dihitung: <b>Harga Beli Induk × Konversi</b>.
+  </div>
+</div>
 
-            <div style="display: flex; align-items: center; margin-bottom: 16px;">
-                <label style="font-weight: bold; min-width: 120px;">Satuan Dasar :</label>
-                <select class="input-control" style="width: 200px; margin-right: 12px;">
-                    <option value="">-- Pilih Satuan --</option>
-                </select>
-                <p class="alert-info">Disarankan untuk tidak mengubah satuan jika sudah terdapat transaksi yang berhubungan dengan item ini.</p>
-            </div>
-
-            <div class="tbl-wrap">
-                <table class="tbl">
-                    <thead>
-                        <tr>
-                            <th style="width: 30px;"></th>
-                            <th>Satuan</th>
-                            <th>Jns Satuan</th>
-                            <th>Konv</th>
-                            <th class="sep">H. Pokok</th>
-                            <th>Proc (%)</th>
-                            <th>Harga Jual</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td style="text-align: center;">▶</td>
-                            <td>
-                                <select class="input-control">
-                                    <option value="">Pcs</option>
-                                </select>
-                            </td>
-                            <td>
-                                <select class="input-control">
-                                    <option value="">Satuan Dasar</option>
-                                </select>
-                            </td>
-                            <td><input type="text" class="input-control" value="1,00" style="text-align: right;"></td>
-                            <td class="sep"><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" value="0,00" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" value="0,00" style="text-align: right; color: var(--primary); font-weight: bold;"></td>
-                        </tr>
-                        <tr>
-                            <td style="text-align: center;">*</td>
-                            <td><select class="input-control"><option value=""></option></select></td>
-                            <td><select class="input-control"><option value=""></option></select></td>
-                            <td><input type="text" class="input-control" style="text-align: right;"></td>
-                            <td class="sep"><input type="text" class="input-control" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" style="text-align: right;"></td>
-                            <td><input type="text" class="input-control" style="text-align: right;"></td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <div style="display: flex; justify-content: flex-end; margin-top: 24px; gap: 12px;">
-                <button class="btn" style="background: var(--bg-color); border: 1px solid var(--border-color);">Batal</button>
-                <button class="btn btn-primary">Simpan Pengaturan</button>
-            </div>
-        </main>
-    </div>
-</body>
-</html>
+<style>
+  #satuanGridTable input, #satuanGridTable select {
+    width: 100%;
+    padding: 6px 8px;
+    font-size: 13px;
+    border: 1px solid transparent;
+    background: transparent;
+  }
+  #satuanGridTable input:focus, #satuanGridTable select:focus {
+    border-color: var(--primary);
+    background: var(--input-bg);
+  }
+  #satuanGridTable td {
+    padding: 2px 4px;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--border-color);
+  }
+  #satuanGridTable tr.base-row {
+    background: rgba(var(--primary-rgb), 0.05);
+  }
+  #satuanGridTable tr.empty-row td {
+    color: var(--text-muted);
+  }
+  .sep { border-left: 2px solid var(--border-color) !important; }
+</style>

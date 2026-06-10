@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tambah Supplier - FPOS</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <style>
+      .item-selection-section {
+        margin: 16px 0;
+        padding: 16px;
+        background: var(--bg-color);
+        border-radius: 12px;
+        border: 1px solid var(--border-color);
+      }
+      .item-selection-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .item-selection-header label {
+        font-weight: 600;
+        color: var(--text-muted);
+        font-size: 14px;
+      }
+      .item-search-box {
+        position: relative;
+        width: 100%;
+        max-width: 400px;
+      }
+      .item-search-input {
+        width: 100%;
+        padding: 10px 12px 10px 36px;
+        border: 2px solid var(--border-color);
+        border-radius: 10px;
+        background: var(--input-bg, #1e293b);
+        color: var(--text-main);
+        font-size: 14px;
+        outline: none;
+        box-sizing: border-box;
+      }
+      .item-search-input:focus {
+        border-color: var(--primary);
+      }
+      .item-search-icon {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+        font-size: 14px;
+        pointer-events: none;
+      }
+      .item-dropdown {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        width: 100%;
+        max-height: 240px;
+        overflow-y: auto;
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        z-index: 9999;
+        display: none;
+      }
+      .item-dropdown.show {
+        display: block;
+      }
+      .item-dropdown-item {
+        padding: 10px 12px;
+        cursor: pointer;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .item-dropdown-item:hover {
+        background: var(--primary-light);
+      }
+      .selected-items-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        min-height: 40px;
+        padding: 8px;
+        border: 1px dashed var(--border-color);
+        border-radius: 8px;
+      }
+      .item-chip {
+        display: inline-flex;
+        align-items: center;
+        background: var(--primary-light);
+        color: var(--primary);
+        padding: 4px 10px;
+        border-radius: 16px;
+        font-size: 13px;
+        font-weight: 500;
+        border: 1px solid var(--primary);
+      }
+      .chip-remove {
+        background: none;
+        border: none;
+        color: inherit;
+        margin-left: 6px;
+        cursor: pointer;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-container">
+      <main class="main-content" style="max-width: 800px; margin: 0 auto">
+        <button
+          class="btn"
+          style="
+            background: transparent;
+            color: var(--text-muted);
+            padding: 0;
+            margin-bottom: 16px;
+          "
+          onclick="history.back()"
+        >
+          ← Kembali
+        </button>
+
+        <div class="card" style="padding: 24px">
+          <h2 id="mSupTitle" style="margin-bottom: 24px">Tambah Supplier</h2>
+
+          <form id="supForm" onsubmit="save(event)">
+            <input type="hidden" id="sId" />
+            <input type="hidden" id="sDeposit" />
+            <div class="input-group" style="margin-bottom: 16px">
+              <label>Nama Supplier *</label>
+              <input
+                id="sNama"
+                class="input-control"
+                placeholder="PT / CV / Nama Distributor"
+                required
+              />
+            </div>
+
+            <div class="row2" style="margin-bottom: 16px">
+              <div class="input-group">
+                <label>Telepon</label>
+                <input
+                  id="sPhone"
+                  class="input-control"
+                  inputmode="tel"
+                  placeholder="021-xxxxxxx"
+                />
+              </div>
+              <div class="input-group">
+                <label>Email</label>
+                <input
+                  id="sEmail"
+                  class="input-control"
+                  type="email"
+                  placeholder="email@supplier.com"
+                />
+              </div>
+            </div>
+
+            <div class="input-group" style="margin-bottom: 16px">
+              <label>Alamat</label>
+              <textarea
+                id="sAlamat"
+                class="input-control"
+                rows="2"
+                placeholder="Alamat lengkap supplier"
+              ></textarea>
+            </div>
+
+            <div class="row2" style="margin-bottom: 16px">
+              <div class="input-group">
+                <label>PPN Supplier</label>
+                <input
+                  id="PpnSupplier"
+                  class="input-control"
+                  placeholder="PPN Supplier"
+                />
+              </div>
+              <div class="input-group">
+                <label>Limit Kredit (Rp)</label>
+                <input
+                  id="sCredit"
+                  type="number"
+                  class="input-control"
+                  placeholder="0"
+                  value="0"
+                />
+              </div>
+            </div>
+
+            <div class="input-group" style="margin-bottom: 16px">
+              <label>Catatan</label>
+              <textarea
+                id="sNotes"
+                class="input-control"
+                rows="2"
+                placeholder="Info tambahan, terms pembayaran, dll..."
+              ></textarea>
+            </div>
+
+            <div class="item-selection-section">
+              <div class="item-selection-header">
+                <label>📦 Barang dari Supplier Ini</label>
+                <div class="item-search-box">
+                  <span class="item-search-icon">🔍</span>
+                  <input
+                    type="text"
+                    id="itemSearchInput"
+                    class="item-search-input"
+                    placeholder="Cari barang..."
+                    autocomplete="off"
+                  />
+                  <div id="itemDropdown" class="item-dropdown"></div>
+                </div>
+              </div>
+              <div id="selectedItemsContainer" class="selected-items-container">
+                <span class="selected-items-empty"
+                  >Belum ada barang dipilih</span
+                >
+              </div>
+            </div>
+
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 12px;
+                margin-top: 24px;
+              "
+            >
+              <button
+                type="button"
+                onclick="history.back()"
+                class="btn"
+                style="
+                  background: var(--bg-color);
+                  border: 1px solid var(--border-color);
+                  color: var(--text-main);
+                "
+              >
+                Batal
+              </button>
+              <button type="submit" class="btn btn-primary" id="btnSimpan">
+                ✓ Simpan Supplier
+              </button>
+            </div>
+          </form>
+        </div>
+      </main>
+    </div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/theme.js"></script>
+    <script>
+      requireAuth();
+      let allItems = [];
+      let selectedItems = new Map();
+      let itemSearchTimeout = null;
+
+      async function loadAllItems() {
+        try {
+          const result = await api(
+            "GET",
+            "/items/?limit=1000&active_only=true",
+          );
+          allItems = Array.isArray(result) ? result : result.data || [];
+        } catch (e) {
+          console.error("Gagal load items", e);
+        }
+      }
+
+      function renderItemDropdown(searchText = "") {
+        const dropdown = document.getElementById("itemDropdown");
+        const search = searchText.toLowerCase().trim();
+        const available = allItems.filter(
+          (item) =>
+            !selectedItems.has(item.id) &&
+            (item.name.toLowerCase().includes(search) ||
+              (item.code && item.code.toLowerCase().includes(search))),
+        );
+
+        if (available.length === 0) {
+          dropdown.innerHTML = `<div class="item-dropdown-empty">Tidak ditemukan</div>`;
+          dropdown.classList.add("show");
+          return;
+        }
+
+        dropdown.innerHTML = available
+          .slice(0, 20)
+          .map(
+            (item) => `
+                <div class="item-dropdown-item" onclick="addItem(${item.id})">
+                    <span>${item.name} ${item.code ? `<small>[${item.code}]</small>` : ""}</span>
+                    <button type="button" class="btn btn-primary" style="padding: 2px 8px; font-size: 12px;">+</button>
+                </div>
+            `,
+          )
+          .join("");
+        dropdown.classList.add("show");
+      }
+
+      window.addItem = function (id) {
+        const item = allItems.find((i) => i.id === id);
+        if (item) {
+          selectedItems.set(item.id, item);
+          renderSelectedItems();
+          document.getElementById("itemSearchInput").value = "";
+          document.getElementById("itemDropdown").classList.remove("show");
+        }
+      };
+
+      function renderSelectedItems() {
+        const container = document.getElementById("selectedItemsContainer");
+        if (selectedItems.size === 0) {
+          container.innerHTML = `<span class="selected-items-empty">Belum ada barang dipilih</span>`;
+          return;
+        }
+        container.innerHTML = Array.from(selectedItems.values())
+          .map(
+            (item) => `
+                <span class="item-chip">
+                    ${item.name}
+                    <button type="button" class="chip-remove" onclick="removeItem(${item.id})">×</button>
+                </span>
+            `,
+          )
+          .join("");
+      }
+
+      window.removeItem = function (id) {
+        selectedItems.delete(id);
+        renderSelectedItems();
+      };
+
+      async function save(e) {
+        e.preventDefault();
+        const btn = document.getElementById("btnSimpan");
+        btn.disabled = true;
+        btn.textContent = "Menyimpan...";
+
+        const data = {
+          name: document.getElementById("sNama").value,
+          phone: document.getElementById("sPhone").value || null,
+          email: document.getElementById("sEmail").value || null,
+          address: document.getElementById("sAlamat").value || null,
+          PpnSupplier: document.getElementById("PpnSupplier").value || null,
+          credit_limit:
+            parseFloat(document.getElementById("sCredit").value) || 0,
+          notes: document.getElementById("sNotes").value || null,
+          item_ids: Array.from(selectedItems.keys()),
+        };
+
+        try {
+          await api("POST", "/suppliers/", data);
+          showToast("Supplier berhasil ditambahkan!");
+          setTimeout(() => (location.href = "/suppliers"), 1000);
+        } catch (ex) {
+          showToast(ex.message, "error");
+          btn.disabled = false;
+          btn.textContent = "✓ Simpan Supplier";
+        }
+      }
+
+      document
+        .getElementById("itemSearchInput")
+        .addEventListener("input", (e) => {
+          clearTimeout(itemSearchTimeout);
+          itemSearchTimeout = setTimeout(() => {
+            renderItemDropdown(e.target.value);
+          }, 300);
+        });
+
+      document.addEventListener("click", (e) => {
+        if (!e.target.closest(".item-search-box")) {
+          document.getElementById("itemDropdown").classList.remove("show");
+        }
+      });
+
+      loadAllItems();
+    </script>
+  </body>
+</html>

@@ -243,7 +243,7 @@ class SupplierCreate(BaseModel):
     address: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
-    contact_person: Optional[str] = None
+    PpnSupplier: float = 0
     credit_limit: float = 0
     item_ids: Optional[List[int]] = None
     model_config = {"from_attributes": True}
@@ -253,7 +253,7 @@ class SupplierUpdate(BaseModel):
     address: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
-    contact_person: Optional[str] = None
+    PpnSupplier: Optional[float] = None
     credit_limit: Optional[float] = None
     is_active: Optional[bool] = None
     item_ids: Optional[List[int]] = None
@@ -266,7 +266,7 @@ class SupplierOut(BaseModel):
     address: Optional[str]
     phone: Optional[str]
     email: Optional[str]
-    contact_person: Optional[str]
+    PpnSupplier: Optional[float]
     credit_limit: float
     deposit_balance: float = 0
     is_active: bool

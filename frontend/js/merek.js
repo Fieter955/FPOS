@@ -1,33 +1,44 @@
 async function loadMerek() {
-  const brands = await api("GET", "/items/brands");
-  document.getElementById("tblMerek").innerHTML =
-    brands
-      .map(
-        (b) => `<tr>
+  try {
+    const brands = await api("GET", "/items/brands");
+    const tbl = document.getElementById("tblMerek");
+    if (!tbl) return;
+    tbl.innerHTML =
+      brands
+        .map(
+          (b) => `<tr>
       <td><b>${b.name}</b></td><td style="color:var(--text-muted)">${
         b.description || "-"
       }</td>
       <td style="white-space:nowrap"><button class="bsm be" onclick='editMerek(${JSON.stringify(
         b,
       ).replace(/"/g, "&quot;")})'>Edit</button> <button class="bsm bd" onclick="delMerek(${
-          b.id
-        },'${b.name}')">Hapus</button></td>
+            b.id
+          },'${b.name}')">Hapus</button></td>
     </tr>`,
-      )
-      .join("") ||
-    '<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text-muted)">Belum ada merek</td></tr>';
+        )
+        .join("") ||
+      '<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text-muted)">Belum ada merek</td></tr>';
+  } catch (e) {
+    console.error("Gagal memuat merek:", e);
+  }
 }
 
 function openMerekModal(item = null) {
   editMerekId = null;
-  document.getElementById("mMerekTitle").textContent = "Tambah Merek";
-  document.getElementById("merekNama").value = "";
-  document.getElementById("merekDesk").value = "";
+  const title = document.getElementById("mMerekTitle");
+  const nama = document.getElementById("merekNama");
+  const desk = document.getElementById("merekDesk");
+
+  if (title) title.textContent = "Tambah Merek";
+  if (nama) nama.value = "";
+  if (desk) desk.value = "";
+
   if (item) {
     editMerekId = item.id;
-    document.getElementById("mMerekTitle").textContent = "Edit Merek";
-    document.getElementById("merekNama").value = item.name;
-    document.getElementById("merekDesk").value = item.description || "";
+    if (title) title.textContent = "Edit Merek";
+    if (nama) nama.value = item.name;
+    if (desk) desk.value = item.description || "";
   }
   openModal("mMerek");
 }

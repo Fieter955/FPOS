@@ -73,12 +73,14 @@ add("customers", "address",         "TEXT")
 add("customers", "email",           "TEXT")
 
 print("\n=== suppliers ===")
+add("suppliers", "PpnSupplier",  "REAL DEFAULT 0")
 add("suppliers", "credit_limit",    "REAL DEFAULT 0")
 add("suppliers", "deposit_balance", "REAL DEFAULT 0")
 add("suppliers", "email",        "TEXT")
 add("suppliers", "notes",        "TEXT")
 add("suppliers", "is_active",    "INTEGER DEFAULT 1")
 add("suppliers", "code",         "TEXT")
+
 
 print("\n=== warehouses ===")
 add("warehouses", "is_default", "INTEGER DEFAULT 0")

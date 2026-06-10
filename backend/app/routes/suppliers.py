@@ -79,10 +79,10 @@ def create_supplier(
     obj = models.Supplier(
         code=sup_code,
         name=s.name,
-        contact_person=s.contact_person,
         phone=s.phone,
         email=s.email,
         address=s.address,
+        PpnSupplier=s.PpnSupplier,
         is_active=True
     )
     db.add(obj)

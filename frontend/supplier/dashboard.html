@@ -269,7 +269,7 @@
                 <th>Telepon</th>
                 <th>Deposit</th>
                 <th>Email</th>
-                <th>Kontak</th>
+                <th>PPN Supplier</th>
                 <th>Status</th>
                 <th>Aksi</th>
               </tr>
@@ -281,134 +281,7 @@
     </div>
 
     <!-- Modal Tambah/Edit Supplier -->
-    <div class="modal-overlay" id="mSup">
-      <div class="modal-box">
-        <div class="modal-hdr">
-          <h2 id="mSupTitle">Tambah Supplier</h2>
-          <button class="btn-x" onclick="closeModal('mSup')">×</button>
-        </div>
-        <input type="hidden" id="sId" />
-
-        <!-- Form Fields (Kode dihapus, Nama full width) -->
-        <div class="input-group" style="margin-bottom: 16px">
-          <label>Nama Supplier *</label>
-          <input
-            id="sNama"
-            class="input-control"
-            placeholder="PT / CV / Nama Distributor"
-          />
-        </div>
-        <div class="row2" style="margin-bottom: 16px">
-          <div class="input-group">
-            <label>Telepon</label>
-            <input
-              id="sPhone"
-              class="input-control"
-              inputmode="tel"
-              placeholder="021-xxxxxxx"
-            />
-          </div>
-          <div class="input-group">
-            <label>Email</label>
-            <input
-              id="sEmail"
-              class="input-control"
-              type="email"
-              placeholder="email@supplier.com"
-            />
-          </div>
-        </div>
-        <div class="input-group" style="margin-bottom: 16px">
-          <label>Alamat</label>
-          <textarea
-            id="sAlamat"
-            class="input-control"
-            rows="2"
-            placeholder="Alamat lengkap supplier"
-          ></textarea>
-        </div>
-        <div class="row2" style="margin-bottom: 16px">
-          <div class="input-group">
-            <label>Kontak Person</label>
-            <input id="sContact" class="input-control" placeholder="Nama CP" />
-          </div>
-          <div class="input-group">
-            <label>Limit Kredit (Rp)</label>
-            <input
-              id="sCredit"
-              type="number"
-              class="input-control"
-              placeholder="0"
-              value="0"
-            />
-          </div>
-        </div>
-        <div class="input-group" style="margin-bottom: 16px">
-          <label>Saldo Deposit (Dari Retur)</label>
-          <input
-            id="sDeposit"
-            class="input-control"
-            readonly
-            style="background: var(--primary-light); color: var(--primary); font-weight: 700; border: 1px solid var(--primary);"
-          />
-        </div>
-        <div class="input-group" style="margin-bottom: 16px">
-          <label>Catatan</label>
-          <textarea
-            id="sNotes"
-            class="input-control"
-            rows="2"
-            placeholder="Info tambahan, terms pembayaran, dll..."
-          ></textarea>
-        </div>
-
-        <!-- === ITEM SELECTION SECTION === -->
-        <div class="item-selection-section">
-          <div class="item-selection-header">
-            <label>📦 Barang dari Supplier Ini</label>
-            <div class="item-search-box">
-              <span class="item-search-icon">🔍</span>
-              <input
-                type="text"
-                id="itemSearchInput"
-                class="item-search-input"
-                placeholder="Cari barang..."
-                autocomplete="off"
-              />
-              <div id="itemDropdown" class="item-dropdown"></div>
-            </div>
-          </div>
-          <div id="selectedItemsContainer" class="selected-items-container">
-            <span class="selected-items-empty">Belum ada barang dipilih</span>
-          </div>
-        </div>
-        <!-- === END ITEM SELECTION === -->
-
-        <div
-          style="
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-top: 8px;
-          "
-        >
-          <button
-            onclick="closeModal('mSup')"
-            class="btn"
-            style="
-              background: var(--bg-color);
-              border: 1px solid var(--border-color);
-              color: var(--text-main);
-            "
-          >
-            Batal
-          </button>
-          <button onclick="save()" class="btn btn-primary" id="btnSimpan">
-            ✓ Simpan
-          </button>
-        </div>
-      </div>
-    </div>
+    <div id="tambahEditBarang"></div>
 
     <!-- Modal Riwayat -->
     <div class="modal-overlay" id="mRiwayat">
@@ -588,6 +461,8 @@
       function setupItemSearch() {
         const input = document.getElementById("itemSearchInput");
         const dropdown = document.getElementById("itemDropdown");
+        if (!input || !dropdown) return;
+
         input.addEventListener("focus", () => {
           renderItemDropdown(input.value);
           positionDropdown(input, dropdown);
@@ -616,9 +491,54 @@
         });
       }
 
+      async function loadModal() {
+        try {
+          const resp = await fetch("/supplier/tambahSuplier.html");
+          const html = await resp.text();
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, "text/html");
+
+          // Cari form atau card dari halaman standalone
+          const form = doc.querySelector("form");
+
+          if (form) {
+            document.getElementById("tambahEditBarang").innerHTML = `
+               <div class="modal-overlay" id="mSup">
+                 <div class="modal-box" style="max-width: 700px">
+                   <div class="modal-hdr">
+                     <h2 id="mSupTitle">Tambah Supplier</h2>
+                     <button class="btn-x" onclick="closeModal('mSup')">×</button>
+                   </div>
+                   <div class="modal-body" style="padding:0;">
+                     ${form.outerHTML}
+                   </div>
+                 </div>
+               </div>
+             `;
+
+            // Bersihkan elemen yang tidak diperlukan di dalam modal
+            const modalBody = document.querySelector("#mSup .modal-body");
+            modalBody.querySelector("h2")?.remove();
+            modalBody
+              .querySelector("button[onclick*='history.back']")
+              ?.remove();
+
+            // Ubah onsubmit form agar menggunakan fungsi save dari dashboard ini
+            const injectedForm = modalBody.querySelector("form");
+            if (injectedForm) {
+              injectedForm.onsubmit = (e) => save(e);
+            }
+
+            setupItemSearch();
+          }
+        } catch (e) {
+          console.error("Gagal memuat modal supplier:", e);
+        }
+      }
+
       async function load() {
         const q = document.getElementById("srch").value;
-        let url = "/suppliers/?limit=200";
+        let url = "/suppliers/?limit=500";
         if (q) url += `&search=${encodeURIComponent(q)}`;
         try {
           const d = await api("GET", url);
@@ -630,7 +550,7 @@
                 <td>${s.phone || "-"}</td>
                 <td style="font-weight:700;color:var(--primary)">${fmtRp(s.deposit_balance || 0)}</td>
                 <td>${s.email || "-"}</td>
-                <td>${s.contact_person || "-"}</td>
+                <td>${s.PpnSupplier !== undefined ? s.PpnSupplier.toFixed(2) : "0.00"}</td>
                 <td><span style="color:${s.is_active !== false ? "#10b981" : "#ef4444"};font-weight:700">${s.is_active !== false ? "● Aktif" : "✗ Nonaktif"}</span></td>
                 <td style="white-space:nowrap">
                   <button class="bsm be" onclick='editSupplier(${JSON.stringify(s).replace(/"/g, "&quot;")})'>Edit</button>
@@ -651,9 +571,14 @@
         selectedItems.clear();
         document.getElementById("mSupTitle").textContent = "Tambah Supplier";
         document.getElementById("sId").value = "";
-        ["sNama", "sPhone", "sEmail", "sAlamat", "sContact", "sNotes"].forEach(
-          (id) => (document.getElementById(id).value = ""),
-        );
+        [
+          "sNama",
+          "sPhone",
+          "sEmail",
+          "sAlamat",
+          "sNotes",
+          "PpnSupplier",
+        ].forEach((id) => (document.getElementById(id).value = ""));
         document.getElementById("sCredit").value = "0";
         renderSelectedItems();
         await loadAllItems();
@@ -670,9 +595,11 @@
         document.getElementById("sPhone").value = s.phone || "";
         document.getElementById("sEmail").value = s.email || "";
         document.getElementById("sAlamat").value = s.address || "";
-        document.getElementById("sContact").value = s.contact_person || "";
+        document.getElementById("PpnSupplier").value = s.PpnSupplier || 0;
         document.getElementById("sCredit").value = s.credit_limit || 0;
-        document.getElementById("sDeposit").value = fmtRp(s.deposit_balance || 0);
+        document.getElementById("sDeposit").value = fmtRp(
+          s.deposit_balance || 0,
+        );
         document.getElementById("sNotes").value = s.notes || "";
         try {
           const items = await api("GET", `/suppliers/${s.id}/items`);
@@ -692,7 +619,8 @@
         setTimeout(() => document.getElementById("sNama")?.focus(), 100);
       }
 
-      async function save() {
+      async function save(e) {
+        if (e && e.preventDefault) e.preventDefault();
         const name = document.getElementById("sNama").value.trim();
         if (!name) {
           showToast("Nama supplier wajib diisi", "error");
@@ -704,7 +632,8 @@
           phone: document.getElementById("sPhone").value || null,
           email: document.getElementById("sEmail").value || null,
           address: document.getElementById("sAlamat").value || null,
-          contact_person: document.getElementById("sContact").value || null,
+          PpnSupplier:
+            parseFloat(document.getElementById("PpnSupplier").value) || 0,
           credit_limit:
             parseFloat(document.getElementById("sCredit").value) || 0,
           notes: document.getElementById("sNotes").value || null,
@@ -771,7 +700,7 @@
       }
 
       document.addEventListener("DOMContentLoaded", async () => {
-        setupItemSearch();
+        loadModal();
         await loadAllItems();
         load();
       });
