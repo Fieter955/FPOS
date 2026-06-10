@@ -3,31 +3,8 @@
     <h3 style="margin: 0; font-size: 1.1em;">Harga Berdasarkan Level Group (Grup Pelanggan)</h3>
   </div>
   <table class="tbl" id="satuanGridTable">
-    <thead>
-      <tr>
-        <th colspan="5" class="header-spacer"></th>
-        <th colspan="2" class="group-label sep">1. Basic</th>
-        <th colspan="2" class="group-label sep">2. Classic</th>
-        <th colspan="2" class="group-label sep">3. Premium</th>
-        <th colspan="2" class="group-label sep">4. Elite</th>
-        <th colspan="2" class="group-label sep">5. VIP</th>
-        <th colspan="2" class="group-label">6. VVIP</th>
-      </tr>
-      <tr>
-        <th style="width: 30px"></th>
-        <th>Satuan</th>
-        <th>Jenis</th>
-        <th style="width: 60px">Konv</th>
-        <th class="sep">H. Pokok</th>
-        
-        <!-- Dinamis header grup bisa di sini tapi untuk sekarang static sesuai template asli -->
-        <th>%</th><th class="sep">Harga</th>
-        <th>%</th><th class="sep">Harga</th>
-        <th>%</th><th class="sep">Harga</th>
-        <th>%</th><th class="sep">Harga</th>
-        <th>%</th><th class="sep">Harga</th>
-        <th>%</th><th>Harga</th>
-      </tr>
+    <thead id="satuanGridHead">
+      <!-- Dinamis diisi JS berdasarkan allGroups -->
     </thead>
     <tbody id="satuanGridBody">
       <!-- Dinamis diisi JS Shared State -->

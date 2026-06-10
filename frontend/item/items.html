@@ -600,9 +600,21 @@
         syncAdvancedGridFromMain();
       }
 
-      function syncAdvancedGridFromMain() {
+      function syncGroupPricesFromMain() {
         if (satuanRows.length > 0) {
           const base = satuanRows[0];
+          // Ensure allGroups prices are initialized in groupPrices if not present
+          allGroups.forEach(group => {
+            const key = group.name.toLowerCase();
+            if (groupPrices[key] === undefined) {
+              const hjualInput = document.getElementById("fHJual");
+              const hjualDiskonInput = document.getElementById("fHJualDiskon");
+              const checkbox = document.getElementById("fIsDiscountable");
+              let basePrice = (toAngka(hjualDiskonInput.value) > 0 && checkbox.checked) ? toAngka(hjualDiskonInput.value) : toAngka(hjualInput.value);
+              groupPrices[key] = Math.round(basePrice * (1 - (group.discount_percent || 0) / 100));
+            }
+          });
+
           for(let key in groupPrices) {
             const group = allGroups.find(g => g.name.toLowerCase() === key.toLowerCase());
             if(group) base.group_prices[group.id] = groupPrices[key];
@@ -866,8 +878,8 @@
         if (gridBaseUnitSelect) { gridBaseUnitSelect.innerHTML = document.getElementById("fSat").innerHTML; gridBaseUnitSelect.value = document.getElementById("fSat").value; }
         const baseUnitId = parseInt(document.getElementById("fSat")?.value) || 0;
         const baseRow = { is_base: true, child_unit_id: baseUnitId, conversion_factor: 1, buy_price_auto: toAngka(document.getElementById("fHBeli")?.value) || 0, sell_price: toAngka(document.getElementById("fHJual")?.value) || 0, margin_percent: parseFloat(document.getElementById("fMargin")?.value) || 0, group_prices: {}, tier_prices: [] };
-        for(let key in groupPrices) { const group = allGroups.find(g => g.name.toLowerCase() === key.toLowerCase()); if(group) baseRow.group_prices[group.id] = groupPrices[key]; }
         satuanRows = [baseRow];
+        syncGroupPricesFromMain();
         if (editItemId) {
           try {
             const data = await api("GET", `/unit-conversion/config/${editItemId}`);
@@ -888,17 +900,43 @@
       function renderAdvancedGrid() {
         const body = document.querySelector("#advancedContent tbody");
         if (!body) return;
+
+        // Render Header if levelHarga
+        if (currentAdvancedType === "levelHarga") {
+          const head = document.getElementById("satuanGridHead");
+          if (head) {
+            let headHtml = `<tr>
+              <th colspan="5" class="header-spacer"></th>
+              ${allGroups.map((g, i) => `<th colspan="2" class="group-label ${i > 0 ? "sep" : ""}">${i + 1}. ${g.name} (${g.discount_percent}%)</th>`).join("")}
+            </tr>
+            <tr>
+              <th style="width: 30px"></th>
+              <th>Satuan</th>
+              <th>Jenis</th>
+              <th style="width: 60px">Konv</th>
+              <th class="sep">H. Pokok</th>
+              ${allGroups.map((g) => `<th>%</th><th class="sep">Harga</th>`).join("")}
+            </tr>`;
+            head.innerHTML = headHtml;
+          }
+        }
+
         body.innerHTML = satuanRows.map((row, idx) => {
           const isBase = row.is_base, isDraft = row.is_draft;
           const unitOptions = masterUnits.map((u) => `<option value="${u.id}" ${parseInt(row.child_unit_id) === u.id ? "selected" : ""}>${u.name}${u.abbreviation ? " (" + u.abbreviation + ")" : ""}</option>`).join("");
           let cols = `<td style="text-align:center; color:var(--primary); font-size:10px;">${isBase ? "▶" : isDraft ? "*" : "•"}</td><td><select class="input-control" ${isBase ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'child_unit_id', this.value)"><option value="">-- Pilih --</option>${unitOptions}</select></td><td><input class="input-control" value="${isBase ? "Satuan Dasar" : "Satuan Turunan"}" disabled></td><td><input type="number" step="0.0001" class="input-control" value="${row.conversion_factor || ""}" ${isBase ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'conversion_factor', this.value)" style="text-align:right;"></td><td class="sep"><input class="input-control" value="${toRibuan(row.buy_price_auto)}" disabled style="text-align:right;"></td>`;
+          
           if (currentAdvancedType === "satuan") {
             cols += `<td><input type="number" step="0.01" class="input-control" value="${row.margin_percent || ""}" ${isBase ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'margin_percent', this.value)" style="text-align:right;"></td><td><input type="text" class="input-control" value="${toRibuan(row.sell_price)}" ${isBase ? "disabled" : ""} oninput="formatInputRibuan(this); updateAdvancedRowField(${idx}, 'sell_price', this.value, 'sell')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
           } else if (currentAdvancedType === "levelHarga") {
             allGroups.forEach((group, gIdx) => {
-              const groupPrice = row.group_prices[group.id] || 0;
-              const groupMargin = row.buy_price_auto > 0 ? ((groupPrice - row.buy_price_auto) / row.buy_price_auto) * 100 : 0;
-              cols += `<td><input type="number" step="0.01" class="input-control" value="${groupMargin.toFixed(2)}" ${isBase && gIdx === 0 ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'group_margin', this.value, '${group.id}')" style="text-align:right;"></td><td class="sep"><input type="text" class="input-control" value="${toRibuan(groupPrice)}" ${isBase && gIdx === 0 ? "disabled" : ""} oninput="formatInputRibuan(this); updateAdvancedRowField(${idx}, 'group_price', this.value, '${group.id}')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
+              let groupPrice = row.group_prices[group.id];
+              if (groupPrice === undefined || groupPrice === 0) {
+                groupPrice = Math.round(row.sell_price * (1 - (group.discount_percent || 0) / 100));
+                row.group_prices[group.id] = groupPrice;
+              }
+              const groupDisc = row.sell_price > 0 ? ((row.sell_price - groupPrice) / row.sell_price) * 100 : (group.discount_percent || 0);
+              cols += `<td><input type="number" step="0.01" class="input-control" value="${groupDisc.toFixed(2)}" ${isBase && gIdx === 0 ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'group_discount', this.value, '${group.id}')" style="text-align:right;"></td><td class="sep"><input type="text" class="input-control" value="${toRibuan(groupPrice)}" ${isBase && gIdx === 0 ? "disabled" : ""} oninput="formatInputRibuan(this); updateAdvancedRowField(${idx}, 'group_price', this.value, '${group.id}')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
             });
           } else if (currentAdvancedType === "levelJumlah") {
             for (let i = 0; i < 4; i++) {
@@ -923,6 +961,7 @@
         else if (field === "margin_percent") { row.margin_percent = parseFloat(val) || 0; recalcAdvancedRow(idx, "margin"); }
         else if (field === "sell_price") { row.sell_price = toAngka(val); recalcAdvancedRow(idx, "sell"); }
         else if (field === "group_price") { const groupId = extra; row.group_prices[groupId] = toAngka(val); if (row.is_base) { const group = allGroups.find(g => String(g.id) === String(groupId)); if(group) groupPrices[group.name.toLowerCase()] = row.group_prices[groupId]; } }
+        else if (field === "group_discount") { const groupId = extra; const disc = parseFloat(val) || 0; row.group_prices[groupId] = Math.round(row.sell_price * (1 - disc / 100)); if (row.is_base) { const group = allGroups.find(g => String(g.id) === String(groupId)); if(group) groupPrices[group.name.toLowerCase()] = row.group_prices[groupId]; } }
         else if (field === "group_margin") { const groupId = extra; const margin = parseFloat(val) || 0; row.group_prices[groupId] = Math.round(row.buy_price_auto * (1 + margin / 100)); if (row.is_base) { const group = allGroups.find(g => String(g.id) === String(groupId)); if(group) groupPrices[group.name.toLowerCase()] = row.group_prices[groupId]; } }
         else if (field === "tier_qty") { const tierIdx = extra; if (!row.tier_prices[tierIdx]) row.tier_prices[tierIdx] = { min_qty: 0, price: 0 }; row.tier_prices[tierIdx].min_qty = parseFloat(val) || 0; }
         else if (field === "tier_price") { const tierIdx = extra; if (!row.tier_prices[tierIdx]) row.tier_prices[tierIdx] = { min_qty: 0, price: 0 }; row.tier_prices[tierIdx].price = toAngka(val); }
