@@ -213,6 +213,10 @@ class CustomerGroup(Base):
     discount_percent = Column(Float, default=0)
     customers = relationship("Customer", back_populates="group")
 
+    @property
+    def member_count(self):
+        return len([c for c in self.customers if c.is_active])
+
 
 class Customer(Base):
     __tablename__ = "customers"
@@ -224,12 +228,17 @@ class Customer(Base):
     email = Column(String(100))
     group_id = Column(Integer, ForeignKey("customer_groups.id"), nullable=True)
     points = Column(Float, default=0)
+    loyalty_points = Column(Float, default=0)
     credit_limit = Column(Float, default=0)
     deposit_balance = Column(Float, default=0)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     group = relationship("CustomerGroup", back_populates="customers")
     sales = relationship("Sale", back_populates="customer")
+
+    @property
+    def total_purchase(self):
+        return sum(s.total for s in self.sales if s.status != "cancelled")
 
 
 class Supplier(Base):

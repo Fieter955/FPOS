@@ -363,7 +363,6 @@
         const container = document.getElementById("advancedContent");
         const buttons = document.querySelectorAll(".adv-btn");
 
-        // Toggle: Jika klik tombol yang sama, tutup panelnya
         if (currentAdvancedType === type) {
           container.style.display = "none";
           currentAdvancedType = null;
@@ -376,7 +375,6 @@
         }
 
         try {
-          // Tambahkan cache buster agar browser selalu mengambil HTML terbaru
           const res = await fetch(`/item/${type}.html?_t=${Date.now()}`);
           const text = await res.text();
           const parser = new DOMParser();
@@ -388,18 +386,14 @@
             container.style.display = "block";
             currentAdvancedType = type;
 
-            if (type === "satuan") {
-              initSatuanGrid();
-            }
+            ensureEmptySatuanRow();
+            renderAdvancedGrid();
 
-            // Update UI Button Active
             buttons.forEach((b) => {
               const isActive = b.id.toLowerCase().includes(type.toLowerCase());
               b.style.background = isActive ? "var(--primary)" : "var(--card-bg)";
               b.style.color = isActive ? "#fff" : "var(--text-main)";
-              b.style.borderColor = isActive
-                ? "var(--primary)"
-                : "var(--border-color)";
+              b.style.borderColor = isActive ? "var(--primary)" : "var(--border-color)";
             });
           }
         } catch (e) {
@@ -416,43 +410,32 @@
         curTab = "brg",
         allGroups = [],
         groupPrices = {}, // { groupName: price }
-        initialGroupPrices = {}, // { groupName: price } untuk deteksi perubahan
+        initialGroupPrices = {}, 
         initialBuyPrice = 0,
         initialSellPrice = 0,
-        supplierSettingsMap = {}, // { supplierId: { buy_price, barcode } }
+        supplierSettingsMap = {}, 
         generalBuyPrice = 0,
         generalBarcode = "",
-        currentSupplierContext = ""; // "" for general, or supplierId as string
+        currentSupplierContext = "",
+        satuanRows = [],
+        masterUnits = [];
 
-      // =======================================================================
-      // 🛠️ FUNGSI FORMATTING ANGKA (TITIK RIBUAN)
-      // =======================================================================
-
-      // Dipakai saat user mengetik (input oninput)
       function formatInputRibuan(input) {
-        let val = input.value.replace(/[^0-9]/g, ""); // Hapus selain angka
-        if (val === "") {
-          input.value = "0";
-          return;
-        }
+        let val = input.value.replace(/[^0-9]/g, "");
+        if (val === "") { input.value = "0"; return; }
         input.value = parseInt(val).toLocaleString("id-ID");
       }
 
-      // Dipakai saat memproses angka murni (misal dari DB) ke format titik
       function toRibuan(num) {
         if (!num) return "0";
         return parseInt(num).toLocaleString("id-ID");
       }
 
-      // Dipakai sebelum kirim ke API (hapus titik agar jadi angka murni)
       function toAngka(str) {
         if (!str) return 0;
         return parseFloat(str.toString().replace(/\./g, "")) || 0;
       }
 
-      // =======================================================================
-      // 📡 SENSOR BARCODE SCANNER
-      // =======================================================================
       let barcodeBuffer = "";
       let lastKeyTime = Date.now();
 
@@ -460,9 +443,7 @@
         const modal = document.getElementById("mBarang");
         if (modal && modal.style.display === "flex") {
           const currentTime = Date.now();
-          if (currentTime - lastKeyTime > 50) {
-            barcodeBuffer = "";
-          }
+          if (currentTime - lastKeyTime > 50) barcodeBuffer = "";
           if (e.key === "Enter" && barcodeBuffer.length > 2) {
             e.preventDefault();
             document.getElementById("autoBarcode").checked = false;
@@ -471,9 +452,7 @@
             showToast("Barcode terscan otomatis: " + barcodeBuffer, "success");
             barcodeBuffer = "";
             return;
-          } else if (e.key.length === 1) {
-            barcodeBuffer += e.key;
-          }
+          } else if (e.key.length === 1) barcodeBuffer += e.key;
           lastKeyTime = currentTime;
         }
       });
@@ -482,15 +461,8 @@
         const autoEl = document.getElementById("autoBarcode");
         const barcodeEl = document.getElementById("fBarcode");
         const scannerEl = document.getElementById("lblScanner");
-
-        if (barcodeEl) {
-          // Barcode manual sekarang selalu ditampilkan sesuai request "Barcode Tambahan / Pabrik"
-          barcodeEl.style.display = "block";
-        }
-
-        if (scannerEl && autoEl) {
-          scannerEl.style.display = autoEl.checked ? "block" : "none";
-        }
+        if (barcodeEl) barcodeEl.style.display = "block";
+        if (scannerEl && autoEl) scannerEl.style.display = autoEl.checked ? "block" : "none";
       }
 
       function togglePpnPercent() {
@@ -499,41 +471,28 @@
         if (ppnSelect && ppnGroup) {
           if (ppnSelect.value === "excluded") {
             ppnGroup.style.display = "block";
-
-            // Pastikan nilai PPN sesuai dengan supplier yang terpilih saat ini
             const contextVal = document.getElementById("fSupplierContext")?.value;
             let targetPpn = 11;
             if (contextVal && contextVal !== "") {
-              const supplierData = allSups.find(
-                (sup) => String(sup.id) === String(contextVal),
-              );
-              if (supplierData && supplierData.PpnSupplier != null) {
-                targetPpn = supplierData.PpnSupplier;
-              }
+              const supplierData = allSups.find((sup) => String(sup.id) === String(contextVal));
+              if (supplierData && supplierData.PpnSupplier != null) targetPpn = supplierData.PpnSupplier;
             }
             const ppnInput = document.getElementById("fPpnPercent");
             if (ppnInput) ppnInput.value = targetPpn;
-          } else {
-            ppnGroup.style.display = "none";
-          }
+          } else ppnGroup.style.display = "none";
         }
       }
 
       function switchTab(t) {
         curTab = t;
-        ["pnlBrg", "pnlKat", "pnlMerek", "pnlSat"].forEach(
-          (id) => (document.getElementById(id).style.display = "none"),
-        );
+        ["pnlBrg", "pnlKat", "pnlMerek", "pnlSat"].forEach((id) => (document.getElementById(id).style.display = "none"));
         const map = { brg: "pnlBrg", kat: "pnlKat", merek: "pnlMerek", sat: "pnlSat" };
         document.getElementById(map[t]).style.display = "block";
         ["tbBarang", "tbKat", "tbMerek", "tbSat"].forEach((id) => {
           const el = document.getElementById(id);
-          const active =
-            id === "tb" + { brg: "Barang", kat: "Kat", merek: "Merek", sat: "Sat" }[t];
+          const active = id === "tb" + { brg: "Barang", kat: "Kat", merek: "Merek", sat: "Sat" }[t];
           el.style.background = active ? "var(--primary)" : "transparent";
-          el.style.borderColor = active
-            ? "var(--primary)"
-            : "var(--border-color)";
+          el.style.borderColor = active ? "var(--primary)" : "var(--border-color)";
           el.style.color = active ? "#fff" : "var(--text-muted)";
         });
         if (t === "kat") loadKat();
@@ -548,43 +507,13 @@
           api("GET", "/items/units"),
         ]);
         const fk = document.getElementById("filterKat");
-        const prev = fk.value;
-        fk.innerHTML =
-          '<option value="">Semua Kategori</option>' +
-          cats
-            .map((c) => `<option value="${c.id}">${c.name}</option>`)
-            .join("");
-        fk.value = prev;
-
+        fk.innerHTML = '<option value="">Semua Kategori</option>' + cats.map((c) => `<option value="${c.id}">${c.name}</option>`).join("");
         const fKat = document.getElementById("fKat");
-        const fKatPrev = fKat.value;
-        fKat.innerHTML =
-          '<option value="">-- Pilih Jenis --</option>' +
-          cats
-            .map((c) => `<option value="${c.id}">${c.name}</option>`)
-            .join("");
-        fKat.value = fKatPrev;
-
+        fKat.innerHTML = '<option value="">-- Pilih Jenis --</option>' + cats.map((c) => `<option value="${c.id}">${c.name}</option>`).join("");
         const fMerek = document.getElementById("fMerek");
-        const fMerekPrev = fMerek.value;
-        fMerek.innerHTML =
-          '<option value="">-- Pilih Merek --</option>' +
-          brands
-            .map((b) => `<option value="${b.id}">${b.name}</option>`)
-            .join("");
-        fMerek.value = fMerekPrev;
-
+        fMerek.innerHTML = '<option value="">-- Pilih Merek --</option>' + brands.map((b) => `<option value="${b.id}">${b.name}</option>`).join("");
         const fSat = document.getElementById("fSat");
-        const fSatPrev = fSat.value;
-        fSat.innerHTML =
-          '<option value="">-- Pilih Satuan --</option>' +
-          units
-            .map(
-              (u) =>
-                `<option value="${u.id}">${u.name}${u.abbreviation ? " (" + u.abbreviation + ")" : ""}</option>`,
-            )
-            .join("");
-        fSat.value = fSatPrev;
+        fSat.innerHTML = '<option value="">-- Pilih Satuan --</option>' + units.map((u) => `<option value="${u.id}">${u.name}${u.abbreviation ? " (" + u.abbreviation + ")" : ""}</option>`).join("");
       }
 
       async function loadItems() {
@@ -597,48 +526,17 @@
         try {
           const items = await api("GET", url);
           document.getElementById("tblBarang").innerHTML = items.length
-            ? items
-                .map((i) => {
+            ? items.map((i) => {
                   let diskon = "-";
-                  if (i.prices && i.prices.length > 0) {
-                    const dPrice = i.prices.find(
-                      (p) => p.name === "Harga Diskon",
-                    );
+                  if (i.prices?.length) {
+                    const dPrice = i.prices.find((p) => p.name === "Harga Diskon");
                     if (dPrice) diskon = fmtRp(dPrice.price);
                   }
-                  const manageUrl = i.is_virtual_variant
-                    ? `/unit_conversion?source_item_id=${i.parent_item_id || i.id}&child_item_id=${i.id}`
-                    : `/unit_conversion?source_item_id=${i.id}`;
-                  return `<tr>
-                  <td>
-                  <b>${i.name}</b>
-                  ${i.is_virtual_variant ? '<span class="bi" style="margin-left:8px">Virtual</span>' : ""}
-                  ${i.barcode ? `<div style="font-family:monospace;font-size:12px;color:var(--text-muted)">${i.barcode}</div>` : ""}
-                  ${i.is_virtual_variant ? `<div style="font-size:12px;color:var(--text-muted)">Stok terikat ke barang induk</div>` : ""}
-                  </td>
-                  <td style="font-size:14px">${i.category?.name || "-"}</td>
-                  <td style="font-size:14px">${i.unit?.name || "-"}</td>
-                  <td>${fmtRp(i.buy_price)}</td>
-                  <td style="color:var(--primary);font-weight:700">${fmtRp(i.sell_price)}</td>
-                  <td style="color:#f59e0b;font-weight:700">${diskon}</td>
-                  <td><span style="font-weight:700;color:${i.stock <= i.min_stock ? "#f59e0b" : "var(--text-main)"}">${
-                    Number.isInteger(Number(i.stock || 0))
-                      ? Number(i.stock || 0)
-                      : Number(i.stock || 0)
-                          .toFixed(4)
-                          .replace(/\.?0+$/, "")
-                  }</span></td>
-                  <td style="white-space:nowrap">
-                  ${i.is_virtual_variant ? "" : `<button class="bsm be" onclick='editItem(${i.id})'>Edit</button>`}
-                  <button class="bsm bp" onclick="location.href='${manageUrl}'">${i.is_virtual_variant ? "Kelola Unit" : "Multi Satuan"}</button>
-                  ${i.is_virtual_variant ? "" : `<button class="bsm bd" onclick="toggleItem(${i.id},${i.is_active})">${i.is_active ? "Nonaktif" : "Aktifkan"}</button>`}
-                  </td></tr>`;
-                })
-                .join("")
+                  const manageUrl = i.is_virtual_variant ? `/unit_conversion?source_item_id=${i.parent_item_id || i.id}&child_item_id=${i.id}` : `/unit_conversion?source_item_id=${i.id}`;
+                  return `<tr><td><b>${i.name}</b>${i.is_virtual_variant ? '<span class="bi" style="margin-left:8px">Virtual</span>' : ""}${i.barcode ? `<div style="font-family:monospace;font-size:12px;color:var(--text-muted)">${i.barcode}</div>` : ""}${i.is_virtual_variant ? `<div style="font-size:12px;color:var(--text-muted)">Stok terikat ke barang induk</div>` : ""}</td><td style="font-size:14px">${i.category?.name || "-"}</td><td style="font-size:14px">${i.unit?.name || "-"}</td><td>${fmtRp(i.buy_price)}</td><td style="color:var(--primary);font-weight:700">${fmtRp(i.sell_price)}</td><td style="color:#f59e0b;font-weight:700">${diskon}</td><td><span style="font-weight:700;color:${i.stock <= i.min_stock ? "#f59e0b" : "var(--text-main)"}">${Number.isInteger(Number(i.stock || 0)) ? Number(i.stock || 0) : Number(i.stock || 0).toFixed(4).replace(/\.?0+$/, "")}</span></td><td style="white-space:nowrap">${i.is_virtual_variant ? "" : `<button class="bsm be" onclick='editItem(${i.id})'>Edit</button>`}<button class="bsm bp" onclick="location.href='${manageUrl}'">${i.is_virtual_variant ? "Kelola Unit" : "Multi Satuan"}</button>${i.is_virtual_variant ? "" : `<button class="bsm bd" onclick="toggleItem(${i.id},${i.is_active})">${i.is_active ? "Nonaktif" : "Aktifkan"}</button>`}</td></tr>`;
+                }).join("")
             : '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-muted)">Tidak ada barang</td></tr>';
-        } catch (e) {
-          showToast(e.message, "error");
-        }
+        } catch (e) { showToast(e.message, "error"); }
       }
 
       function onGroupSelectChange() {
@@ -647,31 +545,14 @@
         const percentInput = document.getElementById("fGroupPercentInput");
         const hint = document.getElementById("groupHint");
         const selOpt = select.options[select.selectedIndex];
-
-        if (!selOpt || !selOpt.value) {
-          priceInput.value = "";
-          percentInput.value = "";
-          hint.textContent =
-            "Pilih grup untuk mengatur harga khusus (Default Bronze: 5%)";
-          return;
-        }
-
+        if (!selOpt || !selOpt.value) { priceInput.value = ""; percentInput.value = ""; hint.textContent = "Pilih grup untuk mengatur harga khusus"; return; }
         const groupName = selOpt.getAttribute("data-name");
         const defaultDisc = parseFloat(selOpt.getAttribute("data-disc")) || 0;
         hint.textContent = `Mengatur harga untuk grup ${groupName} (Default: ${defaultDisc}%)`;
-
         const hjualInput = document.getElementById("fHJual");
         const hjualDiskonInput = document.getElementById("fHJualDiskon");
         const checkbox = document.getElementById("fIsDiscountable");
-
-        let normalPrice = toAngka(hjualInput.value);
-        let baseDiscountPrice = toAngka(hjualDiskonInput.value);
-        let basePrice =
-          baseDiscountPrice > 0 && checkbox.checked
-            ? baseDiscountPrice
-            : normalPrice;
-
-        // Cari di groupPrices secara case-insensitive
+        let basePrice = (toAngka(hjualDiskonInput.value) > 0 && checkbox.checked) ? toAngka(hjualDiskonInput.value) : toAngka(hjualInput.value);
         const key = groupName.toLowerCase();
         if (groupPrices[key] !== undefined) {
           let p = groupPrices[key];
@@ -680,9 +561,7 @@
           percentInput.value = pct.toFixed(2).replace(/\.00$/, "");
         } else {
           percentInput.value = defaultDisc;
-          let finalPrice = Math.round(
-            basePrice - (basePrice * defaultDisc) / 100,
-          );
+          let finalPrice = Math.round(basePrice - (basePrice * defaultDisc) / 100);
           priceInput.value = toRibuan(finalPrice);
         }
       }
@@ -693,24 +572,15 @@
         const percentInput = document.getElementById("fGroupPercentInput");
         const selOpt = select.options[select.selectedIndex];
         if (!selOpt || !selOpt.value) return;
-
         const pct = parseFloat(percentInput.value) || 0;
         const hjualInput = document.getElementById("fHJual");
         const hjualDiskonInput = document.getElementById("fHJualDiskon");
         const checkbox = document.getElementById("fIsDiscountable");
-
-        let normalPrice = toAngka(hjualInput.value);
-        let baseDiscountPrice = toAngka(hjualDiskonInput.value);
-        let basePrice =
-          baseDiscountPrice > 0 && checkbox.checked
-            ? baseDiscountPrice
-            : normalPrice;
-
+        let basePrice = (toAngka(hjualDiskonInput.value) > 0 && checkbox.checked) ? toAngka(hjualDiskonInput.value) : toAngka(hjualInput.value);
         let finalPrice = Math.round(basePrice - (basePrice * pct) / 100);
         priceInput.value = toRibuan(finalPrice);
-
-        groupPrices[selOpt.getAttribute("data-name").toLowerCase()] =
-          finalPrice;
+        groupPrices[selOpt.getAttribute("data-name").toLowerCase()] = finalPrice;
+        syncAdvancedGridFromMain();
       }
 
       function onGroupPriceInput() {
@@ -719,83 +589,39 @@
         const percentInput = document.getElementById("fGroupPercentInput");
         const selOpt = select.options[select.selectedIndex];
         if (!selOpt || !selOpt.value) return;
-
         const finalPrice = toAngka(priceInput.value);
         const hjualInput = document.getElementById("fHJual");
         const hjualDiskonInput = document.getElementById("fHJualDiskon");
         const checkbox = document.getElementById("fIsDiscountable");
-
-        let normalPrice = toAngka(hjualInput.value);
-        let baseDiscountPrice = toAngka(hjualDiskonInput.value);
-        let basePrice =
-          baseDiscountPrice > 0 && checkbox.checked
-            ? baseDiscountPrice
-            : normalPrice;
-
-        let pct =
-          basePrice > 0 ? ((basePrice - finalPrice) / basePrice) * 100 : 0;
+        let basePrice = (toAngka(hjualDiskonInput.value) > 0 && checkbox.checked) ? toAngka(hjualDiskonInput.value) : toAngka(hjualInput.value);
+        let pct = basePrice > 0 ? ((basePrice - finalPrice) / basePrice) * 100 : 0;
         percentInput.value = pct.toFixed(2).replace(/\.00$/, "");
-
-        groupPrices[selOpt.getAttribute("data-name").toLowerCase()] =
-          finalPrice;
+        groupPrices[selOpt.getAttribute("data-name").toLowerCase()] = finalPrice;
+        syncAdvancedGridFromMain();
       }
 
-      let lastBasePrice = 0;
-      function getBasePrice() {
-        const hjualInput = document.getElementById("fHJual");
-        const hjualDiskonInput = document.getElementById("fHJualDiskon");
-        const checkbox = document.getElementById("fIsDiscountable");
-        let normalPrice = toAngka(hjualInput?.value);
-        let baseDiscountPrice = toAngka(hjualDiskonInput?.value);
-        return baseDiscountPrice > 0 && checkbox?.checked
-          ? baseDiscountPrice
-          : normalPrice;
-      }
-
-      function syncGroupPricesProportionally() {
-        const newBasePrice = getBasePrice();
-        if (
-          lastBasePrice > 0 &&
-          newBasePrice > 0 &&
-          lastBasePrice !== newBasePrice
-        ) {
-          const ratio = newBasePrice / lastBasePrice;
-          for (let key in groupPrices) {
-            // Kunci Persentase: Update harga rupiah grup berdasarkan rasio perubahan harga normal
-            groupPrices[key] = Math.round(groupPrices[key] * ratio);
+      function syncAdvancedGridFromMain() {
+        if (satuanRows.length > 0) {
+          const base = satuanRows[0];
+          for(let key in groupPrices) {
+            const group = allGroups.find(g => g.name.toLowerCase() === key.toLowerCase());
+            if(group) base.group_prices[group.id] = groupPrices[key];
           }
+          if(currentAdvancedType) renderAdvancedGrid();
         }
-        lastBasePrice = newBasePrice;
       }
 
-      function updateDiscountPreview() {
-        syncGroupPricesProportionally();
-        onGroupSelectChange();
-      }
+      function updateDiscountPreview() { onGroupSelectChange(); }
 
       async function loadCustomerGroups() {
         try {
           const groups = await api("GET", "/customers/groups");
           allGroups = groups;
           const select = document.getElementById("fDiscountGroupSelect");
-          const oldVal = select.value;
-          select.innerHTML =
-            '<option value="">Pilih Grup (Set Harga)</option>' +
-            groups
-              .map(
-                (g) =>
-                  `<option value="${g.id}" data-name="${g.name}" data-disc="${g.discount_percent}">${g.name}</option>`,
-              )
-              .join("");
-          select.value = oldVal;
-        } catch (ex) {
-          console.error("Gagal load grup:", ex);
-        }
+          select.innerHTML = '<option value="">Pilih Grup (Set Harga)</option>' + groups.map((g) => `<option value="${g.id}" data-name="${g.name}" data-disc="${g.discount_percent}">${g.name}</option>`).join("");
+        } catch (ex) { console.error("Gagal load grup:", ex); }
       }
 
-      // =======================================================================
-      // 🚚 LOGIKA PILIH SUPPLIER (MULTI-SELECT)
-      // =======================================================================
       let allSups = [];
       let selectedSups = new Map();
       let supSearchTimeout;
@@ -804,212 +630,98 @@
         try {
           const res = await api("GET", "/suppliers/?limit=500");
           allSups = Array.isArray(res) ? res : res.data || [];
-        } catch (e) {
-          console.error("Gagal load suppliers:", e);
-        }
+        } catch (e) { console.error("Gagal load suppliers:", e); }
       }
 
       function setupSupSearch() {
         const input = document.getElementById("supSearchInput");
         const dropdown = document.getElementById("supDropdown");
-        input.addEventListener("focus", () => {
-          renderSupDropdown(input.value);
-          dropdown.classList.add("show");
-        });
-        input.addEventListener("input", () => {
-          clearTimeout(supSearchTimeout);
-          supSearchTimeout = setTimeout(() => {
-            renderSupDropdown(input.value);
-          }, 150);
-        });
-        document.addEventListener("click", (e) => {
-          if (!input.contains(e.target) && !dropdown.contains(e.target))
-            dropdown.classList.remove("show");
-        });
+        input.addEventListener("focus", () => { renderSupDropdown(input.value); dropdown.classList.add("show"); });
+        input.addEventListener("input", () => { clearTimeout(supSearchTimeout); supSearchTimeout = setTimeout(() => { renderSupDropdown(input.value); }, 150); });
+        document.addEventListener("click", (e) => { if (!input.contains(e.target) && !dropdown.contains(e.target)) dropdown.classList.remove("show"); });
       }
 
       function renderSupDropdown(searchText = "") {
         const dropdown = document.getElementById("supDropdown");
         const search = searchText.toLowerCase().trim();
-        const available = allSups.filter(
-          (s) =>
-            !selectedSups.has(s.id) &&
-            (s.name.toLowerCase().includes(search) ||
-              (s.code && s.code.toLowerCase().includes(search))),
-        );
-        if (available.length === 0) {
-          dropdown.innerHTML = `<div class="sup-dropdown-empty">${search ? "Tidak ditemukan" : "Semua supplier sudah ditambahkan"}</div>`;
-          dropdown.classList.add("show");
-          return;
-        }
-        dropdown.innerHTML = available
-          .slice(0, 50)
-          .map(
-            (s) => `
-          <div class="sup-dropdown-item" data-id="${s.id}">
-            <span>${s.name}${s.code ? ` <small>[${s.code}]</small>` : ""}</span>
-            <button type="button" class="sup-add-btn" onclick="addSupToSelectionById(${s.id})">+</button>
-          </div>`,
-          )
-          .join("");
+        const available = allSups.filter((s) => !selectedSups.has(s.id) && (s.name.toLowerCase().includes(search) || (s.code && s.code.toLowerCase().includes(search))));
+        if (available.length === 0) { dropdown.innerHTML = `<div class="sup-dropdown-empty">${search ? "Tidak ditemukan" : "Semua supplier sudah ditambahkan"}</div>`; dropdown.classList.add("show"); return; }
+        dropdown.innerHTML = available.slice(0, 50).map((s) => `<div class="sup-dropdown-item" data-id="${s.id}"><span>${s.name}${s.code ? ` <small>[${s.code}]</small>` : ""}</span><button type="button" class="sup-add-btn" onclick="addSupToSelectionById(${s.id})">+</button></div>`).join("");
         dropdown.classList.add("show");
       }
 
       window.addSupToSelectionById = function (id) {
         const s = allSups.find((x) => x.id === id);
-        if (s) {
-          selectedSups.set(s.id, { id: s.id, name: s.name, code: s.code });
-          renderSelectedSups();
-          document.getElementById("supSearchInput").value = "";
-          document.getElementById("supDropdown").classList.remove("show");
-        }
+        if (s) { selectedSups.set(s.id, { id: s.id, name: s.name, code: s.code }); renderSelectedSups(); document.getElementById("supSearchInput").value = ""; document.getElementById("supDropdown").classList.remove("show"); }
       };
 
-      function removeSupFromSelection(sId) {
-        selectedSups.delete(sId);
-        renderSelectedSups();
-      }
+      function removeSupFromSelection(sId) { selectedSups.delete(sId); renderSelectedSups(); }
 
       function onSupplierContextChange() {
         const select = document.getElementById("fSupplierContext");
-        const nextSupplierId = select.value; // string ID atau ""
-        const oldContext = currentSupplierContext; // string ID atau ""
-
-        // 1. Simpan data dari konteks LAMA (yang sedang tampil sekarang)
+        const nextSupplierId = select.value;
+        const oldContext = currentSupplierContext;
         const currentHBeli = toAngka(document.getElementById("fHBeli").value);
         const currentBarcode = document.getElementById("fBarcode").value;
         const isAuto = document.getElementById("autoBarcode").checked;
         const finalBarcode = isAuto ? "" : currentBarcode;
-
-        if (oldContext === "") {
-          // Simpan ke data Umum
-          generalBuyPrice = currentHBeli;
-          generalBarcode = finalBarcode;
-        } else {
-          // Simpan ke data Supplier spesifik
-          supplierSettingsMap[oldContext] = {
-            buy_price: currentHBeli,
-            barcode: finalBarcode,
-          };
-        }
-
-        // 2. Muat data untuk konteks BARU
+        if (oldContext === "") { generalBuyPrice = currentHBeli; generalBarcode = finalBarcode; }
+        else { supplierSettingsMap[oldContext] = { buy_price: currentHBeli, barcode: finalBarcode }; }
         let targetHBeli, targetBarcode, targetPpnSupplier;
-
-        if (nextSupplierId === "") {
-          // Balik ke Harga Umum
-          targetHBeli = generalBuyPrice;
-          targetBarcode = generalBarcode;
-          targetPpnSupplier = 11; // Default
-        } else {
-          // Ambil data suplier dari map
-          // Jika belum ada di map, gunakan harga umum sebagai default awal
+        if (nextSupplierId === "") { targetHBeli = generalBuyPrice; targetBarcode = generalBarcode; targetPpnSupplier = 11; }
+        else {
           const s = supplierSettingsMap[nextSupplierId];
-          if (s) {
-            targetHBeli = s.buy_price;
-            targetBarcode = s.barcode;
-          } else {
-            targetHBeli = generalBuyPrice;
-            targetBarcode = generalBarcode;
-          }
-
-          // Ambil nilai PPN Supplier dari allSups
-          const supplierData = allSups.find(
-            (sup) => String(sup.id) === nextSupplierId,
-          );
-          targetPpnSupplier =
-            supplierData && supplierData.PpnSupplier != null
-              ? supplierData.PpnSupplier
-              : 11;
+          if (s) { targetHBeli = s.buy_price; targetBarcode = s.barcode; }
+          else { targetHBeli = generalBuyPrice; targetBarcode = generalBarcode; }
+          const supplierData = allSups.find((sup) => String(sup.id) === nextSupplierId);
+          targetPpnSupplier = supplierData && supplierData.PpnSupplier != null ? supplierData.PpnSupplier : 11;
         }
-
-        // 3. Tampilkan ke UI
         document.getElementById("fHBeli").value = toRibuan(targetHBeli);
         document.getElementById("fBarcode").value = targetBarcode || "";
-        document.getElementById("autoBarcode").checked = !(
-          targetBarcode && targetBarcode.trim() !== ""
-        );
+        document.getElementById("autoBarcode").checked = !(targetBarcode && targetBarcode.trim() !== "");
         const ppnInput = document.getElementById("fPpnPercent");
         if (ppnInput) ppnInput.value = targetPpnSupplier;
-
-        // Update state konteks sekarang
         currentSupplierContext = nextSupplierId;
-
-        // 4. Update UI pendukung
         toggleBarcodeUI();
-
-        // KRUSIAL: Saat ganti suplier, kita ingin Harga Jual TETAP,
-        // tapi Margin yang menyesuaikan (karena harga modal suplier beda-beda).
         calcMarginFromHJual();
+        syncAdvancedGridFromMain();
       }
 
       function updateSupplierContextDropdown() {
         const select = document.getElementById("fSupplierContext");
         if (!select) return;
         const oldVal = select.value;
-        let html =
-          '<option value="">-- Harga Umum (Default Semua Supplier) --</option>';
-
-        const listToShow =
-          editItemId === null ? allSups : Array.from(selectedSups.values());
-
-        listToShow.forEach((s) => {
-          html += `<option value="${s.id}">🚚 ${s.name}</option>`;
-        });
+        let html = '<option value="">-- Harga Umum (Default Semua Supplier) --</option>';
+        const listToShow = editItemId === null ? allSups : Array.from(selectedSups.values());
+        listToShow.forEach((s) => { html += `<option value="${s.id}">🚚 ${s.name}</option>`; });
         select.innerHTML = html;
-
         const validIds = listToShow.map((s) => String(s.id)).concat([""]);
-        // Pastikan nilai terpilih masih ada, jika tidak reset ke umum
-        if (validIds.includes(oldVal)) {
-          select.value = oldVal;
-        } else {
-          select.value = "";
-          if (currentSupplierContext !== "") onSupplierContextChange();
-        }
+        if (validIds.includes(oldVal)) select.value = oldVal;
+        else { select.value = ""; if (currentSupplierContext !== "") onSupplierContextChange(); }
       }
 
       function renderSelectedSups() {
         const container = document.getElementById("selectedSupsContainer");
-        if (selectedSups.size === 0) {
-          container.innerHTML = `<span style="color:var(--text-muted);font-size:13px;padding:4px;">Belum ada supplier dipilih</span>`;
-          updateSupplierContextDropdown();
-          return;
-        }
-        container.innerHTML = Array.from(selectedSups.values())
-          .map(
-            (s) => `
-          <span class="sup-chip">
-            <span class="chip-name">${s.name}</span>
-            <button type="button" class="chip-remove" onclick="removeSupFromSelection(${s.id})">×</button>
-          </span>`,
-          )
-          .join("");
+        if (selectedSups.size === 0) { container.innerHTML = `<span style="color:var(--text-muted);font-size:13px;padding:4px;">Belum ada supplier dipilih</span>`; updateSupplierContextDropdown(); return; }
+        container.innerHTML = Array.from(selectedSups.values()).map((s) => `<span class="sup-chip"><span class="chip-name">${s.name}</span><button type="button" class="chip-remove" onclick="removeSupFromSelection(${s.id})">×</button></span>`).join("");
         updateSupplierContextDropdown();
       }
 
-      // =======================================================================
-      // 📈 FUNGSI KALKULASI MARGIN PROFIT
-      // =======================================================================
       function calcHJualFromMargin() {
         const hBeli = toAngka(document.getElementById("fHBeli").value) || 0;
-        const margin =
-          parseFloat(document.getElementById("fMargin").value) || 0;
+        const margin = parseFloat(document.getElementById("fMargin").value) || 0;
         const hJual = Math.round(hBeli + (hBeli * margin) / 100);
         document.getElementById("fHJual").value = toRibuan(hJual);
         updateDiscountPreview();
+        syncAdvancedGridFromMain();
       }
 
       function calcMarginFromHJual() {
         const hBeli = toAngka(document.getElementById("fHBeli").value) || 0;
         const hJual = toAngka(document.getElementById("fHJual").value) || 0;
-        if (hBeli > 0) {
-          const margin = ((hJual - hBeli) / hBeli) * 100;
-          document.getElementById("fMargin").value = margin
-            .toFixed(2)
-            .replace(/\.00$/, "");
-        } else {
-          document.getElementById("fMargin").value = "0";
-        }
+        document.getElementById("fMargin").value = hBeli > 0 ? (((hJual - hBeli) / hBeli) * 100).toFixed(2).replace(/\.00$/, "") : "0";
+        updateDiscountPreview();
+        syncAdvancedGridFromMain();
       }
 
       function openItemModal(item = null) {
@@ -1018,35 +730,13 @@
         document.getElementById("fBarang").reset();
         document.getElementById("autoBarcode").checked = true;
         toggleBarcodeUI();
-
-        const setVal = (id, val) => {
-          const el = document.getElementById(id);
-          if (el) el.value = val;
-        };
-
-        setVal("fKodeItem", "");
-        setVal("fHBeli", "0");
-        setVal("fMargin", "0");
-        setVal("fHJual", "0");
-        setVal("fHJualDiskon", "0");
-        setVal("fStokMin", "0");
-        setVal("fPpn", "included");
+        const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+        setVal("fKodeItem", ""); setVal("fHBeli", "0"); setVal("fMargin", "0"); setVal("fHJual", "0"); setVal("fHJualDiskon", "0"); setVal("fStokMin", "0"); setVal("fPpn", "included");
         togglePpnPercent();
-
-        const disc = document.getElementById("fIsDiscountable");
-        if (disc) disc.checked = false;
-
-        const grp = document.getElementById("fDiscountGroupSelect");
-        if (grp) grp.selectedIndex = 0;
-
-        setVal("fGroupPriceInput", "");
-        setVal("fGroupPercentInput", "");
-        groupPrices = {};
-        selectedSups.clear();
-        supplierSettingsMap = {};
-        generalBuyPrice = 0;
-        generalBarcode = "";
-        currentSupplierContext = "";
+        document.getElementById("fIsDiscountable").checked = false;
+        document.getElementById("fDiscountGroupSelect").selectedIndex = 0;
+        setVal("fGroupPriceInput", ""); setVal("fGroupPercentInput", "");
+        groupPrices = {}; selectedSups.clear(); supplierSettingsMap = {}; generalBuyPrice = 0; generalBarcode = ""; currentSupplierContext = "";
         renderSelectedSups();
         document.getElementById("fSupplierContext").value = "";
         document.getElementById("supSearchInput").value = "";
@@ -1059,215 +749,80 @@
           document.getElementById("fKat").value = item.category_id || "";
           document.getElementById("fMerek").value = item.brand_id || "";
           document.getElementById("fSat").value = item.unit_id || "";
-          if (item.is_discountable !== undefined)
-            document.getElementById("fIsDiscountable").checked =
-              item.is_discountable;
-
+          if (item.is_discountable !== undefined) document.getElementById("fIsDiscountable").checked = item.is_discountable;
           document.getElementById("fHBeli").value = toRibuan(item.buy_price);
           document.getElementById("fHJual").value = toRibuan(item.sell_price);
-
           generalBuyPrice = parseFloat(item.buy_price) || 0;
           generalBarcode = item.barcode || "";
-
           initialBuyPrice = generalBuyPrice;
           initialSellPrice = parseFloat(item.sell_price) || 0;
           initialGroupPrices = {};
-
-          // Kalkulasi ulang margin dari harga yang ada agar akurat
-          const hb = initialBuyPrice;
-          const hj = initialSellPrice;
-          if (hb > 0) {
-            const m = ((hj - hb) / hb) * 100;
-            document.getElementById("fMargin").value = m
-              .toFixed(2)
-              .replace(/\.00$/, "");
-          } else {
-            document.getElementById("fMargin").value = "0";
-          }
-
+          if (initialBuyPrice > 0) document.getElementById("fMargin").value = (((initialSellPrice - initialBuyPrice) / initialBuyPrice) * 100).toFixed(2).replace(/\.00$/, "");
+          else document.getElementById("fMargin").value = "0";
           document.getElementById("fStokMin").value = toRibuan(item.min_stock);
           document.getElementById("fDesk").value = item.description || "";
-          if (item.barcode && item.barcode.trim() !== "") {
-            document.getElementById("autoBarcode").checked = false;
-            toggleBarcodeUI();
-            document.getElementById("fBarcode").value = item.barcode;
-          }
-          if (item.prices && item.prices.length > 0) {
+          if (item.barcode?.trim()) { document.getElementById("autoBarcode").checked = false; toggleBarcodeUI(); document.getElementById("fBarcode").value = item.barcode; }
+          if (item.prices?.length) {
             item.prices.forEach((p) => {
-              if (p.name === "Harga Diskon")
-                document.getElementById("fHJualDiskon").value = toRibuan(
-                  p.price,
-                );
-              else {
-                const key = p.name.toLowerCase();
-                groupPrices[key] = p.price;
-                initialGroupPrices[key] = p.price;
-              }
+              if (p.name === "Harga Diskon") document.getElementById("fHJualDiskon").value = toRibuan(p.price);
+              else { const key = p.name.toLowerCase(); groupPrices[key] = p.price; initialGroupPrices[key] = p.price; }
             });
           }
-          if (item.suppliers && item.suppliers.length > 0) {
-            item.suppliers.forEach((s) => {
-              selectedSups.set(s.id, {
-                id: s.id,
-                name: s.name,
-                code: s.code || "",
-              });
-            });
-          }
-          if (item.supplier_details && item.supplier_details.length > 0) {
-            item.supplier_details.forEach((d) => {
-              supplierSettingsMap[d.supplier_id] = {
-                buy_price: d.buy_price,
-                barcode: d.barcode,
-              };
-            });
-          }
+          if (item.suppliers?.length) { item.suppliers.forEach((s) => { selectedSups.set(s.id, { id: s.id, name: s.name, code: s.code || "" }); }); }
+          if (item.supplier_details?.length) { item.supplier_details.forEach((d) => { supplierSettingsMap[d.supplier_id] = { buy_price: d.buy_price, barcode: d.barcode }; }); }
           renderSelectedSups();
         }
+        initSatuanGrid();
         updateDiscountPreview();
         openModal("mBarang");
         setTimeout(() => document.getElementById("fNama").focus(), 100);
       }
 
       async function editItem(id) {
-        try {
-          showLoading("Memuat data...");
-          const item = await api("GET", `/items/${id}`);
-          hideLoading();
-          openItemModal(item);
-        } catch (e) {
-          hideLoading();
-          showToast("Gagal memuat detail barang: " + e.message, "error");
-        }
+        try { showLoading("Memuat data..."); const item = await api("GET", `/items/${id}`); hideLoading(); openItemModal(item); }
+        catch (e) { hideLoading(); showToast("Gagal memuat detail barang: " + e.message, "error"); }
       }
 
       async function saveItem(e) {
         e.preventDefault();
-
-        // 0. Simpan context terakhir sebelum gather data
-        const lastSupplierId =
-          document.getElementById("fSupplierContext").value;
+        const lastSupplierId = document.getElementById("fSupplierContext").value;
         const lastBuyPrice = toAngka(document.getElementById("fHBeli").value);
         const lastBarcode = document.getElementById("fBarcode").value;
-
-        if (lastSupplierId === "" || lastSupplierId === "UNSELECTED") {
-          generalBuyPrice = lastBuyPrice;
-          generalBarcode = lastBarcode;
-        } else {
-          supplierSettingsMap[lastSupplierId] = {
-            buy_price: lastBuyPrice,
-            barcode: lastBarcode,
-          };
-        }
-
+        if (lastSupplierId === "" || lastSupplierId === "UNSELECTED") { generalBuyPrice = lastBuyPrice; generalBarcode = lastBarcode; }
+        else { supplierSettingsMap[lastSupplierId] = { buy_price: lastBuyPrice, barcode: lastBarcode }; }
         const sellPrice = toAngka(document.getElementById("fHJual").value);
-
-        // Notifikasi konfirmasi jika ada perubahan harga beli/jual utama
-        if (editItemId) {
-          if (
-            generalBuyPrice !== initialBuyPrice ||
-            sellPrice !== initialSellPrice
-          ) {
-            let msg = "Deteksi perubahan harga UTAMA:\n";
-            if (generalBuyPrice !== initialBuyPrice)
-              msg += `- Harga Beli: ${fmtRp(initialBuyPrice)} ➜ ${fmtRp(generalBuyPrice)}\n`;
-            if (sellPrice !== initialSellPrice)
-              msg += `- Harga Jual: ${fmtRp(initialSellPrice)} ➜ ${fmtRp(sellPrice)}\n`;
-            msg +=
-              "\nApakah Anda yakin ingin menyimpan perubahan harga utama ini?";
-            if (!(await showConfirm(msg))) return;
-          }
-          // ... (logika cek perubahan harga grup tetap sama)
+        if (editItemId && (generalBuyPrice !== initialBuyPrice || sellPrice !== initialSellPrice)) {
+          let msg = "Deteksi perubahan harga UTAMA:\n";
+          if (generalBuyPrice !== initialBuyPrice) msg += `- Harga Beli: ${fmtRp(initialBuyPrice)} ➜ ${fmtRp(generalBuyPrice)}\n`;
+          if (sellPrice !== initialSellPrice) msg += `- Harga Jual: ${fmtRp(initialSellPrice)} ➜ ${fmtRp(sellPrice)}\n`;
+          msg += "\nSimpan perubahan?";
+          if (!(await showConfirm(msg))) return;
         }
-
         let multi_prices = [];
-        const valDiskon = toAngka(
-          document.getElementById("fHJualDiskon").value,
-        );
-        if (valDiskon > 0)
-          multi_prices.push({
-            name: "Harga Diskon",
-            price: valDiskon,
-            min_qty: 1,
-          });
-        for (const [lowerName, price] of Object.entries(groupPrices)) {
-          if (price > 0 && lowerName !== "harga diskon") {
-            const g = allGroups.find((x) => x.name.toLowerCase() === lowerName);
-            multi_prices.push({
-              name: g ? g.name : lowerName,
-              price: price,
-              min_qty: 1,
-            });
-          }
-        }
-
-        // Build supplier_settings array - PASTI sertakan SEMUA yang terpilih
+        if (toAngka(document.getElementById("fHJualDiskon").value) > 0) multi_prices.push({ name: "Harga Diskon", price: toAngka(document.getElementById("fHJualDiskon").value), min_qty: 1 });
+        for (const [lowerName, price] of Object.entries(groupPrices)) { if (price > 0 && lowerName !== "harga diskon") { const g = allGroups.find((x) => x.name.toLowerCase() === lowerName); multi_prices.push({ name: g ? g.name : lowerName, price: price, min_qty: 1 }); } }
         let settingsArr = [];
-        selectedSups.forEach((sVal, sid) => {
-          // Cari di map (bisa index number atau string)
-          const s = supplierSettingsMap[sid] ||
-            supplierSettingsMap[sid.toString()] || {
-              buy_price: generalBuyPrice,
-              barcode: generalBarcode,
-            };
-          settingsArr.push({
-            supplier_id: sid,
-            buy_price: s.buy_price,
-            barcode: s.barcode || null,
-          });
-        });
-
-        const p = {
-          code: document.getElementById("fKodeItem").value || "AUTO",
-          barcode: generalBarcode || "AUTO",
-          name: document.getElementById("fNama").value,
-          category_id: parseInt(document.getElementById("fKat").value) || null,
-          brand_id: parseInt(document.getElementById("fMerek").value) || null,
-          unit_id: parseInt(document.getElementById("fSat").value) || null,
-          buy_price: generalBuyPrice,
-          sell_price: sellPrice,
-          profit_margin:
-            parseFloat(document.getElementById("fMargin").value) || 0,
-          min_stock: toAngka(document.getElementById("fStokMin").value),
-          description: document.getElementById("fDesk").value || null,
-          is_discountable: document.getElementById("fIsDiscountable").checked,
-          supplier_ids: Array.from(selectedSups.keys()),
-          supplier_settings: settingsArr,
-          prices: multi_prices,
-        };
+        selectedSups.forEach((sVal, sid) => { const s = supplierSettingsMap[sid] || supplierSettingsMap[sid.toString()] || { buy_price: generalBuyPrice, barcode: generalBarcode }; settingsArr.push({ supplier_id: sid, buy_price: s.buy_price, barcode: s.barcode || null }); });
+        const p = { code: document.getElementById("fKodeItem").value || "AUTO", barcode: generalBarcode || "AUTO", name: document.getElementById("fNama").value, category_id: parseInt(document.getElementById("fKat").value) || null, brand_id: parseInt(document.getElementById("fMerek").value) || null, unit_id: parseInt(document.getElementById("fSat").value) || null, buy_price: generalBuyPrice, sell_price: sellPrice, profit_margin: parseFloat(document.getElementById("fMargin").value) || 0, min_stock: toAngka(document.getElementById("fStokMin").value), description: document.getElementById("fDesk").value || null, is_discountable: document.getElementById("fIsDiscountable").checked, supplier_ids: Array.from(selectedSups.keys()), supplier_settings: settingsArr, prices: multi_prices };
         try {
-          if (editItemId) await api("PUT", `/items/${editItemId}`, p);
-          else await api("POST", "/items/", p);
+          let saved;
+          if (editItemId) saved = await api("PUT", `/items/${editItemId}`, p);
+          else saved = await api("POST", "/items/", p);
+          editItemId = saved.id;
+          await saveAllSatuanRows();
           showToast("Barang disimpan ✓", "success");
           closeModal("mBarang");
           loadItems();
-        } catch (ex) {
-          showToast(ex.message, "error");
-        }
+        } catch (ex) { showToast(ex.message, "error"); }
       }
 
       async function toggleItem(id, isActive) {
-        if (
-          !(await showConfirm(
-            isActive ? "Nonaktifkan barang ini?" : "Aktifkan barang ini?",
-          ))
-        )
-          return;
-        try {
-          if (isActive) await api("DELETE", `/items/${id}`);
-          else await api("PUT", `/items/${id}`, { is_active: true });
-          showToast("Status diperbarui");
-          loadItems();
-        } catch (ex) {
-          showToast(ex.message, "error");
-        }
+        if (!(await showConfirm(isActive ? "Nonaktifkan?" : "Aktifkan?"))) return;
+        try { if (isActive) await api("DELETE", `/items/${id}`); else await api("PUT", `/items/${id}`, { is_active: true }); showToast("Ok"); loadItems(); }
+        catch (ex) { showToast(ex.message, "error"); }
       }
 
-      function quickAddSat() {
-        fromItemModal = true;
-        closeModal("mBarang");
-        openSatModal();
-      }
+      function quickAddSat() { fromItemModal = true; closeModal("mBarang"); openSatModal(); }
 
       async function quickAddSup() {
         try {
@@ -1276,256 +831,126 @@
           const parser = new DOMParser();
           const doc = parser.parseFromString(html, "text/html");
           const form = doc.querySelector("form");
-
           if (form) {
-            document.getElementById("quickSupContainer").innerHTML = `
-               <div class="modal-overlay" id="mQuickSup" style="z-index: 10001;">
-                 <div class="modal-box" style="max-width: 600px;">
-                   <div class="modal-hdr">
-                     <h2>Tambah Supplier Dadakan</h2>
-                     <button type="button" class="btn-x" onclick="closeModal('mQuickSup')">×</button>
-                   </div>
-                   <div class="modal-body" style="padding:0;">
-                     ${form.outerHTML}
-                   </div>
-                 </div>
-               </div>
-             `;
-
+            document.getElementById("quickSupContainer").innerHTML = `<div class="modal-overlay" id="mQuickSup" style="z-index: 10001;"><div class="modal-box" style="max-width: 600px;"><div class="modal-hdr"><h2>Tambah Supplier</h2><button type="button" class="btn-x" onclick="closeModal('mQuickSup')">×</button></div><div class="modal-body" style="padding:0;">${form.outerHTML}</div></div></div>`;
             const modalBody = document.querySelector("#mQuickSup .modal-body");
             modalBody.querySelector("h2")?.remove();
-            modalBody
-              .querySelector("button[onclick*='history.back']")
-              ?.remove();
-
+            modalBody.querySelector("button[onclick*='history.back']")?.remove();
             const injectedForm = modalBody.querySelector("form");
-            if (injectedForm) {
-              injectedForm.onsubmit = (e) => saveQuickSup(e);
-            }
+            if (injectedForm) injectedForm.onsubmit = (e) => saveQuickSup(e);
             openModal("mQuickSup");
           }
-        } catch (e) {
-          console.error("Gagal memuat modal supplier cepat:", e);
-          showToast("Gagal memuat form supplier", "error");
-        }
+        } catch (e) { showToast("Gagal memuat form", "error"); }
       }
-
-      let satuanRows = [];
-      let masterUnits = [];
-
-      async function initSatuanGrid() {
-        const gridBaseUnitSelect = document.getElementById("fSatuanDasarGrid");
-        if (gridBaseUnitSelect) {
-          gridBaseUnitSelect.innerHTML = document.getElementById("fSat").innerHTML;
-          gridBaseUnitSelect.value = document.getElementById("fSat").value;
-        }
-
-        const baseUnitId = parseInt(document.getElementById("fSat")?.value) || 0;
-        const baseRow = {
-          is_base: true,
-          child_unit_id: baseUnitId,
-          conversion_factor: 1,
-          buy_price_auto: toAngka(document.getElementById("fHBeli")?.value) || 0,
-          sell_price: toAngka(document.getElementById("fHJual")?.value) || 0,
-          margin_percent: parseFloat(document.getElementById("fMargin")?.value) || 0,
-        };
-
-        satuanRows = [baseRow];
-
-        if (editItemId) {
-          try {
-            const data = await api("GET", `/unit-conversion/config/${editItemId}`);
-            masterUnits = data.units || [];
-            const existingConvs = (data.rows || []).map((row) => ({
-              conversion_id: row.conversion_id,
-              child_item_id: row.child_item_id,
-              child_code: row.child_code || "",
-              child_name: row.child_name || "",
-              child_unit_id: row.child_unit_id,
-              conversion_factor: row.conversion_factor || 1,
-              buy_price_auto: row.buy_price_auto || 0,
-              sell_price: row.sell_price || 0,
-              margin_percent: row.margin_percent || 0,
-            }));
-            satuanRows = satuanRows.concat(existingConvs);
-          } catch (e) {
-            console.error("Gagal load config multi satuan:", e);
-          }
-        }
-
-        ensureEmptySatuanRow();
-        renderSatuanGrid();
-      }
-
-      function ensureEmptySatuanRow() {
-        const last = satuanRows[satuanRows.length - 1];
-        if (!last || last.child_unit_id || last.is_base) {
-          satuanRows.push({
-            is_draft: true,
-            child_unit_id: "",
-            conversion_factor: 0,
-            buy_price_auto: 0,
-            sell_price: 0,
-            margin_percent: 0,
-          });
-        }
-      }
-
-      function renderSatuanGrid() {
-        const body = document.getElementById("satuanGridBody");
-        if (!body) return;
-
-        body.innerHTML = satuanRows
-          .map((row, idx) => {
-            const isBase = row.is_base;
-            const isDraft = row.is_draft;
-            const unitOptions = masterUnits
-              .map(
-                (u) =>
-                  `<option value="${u.id}" ${parseInt(row.child_unit_id) === u.id ? "selected" : ""}>${u.name}${u.abbreviation ? " (" + u.abbreviation + ")" : ""}</option>`,
-              )
-              .join("");
-
-            return `
-            <tr class="${isBase ? "base-row" : ""} ${isDraft ? "empty-row" : ""}">
-              <td style="text-align:center; color:var(--primary); font-size:10px;">${isBase ? "▶" : isDraft ? "*" : "•"}</td>
-              <td>
-                <select class="input-control" ${isBase ? "disabled" : ""} 
-                  data-grid-row="${idx}" data-grid-col="0"
-                  onchange="updateSatuanRowField(${idx}, 'child_unit_id', this.value)">
-                  <option value="">-- Pilih --</option>
-                  ${unitOptions}
-                </select>
-              </td>
-              <td><input class="input-control" value="${isBase ? "Satuan Dasar" : "Satuan Turunan"}" disabled></td>
-              <td>
-                <input type="number" step="0.0001" class="input-control" 
-                  value="${row.conversion_factor || ""}" ${isBase ? "disabled" : ""}
-                  data-grid-row="${idx}" data-grid-col="1"
-                  onchange="updateSatuanRowField(${idx}, 'conversion_factor', this.value)" style="text-align:right;">
-              </td>
-              <td class="sep"><input class="input-control" value="${toRibuan(row.buy_price_auto)}" disabled style="text-align:right;"></td>
-              <td>
-                <input type="number" step="0.01" class="input-control" 
-                  value="${row.margin_percent || ""}" ${isBase ? "disabled" : ""}
-                  data-grid-row="${idx}" data-grid-col="2"
-                  onchange="updateSatuanRowField(${idx}, 'margin_percent', this.value, 'margin')" style="text-align:right;">
-              </td>
-              <td>
-                <input type="text" class="input-control" 
-                  value="${toRibuan(row.sell_price)}" ${isBase ? "disabled" : ""}
-                  data-grid-row="${idx}" data-grid-col="3"
-                  oninput="formatInputRibuan(this); updateSatuanRowField(${idx}, 'sell_price', this.value, 'sell')" 
-                  onblur="if(!${isBase} && !${isDraft}) saveSatuanRow(${idx})"
-                  style="text-align:right; font-weight:700; color:var(--primary)">
-              </td>
-            </tr>`;
-          })
-          .join("");
-      }
-
-      function focusSatuanGridCell(row, col) {
-        const el = document.querySelector(`#satuanGridTable [data-grid-row="${row}"][data-grid-col="${col}"]`);
-        if (el) {
-          el.focus();
-          if (el.tagName === "INPUT" && el.type === "text") {
-            const val = el.value; el.value = ""; el.value = val;
-          }
-        }
-      }
-
-      window.updateSatuanRowField = function (idx, field, val, mode = "factor") {
-        const row = satuanRows[idx];
-        if (!row) return;
-        const colMap = { child_unit_id: 0, conversion_factor: 1, margin_percent: 2, sell_price: 3 };
-
-        if (field === "child_unit_id") {
-          row.child_unit_id = val;
-          if (row.is_draft) {
-            row.is_draft = false;
-            row.conversion_factor = 1;
-            row.margin_percent = parseFloat(document.getElementById("fMargin")?.value) || 0;
-            ensureEmptySatuanRow();
-          }
-          const unit = masterUnits.find((u) => String(u.id) === String(val));
-          if (unit) {
-            const indukName = document.getElementById("fNama")?.value || "Barang";
-            row.child_name = `${indukName} ${unit.abbreviation || unit.name}`;
-          }
-          recalcSatuanRow(idx, "factor");
-        } else if (field === "conversion_factor") {
-          row.conversion_factor = parseFloat(val) || 0;
-          recalcSatuanRow(idx, "factor");
-        } else if (field === "margin_percent") {
-          row.margin_percent = parseFloat(val) || 0;
-          recalcSatuanRow(idx, "margin");
-        } else if (field === "sell_price") {
-          row.sell_price = toAngka(val);
-          recalcSatuanRow(idx, "sell");
-        }
-
-        renderSatuanGrid();
-        if (field in colMap) focusSatuanGridCell(idx, colMap[field]);
-      };
-
-      function recalcSatuanRow(idx, changedBy) {
-        const row = satuanRows[idx];
-        if (!row || row.is_base) return;
-        const indukHBeli = toAngka(document.getElementById("fHBeli")?.value) || 0;
-        row.buy_price_auto = Math.round(indukHBeli * row.conversion_factor);
-
-        if (changedBy === "margin") {
-          row.sell_price = Math.round(row.buy_price_auto * (1 + row.margin_percent / 100));
-        } else if (changedBy === "sell") {
-          row.margin_percent = row.buy_price_auto > 0 ? parseFloat((((row.sell_price - row.buy_price_auto) / row.buy_price_auto) * 100).toFixed(2)) : 0;
-        } else {
-          row.sell_price = Math.round(row.buy_price_auto * (1 + row.margin_percent / 100));
-        }
-      }
-
-      window.saveSatuanRow = async function (idx) {
-        const row = satuanRows[idx];
-        if (!row || row.is_base || row.is_draft || !row.child_unit_id || !row.conversion_factor) return;
-        const payload = { source_item_id: editItemId, child_name: row.child_name || "Barang Turunan", child_unit_id: parseInt(row.child_unit_id), conversion_factor: row.conversion_factor, sell_price: row.sell_price, child_code: row.child_code || null, barcode: null };
-        try {
-          if (row.conversion_id) await api("PUT", `/unit-conversion/variant/${row.conversion_id}`, payload);
-          else {
-            const res = await api("POST", "/unit-conversion/variant", payload);
-            row.conversion_id = res.row.conversion_id;
-            row.child_item_id = res.row.child_item_id;
-            showToast("Satuan disimpan ✓");
-          }
-        } catch (ex) { showToast(ex.message, "error"); }
-      };
 
       async function saveQuickSup(e) {
-        if (e && e.preventDefault) e.preventDefault();
+        if (e?.preventDefault) e.preventDefault();
         const name = document.querySelector("#mQuickSup #sNama").value.trim();
-        if (!name) { showToast("Nama supplier wajib diisi", "error"); return; }
-        const data = { name: name, phone: document.querySelector("#mQuickSup #sPhone")?.value || null, email: document.querySelector("#mQuickSup #sEmail")?.value || null, address: document.querySelector("#mQuickSup #sAlamat")?.value || null, PpnSupplier: parseFloat(document.querySelector("#mQuickSup #PpnSupplier")?.value) || 0, credit_limit: parseFloat(document.querySelector("#mQuickSup #sCredit")?.value) || 0, notes: document.querySelector("#mQuickSup #sNotes")?.value || null, item_ids: [] };
+        if (!name) { showToast("Nama wajib diisi", "error"); return; }
+        const data = { name, phone: document.querySelector("#mQuickSup #sPhone")?.value || null, email: document.querySelector("#mQuickSup #sEmail")?.value || null, address: document.querySelector("#mQuickSup #sAlamat")?.value || null, PpnSupplier: parseFloat(document.querySelector("#mQuickSup #PpnSupplier")?.value) || 0, credit_limit: parseFloat(document.querySelector("#mQuickSup #sCredit")?.value) || 0, notes: document.querySelector("#mQuickSup #sNotes")?.value || null, item_ids: [] };
         try {
           const btn = document.querySelector("#mQuickSup #btnSimpan");
           if (btn) { btn.disabled = true; btn.textContent = "Menyimpan..."; }
           const newSup = await api("POST", "/suppliers/", data);
-          showToast("Supplier berhasil ditambahkan!");
-          closeModal("mQuickSup");
+          showToast("Berhasil!"); closeModal("mQuickSup");
           await loadSuppliers();
           const select = document.getElementById("fSupplierContext");
           updateSupplierContextDropdown();
           select.value = newSup.id;
           onSupplierContextChange();
-        } catch (ex) {
-          showToast(ex.message || "Gagal menyimpan supplier", "error");
-          const btn = document.querySelector("#mQuickSup #btnSimpan");
-          if (btn) { btn.disabled = false; btn.textContent = "✓ Simpan Supplier"; }
-        }
+        } catch (ex) { showToast(ex.message, "error"); if (btn) { btn.disabled = false; btn.textContent = "✓ Simpan"; } }
       }
 
-      refreshSelects();
-      loadItems();
-      loadCustomerGroups();
-      loadSuppliers();
-      setupSupSearch();
+      async function initSatuanGrid() {
+        const gridBaseUnitSelect = document.getElementById("fSatuanDasarGrid");
+        if (gridBaseUnitSelect) { gridBaseUnitSelect.innerHTML = document.getElementById("fSat").innerHTML; gridBaseUnitSelect.value = document.getElementById("fSat").value; }
+        const baseUnitId = parseInt(document.getElementById("fSat")?.value) || 0;
+        const baseRow = { is_base: true, child_unit_id: baseUnitId, conversion_factor: 1, buy_price_auto: toAngka(document.getElementById("fHBeli")?.value) || 0, sell_price: toAngka(document.getElementById("fHJual")?.value) || 0, margin_percent: parseFloat(document.getElementById("fMargin")?.value) || 0, group_prices: {}, tier_prices: [] };
+        for(let key in groupPrices) { const group = allGroups.find(g => g.name.toLowerCase() === key.toLowerCase()); if(group) baseRow.group_prices[group.id] = groupPrices[key]; }
+        satuanRows = [baseRow];
+        if (editItemId) {
+          try {
+            const data = await api("GET", `/unit-conversion/config/${editItemId}`);
+            masterUnits = data.units || [];
+            const existingConvs = (data.rows || []).map((row) => ({ conversion_id: row.conversion_id, child_item_id: row.child_item_id, child_code: row.child_code || "", child_name: row.child_name || "", child_unit_id: row.child_unit_id, conversion_factor: row.conversion_factor || 1, buy_price_auto: row.buy_price_auto || 0, sell_price: row.sell_price || 0, margin_percent: row.margin_percent || 0, group_prices: row.group_prices || {}, tier_prices: row.tier_prices || [] }));
+            satuanRows = satuanRows.concat(existingConvs);
+          } catch (e) { console.error("Gagal load multi satuan", e); }
+        }
+        ensureEmptySatuanRow();
+        if (currentAdvancedType) renderAdvancedGrid();
+      }
+
+      function ensureEmptySatuanRow() {
+        const last = satuanRows[satuanRows.length - 1];
+        if (!last || last.child_unit_id || last.is_base) { satuanRows.push({ is_draft: true, child_unit_id: "", conversion_factor: 0, buy_price_auto: 0, sell_price: 0, margin_percent: 0, group_prices: {}, tier_prices: [] }); }
+      }
+
+      function renderAdvancedGrid() {
+        const body = document.querySelector("#advancedContent tbody");
+        if (!body) return;
+        body.innerHTML = satuanRows.map((row, idx) => {
+          const isBase = row.is_base, isDraft = row.is_draft;
+          const unitOptions = masterUnits.map((u) => `<option value="${u.id}" ${parseInt(row.child_unit_id) === u.id ? "selected" : ""}>${u.name}${u.abbreviation ? " (" + u.abbreviation + ")" : ""}</option>`).join("");
+          let cols = `<td style="text-align:center; color:var(--primary); font-size:10px;">${isBase ? "▶" : isDraft ? "*" : "•"}</td><td><select class="input-control" ${isBase ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'child_unit_id', this.value)"><option value="">-- Pilih --</option>${unitOptions}</select></td><td><input class="input-control" value="${isBase ? "Satuan Dasar" : "Satuan Turunan"}" disabled></td><td><input type="number" step="0.0001" class="input-control" value="${row.conversion_factor || ""}" ${isBase ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'conversion_factor', this.value)" style="text-align:right;"></td><td class="sep"><input class="input-control" value="${toRibuan(row.buy_price_auto)}" disabled style="text-align:right;"></td>`;
+          if (currentAdvancedType === "satuan") {
+            cols += `<td><input type="number" step="0.01" class="input-control" value="${row.margin_percent || ""}" ${isBase ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'margin_percent', this.value)" style="text-align:right;"></td><td><input type="text" class="input-control" value="${toRibuan(row.sell_price)}" ${isBase ? "disabled" : ""} oninput="formatInputRibuan(this); updateAdvancedRowField(${idx}, 'sell_price', this.value, 'sell')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
+          } else if (currentAdvancedType === "levelHarga") {
+            allGroups.forEach((group, gIdx) => {
+              const groupPrice = row.group_prices[group.id] || 0;
+              const groupMargin = row.buy_price_auto > 0 ? ((groupPrice - row.buy_price_auto) / row.buy_price_auto) * 100 : 0;
+              cols += `<td><input type="number" step="0.01" class="input-control" value="${groupMargin.toFixed(2)}" ${isBase && gIdx === 0 ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'group_margin', this.value, '${group.id}')" style="text-align:right;"></td><td class="sep"><input type="text" class="input-control" value="${toRibuan(groupPrice)}" ${isBase && gIdx === 0 ? "disabled" : ""} oninput="formatInputRibuan(this); updateAdvancedRowField(${idx}, 'group_price', this.value, '${group.id}')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
+            });
+          } else if (currentAdvancedType === "levelJumlah") {
+            for (let i = 0; i < 4; i++) {
+              const tier = row.tier_prices[i] || { min_qty: 0, price: 0 };
+              const tierMargin = row.buy_price_auto > 0 ? ((tier.price - row.buy_price_auto) / row.buy_price_auto) * 100 : 0;
+              cols += `<td><input type="number" class="input-control" value="${tier.min_qty || ""}" onchange="updateAdvancedRowField(${idx}, 'tier_qty', this.value, ${i})" style="text-align:right;"></td><td><input type="number" step="0.01" class="input-control" value="${tierMargin.toFixed(2)}" onchange="updateAdvancedRowField(${idx}, 'tier_margin', this.value, ${i})" style="text-align:right;"></td><td class="${i < 3 ? "sep" : ""}"><input type="text" class="input-control" value="${toRibuan(tier.price)}" oninput="formatInputRibuan(this); updateAdvancedRowField(${idx}, 'tier_price', this.value, ${i})" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
+            }
+          }
+          return `<tr class="${isBase ? "base-row" : ""} ${isDraft ? "empty-row" : ""}"> ${cols} </tr>`;
+        }).join("");
+      }
+
+      window.updateAdvancedRowField = function (idx, field, val, extra = null) {
+        const row = satuanRows[idx]; if (!row) return;
+        if (field === "child_unit_id") {
+          row.child_unit_id = val;
+          if (row.is_draft) { row.is_draft = false; row.conversion_factor = 1; row.margin_percent = parseFloat(document.getElementById("fMargin")?.value) || 0; ensureEmptySatuanRow(); }
+          const unit = masterUnits.find((u) => String(u.id) === String(val));
+          if (unit) row.child_name = `${document.getElementById("fNama")?.value || "Barang"} ${unit.abbreviation || unit.name}`;
+          recalcAdvancedRow(idx);
+        } else if (field === "conversion_factor") { row.conversion_factor = parseFloat(val) || 0; recalcAdvancedRow(idx); }
+        else if (field === "margin_percent") { row.margin_percent = parseFloat(val) || 0; recalcAdvancedRow(idx, "margin"); }
+        else if (field === "sell_price") { row.sell_price = toAngka(val); recalcAdvancedRow(idx, "sell"); }
+        else if (field === "group_price") { const groupId = extra; row.group_prices[groupId] = toAngka(val); if (row.is_base) { const group = allGroups.find(g => String(g.id) === String(groupId)); if(group) groupPrices[group.name.toLowerCase()] = row.group_prices[groupId]; } }
+        else if (field === "group_margin") { const groupId = extra; const margin = parseFloat(val) || 0; row.group_prices[groupId] = Math.round(row.buy_price_auto * (1 + margin / 100)); if (row.is_base) { const group = allGroups.find(g => String(g.id) === String(groupId)); if(group) groupPrices[group.name.toLowerCase()] = row.group_prices[groupId]; } }
+        else if (field === "tier_qty") { const tierIdx = extra; if (!row.tier_prices[tierIdx]) row.tier_prices[tierIdx] = { min_qty: 0, price: 0 }; row.tier_prices[tierIdx].min_qty = parseFloat(val) || 0; }
+        else if (field === "tier_price") { const tierIdx = extra; if (!row.tier_prices[tierIdx]) row.tier_prices[tierIdx] = { min_qty: 0, price: 0 }; row.tier_prices[tierIdx].price = toAngka(val); }
+        else if (field === "tier_margin") { const tierIdx = extra; if (!row.tier_prices[tierIdx]) row.tier_prices[tierIdx] = { min_qty: 0, price: 0 }; const margin = parseFloat(val) || 0; row.tier_prices[tierIdx].price = Math.round(row.buy_price_auto * (1 + margin / 100)); }
+        renderAdvancedGrid();
+      };
+
+      function recalcAdvancedRow(idx, changedBy = "factor") {
+        const row = satuanRows[idx]; if (!row) return;
+        row.buy_price_auto = Math.round((toAngka(document.getElementById("fHBeli")?.value) || 0) * row.conversion_factor);
+        if (changedBy === "margin") row.sell_price = Math.round(row.buy_price_auto * (1 + row.margin_percent / 100));
+        else if (changedBy === "sell") row.margin_percent = row.buy_price_auto > 0 ? parseFloat((((row.sell_price - row.buy_price_auto) / row.buy_price_auto) * 100).toFixed(2)) : 0;
+        else row.sell_price = Math.round(row.buy_price_auto * (1 + row.margin_percent / 100));
+      }
+
+      async function saveAllSatuanRows() {
+         for(let i=1; i<satuanRows.length; i++) {
+           const row = satuanRows[i]; if (row.is_draft || !row.child_unit_id) continue;
+           let multi = [];
+           for(let gid in row.group_prices) { const g = allGroups.find(x => String(x.id) === String(gid)); if(g) multi.push({ name: g.name, price: row.group_prices[gid], min_qty: 1 }); }
+           row.tier_prices.forEach(t => { if(t.min_qty > 0) multi.push({ name: `Grosir`, price: t.price, min_qty: t.min_qty }); });
+           const payload = { source_item_id: editItemId, child_name: row.child_name || "Turunan", child_unit_id: parseInt(row.child_unit_id), conversion_factor: row.conversion_factor, sell_price: row.sell_price, prices: multi };
+           try { if (row.conversion_id) await api("PUT", `/unit-conversion/variant/${row.conversion_id}`, payload); else await api("POST", "/unit-conversion/variant", payload); }
+           catch(e) { console.error(e); }
+         }
+      }
+
+      refreshSelects(); loadItems(); loadCustomerGroups(); loadSuppliers(); setupSupSearch();
     </script>
   </body>
 </html>

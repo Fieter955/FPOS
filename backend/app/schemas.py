@@ -194,6 +194,7 @@ class CustomerGroupCreate(BaseModel):
 
 class CustomerGroupOut(CustomerGroupCreate):
     id: int
+    member_count: int = 0
     model_config = {"from_attributes": True}
 
 
@@ -229,6 +230,8 @@ class CustomerOut(BaseModel):
     email: Optional[str]
     group_id: Optional[int]
     points: float
+    loyalty_points: float = 0
+    total_purchase: float = 0
     credit_limit: float
     deposit_balance: float = 0
     is_active: bool

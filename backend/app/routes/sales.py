@@ -287,6 +287,7 @@ def create_sale(
         cust = db.query(models.Customer).with_for_update().get(data.customer_id)
         if cust:
             cust.points += int(total / 1000)
+            cust.loyalty_points += int(total / 1000)
 
     # ── AUTO JOURNAL ──────────────────────────────────────────────────────────
     # ✅ FIX: Di luar blok customer, selalu jalan untuk semua transaksi
@@ -411,8 +412,9 @@ def cancel_sale(
         if cust:
             poin_dibatalkan = int(obj.total / 1000)
             cust.points    -= poin_dibatalkan
-            if cust.points < 0:
-                cust.points = 0
+            cust.loyalty_points -= poin_dibatalkan
+            if cust.points < 0: cust.points = 0
+            if cust.loyalty_points < 0: cust.loyalty_points = 0
 
     # ── Jurnal Pembalik (cermin sempurna dari jurnal asli) ────────────────────
     total_hpp      = sum(it.buy_price * it.qty for it in obj.items)

@@ -11,7 +11,8 @@ router = APIRouter()
 # ─── Customer Groups ──────────────────────────────────────────────────────────
 @router.get("/groups", response_model=list[schemas.CustomerGroupOut])
 def get_groups(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    return db.query(models.CustomerGroup).all()
+    from sqlalchemy.orm import subqueryload
+    return db.query(models.CustomerGroup).options(subqueryload(models.CustomerGroup.customers)).all()
 
 @router.post("/groups", response_model=schemas.CustomerGroupOut)
 def create_group(g: schemas.CustomerGroupCreate, db: Session = Depends(get_db), _=Depends(get_current_user)):
@@ -38,7 +39,11 @@ def delete_group(gid: int, db: Session = Depends(get_db), _=Depends(get_current_
 def get_customers(search: Optional[str] = None, active_only: bool = True,
                   skip: int = 0, limit: int = 100,
                   db: Session = Depends(get_db), _=Depends(get_current_user)):
-    q = db.query(models.Customer)
+    from sqlalchemy.orm import subqueryload, joinedload
+    q = db.query(models.Customer).options(
+        subqueryload(models.Customer.sales),
+        joinedload(models.Customer.group)
+    )
     if active_only: q = q.filter(models.Customer.is_active == True)
     if search: q = q.filter(
         models.Customer.name.ilike(f"%{search}%") |
