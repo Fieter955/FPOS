@@ -8,13 +8,13 @@ Konsep:
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from .. import models
+from .. import models, schemas
 from ..auth import get_current_user, write_audit
 from ..database import get_db
 from ..services.virtual_units import (
@@ -36,6 +36,7 @@ class VirtualVariantPayload(BaseModel):
     sell_price: float = Field(0, ge=0)
     child_code: Optional[str] = None
     barcode: Optional[str] = None
+    prices: List[schemas.ItemPriceCreate] = []
 
 
 def _normalize_text(value: Optional[str]) -> str:
@@ -105,6 +106,21 @@ def _serialize_variant(
     if child_buy_price > 0:
         margin_percent = ((float(child_item.sell_price or 0) - child_buy_price) / child_buy_price) * 100
 
+    group_prices = {}
+    tier_prices = []
+
+    all_groups = db.query(models.CustomerGroup).all()
+    group_map = {g.name.lower(): g.id for g in all_groups}
+
+    for p in child_item.prices:
+        lname = p.name.lower()
+        if lname == "grosir":
+            tier_prices.append({"min_qty": float(p.min_qty), "price": float(p.price)})
+        elif lname in group_map:
+            group_prices[group_map[lname]] = float(p.price)
+
+    tier_prices.sort(key=lambda x: x["min_qty"])
+
     return {
         "conversion_id": conv.id,
         "source_item_id": source_item.id,
@@ -125,6 +141,8 @@ def _serialize_variant(
         "margin_percent": round(margin_percent, 2),
         "available_stock": round(child_stock, 4),
         "required_parent_qty_per_unit": round(get_required_stock_qty(child_item, 1), 4),
+        "group_prices": group_prices,
+        "tier_prices": tier_prices,
     }
 
 
@@ -322,6 +340,12 @@ def create_virtual_variant(
         is_active=True,
     )
     db.add(conv)
+    db.flush()
+
+    # Save custom prices (group and tier)
+    for p in data.prices:
+        db.add(models.ItemPrice(item_id=child_item.id, **p.model_dump()))
+
     db.commit()
     db.refresh(conv)
 
@@ -401,6 +425,11 @@ def update_virtual_variant(
     conv.conversion_factor = float(data.conversion_factor)
     conv.buy_price = float(child_item.buy_price or 0)
     conv.sell_price = float(child_item.sell_price or 0)
+
+    # Update custom prices
+    db.query(models.ItemPrice).filter(models.ItemPrice.item_id == child_item.id).delete()
+    for p in data.prices:
+        db.add(models.ItemPrice(item_id=child_item.id, **p.model_dump()))
 
     db.commit()
 

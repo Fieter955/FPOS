@@ -1,7 +1,12 @@
 <div class="tbl-wrap">
-  <div style="margin-bottom: 16px; display: flex; align-items: center;">
-    <label style="font-weight: bold; min-width: 120px;">Satuan Dasar :</label>
-    <select id="fSatuanDasarGrid" class="input-control" style="width: 200px;" disabled>
+  <div style="margin-bottom: 16px; display: flex; align-items: center">
+    <label style="font-weight: bold; min-width: 120px">Harga Satuan</label>
+    <select
+      id="fSatuanDasarGrid"
+      class="input-control"
+      style="width: 200px; display: none"
+      disabled
+    >
       <!-- Diisi otomatis dari fSat induk -->
     </select>
   </div>
@@ -9,12 +14,12 @@
   <table class="tbl" id="satuanGridTable">
     <thead>
       <tr>
-        <th style="width: 30px;"></th>
+        <th style="width: 30px"></th>
         <th>Satuan</th>
         <th>Jns Satuan</th>
-        <th style="width: 80px;">Konv</th>
+        <th style="width: 80px">Konv</th>
         <th class="sep">H. Pokok</th>
-        <th style="width: 100px;">Proc (%)</th>
+        <th style="width: 100px">Proc (%)</th>
         <th>Harga Jual</th>
       </tr>
     </thead>
@@ -22,21 +27,31 @@
       <!-- Dinamis diisi JS -->
     </tbody>
   </table>
-  <div style="margin-top: 12px; font-size: 12px; color: var(--text-muted); line-height: 1.5;">
-    ℹ️ Ketik pada baris kosong paling bawah untuk menambah satuan baru secara otomatis. <br>
+  <div
+    style="
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    "
+  >
+    ℹ️ Ketik pada baris kosong paling bawah untuk menambah satuan baru secara
+    otomatis. <br />
     H. Pokok dihitung: <b>Harga Beli Induk × Konversi</b>.
   </div>
 </div>
 
 <style>
-  #satuanGridTable input, #satuanGridTable select {
+  #satuanGridTable input,
+  #satuanGridTable select {
     width: 100%;
     padding: 6px 8px;
     font-size: 13px;
     border: 1px solid transparent;
     background: transparent;
   }
-  #satuanGridTable input:focus, #satuanGridTable select:focus {
+  #satuanGridTable input:focus,
+  #satuanGridTable select:focus {
     border-color: var(--primary);
     background: var(--input-bg);
   }
@@ -51,5 +66,7 @@
   #satuanGridTable tr.empty-row td {
     color: var(--text-muted);
   }
-  .sep { border-left: 2px solid var(--border-color) !important; }
+  .sep {
+    border-left: 2px solid var(--border-color) !important;
+  }
 </style>
