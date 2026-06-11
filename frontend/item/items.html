@@ -422,6 +422,7 @@
         generalBarcode = "",
         currentSupplierContext = "",
         satuanRows = [],
+        masterUnits = [],
         lastPpnStatus = "included";
 
       function formatInputRibuan(input) {
@@ -496,7 +497,10 @@
                 targetPpn = supplierData.PpnSupplier;
             }
             // Only set if current value is 0 or it's a fresh toggle to excluded
-            if (parseFloat(ppnInput.value) === 0 || lastPpnStatus === "included") {
+            if (
+              parseFloat(ppnInput.value) === 0 ||
+              lastPpnStatus === "included"
+            ) {
               ppnInput.value = targetPpn;
             }
           } else {
@@ -560,6 +564,7 @@
           api("GET", "/items/brands"),
           api("GET", "/items/units"),
         ]);
+        masterUnits = units;
         const fk = document.getElementById("filterKat");
         fk.innerHTML =
           '<option value="">Semua Kategori</option>' +
@@ -709,6 +714,18 @@
       function syncGroupPricesFromMain() {
         if (satuanRows.length > 0) {
           const base = satuanRows[0];
+
+          // Sinkronisasi field utama ke baris dasar (base row)
+          if (base.is_base) {
+            base.buy_price_auto =
+              toAngka(document.getElementById("fHBeli")?.value) || 0;
+            base.sell_price =
+              toAngka(document.getElementById("fHJual")?.value) || 0;
+            base.margin_percent =
+              parseFloat(document.getElementById("fMargin")?.value) || 0;
+            base.child_unit_id = document.getElementById("fSat")?.value || "";
+          }
+
           // Ensure allGroups prices are initialized in groupPrices if not present
           allGroups.forEach((group) => {
             const key = group.name.toLowerCase();
@@ -866,7 +883,7 @@
           targetPpnSupplier =
             supplierData && supplierData.PpnSupplier != null
               ? supplierData.PpnSupplier
-              : 11;
+              : 16;
         }
         document.getElementById("fHBeli").value = toRibuan(targetHBeli);
         document.getElementById("fBarcode").value = targetBarcode || "";
