@@ -1052,6 +1052,12 @@
             });
           }
           renderSelectedSups();
+          // Auto-select jika cuma ada 1 supplier
+          if (item.suppliers?.length === 1) {
+            const firstSupId = item.suppliers[0].id;
+            document.getElementById("fSupplierContext").value = firstSupId;
+            onSupplierContextChange();
+          }
         }
         initSatuanGrid(item);
         updateDiscountPreview();
