@@ -749,6 +749,14 @@
             );
             if (group) base.group_prices[group.id] = groupPrices[key];
           }
+
+          // Forward Sync: Recalculate all child rows
+          for (let i = 1; i < satuanRows.length; i++) {
+            if (!satuanRows[i].is_draft) {
+              recalcAdvancedRow(i, "base");
+            }
+          }
+
           if (currentAdvancedType) renderAdvancedGrid();
         }
       }
@@ -1401,10 +1409,10 @@
                   `<option value="${u.id}" ${parseInt(row.child_unit_id) === u.id ? "selected" : ""}>${u.name}${u.abbreviation ? " (" + u.abbreviation + ")" : ""}</option>`,
               )
               .join("");
-            let cols = `<td style="text-align:center; color:var(--primary); font-size:10px;">${isBase ? "▶" : isDraft ? "*" : "•"}</td><td><select class="input-control" ${isBase ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'child_unit_id', this.value)"><option value="">-- Pilih --</option>${unitOptions}</select></td><td><input class="input-control" value="${isBase ? "Satuan Dasar" : "Satuan Turunan"}" disabled></td><td><input type="number" step="0.0001" class="input-control" value="${row.conversion_factor || ""}" ${isBase ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'conversion_factor', this.value)" style="text-align:right;"></td><td class="sep"><input class="input-control" value="${toRibuan(row.buy_price_auto)}" disabled style="text-align:right;"></td>`;
+            let cols = `<td style="text-align:center; color:var(--primary); font-size:10px;">${isBase ? "▶" : isDraft ? "*" : "•"}</td><td><select class="input-control" onchange="updateAdvancedRowField(${idx}, 'child_unit_id', this.value)"><option value="">-- Pilih --</option>${unitOptions}</select></td><td><input class="input-control" value="${isBase ? "Satuan Dasar" : "Satuan Turunan"}" disabled></td><td><input type="number" step="0.0001" class="input-control" value="${row.conversion_factor || ""}" ${isBase ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'conversion_factor', this.value)" style="text-align:right;"></td><td class="sep"><input type="text" class="input-control" value="${toRibuan(row.buy_price_auto)}" ${isBase ? "disabled" : ""} oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'buy_price_auto', this.value)" style="text-align:right;"></td>`;
 
             if (currentAdvancedType === "satuan") {
-              cols += `<td><input type="number" step="0.01" class="input-control" value="${row.margin_percent || ""}" ${isBase ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'margin_percent', this.value)" style="text-align:right;"></td><td><input type="text" class="input-control" value="${toRibuan(row.sell_price)}" ${isBase ? "disabled" : ""} oninput="formatInputRibuan(this); updateAdvancedRowField(${idx}, 'sell_price', this.value, 'sell')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
+              cols += `<td><input type="number" step="0.01" class="input-control" value="${row.margin_percent || ""}" ${isBase ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'margin_percent', this.value)" style="text-align:right;"></td><td><input type="text" class="input-control" value="${toRibuan(row.sell_price)}" ${isBase ? "disabled" : ""} oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'sell_price', this.value, 'sell')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
             } else if (currentAdvancedType === "levelHarga") {
               allGroups.forEach((group, gIdx) => {
                 let groupPrice = row.group_prices[group.id];
@@ -1438,11 +1446,46 @@
           .join("");
       }
 
+      window.reverseSyncToBase = function (idx) {
+        const row = satuanRows[idx];
+        if (!row || row.is_base || row.conversion_factor <= 0) return;
+
+        const factor = row.conversion_factor;
+        const baseBuyPrice = Math.round(row.buy_price_auto / factor);
+
+        // Update form utama
+        const fHBeli = document.getElementById("fHBeli");
+        const fHJual = document.getElementById("fHJual");
+        const fMargin = document.getElementById("fMargin");
+
+        if (fHBeli) fHBeli.value = toRibuan(baseBuyPrice);
+
+        // JANGAN ubah fHJual. Biarkan harga jual dasar tetap, hanya update margin dasar.
+        if (fMargin && fHJual) {
+          const currentBaseSell = toAngka(fHJual.value) || 0;
+          const margin =
+            baseBuyPrice > 0
+              ? (
+                  ((currentBaseSell - baseBuyPrice) / baseBuyPrice) *
+                  100
+                ).toFixed(2)
+              : 0;
+          fMargin.value = margin.replace(/\.00$/, "");
+        }
+
+        // Sinkronisasi ulang seluruh baris berdasarkan nilai dasar baru
+        syncGroupPricesFromMain();
+      };
+
       window.updateAdvancedRowField = function (idx, field, val, extra = null) {
         const row = satuanRows[idx];
         if (!row) return;
         if (field === "child_unit_id") {
           row.child_unit_id = val;
+          if (row.is_base) {
+            const fSat = document.getElementById("fSat");
+            if (fSat) fSat.value = val;
+          }
           if (row.is_draft) {
             row.is_draft = false;
             row.conversion_factor = 1;
@@ -1457,6 +1500,10 @@
         } else if (field === "conversion_factor") {
           row.conversion_factor = parseFloat(val) || 0;
           recalcAdvancedRow(idx);
+        } else if (field === "buy_price_auto") {
+          row.buy_price_auto = toAngka(val);
+          recalcAdvancedRow(idx, "buy");
+          if (!row.is_base) reverseSyncToBase(idx);
         } else if (field === "margin_percent") {
           row.margin_percent = parseFloat(val) || 0;
           recalcAdvancedRow(idx, "margin");
@@ -1531,14 +1578,12 @@
         if (changedBy === "factor") {
           allGroups.forEach((g) => {
             let p = row.group_prices[g.id];
-            // Jika p ada (pernah dirubah manual atau di-init), hitung %-nya terhadap sell_price lama
             if (p !== undefined && p !== 0) {
               groupDiscs[g.id] =
                 row.sell_price > 0
                   ? ((row.sell_price - p) / row.sell_price) * 100
                   : g.discount_percent || 0;
             } else {
-              // Jika belum ada, gunakan default diskon grup
               groupDiscs[g.id] = g.discount_percent || 0;
             }
           });
@@ -1551,10 +1596,15 @@
           }
         }
 
-        row.buy_price_auto = Math.round(
-          (toAngka(document.getElementById("fHBeli")?.value) || 0) *
-            row.conversion_factor,
-        );
+        // Jika bukan buy, margin, atau sell yang dirubah langsung (misal: factor atau base price utama berubah)
+        // Maka buy_price_auto dihitung ulang dari base.
+        if (changedBy === "factor" || changedBy === "base") {
+          row.buy_price_auto = Math.round(
+            (toAngka(document.getElementById("fHBeli")?.value) || 0) *
+              row.conversion_factor,
+          );
+        }
+
         if (changedBy === "margin")
           row.sell_price = Math.round(
             row.buy_price_auto * (1 + row.margin_percent / 100),
@@ -1570,10 +1620,17 @@
                   ).toFixed(2),
                 )
               : 0;
-        else
+        else if (changedBy === "buy") {
+          // Jika buy_price_auto dirubah manual, kita hitung ulang sell_price berdasarkan margin yang ada
           row.sell_price = Math.round(
             row.buy_price_auto * (1 + row.margin_percent / 100),
           );
+        } else {
+          // Default: hitung sell dari buy yang sudah ada
+          row.sell_price = Math.round(
+            row.buy_price_auto * (1 + row.margin_percent / 100),
+          );
+        }
 
         // Jika factor berubah, update nominal harga berdasarkan % yang disimpan tadi
         if (changedBy === "factor") {
