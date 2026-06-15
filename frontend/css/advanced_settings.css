@@ -67,6 +67,12 @@
   color: var(--text-main);
   min-width: 60px;
   width: 100%;
+  color-scheme: light dark; /* Ensures native dropdowns match theme */
+}
+
+.advanced-container .tbl select.input-control option {
+  background: var(--card-bg);
+  color: var(--text-main);
 }
 
 .advanced-container .tbl .input-control:focus {
@@ -101,7 +107,12 @@
 /* Style untuk Pemisah Cluster di Level Jumlah & Level Harga */
 .advanced-container .tbl th.sep,
 .advanced-container .tbl td.sep {
-  border-right: 2px solid var(--primary) !important;
+  border-left: 2px solid var(--border-color) !important;
+}
+
+.advanced-container .group-label.sep,
+.advanced-container .tier-label.sep {
+  border-left: 2px solid rgba(255, 255, 255, 0.3) !important;
 }
 
 .advanced-container .group-label {
@@ -118,3 +129,17 @@
 .advanced-container .header-spacer {
   background: var(--primary-light) !important;
 }
+
+/* Row Styles */
+.advanced-container .tbl tr.base-row {
+  background: rgba(249, 115, 22, 0.05); /* Primary with low alpha */
+}
+
+body.dark-mode .advanced-container .tbl tr.base-row {
+  background: rgba(249, 115, 22, 0.1);
+}
+
+.advanced-container .tbl tr.empty-row td {
+  color: var(--text-muted);
+}
+

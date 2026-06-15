@@ -679,7 +679,7 @@
                       : Number(i.stock || 0)
                           .toFixed(4)
                           .replace(/\.?0+$/, "")
-                  }</span></td><td style="white-space:nowrap">${i.is_virtual_variant ? "" : `<button class="bsm be" onclick='editItem(${i.id})'>Edit</button>`}<button class="bsm bp" onclick="location.href='${manageUrl}'">${i.is_virtual_variant ? "Kelola Unit" : "Multi Satuan"}</button>${i.is_virtual_variant ? "" : `<button class="bsm bd" onclick="toggleItem(${i.id},${i.is_active})">${i.is_active ? "Nonaktif" : "Aktifkan"}</button>`}</td></tr>`;
+                  }</span></td><td style="white-space:nowrap">${i.is_virtual_variant ? "" : `<button class="bsm be" onclick='editItem(${i.id})'>Edit</button>`}<button class="bsm bp" style="display:none" onclick="location.href='${manageUrl}'">${i.is_virtual_variant ? "Kelola Unit" : "Multi Satuan"}</button>${i.is_virtual_variant ? "" : `<button class="bsm bd" onclick="toggleItem(${i.id},${i.is_active})">${i.is_active ? "Nonaktif" : "Aktifkan"}</button>`}</td></tr>`;
                 })
                 .join("")
             : '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-muted)">Tidak ada barang</td></tr>';
@@ -783,28 +783,12 @@
             base.child_unit_id = document.getElementById("fSat")?.value || "";
           }
 
-          // Ensure allGroups prices are initialized in groupPrices if not present
-          allGroups.forEach((group) => {
-            const key = group.name.toLowerCase();
-            if (groupPrices[key] === undefined) {
-              const hjualInput = document.getElementById("fHJual");
-              const hjualDiskonInput = document.getElementById("fHJualDiskon");
-              const checkbox = document.getElementById("fIsDiscountable");
-              let basePrice =
-                toAngka(hjualDiskonInput.value) > 0 && checkbox.checked
-                  ? toAngka(hjualDiskonInput.value)
-                  : toAngka(hjualInput.value);
-              groupPrices[key] = Math.round(
-                basePrice * (1 - (group.discount_percent || 0) / 100),
-              );
-            }
-          });
-
-          for (let key in groupPrices) {
-            const group = allGroups.find(
-              (g) => g.name.toLowerCase() === key.toLowerCase(),
-            );
-            if (group) base.group_prices[group.id] = groupPrices[key];
+          // Hanya sinkronkan grup pertama (Umum) dari main form
+          if (allGroups.length > 0) {
+            const firstGroup = allGroups[0];
+            const key = firstGroup.name.toLowerCase();
+            groupPrices[key] = base.sell_price;
+            base.group_prices[firstGroup.id] = base.sell_price;
           }
 
           // Forward Sync: Recalculate all child rows
@@ -1420,15 +1404,15 @@
           if (head) {
             let headHtml = `<tr>
               <th colspan="5" class="header-spacer"></th>
-              ${allGroups.map((g, i) => `<th colspan="2" class="group-label ${i > 0 ? "sep" : ""}">${i + 1}. ${g.name} (${g.discount_percent}%)</th>`).join("")}
+              ${allGroups.map((g, i) => `<th colspan="2" class="group-label ${i > 0 ? "sep" : ""}">${i + 1}. ${g.name}</th>`).join("")}
             </tr>
             <tr>
               <th style="width: 30px"></th>
               <th>Satuan</th>
               <th>Jenis</th>
-              <th style="width: 60px">Konv</th>
+              <th style="width: 60px" class="sep">Konv</th>
               <th class="sep">H. Pokok</th>
-              ${allGroups.map((g) => `<th>%</th><th class="sep">Harga</th>`).join("")}
+              ${allGroups.map((g) => `<th>% Mg</th><th class="sep">Harga</th>`).join("")}
             </tr>`;
             head.innerHTML = headHtml;
           }
@@ -1439,7 +1423,7 @@
               <th style="width: 30px"></th>
               <th>Satuan</th>
               <th>Jenis</th>
-              <th style="width: 60px">Konv</th>
+              <th style="width: 60px" class="sep">Konv</th>
               <th class="sep">H. Pokok</th>
               <th colspan="3" class="tier-label sep">Tier 1</th>
               <th colspan="3" class="tier-label sep">Tier 2</th>
@@ -1466,24 +1450,31 @@
                   `<option value="${u.id}" ${parseInt(row.child_unit_id) === u.id ? "selected" : ""}>${u.name}${u.abbreviation ? " (" + u.abbreviation + ")" : ""}</option>`,
               )
               .join("");
-            let cols = `<td style="text-align:center; color:var(--primary); font-size:10px;">${isBase ? "▶" : isDraft ? "*" : "•"}</td><td><select class="input-control" onchange="updateAdvancedRowField(${idx}, 'child_unit_id', this.value)"><option value="">-- Pilih --</option>${unitOptions}</select></td><td><input class="input-control" value="${isBase ? "Satuan Dasar" : "Satuan Turunan"}" disabled></td><td><input type="number" step="0.0001" class="input-control" value="${row.conversion_factor || ""}" ${isBase ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'conversion_factor', this.value)" style="text-align:right;"></td><td class="sep"><input type="text" class="input-control" value="${toRibuan(row.buy_price_auto)}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'buy_price_auto', this.value)" style="text-align:right;"></td>`;
+            let cols = `<td style="text-align:center; color:var(--primary); font-size:10px;">${isBase ? "▶" : isDraft ? "*" : "•"}</td><td><select class="input-control" onchange="updateAdvancedRowField(${idx}, 'child_unit_id', this.value)"><option value="">-- Pilih --</option>${unitOptions}</select></td><td><input class="input-control" value="${isBase ? "Dasar" : "Konversi"}" disabled></td><td class="sep"><input type="number" step="0.0001" class="input-control" value="${row.conversion_factor || ""}" ${isBase ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'conversion_factor', this.value)" style="text-align:right;"></td><td class="sep"><input type="text" class="input-control" value="${toRibuan(row.buy_price_auto)}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'buy_price_auto', this.value)" style="text-align:right;"></td>`;
 
             if (currentAdvancedType === "satuan") {
               cols += `<td><input type="number" step="0.01" class="input-control" value="${row.margin_percent || ""}" onchange="updateAdvancedRowField(${idx}, 'margin_percent', this.value)" style="text-align:right;"></td><td><input type="text" class="input-control" value="${toRibuan(row.sell_price)}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'sell_price', this.value, 'sell')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
             } else if (currentAdvancedType === "levelHarga") {
               allGroups.forEach((group, gIdx) => {
                 let groupPrice = row.group_prices[group.id];
-                if (groupPrice === undefined || groupPrice === 0) {
-                  groupPrice = Math.round(
-                    row.sell_price * (1 - (group.discount_percent || 0) / 100),
-                  );
+                const isUmum = gIdx === 0;
+
+                // Hanya default-kan grup pertama (Umum) ke harga jual utama
+                if (isUmum && (groupPrice === undefined || groupPrice === 0)) {
+                  groupPrice = row.sell_price;
                   row.group_prices[group.id] = groupPrice;
                 }
-                const groupDisc =
-                  row.sell_price > 0
-                    ? ((row.sell_price - groupPrice) / row.sell_price) * 100
-                    : group.discount_percent || 0;
-                cols += `<td><input type="number" step="0.01" class="input-control" value="${groupDisc.toFixed(2)}" ${isBase && gIdx === 0 ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'group_discount', this.value, '${group.id}')" style="text-align:right;"></td><td class="sep"><input type="text" class="input-control" value="${toRibuan(groupPrice)}" ${isBase && gIdx === 0 ? "disabled" : ""} oninput="formatInputRibuan(this); updateAdvancedRowField(${idx}, 'group_price', this.value, '${group.id}')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
+
+                const displayPrice = groupPrice > 0 ? toRibuan(groupPrice) : "";
+                const groupMargin =
+                  row.buy_price_auto > 0 && groupPrice > 0
+                    ? ((groupPrice - row.buy_price_auto) / row.buy_price_auto) *
+                      100
+                    : 0;
+                const displayMargin =
+                  groupPrice > 0 ? groupMargin.toFixed(2) : "";
+
+                cols += `<td><input type="number" step="0.01" class="input-control" value="${displayMargin}" onchange="updateAdvancedRowField(${idx}, 'group_margin', this.value, '${group.id}')" style="text-align:right;"></td><td class="sep"><input type="text" class="input-control" value="${displayPrice}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'group_price', this.value, '${group.id}')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
               });
             } else if (currentAdvancedType === "levelJumlah") {
               for (let i = 0; i < 4; i++) {
@@ -1495,7 +1486,7 @@
                 const discVal = tier.price > 0 ? tierDisc.toFixed(2) : "";
                 const priceVal = tier.price > 0 ? toRibuan(tier.price) : "";
                 const qtyVal = tier.min_qty > 0 ? tier.min_qty : "";
-                cols += `<td><input type="number" class="input-control" value="${qtyVal}" onchange="updateAdvancedRowField(${idx}, 'tier_qty', this.value, ${i})" style="text-align:right;" placeholder="Qty"></td><td><input type="number" step="0.01" class="input-control" value="${discVal}" onchange="updateAdvancedRowField(${idx}, 'tier_discount', this.value, ${i})" style="text-align:right;" placeholder="%"></td><td class="${i < 3 ? "sep" : ""}"><input type="text" class="input-control" value="${priceVal}" oninput="formatInputRibuan(this); updateAdvancedRowField(${idx}, 'tier_price', this.value, ${i})" style="text-align:right; font-weight:700; color:var(--primary)" placeholder="Harga"></td>`;
+                cols += `<td><input type="number" class="input-control" value="${qtyVal}" onchange="updateAdvancedRowField(${idx}, 'tier_qty', this.value, ${i})" style="text-align:right;" placeholder="Qty"></td><td><input type="number" step="0.01" class="input-control" value="${discVal}" onchange="updateAdvancedRowField(${idx}, 'tier_discount', this.value, ${i})" style="text-align:right;" placeholder="%"></td><td class="${i < 3 ? "sep" : ""}"><input type="text" class="input-control" value="${priceVal}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'tier_price', this.value, ${i})" style="text-align:right; font-weight:700; color:var(--primary)" placeholder="Harga"></td>`;
               }
             }
             return `<tr class="${isBase ? "base-row" : ""} ${isDraft ? "empty-row" : ""}"> ${cols} </tr>`;
@@ -1594,8 +1585,17 @@
             const group = allGroups.find(
               (g) => String(g.id) === String(groupId),
             );
-            if (group)
+            if (group) {
               groupPrices[group.name.toLowerCase()] = row.group_prices[groupId];
+              // Sync back to main HJual if it's the first group of base row
+              if (allGroups[0] && String(allGroups[0].id) === String(groupId)) {
+                const fHJual = document.getElementById("fHJual");
+                if (fHJual) {
+                  fHJual.value = toRibuan(row.group_prices[groupId]);
+                  calcMarginFromHJual();
+                }
+              }
+            }
           }
         } else if (field === "group_discount") {
           const groupId = extra;
@@ -1620,8 +1620,17 @@
             const group = allGroups.find(
               (g) => String(g.id) === String(groupId),
             );
-            if (group)
+            if (group) {
               groupPrices[group.name.toLowerCase()] = row.group_prices[groupId];
+              // Sync back to main Margin if it's the first group of base row
+              if (allGroups[0] && String(allGroups[0].id) === String(groupId)) {
+                const fMargin = document.getElementById("fMargin");
+                if (fMargin) {
+                  fMargin.value = margin.toFixed(2).replace(/\.00$/, "");
+                  calcHJualFromMargin();
+                }
+              }
+            }
           }
         } else if (field === "tier_qty") {
           const tierIdx = extra;
@@ -1649,19 +1658,19 @@
         const row = satuanRows[idx];
         if (!row) return;
 
-        // Simpan % diskon saat ini sebelum buy/sell price berubah (untuk factor change)
-        const groupDiscs = {};
+        // Simpan % margin saat ini sebelum buy/sell price berubah (untuk factor change)
+        const groupMargins = {};
         const tierDiscs = [];
         if (changedBy === "factor") {
           allGroups.forEach((g) => {
             let p = row.group_prices[g.id];
             if (p !== undefined && p !== 0) {
-              groupDiscs[g.id] =
-                row.sell_price > 0
-                  ? ((row.sell_price - p) / row.sell_price) * 100
-                  : g.discount_percent || 0;
+              groupMargins[g.id] =
+                row.buy_price_auto > 0
+                  ? ((p - row.buy_price_auto) / row.buy_price_auto) * 100
+                  : row.margin_percent || 0;
             } else {
-              groupDiscs[g.id] = g.discount_percent || 0;
+              groupMargins[g.id] = row.margin_percent || 0;
             }
           });
           for (let i = 0; i < 4; i++) {
@@ -1713,7 +1722,7 @@
         if (changedBy === "factor") {
           allGroups.forEach((g) => {
             row.group_prices[g.id] = Math.round(
-              row.sell_price * (1 - groupDiscs[g.id] / 100),
+              row.buy_price_auto * (1 + groupMargins[g.id] / 100),
             );
           });
           for (let i = 0; i < 4; i++) {
