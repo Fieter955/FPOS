@@ -355,7 +355,7 @@ if FRONTEND_DIR.exists():
             app.add_api_route(f"/{page}.html", make_handler(page), methods=["GET"])
 
     # Serve pages in item subdirectory
-    ITEM_PAGES = ["dashboard", "satuan", "levelHarga", "levelJumlah", "items", "popUp", "kategori", "units", "merek"]
+    ITEM_PAGES = ["dashboard", "satuan", "levelHarga", "levelJumlah", "items", "popUp", "kategori", "units", "merek", "potonganHargaJual"]
     for page in ITEM_PAGES:
         html_file = FRONTEND_DIR / "item" / f"{page}.html"
         if html_file.exists():

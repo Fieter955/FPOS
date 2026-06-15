@@ -572,6 +572,42 @@
         </div>
       </div>
 
+      <div
+        id="GroupPricePreview"
+        style="
+          background: var(--bg-color);
+          padding: 16px;
+          border-radius: 12px;
+          border: 1px dashed var(--border-color);
+          margin-bottom: 16px;
+        "
+      >
+        <button
+          type="button"
+          class="btn adv-btn"
+          id="btnAdvPotonganHargaJual"
+          style="
+            background: var(--card-bg);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+          "
+          onclick="loadAdvancedContent('potonganHargaJual')"
+        >
+          Potongan Harga Jual
+        </button>
+        <div
+          id="contentPotonganHargaJual"
+          style="
+            display: none;
+            padding-top: 16px;
+            border-top: 1px solid var(--border-color);
+            overflow-x: auto;
+          "
+        >
+          <!-- Konten dinamis akan dimuat di sini -->
+        </div>
+      </div>
+
       <div class="row2" style="margin-bottom: 16px">
         <div class="input-group">
           <label>Peringatan Stok Menipis</label>

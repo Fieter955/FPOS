@@ -359,49 +359,106 @@
       });
 
       let currentAdvancedType = null;
+      let currentPotonganType = null;
       async function loadAdvancedContent(type) {
-        const container = document.getElementById("advancedContent");
+        console.log("loadAdvancedContent called with type:", type);
+        const isPotongan = type === "potonganHargaJual";
+        const targetContainer = document.getElementById(
+          isPotongan ? "contentPotonganHargaJual" : "advancedContent",
+        );
         const buttons = document.querySelectorAll(".adv-btn");
+        const relevantState = isPotongan
+          ? currentPotonganType
+          : currentAdvancedType;
 
-        if (currentAdvancedType === type) {
-          container.style.display = "none";
-          currentAdvancedType = null;
+        if (!targetContainer) {
+          console.error("Target container not found for type:", type);
+          return;
+        }
+
+        // Toggle: Jika mengklik tipe yang sama, maka tutup.
+        if (relevantState === type) {
+          targetContainer.style.display = "none";
+          if (isPotongan) currentPotonganType = null;
+          else currentAdvancedType = null;
+
           buttons.forEach((b) => {
-            b.style.background = "var(--card-bg)";
-            b.style.color = "var(--text-main)";
-            b.style.borderColor = "var(--border-color)";
+            const isTargetBtn = b.id.toLowerCase().includes(type.toLowerCase());
+            if (isTargetBtn) {
+              b.style.background = "var(--card-bg)";
+              b.style.color = "var(--text-main)";
+              b.style.borderColor = "var(--border-color)";
+            }
           });
           return;
         }
 
         try {
-          const res = await fetch(`/item/${type}.html?_t=${Date.now()}`);
+          const url = `/item/${type}.html?_t=${Date.now()}`;
+          console.log("Fetching content from:", url);
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
           const text = await res.text();
           const parser = new DOMParser();
           const doc = parser.parseFromString(text, "text/html");
           const tableWrap = doc.querySelector(".tbl-wrap");
+          const styleTags = doc.querySelectorAll("style");
 
           if (tableWrap) {
-            container.innerHTML = `<div class="advanced-container">${tableWrap.outerHTML}</div>`;
-            container.style.display = "block";
-            currentAdvancedType = type;
+            let contentHtml = `<div class="advanced-container">${tableWrap.outerHTML}</div>`;
+            styleTags.forEach((style) => (contentHtml += style.outerHTML));
 
-            ensureEmptySatuanRow();
-            renderAdvancedGrid();
+            targetContainer.innerHTML = contentHtml;
+            targetContainer.style.display = "block";
 
+            if (isPotongan) currentPotonganType = type;
+            else currentAdvancedType = type;
+
+            if (!isPotongan) {
+              ensureEmptySatuanRow();
+              renderAdvancedGrid();
+            } else {
+              initPotonganHargaJualUI();
+            }
+
+            // Update style tombol
             buttons.forEach((b) => {
-              const isActive = b.id.toLowerCase().includes(type.toLowerCase());
-              b.style.background = isActive
-                ? "var(--primary)"
-                : "var(--card-bg)";
-              b.style.color = isActive ? "#fff" : "var(--text-main)";
-              b.style.borderColor = isActive
-                ? "var(--primary)"
-                : "var(--border-color)";
+              const btnId = b.id.toLowerCase();
+              const isCurrentType = btnId.includes(type.toLowerCase());
+
+              // Jika ini bagian potongan, hanya update tombol potongan
+              if (isPotongan) {
+                if (btnId.includes("potonganhargajual")) {
+                  b.style.background = isCurrentType
+                    ? "var(--primary)"
+                    : "var(--card-bg)";
+                  b.style.color = isCurrentType ? "#fff" : "var(--text-main)";
+                  b.style.borderColor = isCurrentType
+                    ? "var(--primary)"
+                    : "var(--border-color)";
+                }
+              } else {
+                // Jika ini bagian advanced (satuan/harga/jumlah), jangan ganggu tombol potongan
+                if (!btnId.includes("potonganhargajual")) {
+                  b.style.background = isCurrentType
+                    ? "var(--primary)"
+                    : "var(--card-bg)";
+                  b.style.color = isCurrentType ? "#fff" : "var(--text-main)";
+                  b.style.borderColor = isCurrentType
+                    ? "var(--primary)"
+                    : "var(--border-color)";
+                }
+              }
             });
+            console.log("Content loaded successfully for:", type);
+          } else {
+            throw new Error(
+              "Elemen .tbl-wrap tidak ditemukan di " + type + ".html",
+            );
           }
         } catch (e) {
-          showToast("Gagal memuat konten lanjutan", "error");
+          console.error("loadAdvancedContent Error:", e);
+          showToast("Gagal memuat: " + e.message, "error");
         }
       }
 
@@ -1712,6 +1769,106 @@
           }
         }
       }
+
+      async function toggleGroupPricePreview() {
+        const container = document.getElementById("groupPricePreviewContainer");
+        const body = document.getElementById("groupPricePreviewBody");
+        if (!container || !body) return;
+
+        if (container.style.display === "block") {
+          container.style.display = "none";
+        } else {
+          try {
+            const groups = await api("GET", "/customers/groups");
+            body.innerHTML = groups.length
+              ? groups
+                  .map(
+                    (g) => `
+              <tr style="border-bottom: 1px solid var(--border-color)">
+                <td style="padding: 8px 0; color: var(--text-main); font-weight: 500">${g.name}</td>
+                <td style="padding: 8px 0; text-align: right; color: var(--primary); font-weight: 700; font-size: 14px">${g.discount_percent}%</td>
+              </tr>
+            `,
+                  )
+                  .join("")
+              : '<tr><td colspan="2" style="text-align: center; padding: 20px; color: var(--text-muted)">Belum ada grup diskon</td></tr>';
+
+            container.style.display = "block";
+          } catch (ex) {
+            showToast("Gagal memuat grup: " + ex.message, "error");
+          }
+        }
+      }
+      window.toggleGroupPricePreview = toggleGroupPricePreview;
+
+      function initPotonganHargaJualUI() {
+        const body = document.getElementById("potonganGrupBody");
+        if (!body) return;
+
+        // Populate existing group selects
+        const selects = body.querySelectorAll(".group-select");
+        selects.forEach((sel) => {
+          const currentVal = sel.value;
+          sel.innerHTML =
+            '<option value="">-- Pilih Grup --</option>' +
+            allGroups
+              .map((g) => `<option value="${g.id}">${g.name}</option>`)
+              .join("");
+          sel.value = currentVal;
+        });
+      }
+      window.initPotonganHargaJualUI = initPotonganHargaJualUI;
+
+      function handlePotonganRowChange(el) {
+        const row = el.closest("tr");
+        if (row && row.classList.contains("empty-row")) {
+          // Check if any input in the empty row has been filled
+          const select = row.querySelector("select");
+          const inputs = row.querySelectorAll('input[type="number"]');
+          let isFilled = select.value !== "";
+          if (!isFilled) {
+            inputs.forEach((input) => {
+              if (input.value !== "" && parseFloat(input.value) !== 0)
+                isFilled = true;
+            });
+          }
+
+          if (isFilled) {
+            // Convert current empty-row to a normal row
+            row.classList.remove("empty-row");
+            const iconTd = row.querySelector("td");
+            if (iconTd) {
+              iconTd.innerHTML = "▶";
+              iconTd.style.color = "var(--text-main)";
+              iconTd.style.fontSize = "10px";
+            }
+
+            // Create a new empty-row
+            const tbody = document.getElementById("potonganGrupBody");
+            const newRow = row.cloneNode(true);
+            newRow.classList.add("empty-row");
+
+            // Reset icon for new row
+            const newIconTd = newRow.querySelector("td");
+            if (newIconTd) {
+              newIconTd.innerHTML = "*";
+              newIconTd.style.color = "var(--text-muted)";
+              newIconTd.style.fontSize = "14px";
+            }
+
+            // Reset inputs for new row
+            const newSelect = newRow.querySelector("select");
+            newSelect.value = "";
+            const newInputs = newRow.querySelectorAll('input[type="number"]');
+            newInputs.forEach((input) => {
+              input.value = "";
+            });
+
+            tbody.appendChild(newRow);
+          }
+        }
+      }
+      window.handlePotonganRowChange = handlePotonganRowChange;
 
       refreshSelects();
       loadItems();

@@ -1,0 +1,197 @@
+<div class="tbl-wrap">
+  <table class="tbl" id="potonganGrupTable">
+    <thead>
+      <tr>
+        <th style="width: 30px; text-align: center"></th>
+        <th style="text-align: left">Kode Grup Pelanggan</th>
+        <th class="sep" style="width: 100px; text-align: right">Pot. 1 (%)</th>
+        <th style="width: 100px; text-align: right">Pot. 2 (%)</th>
+        <th style="width: 100px; text-align: right">Pot. 3 (%)</th>
+        <th style="width: 100px; text-align: right">Pot. 4 (%)</th>
+      </tr>
+    </thead>
+    <tbody id="potonganGrupBody">
+      <!-- Baris Kosong (Untuk Tambah Baru Otomatis) -->
+      <tr class="empty-row">
+        <td
+          style="text-align: center; color: var(--text-muted); font-size: 14px"
+        >
+          *
+        </td>
+        <td>
+          <select
+            class="input-control group-select"
+            onchange="handlePotonganRowChange(this)"
+          >
+            <option value="">-- Pilih Grup --</option>
+          </select>
+        </td>
+        <td class="sep">
+          <input
+            type="number"
+            step="0.01"
+            placeholder="0.00"
+            class="input-control"
+            style="text-align: right"
+            oninput="handlePotonganRowChange(this)"
+          />
+        </td>
+        <td>
+          <input
+            type="number"
+            step="0.01"
+            placeholder="0.00"
+            class="input-control"
+            style="text-align: right"
+            oninput="handlePotonganRowChange(this)"
+          />
+        </td>
+        <td>
+          <input
+            type="number"
+            step="0.01"
+            placeholder="0.00"
+            class="input-control"
+            style="text-align: right"
+            oninput="handlePotonganRowChange(this)"
+          />
+        </td>
+        <td>
+          <input
+            type="number"
+            step="0.01"
+            placeholder="0.00"
+            class="input-control"
+            style="text-align: right"
+            oninput="handlePotonganRowChange(this)"
+          />
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Tombol Aksi Bawah -->
+  <div style="display: flex; gap: 8px; margin-top: 12px; padding: 4px">
+    <button
+      type="button"
+      class="btn"
+      onclick="toggleGroupPricePreview()"
+      style="
+        padding: 4px 10px;
+        font-size: 12px;
+        background: var(--input-bg);
+        border: 1px solid var(--border-color);
+        color: var(--text-main);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      "
+    >
+      <span style="color: var(--primary)">👥</span> Grup Pelanggan
+    </button>
+  </div>
+
+  <!-- Panel Informasi Grup Diskon (Toggleable) -->
+  <div
+    id="groupPricePreviewContainer"
+    style="
+      display: none;
+      margin-top: 12px;
+      padding: 12px;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      box-shadow: var(--shadow-sm);
+    "
+  >
+    <div
+      style="
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+      "
+    >
+      <h4 style="margin: 0; font-size: 14px; color: var(--primary)">
+        Daftar Grup & Diskon
+      </h4>
+      <span style="font-size: 11px; color: var(--text-muted)"
+        >Data dari Pelanggan > Grup Diskon</span
+      >
+    </div>
+    <table style="width: 100%; border-collapse: collapse; font-size: 12px">
+      <thead>
+        <tr style="border-bottom: 1px solid var(--border-color)">
+          <th style="text-align: left; padding: 6px 0">Nama Grup</th>
+          <th style="text-align: right; padding: 6px 0">Diskon (%)</th>
+        </tr>
+      </thead>
+      <tbody id="groupPricePreviewBody">
+        <!-- Dimuat via JS -->
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<style>
+  /* CSS Khusus Potongan Harga Jual - Meniru Tema Satuan.html */
+  #potonganGrupTable {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--card-bg);
+  }
+  #potonganGrupTable th {
+    background: rgba(var(--primary-rgb, 249, 115, 22), 0.05);
+    padding: 8px;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-muted);
+    border-bottom: 2px solid var(--border-color);
+  }
+  #potonganGrupTable td {
+    padding: 2px 4px;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--border-color);
+    border-right: 1px solid rgba(0, 0, 0, 0.05);
+  }
+  #potonganGrupTable td:last-child {
+    border-right: none;
+  }
+
+  #potonganGrupTable input,
+  #potonganGrupTable select {
+    width: 100%;
+    padding: 4px 8px;
+    font-size: 13px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-main);
+    box-sizing: border-box;
+    outline: none;
+    font-family: inherit;
+  }
+  #potonganGrupTable input:focus,
+  #potonganGrupTable select:focus {
+    border-color: var(--primary);
+    background: var(--input-bg);
+  }
+
+  #potonganGrupTable tr.empty-row td {
+    background: rgba(0, 0, 0, 0.01);
+  }
+  #potonganGrupTable tr.empty-row input::placeholder {
+    color: transparent;
+  }
+  #potonganGrupTable tr.empty-row input:focus::placeholder {
+    color: var(--text-muted);
+  }
+
+  .sep {
+    border-left: 2px solid var(--border-color) !important;
+  }
+
+  /* Support for Dark Mode */
+  body.dark-mode #potonganGrupTable tr.empty-row td {
+    background: rgba(255, 255, 255, 0.02);
+  }
+</style>
