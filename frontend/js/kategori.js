@@ -55,6 +55,7 @@ async function saveKat() {
         description: document.getElementById("kDesk").value || null,
       });
     showToast("Kategori disimpan ✓");
+    invalidateCache("/items/categories");
     await refreshSelects();
     if (fromItemModal) {
       document.getElementById("fKat").value = saved.id;
@@ -73,6 +74,7 @@ async function delKat(id, name) {
   try {
     await api("DELETE", `/items/categories/${id}`);
     showToast("Dihapus");
+    invalidateCache("/items/categories");
     loadKat();
     refreshSelects();
   } catch (ex) {

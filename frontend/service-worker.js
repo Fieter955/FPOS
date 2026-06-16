@@ -1,28 +1,6 @@
-const CACHE_NAME = "ipos-cache-v1";
-const urlsToCache = [
-  "/",
-  "/index.html",
-  "/manifest.json",
-  // Tambahkan file CSS atau JS utama Anda di sini nanti
-];
-
-// Saat aplikasi diinstall, simpan file-file penting
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(urlsToCache);
-    }),
-  );
-});
-
-// Saat aplikasi memanggil data, cek dulu di penyimpanan (cache)
-self.addEventListener("fetch", (event) => {
-  event.respondWith(
-    caches.match(event.request).then((response) => {
-      if (response) {
-        return response; // Gunakan file tersimpan agar cepat
-      }
-      return fetch(event.request); // Ambil dari server jika belum ada
-    }),
-  );
-});
+// service-worker.js — DINONAKTIFKAN.
+// Dulu strategi cache-first yang bisa menyajikan "/" & "/index.html" versi BASI
+// (kode lama tetap jalan walau sudah update). Pendaftarannya sudah dihapus dari index.html,
+// dan SW lama dicopot otomatis oleh pembersih di js/api.js.
+// Dibiarkan kosong (bukan dihapus) agar /service-worker.js dari HTML lama yang masih
+// ter-cache tidak 404.

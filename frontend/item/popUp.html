@@ -72,6 +72,7 @@
 <!-- Container untuk Modal Supplier Cepat -->
 <div id="quickSupContainer"></div>
 <div id="addSupContainer"></div>
+<div id="editItemContainer"></div>
 
 <div class="modal-overlay" id="mBarang">
   <div class="modal-box wide">
@@ -517,49 +518,71 @@
         >
           ⚙️ Pengaturan Harga Lanjutan (Opsional)
         </div>
-        <div
-          id="advancedButton"
-          style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap"
-        >
-          <button
-            type="button"
-            class="btn adv-btn"
-            id="btnAdvSatuan"
+        <div style="display: flex; justify-content: space-between">
+          <div
+            id="advancedButton"
             style="
-              background: var(--card-bg);
-              color: var(--text-main);
-              border: 1px solid var(--border-color);
+              display: flex;
+              gap: 8px;
+              margin-bottom: 16px;
+              flex-wrap: wrap;
             "
-            onclick="loadAdvancedContent('satuan')"
           >
-            Berdasarkan Satuan
-          </button>
-          <button
-            type="button"
-            class="btn adv-btn"
-            id="btnAdvHarga"
-            style="
-              background: var(--card-bg);
-              color: var(--text-main);
-              border: 1px solid var(--border-color);
-            "
-            onclick="loadAdvancedContent('levelHarga')"
-          >
-            Level Harga
-          </button>
-          <button
-            type="button"
-            class="btn adv-btn"
-            id="btnAdvJumlah"
-            style="
-              background: var(--card-bg);
-              color: var(--text-main);
-              border: 1px solid var(--border-color);
-            "
-            onclick="loadAdvancedContent('levelJumlah')"
-          >
-            Level Jumlah
-          </button>
+            <button
+              type="button"
+              class="btn adv-btn"
+              id="btnAdvSatuan"
+              style="
+                background: var(--card-bg);
+                color: var(--text-main);
+                border: 1px solid var(--border-color);
+              "
+              onclick="loadAdvancedContent('satuan')"
+            >
+              Berdasarkan Satuan
+            </button>
+            <button
+              type="button"
+              class="btn adv-btn"
+              id="btnAdvHarga"
+              style="
+                background: var(--card-bg);
+                color: var(--text-main);
+                border: 1px solid var(--border-color);
+              "
+              onclick="loadAdvancedContent('levelHarga')"
+            >
+              Level Harga
+            </button>
+            <button
+              type="button"
+              class="btn adv-btn"
+              id="btnAdvJumlah"
+              style="
+                background: var(--card-bg);
+                color: var(--text-main);
+                border: 1px solid var(--border-color);
+              "
+              onclick="loadAdvancedContent('levelJumlah')"
+            >
+              Level Jumlah
+            </button>
+          </div>
+          <div>
+            <button
+              type="button"
+              class="btn adv-btn"
+              id="btnAdvSatuan"
+              style="
+                background: var(--card-bg);
+                color: var(--text-main);
+                border: 1px solid var(--border-color);
+              "
+              onclick="loadModalEdit()"
+            >
+              Edit Harga Lanjutan
+            </button>
+          </div>
         </div>
         <div
           id="advancedContent"

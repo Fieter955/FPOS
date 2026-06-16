@@ -10,7 +10,7 @@ router = APIRouter()
 
 
 # ─── GET ALL SUPPLIERS ────────────────────────────────────────────────────────
-@router.get("/", response_model=list[schemas.SupplierOut])
+@router.get("/", response_model=list[schemas.SupplierListOut])
 def get_suppliers(
     search: Optional[str] = None,
     active_only: bool = True,

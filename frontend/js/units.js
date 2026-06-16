@@ -55,6 +55,7 @@ async function saveSat() {
         abbreviation: document.getElementById("sAbr").value || null,
       });
     showToast("Satuan disimpan ✓");
+    invalidateCache("/items/units");
     await refreshSelects();
     if (fromItemModal) {
       document.getElementById("fSat").value = saved.id;
@@ -73,6 +74,7 @@ async function delSat(id, name) {
   try {
     await api("DELETE", `/items/units/${id}`);
     showToast("Dihapus");
+    invalidateCache("/items/units");
     loadSat();
     refreshSelects();
   } catch (ex) {

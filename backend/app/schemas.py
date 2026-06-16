@@ -294,6 +294,24 @@ class SupplierOut(BaseModel):
     items: List[ItemOut] = []
     model_config = {"from_attributes": True}
 
+
+class SupplierListOut(BaseModel):
+    """Versi ringan untuk DAFTAR supplier — TANPA nested `items`. SupplierOut.items membuat
+    GET /suppliers/ menyerialisasi ribuan ItemOut (per supplier) + lazy-load N+1, sampai ~2 detik
+    untuk 31 supplier saja. Semua field skalar dipertahankan agar tabel & picker tetap lengkap.
+    Detail per-supplier (dengan items) tetap lewat GET /suppliers/{id}."""
+    id: int
+    code: str
+    name: str
+    address: Optional[str]
+    phone: Optional[str]
+    email: Optional[str]
+    PpnSupplier: Optional[float]
+    credit_limit: float
+    deposit_balance: float = 0
+    is_active: bool
+    model_config = {"from_attributes": True}
+
 # ─── SalesPerson ──────────────────────────────────────────────────────────────
 class SalesPersonCreate(BaseModel):
     code: str

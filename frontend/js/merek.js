@@ -66,6 +66,7 @@ async function saveMerek() {
         description: document.getElementById("merekDesk").value || null,
       });
     showToast("Merek disimpan ✓");
+    invalidateCache("/items/brands");
     await refreshSelects();
     if (fromItemModal) {
       document.getElementById("fMerek").value = saved.id;
@@ -84,6 +85,7 @@ async function delMerek(id, name) {
   try {
     await api("DELETE", `/items/brands/${id}`);
     showToast("Dihapus");
+    invalidateCache("/items/brands");
     loadMerek();
     refreshSelects();
   } catch (ex) {

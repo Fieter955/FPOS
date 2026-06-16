@@ -1,5 +1,22 @@
 const API_BASE = "/api";
 
+// Copot service worker lama + bersihkan cache-nya. SW lama (pass-through di sw.js &
+// cache-first di service-worker.js) hanya menambah overhead per-request dan bikin
+// loading/navigasi di browser lebih lambat dari versi .exe. Idempoten: setelah bersih,
+// jadi no-op. (Pendaftaran SW sudah dihapus dari index.html & pos.html.)
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker
+    .getRegistrations()
+    .then((rs) => rs.forEach((r) => r.unregister()))
+    .catch(() => {});
+  if (window.caches) {
+    caches
+      .keys()
+      .then((ks) => ks.forEach((k) => caches.delete(k)))
+      .catch(() => {});
+  }
+}
+
 function getToken() {
   return localStorage.getItem("ipos_token");
 }
@@ -119,6 +136,32 @@ async function apiForm(path, fd) {
   }
 
   return d;
+}
+
+// GET dengan cache di sessionStorage untuk data master yang jarang berubah
+// (kategori, merek, satuan, cabang). Mengurangi request berulang tiap pindah halaman.
+// Cache otomatis hilang saat tab/sesi ditutup. Invalidasi manual via invalidateCache(path)
+// setelah data diubah. ttlMs default 5 menit sebagai jaring pengaman.
+async function cachedApi(path, ttlMs = 300000) {
+  const key = "cache:" + path;
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (raw) {
+      const { t, d } = JSON.parse(raw);
+      if (Date.now() - t < ttlMs) return d;
+    }
+  } catch {}
+  const data = await api("GET", path);
+  try {
+    sessionStorage.setItem(key, JSON.stringify({ t: Date.now(), d: data }));
+  } catch {}
+  return data;
+}
+
+function invalidateCache(path) {
+  try {
+    sessionStorage.removeItem("cache:" + path);
+  } catch {}
 }
 
 function requireAuth() {
@@ -445,7 +488,8 @@ async function initBranchSwitcher() {
 
   // Jika Admin, load daftar cabang dan buat Dropdown
   try {
-    const branches = await api("GET", "/branches/");
+    // Cabang jarang berubah → cache per-sesi agar tiap pindah halaman tidak fetch ulang.
+    const branches = await cachedApi("/branches/");
     let activeId = localStorage.getItem("active_branch_id");
 
     if (!activeId && branches.length > 0) {
