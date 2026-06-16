@@ -28,7 +28,7 @@ router = APIRouter()
 
 
 def _is_admin_user(user: models.User) -> bool:
-    return "admin" in (user.role or "")
+    return (user.role or "") == "admin"
 
 
 def _sale_out_for_user(sale: models.Sale, current_user: models.User):

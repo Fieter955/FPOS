@@ -1,7 +1,7 @@
 from datetime import datetime
 
 import pytz
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Table, Text, Date
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Table, Text, Date, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
@@ -165,6 +165,13 @@ class Unit(Base):
 
 class Item(Base):
     __tablename__ = "items"
+    __table_args__ = (
+        Index("ix_items_category_id", "category_id"),
+        Index("ix_items_brand_id", "brand_id"),
+        Index("ix_items_unit_id", "unit_id"),
+        Index("ix_items_parent_item_id", "parent_item_id"),
+        Index("ix_items_barcode", "barcode"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     code = Column(String(50), unique=True, nullable=False)
     name = Column(String(200), unique=True, nullable=False)
@@ -202,6 +209,7 @@ class Item(Base):
 
 class ItemPrice(Base):
     __tablename__ = "item_prices"
+    __table_args__ = (Index("ix_item_prices_item_id", "item_id"),)
     id = Column(Integer, primary_key=True, index=True)
     item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
     name = Column(String(50), nullable=False)
@@ -294,6 +302,14 @@ class SalesPerson(Base):
 # ─── Pembelian ────────────────────────────────────────────────────────────────
 class Purchase(Base):
     __tablename__ = "purchases"
+    __table_args__ = (
+        Index("ix_purchases_branch_id", "branch_id"),
+        Index("ix_purchases_supplier_id", "supplier_id"),
+        Index("ix_purchases_target_branch_id", "target_branch_id"),
+        Index("ix_purchases_from_po_id", "from_po_id"),
+        Index("ix_purchases_created_by", "created_by"),
+        Index("ix_purchases_branch_date", "branch_id", "date"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     number = Column(String(50), unique=True, nullable=False)
     date = Column(Date, nullable=False)
@@ -327,6 +343,10 @@ class Purchase(Base):
 
 class PurchaseItem(Base):
     __tablename__ = "purchase_items"
+    __table_args__ = (
+        Index("ix_purchase_items_purchase_id", "purchase_id"),
+        Index("ix_purchase_items_item_id", "item_id"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     purchase_id = Column(Integer, ForeignKey("purchases.id"), nullable=False)
     item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
@@ -372,6 +392,14 @@ class PurchaseReturnItem(Base):
 # ─── Penjualan ────────────────────────────────────────────────────────────────
 class Sale(Base):
     __tablename__ = "sales"
+    __table_args__ = (
+        Index("ix_sales_branch_id", "branch_id"),
+        Index("ix_sales_customer_id", "customer_id"),
+        Index("ix_sales_salesperson_id", "salesperson_id"),
+        Index("ix_sales_shift_id", "shift_id"),
+        Index("ix_sales_created_by", "created_by"),
+        Index("ix_sales_branch_date", "branch_id", "date"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     number = Column(String(50), unique=True, nullable=False)
     date = Column(Date, nullable=False)
@@ -400,6 +428,10 @@ class Sale(Base):
 
 class SaleItem(Base):
     __tablename__ = "sale_items"
+    __table_args__ = (
+        Index("ix_sale_items_sale_id", "sale_id"),
+        Index("ix_sale_items_item_id", "item_id"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     sale_id = Column(Integer, ForeignKey("sales.id"), nullable=False)
     item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
@@ -442,6 +474,11 @@ class SaleReturnItem(Base):
 # ─── Persediaan ───────────────────────────────────────────────────────────────
 class StockMovement(Base):
     __tablename__ = "stock_movements"
+    __table_args__ = (
+        Index("ix_stock_movements_branch_id", "branch_id"),
+        Index("ix_stock_movements_item_id", "item_id"),
+        Index("ix_stock_movements_item_date", "item_id", "date"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     date = Column(Date, nullable=False)
@@ -712,6 +749,11 @@ class Warehouse(Base):
 class WarehouseStock(Base):
     """Stok per item per gudang"""
     __tablename__ = "warehouse_stocks"
+    __table_args__ = (
+        Index("ix_warehouse_stocks_warehouse_id", "warehouse_id"),
+        Index("ix_warehouse_stocks_item_id", "item_id"),
+        Index("ix_warehouse_stocks_wh_item", "warehouse_id", "item_id"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
     item_id = Column(Integer, ForeignKey("items.id"), nullable=False)

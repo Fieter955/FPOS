@@ -41,30 +41,32 @@ Base.metadata.create_all(bind=engine)
 
 # ─── Seed admin & Super Admin Fieter ──────────────────────────────────────────
 def seed_admin():
+    """Seed akun awal HANYA jika belum ada.
+
+    PENTING: JANGAN me-reset password akun yang sudah ada di sini. Versi lama
+    menimpa password 'admin'/'Fieter' tiap boot, sehingga client tidak pernah
+    bisa benar-benar mengganti password (selalu balik tiap restart).
+    Password vendor 'Fieter' diambil dari env VENDOR_BOOTSTRAP_PASSWORD bila ada.
+    """
     db = SessionLocal()
     try:
-        admin = db.query(models.User).filter(models.User.username == "admin").first()
-        if not admin:
+        if not db.query(models.User).filter(models.User.username == "admin").first():
             db.add(models.User(
                 username="admin", full_name="Administrator",
                 hashed_password=get_password_hash("admin123"),
                 role="admin", is_active=True
             ))
-        else:
-            admin.hashed_password = get_password_hash("admin123")
-            
-        fieter = db.query(models.User).filter(models.User.username == "Fieter").first()
-        if not fieter:
+            print("✓ Akun 'admin' dibuat (default: admin123 — SEGERA GANTI password).")
+
+        if not db.query(models.User).filter(models.User.username == "Fieter").first():
+            vendor_pw = os.environ.get("VENDOR_BOOTSTRAP_PASSWORD") or "Fieter098"
             db.add(models.User(
                 username="Fieter", full_name="Super Admin",
-                hashed_password=get_password_hash("Fieter098"),
+                hashed_password=get_password_hash(vendor_pw),
                 role="admin", is_active=True
             ))
-            print("👑 ✓ Akun Fieter BERHASIL DIBUAT (Fieter / Fieter098)")
-        else:
-            fieter.hashed_password = get_password_hash("Fieter098")
-            print("👑 ✓ Akun Fieter SUDAH ADA (Password di-reset ke Fieter098)")
-            
+            print("👑 ✓ Akun Fieter dibuat.")
+
         db.commit()
     except Exception as e:
         print(f"⚠️ Gagal membuat akun otomatis: {e}")
@@ -145,6 +147,94 @@ def run_migrations():
     add_col("item_supplier", "ppn_type", "TEXT DEFAULT 'included'")
     add_col("item_supplier", "ppn_percent", "REAL DEFAULT 0")
 
+    # ─── Index performa (idempotent; aman dijalankan berulang) ─────────────────
+    # SQLite TIDAK meng-index foreign key otomatis → tanpa ini, filter/join jadi
+    # full table scan. Nama mengikuti konvensi SQLAlchemy "ix_<tabel>_<kolom>"
+    # agar konsisten dengan index yang dibuat create_all pada instalasi baru.
+    def add_index(name, table, cols):
+        try:
+            c.execute(f"CREATE INDEX IF NOT EXISTS {name} ON {table} ({cols})")
+        except Exception as e:
+            print(f"  ⚠ Skip index {name}: {e}")
+
+    # Penjualan (tabel tersibuk)
+    add_index("ix_sales_branch_id", "sales", "branch_id")
+    add_index("ix_sales_customer_id", "sales", "customer_id")
+    add_index("ix_sales_salesperson_id", "sales", "salesperson_id")
+    add_index("ix_sales_shift_id", "sales", "shift_id")
+    add_index("ix_sales_created_by", "sales", "created_by")
+    add_index("ix_sales_branch_date", "sales", "branch_id, date")
+    add_index("ix_sale_items_sale_id", "sale_items", "sale_id")
+    add_index("ix_sale_items_item_id", "sale_items", "item_id")
+    add_index("ix_sale_returns_sale_id", "sale_returns", "sale_id")
+    add_index("ix_sale_return_items_return_id", "sale_return_items", "return_id")
+    add_index("ix_sale_return_items_item_id", "sale_return_items", "item_id")
+    # Pembelian
+    add_index("ix_purchases_branch_id", "purchases", "branch_id")
+    add_index("ix_purchases_supplier_id", "purchases", "supplier_id")
+    add_index("ix_purchases_target_branch_id", "purchases", "target_branch_id")
+    add_index("ix_purchases_from_po_id", "purchases", "from_po_id")
+    add_index("ix_purchases_created_by", "purchases", "created_by")
+    add_index("ix_purchases_branch_date", "purchases", "branch_id, date")
+    add_index("ix_purchase_items_purchase_id", "purchase_items", "purchase_id")
+    add_index("ix_purchase_items_item_id", "purchase_items", "item_id")
+    add_index("ix_purchase_returns_purchase_id", "purchase_returns", "purchase_id")
+    add_index("ix_purchase_return_items_return_id", "purchase_return_items", "return_id")
+    add_index("ix_purchase_return_items_item_id", "purchase_return_items", "item_id")
+    # Item & master
+    add_index("ix_items_category_id", "items", "category_id")
+    add_index("ix_items_brand_id", "items", "brand_id")
+    add_index("ix_items_unit_id", "items", "unit_id")
+    add_index("ix_items_parent_item_id", "items", "parent_item_id")
+    add_index("ix_items_barcode", "items", "barcode")
+    add_index("ix_item_prices_item_id", "item_prices", "item_id")
+    add_index("ix_item_group_discounts_item_id", "item_group_discounts", "item_id")
+    add_index("ix_item_group_discounts_group_id", "item_group_discounts", "group_id")
+    add_index("ix_item_supplier_supplier_id", "item_supplier", "supplier_id")
+    add_index("ix_customers_group_id", "customers", "group_id")
+    # Persediaan & gudang
+    add_index("ix_stock_movements_branch_id", "stock_movements", "branch_id")
+    add_index("ix_stock_movements_item_id", "stock_movements", "item_id")
+    add_index("ix_stock_movements_item_date", "stock_movements", "item_id, date")
+    add_index("ix_warehouse_stocks_warehouse_id", "warehouse_stocks", "warehouse_id")
+    add_index("ix_warehouse_stocks_item_id", "warehouse_stocks", "item_id")
+    add_index("ix_warehouse_stocks_wh_item", "warehouse_stocks", "warehouse_id, item_id")
+    add_index("ix_warehouses_branch_id", "warehouses", "branch_id")
+    add_index("ix_warehouse_transfers_from_wh", "warehouse_transfers", "from_warehouse_id")
+    add_index("ix_warehouse_transfers_to_wh", "warehouse_transfers", "to_warehouse_id")
+    add_index("ix_wh_transfer_items_transfer_id", "warehouse_transfer_items", "transfer_id")
+    add_index("ix_wh_transfer_items_item_id", "warehouse_transfer_items", "item_id")
+    # Akuntansi
+    add_index("ix_cash_transactions_account_id", "cash_transactions", "account_id")
+    add_index("ix_cash_transactions_branch_id", "cash_transactions", "branch_id")
+    add_index("ix_journals_branch_id", "journals", "branch_id")
+    add_index("ix_journals_created_by", "journals", "created_by")
+    add_index("ix_jel_journal_id", "journal_entry_lines", "journal_id")
+    add_index("ix_jel_debit_account_id", "journal_entry_lines", "debit_account_id")
+    add_index("ix_jel_credit_account_id", "journal_entry_lines", "credit_account_id")
+    add_index("ix_branch_deposits_branch_id", "branch_deposits", "branch_id")
+    # Shift, audit, lisensi, print
+    add_index("ix_shifts_user_id", "shifts", "user_id")
+    add_index("ix_shifts_branch_id", "shifts", "branch_id")
+    add_index("ix_audit_logs_user_id", "audit_logs", "user_id")
+    add_index("ix_users_branch_id", "users", "branch_id")
+    add_index("ix_login_attempts_username", "login_attempts", "username")
+    add_index("ix_print_jobs_status", "print_jobs", "status")
+    add_index("ix_license_payments_license_id", "license_payments", "license_id")
+    # Konsinyasi
+    add_index("ix_cons_in_items_cons_id", "consignment_in_items", "consignment_id")
+    add_index("ix_cons_in_items_item_id", "consignment_in_items", "item_id")
+    add_index("ix_cons_out_items_cons_id", "consignment_out_items", "consignment_id")
+    add_index("ix_cons_out_items_item_id", "consignment_out_items", "item_id")
+    # Surat jalan, tukar tambah, proyek, konversi
+    add_index("ix_delivery_notes_sale_id", "delivery_notes", "sale_id")
+    add_index("ix_delivery_notes_customer_id", "delivery_notes", "customer_id")
+    add_index("ix_delivery_note_items_delivery_id", "delivery_note_items", "delivery_id")
+    add_index("ix_trade_ins_customer_id", "trade_ins", "customer_id")
+    add_index("ix_trade_ins_branch_id", "trade_ins", "branch_id")
+    add_index("ix_ti_return_items_trade_in_id", "trade_in_return_items", "trade_in_id")
+    add_index("ix_ti_new_items_trade_in_id", "trade_in_new_items", "trade_in_id")
+    add_index("ix_unit_conversions_item_id", "unit_conversions", "item_id")
 
     conn.commit()
     conn.close()
@@ -262,10 +352,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.APP_NAME, version=settings.APP_VERSION, lifespan=lifespan)
 
+# CORS: auth memakai Bearer token di header Authorization (BUKAN cookie), maka
+# allow_credentials=False — ini menghapus kombinasi berbahaya ["*"] + credentials.
+# Origin dibaca dari settings.ALLOWED_ORIGINS (pisah koma). Tanpa credentials,
+# header Authorization tetap berfungsi lintas-origin meski origin "*".
+_allowed_origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()] or ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_allowed_origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -513,7 +608,9 @@ if __name__ == "__main__":
     cek_dan_tanya_autostart()
 
     PORT = 8010
-    PUBLIK = True
+    # AMAN secara default: tailscale "serve" (hanya tailnet). Set TAILSCALE_PUBLIC=true
+    # di .env HANYA jika cabang berada di luar tailnet dan benar-benar butuh akses publik.
+    PUBLIK = settings.TAILSCALE_PUBLIC
 
     def is_server_running(port: int) -> bool:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -521,7 +618,9 @@ if __name__ == "__main__":
 
     def jalankan_server():
         jalankan_tailscale(PORT, PUBLIK)
-        uvicorn.run(app, host="0.0.0.0", port=PORT)
+        # Bind ke localhost saja. Tailscale serve/funnel & WebView lokal mengakses
+        # lewat 127.0.0.1, jadi app tidak perlu terekspos di seluruh interface (0.0.0.0).
+        uvicorn.run(app, host="127.0.0.1", port=PORT)
 
     def maximize_benar(window):
         time.sleep(0.5) 

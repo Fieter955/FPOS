@@ -1,3 +1,5 @@
+import secrets
+from pathlib import Path
 from pydantic_settings import BaseSettings
 from typing import Optional
 
@@ -7,9 +9,16 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./ipos.db"
 
     # Security
-    SECRET_KEY: str = "ipos-super-secret-key-change-in-production-2025"
+    # JANGAN taruh nilai rahasia di sini. SECRET_KEY di-resolve per-instalasi
+    # di bawah (_resolve_secret_key) menjadi kunci unik per mesin.
+    SECRET_KEY: str = ""
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
+
+    # ── Network / Tailscale ───────────────────────────────────────────────────
+    # False = tailscale "serve"  → HANYA device di tailnet yang sama (AMAN, default)
+    # True  = tailscale "funnel" → TERBUKA ke internet publik (pakai hanya jika perlu)
+    TAILSCALE_PUBLIC: bool = False
 
     # App
     APP_NAME: str = "iPos 5.0"
@@ -58,4 +67,39 @@ class Settings(BaseSettings):
         extra = "ignore"
 
 
+# Nilai SECRET_KEY lama yang pernah hardcoded / bocor di git — wajib diganti otomatis.
+_INSECURE_SECRETS = {
+    "",
+    "ipos-super-secret-key-change-in-production-2025",
+    "your_secret_key_here",
+}
+# Disimpan satu folder dengan ipos.db (CWD = BASE_DIR setelah os.chdir), di luar git.
+_SECRET_KEY_FILE = Path("secret.key")
+
+
+def _resolve_secret_key(configured: str) -> str:
+    """Pastikan tiap instalasi punya SECRET_KEY unik & rahasia.
+
+    Jika SECRET_KEY belum diisi (atau masih nilai default lama yang sudah bocor),
+    generate kunci acak SEKALI lalu simpan ke `secret.key` (tidak ikut git) agar
+    konsisten antar-restart. Hasil: JWT satu client tidak berlaku di client lain
+    dan tidak bisa ditebak.
+    """
+    if configured and configured not in _INSECURE_SECRETS:
+        return configured
+    try:
+        if _SECRET_KEY_FILE.exists():
+            existing = _SECRET_KEY_FILE.read_text(encoding="utf-8").strip()
+            if existing:
+                return existing
+        new_key = secrets.token_urlsafe(48)
+        _SECRET_KEY_FILE.write_text(new_key, encoding="utf-8")
+        return new_key
+    except Exception:
+        # Fallback terakhir: kunci ephemeral (token invalid saat restart,
+        # tapi TIDAK PERNAH memakai kunci default yang bisa ditebak).
+        return secrets.token_urlsafe(48)
+
+
 settings = Settings()
+settings.SECRET_KEY = _resolve_secret_key(settings.SECRET_KEY)

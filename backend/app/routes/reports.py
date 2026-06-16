@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
-from sqlalchemy.orm import Session
-from sqlalchemy import func, String, cast
+from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy import func
 from typing import Optional
 from datetime import date
 from dateutil.relativedelta import relativedelta
@@ -27,7 +27,7 @@ def get_local_date():
 
 
 def _is_admin_user(user: models.User) -> bool:
-    return "admin" in (user.role or "")
+    return (user.role or "") == "admin"
 
 
 def _require_financial_report_access(user: models.User):
@@ -102,7 +102,8 @@ def get_dashboard_data(db: Session = Depends(get_db), current_user: models.User 
         func.sum(models.SaleItem.qty).label("total_qty"),
         func.sum(models.SaleItem.total).label("total_amount")
     ).filter(
-        cast(models.Sale.date, String).like(f"%{today_local.strftime('%Y-%m')}%"),
+        models.Sale.date >= today_local.replace(day=1),
+        models.Sale.date < today_local.replace(day=1) + relativedelta(months=1),
         models.Sale.status != "cancelled"
     ).group_by(models.Item.id).order_by(func.sum(models.SaleItem.qty).desc()).limit(5).all()
     
@@ -119,15 +120,20 @@ def get_dashboard_data(db: Session = Depends(get_db), current_user: models.User 
         "customer": s.customer.name if s.customer else "Umum",
         "total": s.total, 
         "status": s.status
-    } for s in get_query(db, models.Sale, current_user).order_by(models.Sale.id.desc()).limit(5).all()]
+    } for s in get_query(db, models.Sale, current_user).options(
+        joinedload(models.Sale.customer)
+    ).order_by(models.Sale.id.desc()).limit(5).all()]
 
     # Grafik 6 Bulan Terakhir (Filter Cabang)
     monthly = []
     for i in range(5, -1, -1):
         d = today_local - relativedelta(months=i)
-        m_str = d.strftime("%Y-%m")
+        month_start = d.replace(day=1)
+        next_month = month_start + relativedelta(months=1)
+        # Range tanggal (ramah index ix_sales_branch_date) — bukan cast().like() yang full-scan.
         amt = get_query(db, models.Sale, current_user).filter(
-            cast(models.Sale.date, String).like(f"%{m_str}%"),
+            models.Sale.date >= month_start,
+            models.Sale.date < next_month,
             models.Sale.status != "cancelled"
         ).with_entities(func.sum(models.Sale.total)).scalar() or 0
         monthly.append({"month": d.strftime("%b %Y"), "amount": float(amt)})
@@ -193,7 +199,9 @@ def profit_loss(
 # ─── 3. HUTANG & PIUTANG ──────────────────────────────────────────────────────
 @router.get("/receivables")
 def receivables(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    sales = get_query(db, models.Sale, current_user).filter(
+    sales = get_query(db, models.Sale, current_user).options(
+        joinedload(models.Sale.customer)
+    ).filter(
         models.Sale.status.in_(["unpaid", "partial"])
     ).all()
     return [{
@@ -214,8 +222,8 @@ def payables(db: Session = Depends(get_db), current_user: models.User = Depends(
     )
     if current_user.active_branch_id is not None:
         q = q.filter(models.Purchase.branch_id == current_user.active_branch_id)
-    purchases = q.all()
-    
+    purchases = q.options(joinedload(models.Purchase.supplier)).all()
+
     return [{
         "id": p.id,
         "date": p.date,
@@ -238,7 +246,10 @@ def get_sales_detailed(
     if not start_date: start_date = today_local.replace(day=1)
     if not end_date: end_date = today_local
 
-    sales = get_query(db, models.Sale, current_user).filter(
+    sales = get_query(db, models.Sale, current_user).options(
+        joinedload(models.Sale.customer),
+        selectinload(models.Sale.items).joinedload(models.SaleItem.item),
+    ).filter(
         models.Sale.date >= start_date,
         models.Sale.date <= end_date,
         models.Sale.status != "cancelled"

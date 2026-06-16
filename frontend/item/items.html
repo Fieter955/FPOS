@@ -374,6 +374,9 @@
               if (c.id === "popUpContainer") {
                 setupSupSearch();
                 populateDiscountGroupSelect();
+                // Modal baru saja masuk DOM: isi fKat/fMerek/fSat yang belum
+                // sempat terisi saat refreshSelects() awal (pakai cache, tanpa request baru).
+                refreshSelects();
               }
             });
         });
@@ -648,34 +651,38 @@
           cachedApi("/items/brands"),
           cachedApi("/items/units"),
         ]);
-        masterUnits = units;
+        masterUnits = units || [];
+        // Catatan: filterKat statis di items.html, sedangkan fKat/fMerek/fSat ada di
+        // popUp.html (di-inject loadComponents saat idle). refreshSelects() bisa berjalan
+        // sebelum modal termuat, jadi setiap select dijaga null-safe.
+        const catOptions = (cats || [])
+          .map((c) => `<option value="${c.id}">${c.name}</option>`)
+          .join("");
         const fk = document.getElementById("filterKat");
-        fk.innerHTML =
-          '<option value="">Semua Kategori</option>' +
-          cats
-            .map((c) => `<option value="${c.id}">${c.name}</option>`)
-            .join("");
+        if (fk)
+          fk.innerHTML =
+            '<option value="">Semua Kategori</option>' + catOptions;
         const fKat = document.getElementById("fKat");
-        fKat.innerHTML =
-          '<option value="">-- Pilih Jenis --</option>' +
-          cats
-            .map((c) => `<option value="${c.id}">${c.name}</option>`)
-            .join("");
+        if (fKat)
+          fKat.innerHTML =
+            '<option value="">-- Pilih Jenis --</option>' + catOptions;
         const fMerek = document.getElementById("fMerek");
-        fMerek.innerHTML =
-          '<option value="">-- Pilih Merek --</option>' +
-          brands
-            .map((b) => `<option value="${b.id}">${b.name}</option>`)
-            .join("");
+        if (fMerek)
+          fMerek.innerHTML =
+            '<option value="">-- Pilih Merek --</option>' +
+            (brands || [])
+              .map((b) => `<option value="${b.id}">${b.name}</option>`)
+              .join("");
         const fSat = document.getElementById("fSat");
-        fSat.innerHTML =
-          '<option value="">-- Pilih Satuan --</option>' +
-          units
-            .map(
-              (u) =>
-                `<option value="${u.id}">${u.name}${u.abbreviation ? " (" + u.abbreviation + ")" : ""}</option>`,
-            )
-            .join("");
+        if (fSat)
+          fSat.innerHTML =
+            '<option value="">-- Pilih Satuan --</option>' +
+            (units || [])
+              .map(
+                (u) =>
+                  `<option value="${u.id}">${u.name}${u.abbreviation ? " (" + u.abbreviation + ")" : ""}</option>`,
+              )
+              .join("");
       }
 
       // Token render: tiap loadItems menaikkannya; render bertahap berhenti bila tokennya basi
@@ -1811,7 +1818,7 @@
           .map((row, idx) => {
             const isBase = row.is_base,
               isDraft = row.is_draft;
-            const unitOptions = masterUnits
+            const unitOptions = (masterUnits || [])
               .map(
                 (u) =>
                   `<option value="${u.id}" ${parseInt(row.child_unit_id) === u.id ? "selected" : ""}>${u.name}${u.abbreviation ? " (" + u.abbreviation + ")" : ""}</option>`,

@@ -64,7 +64,7 @@ def get_current_user(request: Request, token: str = Depends(oauth2_scheme), db: 
     # 🔥 LOGIKA PENCEGAT CABANG SECARA GLOBAL 🔥
     requested_branch = request.headers.get("X-Branch-ID")
     
-    if "admin" in user.role:
+    if (user.role or "") == "admin":
         if requested_branch: # Jika admin pilih cabang tertentu
             try:
                 b_id = int(requested_branch)
@@ -87,7 +87,7 @@ def get_current_user(request: Request, token: str = Depends(oauth2_scheme), db: 
 
 
 def require_admin(current_user: models.User = Depends(get_current_user)):
-    if "admin" not in current_user.role:
+    if (current_user.role or "") != "admin":
         raise HTTPException(status_code=403, detail="Akses ditolak: hanya admin")
     return current_user
 
@@ -102,8 +102,9 @@ def write_audit(db: Session, user_id: int, action: str, table: str,
         )
         db.add(log)
         db.flush()
-    except Exception:
-        pass
+    except Exception as e:
+        # Jangan diam-diam menelan kegagalan audit — jejak keamanan bisa hilang.
+        print(f"⚠️ Gagal menulis audit log (user={user_id}, action={action}, table={table}): {e}")
 
 
 # 👇 INI DIA FUNGSI AJAIBNYA! (Tambahkan di paling bawah auth.py) 👇

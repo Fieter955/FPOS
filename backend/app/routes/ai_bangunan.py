@@ -108,11 +108,43 @@ MATERIAL_FORMULAS = {
 }
 
 
+import ast as _ast
+import operator as _op
+
+# Evaluator aritmetika aman (pengganti eval). Hanya izinkan angka, nama parameter,
+# dan operator + - * / % ** serta tanda unary — TANPA akses atribut/builtins/fungsi,
+# sehingga tidak bisa dipakai untuk code injection.
+_ALLOWED_BINOPS = {
+    _ast.Add: _op.add, _ast.Sub: _op.sub, _ast.Mult: _op.mul,
+    _ast.Div: _op.truediv, _ast.Mod: _op.mod, _ast.Pow: _op.pow,
+}
+_ALLOWED_UNARY = {_ast.UAdd: _op.pos, _ast.USub: _op.neg}
+
+
+def _safe_eval_node(node, params):
+    if isinstance(node, _ast.Expression):
+        return _safe_eval_node(node.body, params)
+    if isinstance(node, _ast.Constant) and isinstance(node.value, (int, float)):
+        return float(node.value)
+    if isinstance(node, _ast.Name):
+        if node.id in params:
+            return float(params[node.id])
+        raise ValueError(f"variabel tidak dikenal: {node.id}")
+    if isinstance(node, _ast.BinOp) and type(node.op) in _ALLOWED_BINOPS:
+        return _ALLOWED_BINOPS[type(node.op)](
+            _safe_eval_node(node.left, params), _safe_eval_node(node.right, params)
+        )
+    if isinstance(node, _ast.UnaryOp) and type(node.op) in _ALLOWED_UNARY:
+        return _ALLOWED_UNARY[type(node.op)](_safe_eval_node(node.operand, params))
+    raise ValueError("ekspresi tidak diizinkan")
+
+
 def evaluate_formula(formula: str, params: dict) -> float:
-    """Evaluasi formula material dengan parameter dimensi"""
+    """Evaluasi formula material dengan parameter dimensi (aman, tanpa eval)."""
     safe_params = {k: float(v) for k, v in params.items() if v}
     try:
-        return eval(formula, {"__builtins__": {}}, safe_params)
+        tree = _ast.parse(formula, mode="eval")
+        return float(_safe_eval_node(tree, safe_params))
     except Exception:
         return 0.0
 

@@ -225,22 +225,28 @@ import shutil
 @router.post("/upload-proof")
 async def upload_payment_proof(
     file: UploadFile = File(...), 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(get_current_user),
 ):
-    """Menerima foto bukti transfer dari pemilik toko"""
+    """Menerima foto bukti transfer dari pemilik toko (wajib login)."""
     lic = get_or_create_trial(db)
     
     # Buat folder khusus untuk menyimpan bukti transfer
     upload_dir = "dist/uploads/billing"
     os.makedirs(upload_dir, exist_ok=True)
     
-    # Simpan file gambar
-    file_extension = file.filename.split(".")[-1]
-    safe_filename = f"proof_{datetime.now().strftime('%Y%m%d%H%M%S')}.{file_extension}"
+    # Validasi ekstensi (whitelist) — cegah upload file berbahaya / path traversal.
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower()
+    if ext not in {"jpg", "jpeg", "png", "webp", "pdf"} or not ext.isalnum():
+        raise HTTPException(400, "Tipe file tidak diizinkan. Hanya: jpg, jpeg, png, webp, pdf")
+    safe_filename = f"proof_{datetime.now().strftime('%Y%m%d%H%M%S')}.{ext}"
     file_path = os.path.join(upload_dir, safe_filename)
-    
+
+    contents = await file.read()
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(400, "Ukuran file maksimal 5 MB")
     with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        buffer.write(contents)
         
     # Catat di database
     payment = models.LicensePayment(
@@ -268,6 +274,13 @@ def trigger_kill_switch(data: dict, db: Session = Depends(get_db), user: models.
 # 👇 UBAH BAGIAN INI 👇
     if user.username.lower() != "fieter":
         raise HTTPException(403, "Akses ditolak! Hanya Pemilik Sistem yang bisa melakukan ini.")
+    # Lapisan kedua OPSIONAL: bila VENDOR_KILL_SWITCH_TOKEN diset di environment,
+    # request WAJIB menyertakan vendor_token yang cocok (defense-in-depth).
+    _vendor_token = os.environ.get("VENDOR_KILL_SWITCH_TOKEN")
+    if _vendor_token:
+        import hmac
+        if not hmac.compare_digest(str(data.get("vendor_token", "")), _vendor_token):
+            raise HTTPException(403, "Token vendor tidak valid.")
     # 👆 SAMPAI SINI 👆
         
     action = data.get("action") # "warning" atau "block" atau "ok"

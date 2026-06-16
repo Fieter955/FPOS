@@ -1,0 +1,39 @@
+# ── Rahasia & environment ──────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+*.key
+secret.key
+instance/
+
+# ── Database & backup (jangan commit data client) ───────────────────────────
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+backups/
+
+# ── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# ── Build artifacts (PyInstaller, dll) ──────────────────────────────────────
+build/
+dist/
+*.spec
+
+# ── Log & runtime ────────────────────────────────────────────────────────────
+error_log.txt
+*.log
+.autostart_configured
+
+# ── Editor / OS ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

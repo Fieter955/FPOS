@@ -20,7 +20,7 @@ router = APIRouter()
 
 
 def _is_admin_user(user: models.User) -> bool:
-    return "admin" in (user.role or "")
+    return (user.role or "") == "admin"
 
 
 def _serialize_item_for_user(item: models.Item, current_user: models.User):

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from pydantic import BaseModel
 from typing import Optional
 from datetime import date
@@ -40,11 +40,14 @@ def get_movements(
     if end_date: q = q.filter(models.StockMovement.date <= end_date)
     if type: q = q.filter(models.StockMovement.type == type)
     
-    movements = q.order_by(models.StockMovement.id.desc()).offset(skip).limit(limit).all()
-    
+    # Eager-load item agar tidak N+1 (sebelumnya 1 query per baris mutasi).
+    movements = (q.options(joinedload(models.StockMovement.item))
+                  .order_by(models.StockMovement.id.desc())
+                  .offset(skip).limit(limit).all())
+
     result = []
     for m in movements:
-        item = db.query(models.Item).get(m.item_id)
+        item = m.item
         result.append({
             "id": m.id, 
             "date": str(m.date),
