@@ -2,7 +2,15 @@
   "permissions": {
     "allow": [
       "Bash(grep -E \"\\\\.py$\")",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(python -c ' *)",
+      "Bash(PYTHONIOENCODING=utf-8 python -c ' *)",
+      "Bash(command -v node)",
+      "Bash(node -e ' *)",
+      "Bash(node --check _items_check.js)",
+      "Bash(rm -f _items_check.js)",
+      "Bash(node --check _pos_check.js)",
+      "Bash(rm -f _pos_check.js)"
     ]
   }
 }

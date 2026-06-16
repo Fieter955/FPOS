@@ -125,6 +125,16 @@ function requireAuth() {
   if (!getToken()) window.location.href = "/";
 }
 
+// Debounce: tunda eksekusi `fn` sampai `ms` ms berlalu tanpa panggilan baru.
+// Dipakai untuk input pencarian agar tidak memicu request/render tiap ketukan huruf.
+function debounce(fn, ms = 300) {
+  let t;
+  return function (...args) {
+    clearTimeout(t);
+    t = setTimeout(() => fn.apply(this, args), ms);
+  };
+}
+
 function showToast(msg, type = "success") {
   document.getElementById("_t")?.remove();
   const c = {

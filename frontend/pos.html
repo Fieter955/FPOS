@@ -1322,7 +1322,9 @@
           return mc && mq;
         });
         kbFocusIndex = -1;
-        renderItems(currentFilteredItems);
+        // Filter di atas sinkron → currentFilteredItems selalu fresh (untuk Enter & navigasi panah).
+        // Render grid (DOM berat) di-debounce agar tidak rebuild ratusan kartu tiap ketukan huruf.
+        debouncedRenderItems(currentFilteredItems);
       }
 
       function renderItems(items) {
@@ -1345,9 +1347,13 @@
           .join("");
       }
 
+      const debouncedRenderItems = debounce(renderItems, 120);
+
       let pendingPriceNormal = 0;
       let pendingPriceDiskon = 0;
       let hasDiskon = false;
+      // Barang yang harga grupnya dibatalkan karena di bawah modal (untuk peringatan)
+      let groupPriceBlockedItems = [];
 
       function getActiveDiscountGroup() {
         const groupId = document.getElementById("groupSel")?.value;
@@ -1362,50 +1368,122 @@
         const group = getActiveDiscountGroup();
         if (!group) return basePrice;
 
-        let calculatedPrice = basePrice;
         const groupName = String(group.name || "").toLowerCase().trim();
-        
-        // Cari harga spesifik grup (Case Insensitive)
+        let hasGroupSetting = false;
+
+        // (1) LEVEL HARGA dulu: harga grup absolut dipakai sebagai harga DASAR.
+        let levelPrice = basePrice;
         const specPrice = (item.prices || []).find(
           (p) => String(p.name || "").toLowerCase().trim() === groupName,
         );
-        
         if (specPrice && parseFloat(specPrice.price) > 0) {
-          calculatedPrice = parseFloat(specPrice.price);
-        } else {
-          // Jika tidak ada harga spesifik, gunakan persen default grup
-          const discountPercent = parseFloat(group.discount_percent || 0) || 0;
-          if (discountPercent > 0) {
-            calculatedPrice = basePrice * (1 - discountPercent / 100);
+          levelPrice = parseFloat(specPrice.price);
+          hasGroupSetting = true;
+        }
+
+        // (2) Lalu DILANJUT "Potongan Harga Jual": diskon bertingkat di ATAS
+        //     harga Level Harga — bukan pengganti, tapi lanjutan.
+        let discountedPrice = levelPrice;
+        const gd = (item.group_discounts || []).find(
+          (d) => String(d.group_id) === String(group.id),
+        );
+        if (gd) {
+          let price = levelPrice;
+          [gd.disc1, gd.disc2, gd.disc3, gd.disc4].forEach((d) => {
+            const pct = parseFloat(d) || 0;
+            if (pct > 0) price = price * (1 - pct / 100);
+          });
+          if (price < levelPrice) {
+            discountedPrice = price;
+            hasGroupSetting = true;
           }
         }
 
-        // 2. Cegah Jual Rugi (Di bawah HPP) -> Batal Diskon (kembali ke normal)
-        // Gunakan supplier-specific HPP jika ada
-        let hpp = parseFloat(item.buy_price) || 0;
+        // Tidak ada setelan grup pada barang ini -> tidak ada diskon.
+        // (Persen di data grup pelanggan HANYA referensi, bukan auto-diskon.)
+        if (!hasGroupSetting) return basePrice;
+
+        // (3) Penjaga anti-rugi (di bawah HPP) — BERTINGKAT:
+        //   a) harga diskon penuh masih >= HPP -> pakai harga diskon.
+        //   b) Potongan bikin < HPP, tapi harga Level Harga >= HPP
+        //      -> lewati diskon Potongan, pakai harga Level Harga.
+        //   c) harga Level Harga pun < HPP -> peringatan + pakai harga normal.
+        // Pakai min_price (dikirim backend ke SEMUA role) agar konsisten admin & kasir.
+        let hpp = parseFloat(item.min_price ?? item.buy_price) || 0;
         if (supplierId) {
-            const sd = (item.supplier_details || []).find(s => s.supplier_id === supplierId);
-            if (sd) hpp = sd.buy_price;
+          const sd = (item.supplier_details || []).find(
+            (s) => s.supplier_id === supplierId,
+          );
+          if (sd && parseFloat(sd.buy_price) > 0) hpp = parseFloat(sd.buy_price);
         }
 
-        if (calculatedPrice < (hpp - 0.01)) {
-          console.warn(`Diskon untuk ${item.name} dibatalkan karena di bawah HPP (${calculatedPrice} < ${hpp})`);
-          return basePrice;
-        }
+        if (hpp <= 0) return Math.round(discountedPrice); // HPP tak diketahui
+        if (discountedPrice >= hpp - 0.01) return Math.round(discountedPrice); // (a)
+        if (levelPrice >= hpp - 0.01) return Math.round(levelPrice); // (b)
 
-        return Math.round(calculatedPrice);
+        // (c) Level Harga pun di bawah HPP -> catat untuk peringatan, pakai harga normal.
+        groupPriceBlockedItems.push(item.name);
+        return basePrice;
+      }
+
+      // Harga grosir/tiering berdasarkan JUMLAH beli. Tier disimpan sebagai
+      // ItemPrice bernama "Grosir" dengan min_qty (lihat tab "Level Jumlah").
+      // Mengembalikan harga satuan terbaik (terendah) bila qty memenuhi tier.
+      function applyTierPrice(item, qty, basePrice) {
+        const q = parseFloat(qty) || 0;
+        const tiers = (item.prices || [])
+          .filter(
+            (p) =>
+              String(p.name || "").toLowerCase().trim() === "grosir" &&
+              parseFloat(p.min_qty) > 0 &&
+              parseFloat(p.price) > 0,
+          )
+          .sort((a, b) => parseFloat(b.min_qty) - parseFloat(a.min_qty));
+        // tier dgn min_qty terbesar yang masih <= qty
+        const tier = tiers.find((t) => q >= parseFloat(t.min_qty));
+        if (tier)
+          return Math.min(basePrice, Math.round(parseFloat(tier.price)));
+        return basePrice;
+      }
+
+      // Harga satuan final 1 baris keranjang: harga grup/level harga DULU,
+      // lalu harga grosir berdasarkan jumlah (ambil yang termurah utk pelanggan).
+      function computeLinePrice(item, basePrice, qty, supplierId = null) {
+        const groupPrice = applyDiscountGroupPrice(item, basePrice, supplierId);
+        return applyTierPrice(item, qty, groupPrice);
+      }
+
+      function notifyGroupPriceBlocked() {
+        if (!groupPriceBlockedItems.length) return;
+        const g = getActiveDiscountGroup();
+        const uniq = [...new Set(groupPriceBlockedItems)];
+        const names =
+          uniq.slice(0, 3).join(", ") +
+          (uniq.length > 3 ? `, +${uniq.length - 3} lainnya` : "");
+        showToast(
+          `⚠️ Harga grup ${g ? g.name : ""} di bawah modal untuk ${uniq.length} barang (${names}) — tetap dipakai harga normal.`,
+          "warning",
+        );
+        groupPriceBlockedItems = [];
       }
 
       function recalcCartPricesByGroup() {
+        groupPriceBlockedItems = [];
         cart.forEach((cartItem) => {
           const item = allItems.find((i) => i.id === cartItem.id);
           if (!item) return;
           const basePrice = cartItem.original_price || item.sell_price;
-          cartItem.price = applyDiscountGroupPrice(item, basePrice, cartItem.supplier_id);
+          cartItem.price = computeLinePrice(
+            item,
+            basePrice,
+            cartItem.qty,
+            cartItem.supplier_id,
+          );
         });
 
         renderCart();
         recalc();
+        notifyGroupPriceBlocked();
       }
 
       function promptQty(id, supplierId = null) {
@@ -1483,13 +1561,12 @@
           finalPrice = pendingPriceDiskon;
         }
 
-        let appliedPrice = applyDiscountGroupPrice(item, finalPrice);
-
         // 🔥 FIX BUG KERANJANG: Pisahkan item Normal & Diskon 🔥
         const ex = cart.find(
           (c) => c.id === pendingItemId && c.original_price === finalPrice,
         );
 
+        groupPriceBlockedItems = [];
         if (ex) {
           const exIndex = cart.indexOf(ex);
           const availableQty = getAvailableCartStock(item, exIndex);
@@ -1499,6 +1576,8 @@
           }
           ex.qty = roundQty(ex.qty + qty);
           ex.stock = availableQty;
+          // Hitung ulang harga satuan utk total qty (mis. harga grosir aktif)
+          ex.price = computeLinePrice(item, finalPrice, ex.qty, ex.supplier_id);
         } else {
           const availableQty = getAvailableCartStock(item);
           if (qty > availableQty) {
@@ -1510,12 +1589,18 @@
             name: item.name,
             unit: item.unit?.abbreviation || item.unit?.name || "pcs",
             original_price: finalPrice,
-            price: appliedPrice,
+            price: computeLinePrice(
+              item,
+              finalPrice,
+              roundQty(qty),
+              pendingSupplierId,
+            ),
             qty: roundQty(qty),
             stock: availableQty,
             supplier_id: pendingSupplierId, // 🔥 Simpan ID Supplier jika dari barcode khusus
           });
         }
+        notifyGroupPriceBlocked();
 
         document.getElementById("searchInp").value = "";
         filterItems();
@@ -1643,6 +1728,15 @@
           1,
           Math.min(availableQty, roundQty(cart[i].qty + d)),
         );
+        // Harga satuan menyesuaikan jumlah (harga grosir/tier berdasarkan qty)
+        groupPriceBlockedItems = [];
+        cart[i].price = computeLinePrice(
+          item,
+          cart[i].original_price || item.sell_price,
+          cart[i].qty,
+          cart[i].supplier_id,
+        );
+        notifyGroupPriceBlocked();
         renderCart();
         recalc();
       }

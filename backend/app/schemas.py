@@ -119,8 +119,22 @@ class ItemSupplierCreate(BaseModel):
     supplier_id: int
     buy_price: float = 0
     barcode: Optional[str] = None
+    ppn_type: Optional[str] = "included"   # included | excluded
+    ppn_percent: float = 0
 
 class ItemSupplierOut(ItemSupplierCreate):
+    model_config = {"from_attributes": True}
+
+# ─── Item Group Discount (Potongan Harga Jual per grup pelanggan) ───────────────
+class ItemGroupDiscountCreate(BaseModel):
+    group_id: int
+    disc1: float = 0
+    disc2: float = 0
+    disc3: float = 0
+    disc4: float = 0
+
+class ItemGroupDiscountOut(ItemGroupDiscountCreate):
+    id: int
     model_config = {"from_attributes": True}
 
 # ─── Item ─────────────────────────────────────────────────────────────────────
@@ -141,6 +155,7 @@ class ItemCreate(BaseModel):
     supplier_ids: Optional[List[int]] = None
     supplier_settings: Optional[List[ItemSupplierCreate]] = []
     prices: Optional[List[ItemPriceCreate]] = []
+    group_discounts: Optional[List[ItemGroupDiscountCreate]] = []
 
 class ItemUpdate(BaseModel):
     name: Optional[str] = None
@@ -158,6 +173,7 @@ class ItemUpdate(BaseModel):
     supplier_ids: Optional[List[int]] = None
     supplier_settings: Optional[List[ItemSupplierCreate]] = None
     prices: Optional[List[ItemPriceCreate]] = None
+    group_discounts: Optional[List[ItemGroupDiscountCreate]] = None
 
 class ItemOut(BaseModel):
     id: int
@@ -170,6 +186,7 @@ class ItemOut(BaseModel):
     conversion_factor_to_parent: float = 1
     is_virtual_variant: bool = False
     buy_price: float
+    min_price: float = 0
     sell_price: float
     profit_margin: float
     stock: float
@@ -182,6 +199,7 @@ class ItemOut(BaseModel):
     brand: Optional[BrandOut] = None
     unit: Optional[UnitOut] = None
     prices: List[ItemPriceOut] = []
+    group_discounts: List[ItemGroupDiscountOut] = []
     suppliers: List[SupplierSimpleOut] = []
     supplier_details: List[ItemSupplierOut] = []
     model_config = {"from_attributes": True}

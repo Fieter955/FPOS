@@ -71,6 +71,7 @@
 
 <!-- Container untuk Modal Supplier Cepat -->
 <div id="quickSupContainer"></div>
+<div id="addSupContainer"></div>
 
 <div class="modal-overlay" id="mBarang">
   <div class="modal-box wide">
@@ -238,7 +239,7 @@
               </select>
               <button
                 type="button"
-                onclick="quickAddSup()"
+                onclick="addSupplier()"
                 class="btn"
                 style="
                   padding: 12px 16px;
@@ -332,7 +333,7 @@
               value="0"
               oninput="
                 formatInputRibuan(this);
-                calcHJualFromMargin();
+                onBuyPriceInput();
               "
             />
           </div>
@@ -344,7 +345,7 @@
               step="0.01"
               class="input-control"
               value="0"
-              oninput="calcHJualFromMargin()"
+              oninput="onMarginInput()"
             />
           </div>
           <div class="input-group" style="grid-area: jual">
@@ -360,10 +361,31 @@
               required
               oninput="
                 formatInputRibuan(this);
-                calcMarginFromHJual();
+                onSellPriceInput();
                 updateDiscountPreview();
               "
             />
+            <label
+              style="
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 0.85em;
+                cursor: pointer;
+                color: var(--text-main);
+                white-space: nowrap;
+                font-weight: 600;
+                margin-top: 4px;
+              "
+            >
+              <input
+                type="checkbox"
+                id="fIsDiscountable"
+                onchange="updateDiscountPreview()"
+                style="width: 16px; height: 16px"
+              />
+              Dapat Diskon Member
+            </label>
           </div>
         </div>
 
@@ -385,26 +407,6 @@
                   updateDiscountPreview();
                 "
               />
-              <label
-                style="
-                  display: flex;
-                  align-items: center;
-                  gap: 6px;
-                  font-size: 0.85em;
-                  cursor: pointer;
-                  color: var(--text-main);
-                  white-space: nowrap;
-                  font-weight: 600;
-                "
-              >
-                <input
-                  type="checkbox"
-                  id="fIsDiscountable"
-                  onchange="updateDiscountPreview()"
-                  style="width: 16px; height: 16px"
-                />
-                Dapat Diskon Member
-              </label>
             </div>
 
             <div
@@ -635,7 +637,7 @@
       <div class="sup-selection-section">
         <div class="sup-selection-header">
           <label>🚚 Supplier Barang Ini</label>
-          <div class="sup-search-box">
+          <div class="sup-search-box" style="display: none">
             <span class="sup-search-icon">🔍</span>
             <input
               type="text"

@@ -16,6 +16,7 @@ from tkinter import messagebox
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from sqlalchemy import func
@@ -141,6 +142,8 @@ def run_migrations():
     add_col("shifts", "branch_id", "INTEGER DEFAULT 1")
     add_col("warehouses", "branch_id", "INTEGER DEFAULT 1")
     add_col("print_jobs", "content_type", "TEXT DEFAULT 'text'")
+    add_col("item_supplier", "ppn_type", "TEXT DEFAULT 'included'")
+    add_col("item_supplier", "ppn_percent", "REAL DEFAULT 0")
 
 
     conn.commit()
@@ -267,6 +270,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 🗜️ Kompresi GZip — pangkas ukuran transfer JSON/JS/CSS/HTML (sangat membantu via Tailscale).
+# minimum_size=1024 agar respons kecil tidak ikut dikompres (overhead tak sepadan).
+app.add_middleware(GZipMiddleware, minimum_size=1024)
+
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(items.router, prefix="/api/items", tags=["Items"])
 app.include_router(customers.router, prefix="/api/customers", tags=["Customers"])
@@ -311,9 +318,27 @@ else:
 FRONTEND_DIR = ROOT_DIR / "frontend"
 MANIFEST_PATH = FRONTEND_DIR / "manifest.json"
 
+class CachedStaticFiles(StaticFiles):
+    """StaticFiles + header Cache-Control agar aset (js/css/gambar) tidak di-download ulang
+    setiap kunjungan. Hemat round-trip — terasa banget via Tailscale.
+    Catatan: nama file tidak ber-hash, jadi max_age sengaja moderat (1 jam untuk js/css)
+    supaya update tetap kebaca tanpa nunggu lama. Naikkan bila deploy sudah jarang."""
+    def __init__(self, *args, max_age: int = 3600, **kwargs):
+        self.max_age = max_age
+        super().__init__(*args, **kwargs)
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        # Hanya cache respons sukses (200/304) — jangan cache error seperti 404.
+        if response.status_code < 400:
+            response.headers["Cache-Control"] = f"public, max-age={self.max_age}"
+        return response
+
+
 UPLOADS_DIR = ROOT_DIR / "uploads"
-os.makedirs(UPLOADS_DIR, exist_ok=True) 
-app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+# Gambar upload jarang berubah → boleh cache lebih lama (1 minggu).
+app.mount("/uploads", CachedStaticFiles(directory=str(UPLOADS_DIR), max_age=604800), name="uploads")
 
 @app.get("/manifest.json", tags=["PWA"])
 def get_manifest():
@@ -327,9 +352,9 @@ def health():
 
 if FRONTEND_DIR.exists():
     if (FRONTEND_DIR / "js").exists():
-        app.mount("/js", StaticFiles(directory=str(FRONTEND_DIR / "js")), name="js")
+        app.mount("/js", CachedStaticFiles(directory=str(FRONTEND_DIR / "js"), max_age=3600), name="js")
     if (FRONTEND_DIR / "css").exists():
-        app.mount("/css", StaticFiles(directory=str(FRONTEND_DIR / "css")), name="css")
+        app.mount("/css", CachedStaticFiles(directory=str(FRONTEND_DIR / "css"), max_age=3600), name="css")
 
     @app.get("/")
     async def root():

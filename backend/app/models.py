@@ -132,6 +132,9 @@ class ItemSupplier(Base):
     supplier_id = Column(Integer, ForeignKey("suppliers.id"), primary_key=True)
     buy_price = Column(Float, default=0)
     barcode = Column(String(100)) # Barcode khusus supplier ini
+    # Setelan PPN khusus per supplier (menentukan harga beli akhir). Margin = turunan.
+    ppn_type = Column(String(20), default="included")   # included | excluded
+    ppn_percent = Column(Float, default=0)
 
     item = relationship("Item", back_populates="supplier_details")
     supplier = relationship("Supplier", back_populates="item_details")
@@ -187,6 +190,7 @@ class Item(Base):
     brand = relationship("Brand", back_populates="items")
     unit = relationship("Unit", back_populates="items")
     prices = relationship("ItemPrice", back_populates="item", cascade="all, delete-orphan")
+    group_discounts = relationship("ItemGroupDiscount", back_populates="item", cascade="all, delete-orphan")
     sale_items = relationship("SaleItem", back_populates="item")
     purchase_items = relationship("PurchaseItem", back_populates="item")
     stock_movements = relationship("StockMovement", back_populates="item")
@@ -210,12 +214,27 @@ class CustomerGroup(Base):
     __tablename__ = "customer_groups"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
-    discount_percent = Column(Float, default=0)
+    discount_percent = Column(Float, default=0)   # HANYA referensi — tidak auto-diskon di POS
     customers = relationship("Customer", back_populates="group")
 
     @property
     def member_count(self):
         return len([c for c in self.customers if c.is_active])
+
+
+class ItemGroupDiscount(Base):
+    """Diskon bertingkat (Pot.1–Pot.4) per barang per grup pelanggan.
+    Diatur lewat 'Potongan Harga Jual' di form barang. Harga akhir di POS =
+    harga jual × (1-disc1/100) × (1-disc2/100) × (1-disc3/100) × (1-disc4/100)."""
+    __tablename__ = "item_group_discounts"
+    id = Column(Integer, primary_key=True, index=True)
+    item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    group_id = Column(Integer, ForeignKey("customer_groups.id"), nullable=False)
+    disc1 = Column(Float, default=0)
+    disc2 = Column(Float, default=0)
+    disc3 = Column(Float, default=0)
+    disc4 = Column(Float, default=0)
+    item = relationship("Item", back_populates="group_discounts")
 
 
 class Customer(Base):

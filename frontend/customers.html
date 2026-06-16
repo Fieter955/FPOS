@@ -118,13 +118,10 @@
               display: flex;
               justify-content: flex-end;
               margin-bottom: 14px;
+              display: none;
             "
           >
-            <button
-              class="btn btn-primary"
-              onclick="openModal('mGrup')"
-              style="display: none"
-            >
+            <button class="btn btn-primary" onclick="openModal('mGrup')">
               ➕ Tambah Grup
             </button>
           </div>
@@ -230,7 +227,7 @@
           />
         </div>
         <div class="input-group">
-          <label>Diskon (%)</label>
+          <label>Diskon (%) — Referensi saja</label>
           <input
             id="gDisc"
             type="number"
@@ -238,6 +235,18 @@
             class="input-control"
             placeholder="0"
           />
+          <div
+            style="
+              font-size: 11px;
+              color: var(--text-muted);
+              margin-top: 4px;
+              line-height: 1.5;
+            "
+          >
+            ℹ️ Angka ini hanya <b>referensi/acuan</b> — POS tidak otomatis
+            memberi diskon ini. Diskon nyata per barang diatur di
+            <b>Barang → Potongan Harga Jual</b> per grup.
+          </div>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
           <button

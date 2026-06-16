@@ -139,7 +139,7 @@
               type="text"
               class="input-control"
               placeholder="🔍 Cari kode / nama / barcode..."
-              oninput="loadItems()"
+              oninput="debouncedLoadItems()"
             />
             <select id="filterKat" class="input-control" onchange="loadItems()">
               <option value="">Semua Kategori</option>
@@ -190,6 +190,14 @@
     </div>
 
     <style>
+      /* Render ringan untuk tabel panjang (1000+ baris): browser melewati layout/paint
+         baris yang di luar layar. contain-intrinsic-size memberi perkiraan tinggi baris
+         agar scrollbar tetap stabil. */
+      #tblBarang tr {
+        content-visibility: auto;
+        contain-intrinsic-size: 0 49px;
+      }
+
       /* Menghilangkan spinner (panah atas bawah) pada input number */
       input::-webkit-outer-spin-button,
       input::-webkit-inner-spin-button {
@@ -342,7 +350,9 @@
     <script src="/js/merek.js"></script>
     <script src="/js/units.js"></script>
     <script>
-      // Load Components
+      // Load Components — dipanggil saat idle (lihat init di bawah) agar tidak berebut
+      // bandwidth dengan daftar barang saat pertama buka. Komponen ini (modal & tab)
+      // baru dibutuhkan saat user klik Tambah/Edit atau pindah tab.
       const components = [
         { url: "/item/popUp.html", id: "popUpContainer" },
         { url: "/item/kategori.html", id: "katContainer" },
@@ -350,13 +360,24 @@
         { url: "/item/units.html", id: "unitsContainer" },
       ];
 
-      components.forEach((c) => {
-        fetch(c.url)
-          .then((r) => r.text())
-          .then((html) => {
-            document.getElementById(c.id).innerHTML = html;
-          });
-      });
+      let componentsLoaded = false;
+      function loadComponents() {
+        if (componentsLoaded) return;
+        componentsLoaded = true;
+        components.forEach((c) => {
+          fetch(c.url)
+            .then((r) => r.text())
+            .then((html) => {
+              document.getElementById(c.id).innerHTML = html;
+              // Setelah markup modal ada di DOM: pasang listener pencarian supplier &
+              // isi dropdown grup diskon (jika data grup sudah lebih dulu termuat).
+              if (c.id === "popUpContainer") {
+                setupSupSearch();
+                populateDiscountGroupSelect();
+              }
+            });
+        });
+      }
 
       let currentAdvancedType = null;
       let currentPotonganType = null;
@@ -477,9 +498,13 @@
         supplierSettingsMap = {},
         generalBuyPrice = 0,
         generalBarcode = "",
+        generalPpnType = "included",
+        generalPpnPercent = 0,
+        sharedFieldNotified = false,
         currentSupplierContext = "",
         satuanRows = [],
         masterUnits = [],
+        groupDiscounts = [], // Potongan Harga Jual per grup: [{group_id, disc1..disc4}]
         lastPpnStatus = "included";
 
       function formatInputRibuan(input) {
@@ -588,6 +613,7 @@
       }
 
       function switchTab(t) {
+        loadComponents(); // pastikan markup tab (kat/merek/satuan) sudah/mulai dimuat
         curTab = t;
         ["pnlBrg", "pnlKat", "pnlMerek", "pnlSat"].forEach(
           (id) => (document.getElementById(id).style.display = "none"),
@@ -783,12 +809,19 @@
             base.child_unit_id = document.getElementById("fSat")?.value || "";
           }
 
-          // Hanya sinkronkan grup pertama (Umum) dari main form
+          // Sinkronkan SEMUA grup dari state global groupPrices ke base row (ID-based)
           if (allGroups.length > 0) {
-            const firstGroup = allGroups[0];
-            const key = firstGroup.name.toLowerCase();
-            groupPrices[key] = base.sell_price;
-            base.group_prices[firstGroup.id] = base.sell_price;
+            allGroups.forEach((g, i) => {
+              const key = g.name.toLowerCase();
+              if (i === 0) {
+                // Grup pertama (Umum) selalu sinkron dengan HJual utama
+                groupPrices[key] = base.sell_price;
+                base.group_prices[g.id] = base.sell_price;
+              } else if (groupPrices[key] !== undefined) {
+                // Grup lain sinkron dengan apa yang ada di state groupPrices (hasil load dari DB)
+                base.group_prices[g.id] = groupPrices[key];
+              }
+            });
           }
 
           // Forward Sync: Recalculate all child rows
@@ -806,19 +839,25 @@
         onGroupSelectChange();
       }
 
+      // Isi <select> grup diskon dari allGroups. Dipisah dari pemuatan data agar bisa dipanggil
+      // ulang setelah popUp.html termuat (urutan load grup vs komponen tidak menentukan hasil).
+      function populateDiscountGroupSelect() {
+        const select = document.getElementById("fDiscountGroupSelect");
+        if (!select || !allGroups.length) return;
+        select.innerHTML =
+          '<option value="">Pilih Grup (Set Harga)</option>' +
+          allGroups
+            .map(
+              (g) =>
+                `<option value="${g.id}" data-name="${g.name}" data-disc="${g.discount_percent}">${g.name}</option>`,
+            )
+            .join("");
+      }
+
       async function loadCustomerGroups() {
         try {
-          const groups = await api("GET", "/customers/groups");
-          allGroups = groups;
-          const select = document.getElementById("fDiscountGroupSelect");
-          select.innerHTML =
-            '<option value="">Pilih Grup (Set Harga)</option>' +
-            groups
-              .map(
-                (g) =>
-                  `<option value="${g.id}" data-name="${g.name}" data-disc="${g.discount_percent}">${g.name}</option>`,
-              )
-              .join("");
+          allGroups = await api("GET", "/customers/groups");
+          populateDiscountGroupSelect();
         } catch (ex) {
           console.error("Gagal load grup:", ex);
         }
@@ -827,6 +866,7 @@
       let allSups = [];
       let selectedSups = new Map();
       let supSearchTimeout;
+      let cariSupTimeout;
 
       async function loadSuppliers() {
         try {
@@ -840,6 +880,7 @@
       function setupSupSearch() {
         const input = document.getElementById("supSearchInput");
         const dropdown = document.getElementById("supDropdown");
+        if (!input || !dropdown) return; // popUp.html belum termuat — dipanggil ulang setelah load
         input.addEventListener("focus", () => {
           renderSupDropdown(input.value);
           dropdown.classList.add("show");
@@ -898,53 +939,109 @@
       function onSupplierContextChange() {
         const select = document.getElementById("fSupplierContext");
         const nextSupplierId = select.value;
+
+        // Cek SEBELUM perubahan apa pun: apakah supplier ini sudah pernah diatur?
+        const alreadyConfigured =
+          nextSupplierId !== "" &&
+          supplierSettingsMap[nextSupplierId] !== undefined;
+
+        // Otomatis tambahkan ke selectedSups (chip) jika dipilih lewat dropdown konteks
+        if (nextSupplierId !== "") {
+          const supIdInt = parseInt(nextSupplierId);
+          if (!selectedSups.has(supIdInt)) {
+            addSupToSelectionById(supIdInt);
+          }
+        }
+
+        // 1) Simpan setelan konteks LAMA (harga beli, barcode, PPN)
         const oldContext = currentSupplierContext;
         const currentHBeli = toAngka(document.getElementById("fHBeli").value);
         const currentBarcode = document.getElementById("fBarcode").value;
         const isAuto = document.getElementById("autoBarcode").checked;
         const finalBarcode = isAuto ? "" : currentBarcode;
+        const currentPpnType = document.getElementById("fPpn").value;
+        const currentPpnPercent =
+          parseFloat(document.getElementById("fPpnPercent").value) || 0;
         if (oldContext === "") {
           generalBuyPrice = currentHBeli;
           generalBarcode = finalBarcode;
+          generalPpnType = currentPpnType;
+          generalPpnPercent = currentPpnPercent;
         } else {
           supplierSettingsMap[oldContext] = {
             buy_price: currentHBeli,
             barcode: finalBarcode,
+            ppn_type: currentPpnType,
+            ppn_percent: currentPpnPercent,
           };
         }
-        let targetHBeli, targetBarcode, targetPpnSupplier;
+
+        // 2) Muat setelan konteks BARU
+        let targetHBeli, targetBarcode, targetPpnType, targetPpnPercent;
         if (nextSupplierId === "") {
           targetHBeli = generalBuyPrice;
           targetBarcode = generalBarcode;
-          targetPpnSupplier = 11;
+          targetPpnType = generalPpnType;
+          targetPpnPercent = generalPpnPercent;
         } else {
           const s = supplierSettingsMap[nextSupplierId];
-          if (s) {
-            targetHBeli = s.buy_price;
-            targetBarcode = s.barcode;
-          } else {
-            targetHBeli = generalBuyPrice;
-            targetBarcode = generalBarcode;
-          }
           const supplierData = allSups.find(
             (sup) => String(sup.id) === nextSupplierId,
           );
-          targetPpnSupplier =
+          const defPpn =
             supplierData && supplierData.PpnSupplier != null
               ? supplierData.PpnSupplier
-              : 16;
+              : 11;
+          if (s) {
+            targetHBeli = s.buy_price;
+            targetBarcode = s.barcode;
+            targetPpnType = s.ppn_type || "included";
+            targetPpnPercent = s.ppn_percent || 0;
+          } else {
+            // Supplier baru: mulai dari harga umum + PPN default supplier
+            targetHBeli = generalBuyPrice;
+            targetBarcode = generalBarcode;
+            targetPpnType = "included";
+            targetPpnPercent = defPpn;
+          }
         }
+
+        // 3) Terapkan ke form (PPN di-set langsung TANPA konversi harga otomatis)
         document.getElementById("fHBeli").value = toRibuan(targetHBeli);
         document.getElementById("fBarcode").value = targetBarcode || "";
         document.getElementById("autoBarcode").checked = !(
           targetBarcode && targetBarcode.trim() !== ""
         );
+        const ppnSelect = document.getElementById("fPpn");
+        const ppnGroup = document.getElementById("ppnPercentGroup");
         const ppnInput = document.getElementById("fPpnPercent");
-        if (ppnInput) ppnInput.value = targetPpnSupplier;
+        if (ppnSelect) ppnSelect.value = targetPpnType;
+        if (ppnGroup)
+          ppnGroup.style.display =
+            targetPpnType === "excluded" ? "block" : "none";
+        if (ppnInput) ppnInput.value = targetPpnPercent;
+        lastPpnStatus = targetPpnType; // sinkronkan agar toggle PPN berikutnya benar
+
         currentSupplierContext = nextSupplierId;
+        sharedFieldNotified = false; // izinkan lagi notif "berlaku semua supplier"
         toggleBarcodeUI();
-        calcMarginFromHJual();
+        calcMarginFromHJual(); // harga jual tetap (shared) -> margin menyesuaikan
         syncGroupPricesFromMain();
+
+        // 4) Notifikasi status supplier yang dipilih
+        if (nextSupplierId !== "") {
+          if (alreadyConfigured) {
+            showToast(
+              "Ini setelan harga beli untuk supplier yang Anda pilih.",
+              "info",
+            );
+          } else {
+            showToast(
+              "Silakan input data harga beli baru untuk supplier ini.",
+              "info",
+            );
+          }
+        }
       }
 
       function updateSupplierContextDropdown() {
@@ -1004,7 +1101,49 @@
         syncGroupPricesFromMain();
       }
 
+      // Harga beli dihitung dari harga jual (shared) & margin — dipakai di konteks supplier
+      function calcHBeliFromMargin() {
+        const margin =
+          parseFloat(document.getElementById("fMargin").value) || 0;
+        const hJual = toAngka(document.getElementById("fHJual").value) || 0;
+        const hBeli =
+          margin > -100 ? Math.round(hJual / (1 + margin / 100)) : 0;
+        document.getElementById("fHBeli").value = toRibuan(hBeli);
+        updateDiscountPreview();
+        syncGroupPricesFromMain();
+      }
+
+      function inSupplierContext() {
+        return currentSupplierContext && currentSupplierContext !== "";
+      }
+
+      // Input handlers sadar-konteks. Di konteks supplier, HARGA JUAL adalah patokan
+      // bersama (tetap); yang menyesuaikan adalah harga beli / margin supplier itu.
+      function onBuyPriceInput() {
+        if (inSupplierContext()) calcMarginFromHJual();
+        else calcHJualFromMargin();
+      }
+      function onMarginInput() {
+        if (inSupplierContext()) calcHBeliFromMargin();
+        else calcHJualFromMargin();
+      }
+      function onSellPriceInput() {
+        calcMarginFromHJual();
+        notifySharedFieldChange();
+      }
+
+      // Beritahu (sekali per pemilihan supplier) bahwa field ini berlaku untuk SEMUA supplier.
+      function notifySharedFieldChange() {
+        if (!inSupplierContext() || sharedFieldNotified) return;
+        sharedFieldNotified = true;
+        showToast(
+          "Catatan: Harga Jual, Level Harga & Potongan berlaku untuk SEMUA supplier. Hanya Harga Beli & PPN yang khusus per supplier.",
+          "info",
+        );
+      }
+
       function openItemModal(item = null) {
+        loadComponents(); // pastikan markup modal (popUp) sudah/mulai dimuat
         editItemId = null;
         document.getElementById("mBarangTitle").textContent = "Tambah Barang";
         document.getElementById("fBarang").reset();
@@ -1023,15 +1162,19 @@
         setVal("fPpn", "included");
         lastPpnStatus = "included";
         togglePpnPercent();
-        document.getElementById("fIsDiscountable").checked = false;
+        document.getElementById("fIsDiscountable").checked = true;
         document.getElementById("fDiscountGroupSelect").selectedIndex = 0;
         setVal("fGroupPriceInput", "");
         setVal("fGroupPercentInput", "");
         groupPrices = {};
+        groupDiscounts = [];
         selectedSups.clear();
         supplierSettingsMap = {};
         generalBuyPrice = 0;
         generalBarcode = "";
+        generalPpnType = "included";
+        generalPpnPercent = 0;
+        sharedFieldNotified = false;
         currentSupplierContext = "";
         renderSelectedSups();
         document.getElementById("fSupplierContext").value = "";
@@ -1083,6 +1226,15 @@
               }
             });
           }
+          if (item.group_discounts?.length) {
+            groupDiscounts = item.group_discounts.map((gd) => ({
+              group_id: gd.group_id,
+              disc1: gd.disc1 || 0,
+              disc2: gd.disc2 || 0,
+              disc3: gd.disc3 || 0,
+              disc4: gd.disc4 || 0,
+            }));
+          }
           if (item.suppliers?.length) {
             item.suppliers.forEach((s) => {
               selectedSups.set(s.id, {
@@ -1097,6 +1249,8 @@
               supplierSettingsMap[d.supplier_id] = {
                 buy_price: d.buy_price,
                 barcode: d.barcode,
+                ppn_type: d.ppn_type || "included",
+                ppn_percent: d.ppn_percent || 0,
               };
             });
           }
@@ -1132,13 +1286,20 @@
           document.getElementById("fSupplierContext").value;
         const lastBuyPrice = toAngka(document.getElementById("fHBeli").value);
         const lastBarcode = document.getElementById("fBarcode").value;
+        const lastPpnType = document.getElementById("fPpn").value;
+        const lastPpnPercent =
+          parseFloat(document.getElementById("fPpnPercent").value) || 0;
         if (lastSupplierId === "" || lastSupplierId === "UNSELECTED") {
           generalBuyPrice = lastBuyPrice;
           generalBarcode = lastBarcode;
+          generalPpnType = lastPpnType;
+          generalPpnPercent = lastPpnPercent;
         } else {
           supplierSettingsMap[lastSupplierId] = {
             buy_price: lastBuyPrice,
             barcode: lastBarcode,
+            ppn_type: lastPpnType,
+            ppn_percent: lastPpnPercent,
           };
         }
         const sellPrice = toAngka(document.getElementById("fHJual").value);
@@ -1188,13 +1349,18 @@
             supplierSettingsMap[sid.toString()] || {
               buy_price: generalBuyPrice,
               barcode: generalBarcode,
+              ppn_type: generalPpnType,
+              ppn_percent: generalPpnPercent,
             };
           settingsArr.push({
             supplier_id: sid,
             buy_price: s.buy_price,
             barcode: s.barcode || null,
+            ppn_type: s.ppn_type || "included",
+            ppn_percent: s.ppn_percent || 0,
           });
         });
+        readPotonganGrid();
         const p = {
           code: document.getElementById("fKodeItem").value || "AUTO",
           barcode: generalBarcode || "AUTO",
@@ -1212,6 +1378,9 @@
           supplier_ids: Array.from(selectedSups.keys()),
           supplier_settings: settingsArr,
           prices: multi_prices,
+          group_discounts: groupDiscounts.filter(
+            (gd) => gd.disc1 || gd.disc2 || gd.disc3 || gd.disc4,
+          ),
         };
         try {
           let saved;
@@ -1246,6 +1415,114 @@
         openSatModal();
       }
 
+      async function addSupplier() {
+        try {
+          document.getElementById("addSupContainer").innerHTML = `
+      <div class="modal-overlay" id="mPilihSup" style="z-index: 10000;">
+        <div class="modal-box" style="max-width: 440px;">
+          <div class="modal-hdr">
+            <h2 style="margin: 0; font-size: 18px;">🚚 Pilih Supplier</h2>
+            <button type="button" class="btn-x" onclick="closeModal('mPilihSup')">×</button>
+          </div>
+
+          <p style="margin: 0 0 14px; font-size: 13px; color: var(--text-muted); line-height: 1.45;">
+            Cari supplier untuk mengatur <b>harga &amp; barcode khusus</b>, atau tambahkan supplier baru.
+          </p>
+
+          <div class="sup-search-box" style="max-width: none;">
+            <span class="sup-search-icon">🔍</span>
+            <input
+              type="text"
+              id="cariSupInput"
+              class="sup-search-input"
+              placeholder="Ketik nama / kode supplier..."
+              autocomplete="off"
+              oninput="cariSupplier()"
+            />
+          </div>
+
+          <div
+            id="cariSupResults"
+            style="
+              margin-top: 10px;
+              max-height: 260px;
+              overflow-y: auto;
+              border: 1px solid var(--border-color);
+              border-radius: 8px;
+            "
+          ></div>
+
+          <button
+            type="button"
+            class="rcpt-btn"
+            style="
+              width: 100%;
+              margin-top: 14px;
+              background: #10b981;
+              color: #fff;
+              border: none;
+            "
+            onclick="quickAddSup()"
+          >
+            ➕ Tambah Supplier Baru
+          </button>
+        </div>
+      </div>
+    `;
+          openModal("mPilihSup");
+          const input = document.getElementById("cariSupInput");
+          if (input) input.focus();
+          cariSupplier(); // tampilkan daftar awal (semua supplier)
+        } catch (e) {
+          showToast("Gagal memuat form", "error");
+        }
+      }
+
+      // Pencarian live di dalam modal "Pilih Supplier". Tidak meng-exclude
+      // selectedSups: user boleh memilih ulang supplier yang sudah ada untuk
+      // melihat / mengubah setelan harga & barcode-nya.
+      function cariSupplier() {
+        const results = document.getElementById("cariSupResults");
+        if (!results) return;
+        clearTimeout(cariSupTimeout);
+        cariSupTimeout = setTimeout(async () => {
+          if (!allSups || allSups.length === 0) await loadSuppliers();
+          const inputEl = document.getElementById("cariSupInput");
+          const search = (inputEl ? inputEl.value : "").toLowerCase().trim();
+          const matches = allSups.filter(
+            (s) =>
+              s.name.toLowerCase().includes(search) ||
+              (s.code && s.code.toLowerCase().includes(search)),
+          );
+          if (matches.length === 0) {
+            results.innerHTML = `<div class="sup-dropdown-empty">${
+              search ? "Tidak ditemukan" : "Belum ada supplier"
+            }</div>`;
+            return;
+          }
+          results.innerHTML = matches
+            .slice(0, 50)
+            .map(
+              (s) =>
+                `<div class="sup-dropdown-item" style="cursor: pointer;" onclick="pilihSupplierKonteks(${s.id})"><span>${s.name}${
+                  s.code ? ` <small>[${s.code}]</small>` : ""
+                }</span><span class="sup-add-btn">+</span></div>`,
+            )
+            .join("");
+        }, 150);
+      }
+
+      // Saat hasil pencarian diklik: aktifkan supplier sebagai konteks setelan
+      // harga & barcode (otomatis mengubah dropdown fSupplierContext).
+      function pilihSupplierKonteks(id) {
+        addSupToSelectionById(id);
+        const select = document.getElementById("fSupplierContext");
+        if (select) {
+          select.value = String(id);
+          onSupplierContextChange();
+        }
+        closeModal("mPilihSup");
+      }
       async function quickAddSup() {
         try {
           const resp = await fetch("/supplier/tambahSuplier.html");
@@ -1403,40 +1680,40 @@
           const head = document.getElementById("satuanGridHead");
           if (head) {
             let headHtml = `<tr>
-              <th colspan="5" class="header-spacer"></th>
-              ${allGroups.map((g, i) => `<th colspan="2" class="group-label ${i > 0 ? "sep" : ""}">${i + 1}. ${g.name}</th>`).join("")}
-            </tr>
-            <tr>
-              <th style="width: 30px"></th>
-              <th>Satuan</th>
-              <th>Jenis</th>
-              <th style="width: 60px" class="sep">Konv</th>
-              <th class="sep">H. Pokok</th>
-              ${allGroups.map((g) => `<th>% Mg</th><th class="sep">Harga</th>`).join("")}
-            </tr>`;
+                      <th colspan="5" class="header-spacer"></th>
+                      ${allGroups.map((g, i) => `<th colspan="2" class="group-label ${i > 0 ? "sep" : ""}">${i + 1}. ${g.name}</th>`).join("")}
+                    </tr>
+                    <tr>
+                      <th style="width: 30px"></th>
+                      <th>Satuan</th>
+                      <th>Jenis</th>
+                      <th style="width: 60px" class="sep">Konv</th>
+                      <th class="sep">H. Pokok</th>
+                      ${allGroups.map((g) => `<th>% Mg</th><th class="sep">Harga</th>`).join("")}
+                    </tr>`;
             head.innerHTML = headHtml;
           }
         } else if (currentAdvancedType === "levelJumlah") {
           const head = document.getElementById("satuanGridHead");
           if (head) {
             head.innerHTML = `<tr>
-              <th style="width: 30px"></th>
-              <th>Satuan</th>
-              <th>Jenis</th>
-              <th style="width: 60px" class="sep">Konv</th>
-              <th class="sep">H. Pokok</th>
-              <th colspan="3" class="tier-label sep">Tier 1</th>
-              <th colspan="3" class="tier-label sep">Tier 2</th>
-              <th colspan="3" class="tier-label sep">Tier 3</th>
-              <th colspan="3" class="tier-label">Tier 4</th>
-            </tr>
-            <tr>
-              <th colspan="5"></th>
-              <th>Hingga Qty</th><th>%</th><th class="sep">Harga</th>
-              <th>Hingga Qty</th><th>%</th><th class="sep">Harga</th>
-              <th>Hingga Qty</th><th>%</th><th class="sep">Harga</th>
-              <th>Hingga Qty</th><th>%</th><th>Harga</th>
-            </tr>`;
+                      <th style="width: 30px"></th>
+                      <th>Satuan</th>
+                      <th>Jenis</th>
+                      <th style="width: 60px" class="sep">Konv</th>
+                      <th class="sep">H. Pokok</th>
+                      <th colspan="3" class="tier-label sep">Tier 1</th>
+                      <th colspan="3" class="tier-label sep">Tier 2</th>
+                      <th colspan="3" class="tier-label sep">Tier 3</th>
+                      <th colspan="3" class="tier-label">Tier 4</th>
+                    </tr>
+                    <tr>
+                      <th colspan="5"></th>
+                      <th>Hingga Qty</th><th>% Mg</th><th class="sep">Harga</th>
+                      <th>Hingga Qty</th><th>% Mg</th><th class="sep">Harga</th>
+                      <th>Hingga Qty</th><th>% Mg</th><th class="sep">Harga</th>
+                      <th>Hingga Qty</th><th>% Mg</th><th>Harga</th>
+                    </tr>`;
           }
         }
 
@@ -1479,14 +1756,16 @@
             } else if (currentAdvancedType === "levelJumlah") {
               for (let i = 0; i < 4; i++) {
                 const tier = row.tier_prices[i] || { min_qty: 0, price: 0 };
-                const tierDisc =
-                  row.sell_price > 0 && tier.price > 0
-                    ? ((row.sell_price - tier.price) / row.sell_price) * 100
+                // Kolom "%" = MARGIN terhadap H. Pokok (buy_price_auto), bukan diskon
+                const tierMargin =
+                  row.buy_price_auto > 0 && tier.price > 0
+                    ? ((tier.price - row.buy_price_auto) / row.buy_price_auto) *
+                      100
                     : 0;
-                const discVal = tier.price > 0 ? tierDisc.toFixed(2) : "";
+                const marginVal = tier.price > 0 ? tierMargin.toFixed(2) : "";
                 const priceVal = tier.price > 0 ? toRibuan(tier.price) : "";
                 const qtyVal = tier.min_qty > 0 ? tier.min_qty : "";
-                cols += `<td><input type="number" class="input-control" value="${qtyVal}" onchange="updateAdvancedRowField(${idx}, 'tier_qty', this.value, ${i})" style="text-align:right;" placeholder="Qty"></td><td><input type="number" step="0.01" class="input-control" value="${discVal}" onchange="updateAdvancedRowField(${idx}, 'tier_discount', this.value, ${i})" style="text-align:right;" placeholder="%"></td><td class="${i < 3 ? "sep" : ""}"><input type="text" class="input-control" value="${priceVal}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'tier_price', this.value, ${i})" style="text-align:right; font-weight:700; color:var(--primary)" placeholder="Harga"></td>`;
+                cols += `<td><input type="number" class="input-control" value="${qtyVal}" onchange="updateAdvancedRowField(${idx}, 'tier_qty', this.value, ${i})" style="text-align:right;" placeholder="Qty"></td><td><input type="number" step="0.01" class="input-control" value="${marginVal}" onchange="updateAdvancedRowField(${idx}, 'tier_margin', this.value, ${i})" style="text-align:right;" placeholder="% Mg"></td><td class="${i < 3 ? "sep" : ""}"><input type="text" class="input-control" value="${priceVal}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'tier_price', this.value, ${i})" style="text-align:right; font-weight:700; color:var(--primary)" placeholder="Harga"></td>`;
               }
             }
             return `<tr class="${isBase ? "base-row" : ""} ${isDraft ? "empty-row" : ""}"> ${cols} </tr>`;
@@ -1528,6 +1807,18 @@
       window.updateAdvancedRowField = function (idx, field, val, extra = null) {
         const row = satuanRows[idx];
         if (!row) return;
+        // Field harga yang berlaku untuk SEMUA supplier -> beri tahu sekali
+        if (
+          [
+            "group_price",
+            "group_margin",
+            "group_discount",
+            "sell_price",
+            "tier_price",
+            "tier_margin",
+          ].includes(field)
+        )
+          notifySharedFieldChange();
         if (field === "child_unit_id") {
           row.child_unit_id = val;
           if (row.is_base) {
@@ -1642,13 +1933,14 @@
           if (!row.tier_prices[tierIdx])
             row.tier_prices[tierIdx] = { min_qty: 0, price: 0 };
           row.tier_prices[tierIdx].price = toAngka(val);
-        } else if (field === "tier_discount") {
+        } else if (field === "tier_margin") {
           const tierIdx = extra;
           if (!row.tier_prices[tierIdx])
             row.tier_prices[tierIdx] = { min_qty: 0, price: 0 };
-          const disc = parseFloat(val) || 0;
+          const margin = parseFloat(val) || 0;
+          // Harga tier = H. Pokok + margin% (konsisten dgn margin utama & % Mg level harga)
           row.tier_prices[tierIdx].price = Math.round(
-            row.sell_price * (1 - disc / 100),
+            row.buy_price_auto * (1 + margin / 100),
           );
         }
         renderAdvancedGrid();
@@ -1660,7 +1952,7 @@
 
         // Simpan % margin saat ini sebelum buy/sell price berubah (untuk factor change)
         const groupMargins = {};
-        const tierDiscs = [];
+        const tierMargins = [];
         if (changedBy === "factor") {
           allGroups.forEach((g) => {
             let p = row.group_prices[g.id];
@@ -1675,9 +1967,9 @@
           });
           for (let i = 0; i < 4; i++) {
             const t = row.tier_prices[i] || { price: 0 };
-            tierDiscs[i] =
-              row.sell_price > 0 && t.price > 0
-                ? ((row.sell_price - t.price) / row.sell_price) * 100
+            tierMargins[i] =
+              row.buy_price_auto > 0 && t.price > 0
+                ? ((t.price - row.buy_price_auto) / row.buy_price_auto) * 100
                 : 0;
           }
         }
@@ -1728,7 +2020,7 @@
           for (let i = 0; i < 4; i++) {
             if (row.tier_prices[i] && row.tier_prices[i].price > 0) {
               row.tier_prices[i].price = Math.round(
-                row.sell_price * (1 - tierDiscs[i] / 100),
+                row.buy_price_auto * (1 + tierMargins[i] / 100),
               );
             }
           }
@@ -1793,11 +2085,11 @@
               ? groups
                   .map(
                     (g) => `
-              <tr style="border-bottom: 1px solid var(--border-color)">
-                <td style="padding: 8px 0; color: var(--text-main); font-weight: 500">${g.name}</td>
-                <td style="padding: 8px 0; text-align: right; color: var(--primary); font-weight: 700; font-size: 14px">${g.discount_percent}%</td>
-              </tr>
-            `,
+                      <tr style="border-bottom: 1px solid var(--border-color)">
+                        <td style="padding: 8px 0; color: var(--text-main); font-weight: 500">${g.name}</td>
+                        <td style="padding: 8px 0; text-align: right; color: var(--primary); font-weight: 700; font-size: 14px">${g.discount_percent}%</td>
+                      </tr>
+                    `,
                   )
                   .join("")
               : '<tr><td colspan="2" style="text-align: center; padding: 20px; color: var(--text-muted)">Belum ada grup diskon</td></tr>';
@@ -1810,40 +2102,70 @@
       }
       window.toggleGroupPricePreview = toggleGroupPricePreview;
 
-      function initPotonganHargaJualUI() {
+      function potonganGroupOptions(selectedId) {
+        return (
+          '<option value="">-- Pilih Grup --</option>' +
+          allGroups
+            .map(
+              (g) =>
+                `<option value="${g.id}" ${String(g.id) === String(selectedId) ? "selected" : ""}>${g.name}</option>`,
+            )
+            .join("")
+        );
+      }
+
+      function potonganRowHtml(gd, isEmpty) {
+        const v = (n) => (gd && gd[n] ? gd[n] : "");
+        return `<tr class="${isEmpty ? "empty-row" : ""}">
+                  <td style="text-align:center;color:var(--text-muted);font-size:14px;">${isEmpty ? "*" : "▶"}</td>
+                  <td><select class="input-control group-select" onchange="handlePotonganRowChange(this)">${potonganGroupOptions(gd ? gd.group_id : "")}</select></td>
+                  <td class="sep"><input type="number" step="0.01" placeholder="0.00" class="input-control" style="text-align:right" value="${v("disc1")}" oninput="handlePotonganRowChange(this)"></td>
+                  <td><input type="number" step="0.01" placeholder="0.00" class="input-control" style="text-align:right" value="${v("disc2")}" oninput="handlePotonganRowChange(this)"></td>
+                  <td><input type="number" step="0.01" placeholder="0.00" class="input-control" style="text-align:right" value="${v("disc3")}" oninput="handlePotonganRowChange(this)"></td>
+                  <td><input type="number" step="0.01" placeholder="0.00" class="input-control" style="text-align:right" value="${v("disc4")}" oninput="handlePotonganRowChange(this)"></td>
+                </tr>`;
+      }
+
+      function renderPotonganGrid() {
         const body = document.getElementById("potonganGrupBody");
         if (!body) return;
+        let html = groupDiscounts
+          .map((gd) => potonganRowHtml(gd, false))
+          .join("");
+        html += potonganRowHtml(null, true); // baris kosong untuk tambah baru
+        body.innerHTML = html;
+      }
 
-        // Populate existing group selects
-        const selects = body.querySelectorAll(".group-select");
-        selects.forEach((sel) => {
-          const currentVal = sel.value;
-          sel.innerHTML =
-            '<option value="">-- Pilih Grup --</option>' +
-            allGroups
-              .map((g) => `<option value="${g.id}">${g.name}</option>`)
-              .join("");
-          sel.value = currentVal;
+      function readPotonganGrid() {
+        const body = document.getElementById("potonganGrupBody");
+        if (!body) return; // UI belum dibuka — pertahankan state yang ada
+        const next = [];
+        body.querySelectorAll("tr").forEach((tr) => {
+          const sel = tr.querySelector("select.group-select");
+          if (!sel || !sel.value) return; // baris kosong / belum pilih grup
+          const inp = tr.querySelectorAll('input[type="number"]');
+          next.push({
+            group_id: parseInt(sel.value),
+            disc1: parseFloat(inp[0]?.value) || 0,
+            disc2: parseFloat(inp[1]?.value) || 0,
+            disc3: parseFloat(inp[2]?.value) || 0,
+            disc4: parseFloat(inp[3]?.value) || 0,
+          });
         });
+        groupDiscounts = next;
+      }
+
+      function initPotonganHargaJualUI() {
+        renderPotonganGrid();
       }
       window.initPotonganHargaJualUI = initPotonganHargaJualUI;
 
       function handlePotonganRowChange(el) {
         const row = el.closest("tr");
+        // Begitu grup dipilih di baris kosong: jadikan baris permanen + tambah baris kosong baru
         if (row && row.classList.contains("empty-row")) {
-          // Check if any input in the empty row has been filled
           const select = row.querySelector("select");
-          const inputs = row.querySelectorAll('input[type="number"]');
-          let isFilled = select.value !== "";
-          if (!isFilled) {
-            inputs.forEach((input) => {
-              if (input.value !== "" && parseFloat(input.value) !== 0)
-                isFilled = true;
-            });
-          }
-
-          if (isFilled) {
-            // Convert current empty-row to a normal row
+          if (select && select.value) {
             row.classList.remove("empty-row");
             const iconTd = row.querySelector("td");
             if (iconTd) {
@@ -1851,39 +2173,35 @@
               iconTd.style.color = "var(--text-main)";
               iconTd.style.fontSize = "10px";
             }
-
-            // Create a new empty-row
             const tbody = document.getElementById("potonganGrupBody");
-            const newRow = row.cloneNode(true);
-            newRow.classList.add("empty-row");
-
-            // Reset icon for new row
-            const newIconTd = newRow.querySelector("td");
-            if (newIconTd) {
-              newIconTd.innerHTML = "*";
-              newIconTd.style.color = "var(--text-muted)";
-              newIconTd.style.fontSize = "14px";
-            }
-
-            // Reset inputs for new row
-            const newSelect = newRow.querySelector("select");
-            newSelect.value = "";
-            const newInputs = newRow.querySelectorAll('input[type="number"]');
-            newInputs.forEach((input) => {
-              input.value = "";
-            });
-
-            tbody.appendChild(newRow);
+            if (tbody)
+              tbody.insertAdjacentHTML(
+                "beforeend",
+                potonganRowHtml(null, true),
+              );
           }
         }
+        // Sinkronkan DOM -> state (tanpa render ulang agar fokus input tidak hilang)
+        readPotonganGrid();
+        notifySharedFieldChange();
       }
       window.handlePotonganRowChange = handlePotonganRowChange;
 
+      // Versi ter-debounce untuk kotak cari (dipakai inline: oninput="debouncedLoadItems()").
+      window.debouncedLoadItems = debounce(loadItems, 300);
+
+      // Kritis untuk tampilan awal: filter kategori + daftar barang.
       refreshSelects();
       loadItems();
-      loadCustomerGroups();
-      loadSuppliers();
-      setupSupSearch();
+
+      // Non-kritis (komponen modal/tab + data supplier & grup): tunda sampai browser idle
+      // agar tidak berebut bandwidth dengan daftar barang saat pertama buka (terasa di Tailscale).
+      const _idle = window.requestIdleCallback || ((cb) => setTimeout(cb, 200));
+      _idle(() => {
+        loadComponents();
+        loadCustomerGroups();
+        loadSuppliers();
+      });
     </script>
   </body>
 </html>

@@ -25,6 +25,10 @@ def _is_admin_user(user: models.User) -> bool:
 
 def _serialize_item_for_user(item: models.Item, current_user: models.User):
     data = schemas.ItemOut.model_validate(item).model_dump()
+    # Lantai harga modal (HPP) untuk penjaga anti-rugi diskon grup di POS.
+    # Dikirim ke semua role agar harga grup konsisten antara admin & kasir,
+    # tanpa pernah menampilkan harga modal di UI mana pun.
+    data["min_price"] = float(item.buy_price or 0)
     if not _is_admin_user(current_user):
         data["buy_price"] = 0
     return data
@@ -155,7 +159,9 @@ def delete_unit(unit_id: int, db: Session = Depends(get_db), _=Depends(get_curre
 
 
 # ─── Items ────────────────────────────────────────────────────────────────────
-@router.get("/", response_model=list[schemas.ItemOut])
+# response_model=None: _serialize_item_for_user sudah menghasilkan dict berbentuk ItemOut,
+# jadi tak perlu validasi ulang Pydantic (hindari serialisasi dobel atas ribuan item).
+@router.get("/", response_model=None)
 def get_items(
     search: Optional[str] = None,
     category_id: Optional[int] = None,
@@ -169,9 +175,21 @@ def get_items(
     # Ubah angka 500 menjadi 1000 agar halaman Supplier juga ikut ter-cover!
     if limit <= 1000:
         limit = 20000
-        
-    from sqlalchemy.orm import joinedload
-    q = db.query(models.Item).options(joinedload(models.Item.suppliers), joinedload(models.Item.supplier_details))
+
+    # Eager-load relasi to-one via joinedload, dan koleksi via selectinload.
+    # selectinload menghindari "cartesian product" (row explosion) yang terjadi bila beberapa
+    # relasi one-to-many di-joinedload sekaligus. category/brand/unit ditambahkan agar tidak
+    # ada lazy-load per item saat serialisasi.
+    from sqlalchemy.orm import joinedload, selectinload
+    q = db.query(models.Item).options(
+        joinedload(models.Item.category),
+        joinedload(models.Item.brand),
+        joinedload(models.Item.unit),
+        selectinload(models.Item.suppliers),
+        selectinload(models.Item.supplier_details),
+        selectinload(models.Item.prices),
+        selectinload(models.Item.group_discounts),
+    )
 
     # 🏢 FILTER LINTAS CABANG (Penyaringan Barang)
     active_branch = None
@@ -179,12 +197,10 @@ def get_items(
         active_branch = db.query(models.Branch).get(current_user.active_branch_id)
     
     is_pusat = not active_branch or (active_branch.id == 1 or active_branch.status == "Toko Utama")
-    print(f"[DEBUG get_items] user={current_user.username}, branch_id={current_user.active_branch_id}, is_pusat={is_pusat}")
 
     if not is_pusat:
         # Jika bukan Pusat, hanya munculkan barang yang sudah pernah didaftarkan stoknya di gudang cabang ini
         gudang_ids = [g.id for g in db.query(models.Warehouse.id).filter(models.Warehouse.branch_id == active_branch.id).all()]
-        print(f"[DEBUG get_items] sub-branch filter applied. gudang_ids={gudang_ids}")
         if gudang_ids:
             # Menggunakan join + distinct agar lebih mantap dan menghindari duplikasi jika ada >1 gudang per cabang
             q = q.join(models.WarehouseStock).filter(models.WarehouseStock.warehouse_id.in_(gudang_ids)).distinct()
@@ -200,13 +216,21 @@ def get_items(
     if category_id: q = q.filter(models.Item.category_id == category_id)
 
     items = q.offset(skip).limit(limit).all()
-    print(f"[DEBUG get_items] search='{search}', found {len(items)} items, user active_branch_id={current_user.active_branch_id}")  # 👈 DEBUG
     items = _apply_virtual_item_metrics(items, db, current_user)
     return [_serialize_item_for_user(item, current_user) for item in items]
 
 @router.get("/{item_id}", response_model=schemas.ItemOut)
 def get_item(item_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    obj = db.query(models.Item).get(item_id)
+    from sqlalchemy.orm import joinedload, selectinload
+    obj = db.query(models.Item).options(
+        joinedload(models.Item.category),
+        joinedload(models.Item.brand),
+        joinedload(models.Item.unit),
+        selectinload(models.Item.suppliers),
+        selectinload(models.Item.supplier_details),
+        selectinload(models.Item.prices),
+        selectinload(models.Item.group_discounts),
+    ).filter(models.Item.id == item_id).first()
     if not obj: raise HTTPException(404, "Item tidak ditemukan")
     obj = _apply_virtual_item_metrics([obj], db, current_user)[0]
     return _serialize_item_for_user(obj, current_user)
@@ -216,7 +240,7 @@ def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db), current
     import uuid
 
     # Ambil data form, kecuali prices dan supplier_ids
-    item_data = item.model_dump(exclude={"prices", "supplier_ids", "supplier_settings"})
+    item_data = item.model_dump(exclude={"prices", "supplier_ids", "supplier_settings", "group_discounts"})
 
     # 1. Pastikan Kode ter-generate otomatis dengan aman di backend
     if not item_data.get("code") or item_data["code"] == "AUTO":
@@ -234,7 +258,9 @@ def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db), current
                 item=obj,
                 supplier_id=s_data.supplier_id,
                 buy_price=s_data.buy_price,
-                barcode=s_data.barcode
+                barcode=s_data.barcode,
+                ppn_type=s_data.ppn_type,
+                ppn_percent=s_data.ppn_percent
             ))
     elif item.supplier_ids:
         for sid in item.supplier_ids:
@@ -268,7 +294,12 @@ def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db), current
     if item.prices:
         for p in item.prices:
             db.add(models.ItemPrice(item_id=obj.id, **p.model_dump()))
-            
+
+    # 5b. Simpan Potongan Harga Jual per grup (diskon bertingkat Pot.1–Pot.4)
+    if item.group_discounts:
+        for gd in item.group_discounts:
+            db.add(models.ItemGroupDiscount(item_id=obj.id, **gd.model_dump()))
+
     # 6. 🛡️ INISIALISASI STOK GUDANG (SUPER PENTING!) 🛡️
     # Ini yang membuat barang terbaca di POS dan Menu Pembelian Supplier!
     b_id = current_user.active_branch_id
@@ -305,7 +336,7 @@ def update_item(item_id: int, item: schemas.ItemUpdate, db: Session = Depends(ge
             f"Barang multi-satuan {obj.name} dikelola dari menu Multi Satuan, bukan edit barang biasa.",
         )
     
-    data = item.model_dump(exclude_unset=True, exclude={"prices", "supplier_ids", "supplier_settings"})
+    data = item.model_dump(exclude_unset=True, exclude={"prices", "supplier_ids", "supplier_settings", "group_discounts"})
     
     need_barcode_gen = False
     if data.get("barcode") == "AUTO":
@@ -325,7 +356,9 @@ def update_item(item_id: int, item: schemas.ItemUpdate, db: Session = Depends(ge
                 item_id=item_id,
                 supplier_id=s_data.supplier_id,
                 buy_price=s_data.buy_price,
-                barcode=s_data.barcode
+                barcode=s_data.barcode,
+                ppn_type=s_data.ppn_type,
+                ppn_percent=s_data.ppn_percent
             ))
     elif item.supplier_ids is not None:
         # Jika hanya kirim ID, reset detail dengan nilai default item saat ini
@@ -353,7 +386,12 @@ def update_item(item_id: int, item: schemas.ItemUpdate, db: Session = Depends(ge
         db.query(models.ItemPrice).filter(models.ItemPrice.item_id == item_id).delete()
         for p in item.prices:
             db.add(models.ItemPrice(item_id=item_id, **p.model_dump()))
-            
+
+    if item.group_discounts is not None:
+        db.query(models.ItemGroupDiscount).filter(models.ItemGroupDiscount.item_id == item_id).delete()
+        for gd in item.group_discounts:
+            db.add(models.ItemGroupDiscount(item_id=item_id, **gd.model_dump()))
+
     db.commit()
     db.refresh(obj)
     return obj
