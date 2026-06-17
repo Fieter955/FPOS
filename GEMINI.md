@@ -1,111 +1,119 @@
-# FPOS Project Instructions & Standards
+# 💎 GEMINI CLI: FPOS Project Instructions & Standards
 
-Foundational mandates for Gemini CLI interaction within this workspace.
+Dokumen ini berisi mandat operasional dan panduan arsitektur sistem FPOS. **Mandat di sini bersifat absolut** dan harus dipatuhi oleh Gemini CLI dalam setiap interaksi.
+
+---
 
 ## 🏗️ Architectural Overview
 
-- **Frontend**: Vanilla JavaScript + HTML5.
-- **Styling**: Vanilla CSS using CSS Variables (defined in `css/style.css`).
-- **Backend**: FastAPI (Python) with SQLAlchemy ORM.
-- **Database**: SQLite (`ipos.db`).
+- **Frontend**: Vanilla JavaScript (ES6+) + HTML5.
+- **Styling**: Vanilla CSS dengan CSS Variables (definisi utama di `frontend/css/style.css`).
+- **Backend**: FastAPI (Python) dengan SQLAlchemy ORM.
+- **Database**: SQLite (`ipos.db`) menggunakan mode WAL untuk performa tinggi.
+- **Waktu**: Semua transaksi menggunakan zona **WITA (Asia/Makassar)**.
+
+---
 
 ## 🧩 Shared UI Components (Mandatory)
 
-Always reuse existing components instead of re-implementing them. Files: `frontend/js/components.js`, `frontend/css/components.css`.
+Selalu gunakan komponen yang sudah ada di `frontend/js/components.js` dan `frontend/css/components.css`. **Jangan implementasi ulang.**
 
 ### 1. Searchable Dropdowns (Combobox)
-
-- **Function**: `createPremiumCombo(container, data, config)`.
-- **Rule**: Mandatory for all selection tasks. Features fixed positioning and real-time filtering.
-- **Features**: Creates a premium searchable dropdown with fixed positioning and high performance.
+- **Fungsi**: `createPremiumCombo(container, data, config)`
+- **Aturan**: Wajib digunakan untuk semua pemilihan entitas (Supplier, Customer, Akun, dll). Mendukung *fixed positioning* dan filter real-time.
 
 ### 2. Unified Purchase Grid
-
-- **Function**: `createPurchaseGrid(container, config)`.
-- **Modes**:
-  - `isFulfillment: false` (PO/Order): 1 column Qty (Pesan).
-  - `isFulfillment: true` (Purchase): 2 columns Qty (Pesan vs Terima).
-- **Naming Standard**: Always use `qty_ordered` and `qty_received` to match Pydantic schemas.
-- **Visual Standards**:b
-  - Qty & Margin: Compact width (60px).
-  - Mismatch Feedback: `qty_received` input changes border/bg to orange if it differs from `qty_ordered`.
-- **Layout Order**: **[Barang] [Pesan] [Terima*] [Harga Beli] [Margin %] [Harga Jual] [Diskon %] [Total]**. -**Features**: Membuat tabel pembelian yang bisa menyesuaikan apakah perlu kolom barang diterima apa tidak tergantung mode yang dipakai
+- **Fungsi**: `createPurchaseGrid(container, config)`
+- **Mode**:
+  - `isFulfillment: false` (PO/Order): 1 kolom Qty (Pesan).
+  - `isFulfillment: true` (Purchase): 2 kolom Qty (Pesan vs Terima).
+- **Standar Penamaan**: Gunakan `qty_ordered` dan `qty_received` agar sinkron dengan Pydantic schema.
+- **Visual Standards**:
+  - Kolom Qty & Margin: Lebar kompak (60px).
+  - Feedback Selisih: Input `qty_received` berubah warna (border/bg orange) jika berbeda dengan `qty_ordered`.
+- **Layout Kolom**: `[Barang] [Pesan] [Terima*] [Harga Beli] [Margin %] [Harga Jual] [Diskon %] [Total]`
 
 ### 3. Unified Transaction Manager (OrderManager)
+- **Fungsi**: `createOrderManager(containerId, config)`
+- **Lingkup**: Wajib untuk alur "Catat Pembelian" dan "Catat Penjualan".
+- **Fitur**: Mengelola pemilihan Supplier/Customer, input Tanggal, Nomor Referensi, Item Grid, dan Summary Box (Grand Total) secara otomatis.
+- **Aturan Kalkulasi**: Dalam mode `purchase`, Total **SELALU** dihitung berdasarkan `qty_received`.
 
-- **Function**: `createOrderManager(containerId, config)`.
-- **Scope**: Mandatory for all "Catat Pembelian" and "Catat Penjualan" workflows.
-- **Features**: Automatically manages Supplier/Customer selection, Date inputs, Reference numbers, the unified Item Grid, and the Grand Total summary box.
-- **Calculation Rule**: In `purchase` mode, Total is ALWAYS calculated based on `qty_received`.
+### 4. UI Helpers Lainnya
+- **Filter Bar**: `createFilterBar(container, config)` (Date Range, Status, & Premium Search).
+- **Payment Modal**: `createPaymentModal(config)` (Split payment Cash/Bank & Verifikasi Saldo).
+- **Barcode Scanner**: `setupBarcodeScanner(onScan, config)` (Global listener dengan deteksi kecepatan ketikan hardware).
 
-### 4. Filter Bar
+---
 
-- **Function**: `createFilterBar(container, config)`.
-- **Features**: Includes Date Range, Status Select, and a Premium Searchable Entity dropdown.
+## 🚀 Workflow Standards & Rules
 
-### 5. Payment Modal
+### 1. Modularisasi & CRUD
+- Pindahkan logika reusable ke `components.js` jika digunakan di 2+ halaman.
+- **Modal CRUD**: Setiap form berbasis modal wajib memiliki 3 fungsi eksplisit: `open[Name]Modal()`, `edit[Name](data)`, dan `save[Name]()`.
+- **Handling ID**: Pastikan fungsi `edit` menyimpan ID (misal: `editCoaId = a.id`).
 
-- **Function**: `createPaymentModal(config)`.
-- **Features**: Handles split payments (Cash/Bank), saldo verification, and automated API submission.
+### 2. Draft & Admin Rules
+- Hanya `role: admin` yang boleh memproses/mengedit draft di `catat-pembelian.html`.
+- **Supplier Locking**: Supplier harus di-lock (`.disable()`) saat mengedit draft yang sudah ada.
+- **Change Tracking**: Tampilkan `showConfirm` jika ada perubahan item (tambah/hapus/qty) pada draft.
+- **Finalisasi**: Proses draft harus mengubah status (misal ke `unpaid` untuk hutang dagang).
 
-### 6. Barcode Scanner Hook
+### 3. Discrepancy Handling (Selisih Stok)
+- Jika `qty_received < qty_ordered` saat fulfillment, tawarkan opsi "Reorder Missing" untuk membuat draft baru berisi sisa barang yang belum diterima.
 
-- **Function**: `setupBarcodeScanner(onScan, config)`.
-- **Purpose**: Global listener to detect rapid keystrokes (scanners) without needing focused input.
-- **Config**: `{ minLength: 2, interval: 50 }`.
-- **Logic**: Automatically distinguishes between human typing and hardware scanner using character timing (`Date.now()`).
+---
 
-## 🎨 Design System
+## 🏢 Multi-Branch & Accounting Standards
 
-- **Colors**: Use variables like `--primary`, `--bg-color`, `--card-bg`, etc.
-- **Spacing**: Maintain consistent padding (12px-24px) and border-radius (8px-12px).
+### 1. Data Integrity
+- **Branch Address**: Setiap cabang **WAJIB** memiliki alamat lengkap.
+- **Warehouse Linking**: Cabang memiliki default warehouse dengan format `WH-CBG-XXXX`.
 
-## 🚀 Workflow Standards
+### 2. Inter-Branch PO Workflow (Mandatory)
+- **Routing**: Cabang non-pusat mengirim PO ke Main Store (ID 1) dengan `is_branch_request=true` dan `status='pending'`.
+- **Simultaneous Journals** (di `journal_service.py`):
+  - **Pusat (Branch 1)**: Debit `3-2200 Kirim Barang ke Cabang`, Credit `1-1100 Kas/Hutang`.
+  - **Cabang Penerima**: Debit `1-1400 Persediaan`, Credit `3-2100 Transfer dari Pusat`.
+- **Stock Isolation**: Stok hanya bertambah di gudang cabang tujuan (`target_branch_id`), **bukan** di stok Toko Pusat.
 
-- **Modularization**: Move reusable logic to `components.js` segera jika dipakai di 2+ tempat.
-- **Modal CRUD Implementation**:
-  - Every modal-based form (e.g., CoA, Kas, Items) MUST have three explicit functions: `open[Name]Modal()` (to reset fields), `edit[Name](data)` (to populate fields), and `save[Name]()` (to handle POST/PUT).
-  - Ensure `edit` functions properly handle ID state (e.g., `editCoaId = a.id`).
-- **Draft Editing (Admin Only)**:
-  - Only `role: admin` can process/edit draft invoices in `catat-pembelian.html`.
-  - **Supplier Locking**: Supplier MUST be locked (`.disable()`) when editing an existing draft to maintain data integrity.
-  - **Change Tracking**: System MUST compare current items against original draft items and show a `showConfirm` warning if items are added, removed, or quantities are modified.
-  - **Finalization**: Processing a draft MUST result in a status transition (e.g., to `unpaid` for AP).
-- **Discrepancy Handling**: Purchase fulfillment MUST validate mismatches. If `qty_received < qty_ordered`, offer the "Reorder Missing" option to create a new draft for the balance.
+---
 
-## 🏢 Multi-Branch Standards
+## 🧠 AI Optimization & Logic Consistency
 
-- **Branch Address**: Mandatory. Every branch MUST have a full address.
-- **Auto-Generation**: Branch codes are auto-generated as `CBG-XXXX`.
-- **Warehouse Linking**: Every branch has a default warehouse `WH-CBG-XXXX`.
+1. **Schema Sync**: Nama field di Frontend (JS) **WAJIB** sama dengan Pydantic `schemas.py` (misal: `qty_received`, bukan `qty_diterima`).
+2. **Schema Coverage**: `Update` schemas (misal: `AccountUpdate`) harus mencakup semua field yang bisa diedit di UI untuk mencegah kegagalan simpan silent.
+3. **State Awareness**: Selalu filter data menggunakan `current_user.active_branch_id`.
+4. **Unique Integrity**: Nama barang (`Item.name`) dan kode barang (`Item.code`) bersifat **UNIK**.
 
-### 📦 Inter-Branch PO Workflow (Mandatory Logic)
+---
 
-- **Request Routing**: Non-Main branches route POs to Main Store (ID 1) with `is_branch_request=true` and `status='pending'`.
-- **Accounting (Reciprocal Transfer)**:
-  - **Main Store (Branch 1)**: Debit `3-2200 Kirim Barang ke Cabang`, Credit `1-1100 Kas` / `2-1100 Hutang`.
-  - **Requesting Branch**: Debit `1-1400 Persediaan`, Credit `3-2100 Transfer dari Pusat`.
-  - **Implementation**: Both journals MUST be created simultaneously in `journal_service.py` during fulfillment.
-- **Stock Isolation**:
-  - **Pusat Stock**: `item.stock` MUST NOT increase when Pusat fulfills a request for another branch.
-  - **Branch Stock**: Increments MUST be directed to the target branch's warehouse (`target_branch_id`).
-- **Data Integrity**:
-  - **Draft Preservation**: `target_branch_id` MUST be preserved when updating/finalizing a draft PO fulfillment, even if the frontend payload is incomplete.
-  - **Visibility Filter**: Fulfillment purchases (where `branch_id == 1` and `target_branch_id > 1`) MUST be excluded from the branch's main purchase list to prevent duplicate views, accessible only via `po.html`.
-- **Audit**: `StockMovement` records must use `get_total_branch_stock` for accurate branch-level snapshots.
+## 📦 System Maintenance & Build
 
-## 🧠 AI Optimization & Intelligence
+### 1. Frontend Build
+- Jalankan `npm run build` untuk memproses aset ke `frontend-dist/`.
+- Backend secara otomatis menggunakan `frontend-dist/` jika aplikasi dalam bentuk frozen (`.exe`) atau env `FPOS_USE_BUILD=1` aktif.
 
-### 1. Schema Consistency
+### 2. Executable (.exe) Build
+- Gunakan `PyInstaller` dengan spec file yang sudah ada.
+- **Penting**: Pastikan DLL OpenSSL dari conda env diutamakan dalam PATH agar `_ssl` tidak crash.
 
-- **Standard**: Field names MUST match between Pydantic `schemas.py` and Frontend logic (e.g., `qty_received`, not `qty_diterima`).
-- **Field Coverage**: Pydantic `Update` schemas (e.g., `AccountUpdate`) MUST include all fields that are editable in the frontend UI (e.g., `code`, `type`) to prevent silent save failures.
+---
 
-### 2. State Awareness
+## 📜 Brain Map: Arsitektur Sistem (iPos 5.0)
 
-- **Active Branch**: Filter data using `current_user.active_branch_id`.
+### Struktur Direktori Utama
+- `/backend`: Core API, Models, Schemas, & Logika Bisnis.
+- `/frontend`: Antarmuka Pengguna (Vanilla SPA Style).
+  - `/item`: Modul manajemen barang (Fragmented HTML).
+  - `/js`: Logika frontend modular.
+- `/uploads`: Aset gambar dan file sistem.
 
-### 3. Documentation Hooks
+### Siklus Bisnis Inti
+- **Purchase**: Draft -> Invoice -> Stok & Jurnal -> Payment.
+- **Sales**: POS (Realtime) -> Potong Stok -> Jurnal Otomatis.
+- **Trade-In**: Mekanisme stok ganda (Barang Kembali & Barang Baru) dengan penanganan surplus/defisit otomatis ke saldo pelanggan.
+- **Broken Return**: Alur retur barang rusak hasil Trade-In ke Supplier dengan validasi faktur historis.
 
-- Use `GEMINI.md` for mandatory architectural patterns and shared UI components.
-- When finishing a task, recap the "Why" and "How" in the topic summary.
+---
+*Dokumen ini diperbarui secara berkala. Gemini CLI akan menggunakan informasi ini sebagai basis pengetahuan utama.*
