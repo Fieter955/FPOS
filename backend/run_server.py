@@ -38,4 +38,7 @@ if __name__ == "__main__":
     threading.Thread(target=start_browser, daemon=True).start()
 
     # Jalankan Uvicorn menggunakan variabel 'app' langsung, BUKAN teks
+    # ⚠️ Tetap 1 proses (TANPA workers=N/fork): SQLite penulis-tunggal + lifespan/
+    # scheduler idempotensi. Handler sinkron sudah di-threadpool oleh FastAPI,
+    # cukup untuk ≤15 user konkuren.
     uvicorn.run(app, host="127.0.0.1", port=8010, reload=False)

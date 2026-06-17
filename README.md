@@ -170,3 +170,77 @@ python cleanup_duplicates.py
 - **Dashboard Integration**: Menambahkan tombol pintas "Tambah Supplier" langsung di Dashboard Utama untuk mempercepat registrasi pemasok baru.
 - **Routing**: Mengaktifkan routing otomatis untuk seluruh file di folder `frontend/supplier/` melalui backend FastAPI.
 
+---
+
+## 🚀 Build Frontend & Rilis
+
+Frontend tetap **Vanilla MPA** (tanpa framework/SPA). Ditambahkan pipeline build ringan berbasis
+**esbuild + html-minifier-terser** yang menghasilkan versi teroptimasi ke folder `frontend-dist/`:
+**minify** JS/CSS/HTML (termasuk JS/CSS inline), **content-hash** nama file (cache 1 tahun + `immutable`),
+serta vendor & font **di-host lokal** (lepas dari CDN — aman untuk Tailscale/offline).
+
+### 1. Prasyarat
+- **Node.js** (untuk build saja; runtime aplikasi tetap Python/FastAPI).
+- Sekali setup: `npm install`
+
+### 2. Perintah
+```bash
+npm run build      # build sekali → frontend-dist/
+npm run watch      # rebuild otomatis tiap file di frontend/ berubah
+```
+
+### 3. Dev vs Build (penting)
+- **Development**: edit `frontend/` seperti biasa — **tanpa perlu build**. Backend menyajikan folder
+  sumber agar perubahan langsung kebaca.
+- **Uji versi build secara lokal**: jalankan backend dengan env `FPOS_USE_BUILD=1` → backend memakai
+  `frontend-dist/` (aset ber-hash + cache panjang).
+- **Produksi (.exe)**: saat frozen, backend **otomatis** memakai `frontend-dist/` bila ada.
+- Logika pemilihan ada di `backend/main.py` (`_USE_BUILT`).
+
+### 4. Langkah Rilis (.exe)
+1. `npm run build` — hasilkan `frontend-dist/`.
+2. `cd backend && pyinstaller FPOS.spec` — kini **mode onedir** (startup lebih cepat, tanpa ekstraksi
+   ke folder temp). Output: `backend/dist/FPOS/` (berisi `FPOS.exe` + `_internal/`).
+3. Copy `frontend-dist/` ke dalam `backend/dist/FPOS/` (di samping `FPOS.exe`). Frontend memang sengaja
+   dikirim sebagai **file lepas** (bukan di-embed) agar bisa dipatch tanpa rebuild exe.
+
+### 5. Vendor & Font (host lokal)
+- `frontend/js/vendor/chart.umd.min.js` — Chart.js, di-*lazy-load* hanya di `reports.html`.
+- `frontend/css/fonts/poppins-*.woff2` — Poppins, `@font-face` ada di `style.css` (`font-display:swap`).
+- Untuk mengunduh ulang vendor/font: `node fetch-vendor.mjs`.
+
+> ⚠️ Jangan edit isi `frontend-dist/` secara manual — folder ini hasil generate dan ditimpa tiap build
+> (sudah masuk `.gitignore` bersama `node_modules/`).
+
+### 6. Fix wajib di `FPOS.spec` & `main.py` (jangan dihapus)
+
+Build `.exe` dari nol mudah gagal dengan gejala window **"refused to connect"** (server di dalam exe
+crash/diam-diam tidak naik). Tiga akar masalah berikut sudah diperbaiki — **jangan dihapus**:
+
+1. **uvicorn (hidden imports)** — uvicorn memuat loop & protokol HTTP/websocket lewat *import string*
+   saat runtime, jadi analisis statis PyInstaller melewatkannya → `uvicorn.run()` gagal di server
+   thread (tanpa error terlihat). Fix di `FPOS.spec`:
+   ```python
+   from PyInstaller.utils.hooks import collect_submodules
+   _hidden = collect_submodules('uvicorn') + ['h11']   # → hiddenimports=_hidden
+   ```
+2. **OpenSSL salah versi** — di PATH ada banyak `libcrypto-3-x64.dll` (conda base, poppler, php) selain
+   milik env. PyInstaller bisa membundel versi yang salah → exe crash di import
+   `_ssl: procedure could not be found`. Fix di awal `FPOS.spec` (utamakan DLL dari conda env aktif):
+   ```python
+   import os, sys
+   os.environ["PATH"] = os.path.join(sys.prefix, "Library", "bin") + os.pathsep + os.environ.get("PATH", "")
+   ```
+3. **`print()` emoji** — `seed_admin()` dkk mencetak `✓ 👑 ⚠️`. Di frozen windowed (`sys.stdout=None`)
+   atau console (cp1252) → `UnicodeEncodeError` saat DB baru (fresh install) → crash. Fix di awal
+   `backend/main.py`: amankan stdout/stderr ke UTF-8 (windowed → `error_log.txt`) sebelum `print` apa pun.
+
+> ⚠️ **`FPOS.spec` masuk `.gitignore` (`*.spec`)** — ketiga fix di atas hanya ada di file lokal, **tidak
+> ikut git**. Simpan baik-baik dan **jangan regenerate** spec dari nol (`pyi-makespec`), atau fix hilang.
+
+**Verifikasi build cepat:** jalankan `backend/dist/FPOS/FPOS.exe`, lalu cek `http://127.0.0.1:8010/health`
+membalas `{"status":"ok",...}`. Bila debugging perlu melihat error, set `console=True` sementara di spec.
+
+**Catatan first-run:** di mesin baru (belum ada file `.autostart_configured`), launch pertama memunculkan
+dialog Yes/No auto-start Windows — ini **memang fitur**, jawab sekali lalu diingat untuk seterusnya.
+

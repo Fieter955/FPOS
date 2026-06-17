@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional
@@ -472,9 +473,9 @@ def delete_item(item_id: int, db: Session = Depends(get_db), _=Depends(get_curre
 # ─── IMPORT EXCEL (VERSI AUTO-GUDANG, FIX WARNING, SKIP DUPLIKAT & SAFE PER-BARIS) ───────────────
 @router.post("/import")
 async def import_items_from_excel(
-    file: UploadFile = File(...), 
-    db: Session = Depends(get_db), 
-    current_user: models.User = Depends(get_current_user) 
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
 ):
     """
     Import ribuan barang dari file Excel/CSV.
@@ -484,15 +485,21 @@ async def import_items_from_excel(
     - SKIP duplikat nama barang (case-insensitive, whitespace-safe)
     - Aman per-baris: 1 baris gagal tidak rollback semua
     """
-    import pytz
-    from datetime import datetime
-
     if not file.filename.endswith(('.xlsx', '.xls', '.csv')):
         raise HTTPException(400, "Format file harus Excel (.xlsx/.xls) atau CSV")
 
+    contents = await file.read()
+    # Parsing pandas + ribuan insert = kerja blocking berat. Jalankan di threadpool
+    # agar TIDAK membekukan event loop (request cabang lain tetap responsif).
+    return await run_in_threadpool(_import_items_sync, contents, file.filename, db, current_user)
+
+
+def _import_items_sync(contents: bytes, filename: str, db: Session, current_user: models.User):
+    import pytz
+    from datetime import datetime
+
     try:
-        contents = await file.read()
-        if file.filename.endswith('.csv'):
+        if filename.endswith('.csv'):
             df = pd.read_csv(BytesIO(contents))
         else:
             df = pd.read_excel(BytesIO(contents))

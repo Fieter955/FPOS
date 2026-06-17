@@ -34,6 +34,11 @@ error_log.txt
 *.log
 .autostart_configured
 
+# ── Frontend build (Node) ────────────────────────────────────────────────────
+node_modules/
+frontend-dist/
+build-manifest.json
+
 # ── Editor / OS ──────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db

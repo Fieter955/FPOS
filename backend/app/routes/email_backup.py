@@ -5,6 +5,7 @@ from email.mime.text import MIMEText
 from email import encoders
 from datetime import datetime, date
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from typing import Optional
 
@@ -150,15 +151,21 @@ async def import_db(file: UploadFile = File(...), _=Depends(require_admin)):
     """Fitur untuk menimpa database dengan file dari luar."""
     if not file.filename.endswith(".db"):
         raise HTTPException(400, "Hanya menerima file .db")
-    
+
+    file_content = await file.read()
+    # Tulis file + dispose koneksi = blocking I/O → threadpool agar loop tetap responsif.
+    return await run_in_threadpool(_import_db_sync, file_content)
+
+
+def _import_db_sync(file_content: bytes):
     try:
         engine.dispose() # Putuskan koneksi DB aktif
         # Buat backup darurat sebelum ditimpa
         shutil.copy2(DB_PATH, DB_PATH + ".bak")
-        
+
         with open(DB_PATH, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-            
+            buffer.write(file_content)
+
         return {"success": True, "message": "Restore sukses! Silakan restart server."}
     except Exception as e:
         raise HTTPException(500, str(e))

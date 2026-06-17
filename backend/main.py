@@ -8,6 +8,23 @@ else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(BASE_DIR)
 # 👆 BATAS PENAWAR 👆
+
+# 👇 AMANKAN STDOUT/STDERR (sebelum print apa pun di modul ini) 👇
+# Frozen windowed: sys.stdout/stderr = None → print() menggagalkan seluruh startup.
+# Frozen console : encoding default cp1252 → print emoji (✓ 👑 ⚠️) → UnicodeEncodeError → crash.
+# Solusi: windowed → arahkan ke error_log.txt (UTF-8); console → reconfigure ke UTF-8.
+if getattr(sys, 'frozen', False):
+    if sys.stdout is None or sys.stderr is None:
+        _logf = open(os.path.join(BASE_DIR, "error_log.txt"), "w", encoding="utf-8")
+        sys.stdout = _logf
+        sys.stderr = _logf
+    else:
+        for _s in (sys.stdout, sys.stderr):
+            try:
+                _s.reconfigure(encoding="utf-8")
+            except Exception:
+                pass
+# 👆 BATAS AMAN STDOUT 👆
 import subprocess
 import os, threading, time, sys
 import winreg
@@ -24,7 +41,7 @@ import uvicorn
 from contextlib import asynccontextmanager
 
 from app.database import Base, engine, SessionLocal
-from app.auth import get_password_hash
+from app.auth import get_password_hash, verify_password
 from app.config import settings
 from app import models
 from app.routes import (
@@ -342,6 +359,29 @@ async def lifespan(app: FastAPI):
             print("📦 ✓ Seed Unit: Pcs")
         db.commit()
 
+        # ── Guard keamanan: password default + akses publik (Funnel) ──────────
+        # Di mode publik, kredensial bawaan bisa ditebak SEKALI coba dari internet;
+        # throttle login (429) tidak menolong bila tebakan pertama sudah benar.
+        # CATATAN: sengaja TIDAK pakai messagebox di sini — lifespan jalan di thread
+        # server (bukan main thread); Tk tidak thread-safe & modal akan memblok startup.
+        # Peringatan diarahkan ke stdout → error_log.txt (mode frozen windowed).
+        if settings.TAILSCALE_PUBLIC:
+            lemah = []
+            admin_u = db.query(models.User).filter(models.User.username == "admin").first()
+            if admin_u and verify_password("admin123", admin_u.hashed_password):
+                lemah.append("admin/admin123")
+            fieter_u = db.query(models.User).filter(models.User.username == "Fieter").first()
+            if fieter_u and verify_password("Fieter098", fieter_u.hashed_password):
+                lemah.append("Fieter/Fieter098 (vendor)")
+            if lemah:
+                garis = "!" * 70
+                print(garis)
+                print("⚠️  BAHAYA: AKSES PUBLIK (Tailscale Funnel) AKTIF DENGAN PASSWORD DEFAULT")
+                print(f"    Akun masih memakai password bawaan: {', '.join(lemah)}")
+                print("    Siapa pun yang menemukan URL bisa login. GANTI PASSWORD SEKARANG,")
+                print("    atau matikan Funnel (TAILSCALE_PUBLIC=false) sampai password diganti.")
+                print(garis)
+
     except Exception as e:
         print(f"⚠️ Gagal inisialisasi data awal: {e}")
     finally:
@@ -350,7 +390,18 @@ async def lifespan(app: FastAPI):
     yield 
     print("Server mematikan proses...")
 
-app = FastAPI(title=settings.APP_NAME, version=settings.APP_VERSION, lifespan=lifespan)
+# Saat mode Funnel (TAILSCALE_PUBLIC=True) server terbuka ke internet publik.
+# Tutup dokumentasi interaktif agar peta API (endpoint, schema, contoh) tidak
+# bocor ke publik. Di mode privat (serve/tailnet) docs tetap aktif untuk debug.
+_public = settings.TAILSCALE_PUBLIC
+app = FastAPI(
+    title=settings.APP_NAME,
+    version=settings.APP_VERSION,
+    lifespan=lifespan,
+    docs_url=None if _public else "/docs",
+    redoc_url=None if _public else "/redoc",
+    openapi_url=None if _public else "/openapi.json",
+)
 
 # CORS: auth memakai Bearer token di header Authorization (BUKAN cookie), maka
 # allow_credentials=False — ini menghapus kombinasi berbahaya ["*"] + credentials.
@@ -410,23 +461,36 @@ if getattr(sys, 'frozen', False):
 else:
     ROOT_DIR = Path(__file__).resolve().parent.parent
 
-FRONTEND_DIR = ROOT_DIR / "frontend"
+# Saat frozen (exe) pakai hasil build (frontend-dist) bila ada. Saat dev (jalan dari sumber)
+# tetap pakai folder sumber agar edit langsung kebaca — kecuali FPOS_USE_BUILD=1 untuk uji build.
+_BUILT_FRONTEND = ROOT_DIR / "frontend-dist"
+_USE_BUILT = _BUILT_FRONTEND.exists() and (
+    getattr(sys, "frozen", False) or os.getenv("FPOS_USE_BUILD") == "1"
+)
+FRONTEND_DIR = _BUILT_FRONTEND if _USE_BUILT else (ROOT_DIR / "frontend")
+# Aset di frontend-dist ber-hash (immutable) → boleh cache 1 tahun; sumber dev cache pendek (1 jam).
+_ASSET_MAX_AGE = 31536000 if _USE_BUILT else 3600
+_ASSET_IMMUTABLE = _USE_BUILT
 MANIFEST_PATH = FRONTEND_DIR / "manifest.json"
 
 class CachedStaticFiles(StaticFiles):
     """StaticFiles + header Cache-Control agar aset (js/css/gambar) tidak di-download ulang
     setiap kunjungan. Hemat round-trip — terasa banget via Tailscale.
-    Catatan: nama file tidak ber-hash, jadi max_age sengaja moderat (1 jam untuk js/css)
-    supaya update tetap kebaca tanpa nunggu lama. Naikkan bila deploy sudah jarang."""
-    def __init__(self, *args, max_age: int = 3600, **kwargs):
+    Catatan: bila disajikan dari frontend-dist, nama file sudah ber-hash → aman pakai
+    max_age panjang + immutable. Dari sumber (dev) max_age moderat agar update cepat kebaca."""
+    def __init__(self, *args, max_age: int = 3600, immutable: bool = False, **kwargs):
         self.max_age = max_age
+        self.immutable = immutable
         super().__init__(*args, **kwargs)
 
     async def get_response(self, path, scope):
         response = await super().get_response(path, scope)
         # Hanya cache respons sukses (200/304) — jangan cache error seperti 404.
         if response.status_code < 400:
-            response.headers["Cache-Control"] = f"public, max-age={self.max_age}"
+            cc = f"public, max-age={self.max_age}"
+            if self.immutable:
+                cc += ", immutable"
+            response.headers["Cache-Control"] = cc
         return response
 
 
@@ -447,9 +511,9 @@ def health():
 
 if FRONTEND_DIR.exists():
     if (FRONTEND_DIR / "js").exists():
-        app.mount("/js", CachedStaticFiles(directory=str(FRONTEND_DIR / "js"), max_age=3600), name="js")
+        app.mount("/js", CachedStaticFiles(directory=str(FRONTEND_DIR / "js"), max_age=_ASSET_MAX_AGE, immutable=_ASSET_IMMUTABLE), name="js")
     if (FRONTEND_DIR / "css").exists():
-        app.mount("/css", CachedStaticFiles(directory=str(FRONTEND_DIR / "css"), max_age=3600), name="css")
+        app.mount("/css", CachedStaticFiles(directory=str(FRONTEND_DIR / "css"), max_age=_ASSET_MAX_AGE, immutable=_ASSET_IMMUTABLE), name="css")
 
     @app.get("/")
     async def root():
@@ -620,6 +684,12 @@ if __name__ == "__main__":
         jalankan_tailscale(PORT, PUBLIK)
         # Bind ke localhost saja. Tailscale serve/funnel & WebView lokal mengakses
         # lewat 127.0.0.1, jadi app tidak perlu terekspos di seluruh interface (0.0.0.0).
+        #
+        # ⚠️ JANGAN tambahkan workers=N / gunicorn fork. SQLite = penulis tunggal,
+        # multi-proses justru memperburuk kontensi lock; selain itu lifespan/seed +
+        # scheduler backup (thread daemon) akan jalan ganda. Tetap 1 proses: handler
+        # `def` (sinkron) sudah dijalankan FastAPI di threadpool (~40 thread) → cukup
+        # untuk ≤15 user konkuren tanpa membekukan event loop.
         uvicorn.run(app, host="127.0.0.1", port=PORT)
 
     def maximize_benar(window):

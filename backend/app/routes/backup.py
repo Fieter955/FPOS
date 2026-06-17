@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Response, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 import shutil, os
 from datetime import datetime
@@ -66,9 +67,6 @@ async def import_database(
     Import / restore database dari file .db yang diupload.
     Menggunakan SQLite built-in backup API — aman di Windows (tidak perlu delete file).
     """
-    import sqlite3, os, shutil
-    from datetime import datetime
-
     if not file.filename or not file.filename.endswith(".db"):
         raise HTTPException(400, "File harus berekstensi .db")
 
@@ -79,6 +77,15 @@ async def import_database(
 
     if len(file_content) < 16 or file_content[:16] != b"SQLite format 3\x00":
         raise HTTPException(400, "File bukan database SQLite yang valid")
+
+    # SQLite backup API + file I/O = blocking. Jalankan di threadpool agar event
+    # loop tidak freeze (penting saat server publik melayani banyak cabang).
+    return await run_in_threadpool(_import_database_sync, file_content)
+
+
+def _import_database_sync(file_content: bytes):
+    import sqlite3, os, shutil
+    from datetime import datetime
 
     # Tentukan path DB dari DATABASE_URL di config
     from ..config import settings

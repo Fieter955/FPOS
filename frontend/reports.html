@@ -19,7 +19,6 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Laporan - FPOS</title>
     <link rel="stylesheet" href="/css/style.css" />
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   </head>
   <body>
     <div class="app-container">
@@ -297,6 +296,20 @@
         }
       }
 
+      // Chart.js di-host lokal & di-load saat dibutuhkan (lepas dari CDN, aman untuk Tailscale/offline)
+      function loadChartJs() {
+        if (window.Chart) return Promise.resolve();
+        if (window._chartJsPromise) return window._chartJsPromise;
+        window._chartJsPromise = new Promise((resolve, reject) => {
+          const s = document.createElement("script");
+          s.src = "/js/vendor/chart.umd.min.js";
+          s.onload = resolve;
+          s.onerror = reject;
+          document.head.appendChild(s);
+        });
+        return window._chartJsPromise;
+      }
+
       async function loadDash() {
         try {
           const d = await api("GET", "/reports/dashboard");
@@ -306,6 +319,7 @@
       <div class="card" style="padding:20px"><div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">Jumlah Transaksi</div><div style="font-size:26px;font-weight:900">${d.total_transactions_today || 0}</div></div>
       <div class="card" style="padding:20px"><div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">Stok Menipis</div><div style="font-size:26px;font-weight:900;color:#ef4444">${d.low_stock_count || 0} item</div></div>`;
 
+          await loadChartJs();
           if (chartInst) chartInst.destroy();
           const isDark = document.body.classList.contains("dark-mode");
           chartInst = new Chart(document.getElementById("chartSales"), {
