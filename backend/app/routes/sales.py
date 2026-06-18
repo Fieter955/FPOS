@@ -22,6 +22,7 @@ from ..services.virtual_units import (
     get_required_stock_qty,
     is_virtual_variant,
 )
+from ..services.inventory_fifo import consume_fifo, record_allocations, restore_allocations
 from .accounting import create_auto_journal  # ✅ Import di atas, sekali saja
 
 router = APIRouter()
@@ -247,11 +248,26 @@ def create_sale(
             if stock_item.stock < required_qty:
                 raise HTTPException(400, f"Stok {item.name} tidak cukup (Sisa: {round(available_qty, 4)})")
 
-        line_total        = (it.sell_price * (1 - it.discount / 100)) * it.qty
-        current_buy_price = get_effective_buy_price(db, item, item_map=item_map) or 0
-        total_hpp        += current_buy_price * it.qty
+        line_total = (it.sell_price * (1 - it.discount / 100)) * it.qty
 
-        db.add(models.SaleItem(
+        # ── HPP via FIFO: konsumsi batch tertua dulu di gudang penjualan ────────
+        # required_qty sudah dalam satuan dasar (mengikuti konversi multi-satuan).
+        if gudang_aktif:
+            allocations = consume_fifo(
+                db, item_id=stock_item.id, warehouse_id=gudang_aktif.id, qty=required_qty
+            )
+            line_hpp = sum(a_qty * a_cost for (_b, a_qty, a_cost) in allocations)
+        else:
+            # Tanpa gudang (mode lama): jatuh ke harga modal item (perilaku lama).
+            allocations = []
+            line_hpp = (get_effective_buy_price(db, item, item_map=item_map) or 0) * it.qty
+
+        # buy_price disimpan PER SATUAN JUAL (it.qty), konsisten dgn logika lama
+        # (pembalikan/retur & margin memakai SaleItem.buy_price * qty).
+        current_buy_price = (line_hpp / it.qty) if it.qty else 0
+        total_hpp        += line_hpp
+
+        sale_item = models.SaleItem(
             sale_id=sale.id,
             item_id=it.item_id,
             qty=it.qty,
@@ -259,7 +275,10 @@ def create_sale(
             sell_price=it.sell_price,
             discount=it.discount,
             total=line_total
-        ))
+        )
+        db.add(sale_item)
+        db.flush()
+        record_allocations(db, sale_item_id=sale_item.id, allocations=allocations)
 
         before = float(stock_item.stock or 0)
         stock_item.stock -= required_qty
@@ -388,6 +407,9 @@ def cancel_sale(
             if gudang_aktif:
                 from .warehouse import adjust_warehouse_stock
                 adjust_warehouse_stock(db, gudang_aktif.id, stock_item.id, required_qty)
+
+            # ── FIFO: kembalikan sisa ke batch yg dulu dikonsumsi baris jual ini ─
+            restore_allocations(db, it.id)
 
             db.add(models.StockMovement(
                 date=local_date,

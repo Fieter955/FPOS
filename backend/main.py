@@ -258,6 +258,62 @@ def run_migrations():
 
 run_migrations()
 
+
+# ─── Seed Batch Pembukaan FIFO (idempotent) ────────────────────────────────────
+def seed_opening_stock_batches():
+    """Sekali jalan: buat 1 batch pembukaan FIFO untuk tiap (gudang, item) yang
+    punya stok > 0 tapi BELUM punya lapisan batch sama sekali. unit_cost diambil
+    dari item.buy_price (harga modal terakhir yang diketahui). received_date jauh
+    di masa lalu agar stok lama ini keluar lebih dulu (FIFO). Idempotent: aman
+    dijalankan tiap boot — (gudang,item) yang sudah punya batch dilewati."""
+    from datetime import date as _date
+    from sqlalchemy import inspect as _sa_inspect
+    db = SessionLocal()
+    try:
+        if not _sa_inspect(engine).has_table("stock_batches"):
+            return
+        existing = {
+            (wid, iid)
+            for (wid, iid) in db.query(
+                models.StockBatch.warehouse_id, models.StockBatch.item_id
+            ).distinct().all()
+        }
+        buy_map = {
+            iid: float(bp or 0)
+            for (iid, bp) in db.query(models.Item.id, models.Item.buy_price).all()
+        }
+        rows = db.query(
+            models.WarehouseStock.warehouse_id,
+            models.WarehouseStock.item_id,
+            models.WarehouseStock.stock,
+        ).filter(models.WarehouseStock.stock > 0).all()
+
+        created = 0
+        seed_date = _date(2000, 1, 1)
+        for wid, iid, stock in rows:
+            if stock and stock > 0 and (wid, iid) not in existing:
+                db.add(models.StockBatch(
+                    item_id=iid,
+                    warehouse_id=wid,
+                    supplier_id=None,
+                    purchase_item_id=None,
+                    unit_cost=buy_map.get(iid, 0.0),
+                    qty_received=float(stock),
+                    qty_remaining=float(stock),
+                    received_date=seed_date,
+                ))
+                created += 1
+        if created:
+            db.commit()
+            print(f"✓ FIFO: {created} batch pembukaan dibuat dari stok berjalan.")
+    except Exception as e:
+        db.rollback()
+        print(f"⚠️ Gagal seed batch pembukaan FIFO: {e}")
+    finally:
+        db.close()
+
+seed_opening_stock_batches()
+
 # ─── Background Tasks ─────────────────────────────────────────────────────────
 def local_backup_loop():
     import shutil

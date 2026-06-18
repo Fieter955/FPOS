@@ -207,14 +207,15 @@ function createPurchaseGrid(container, config = {}) {
     row.id = `pg-row-${id}`;
     row.style = `display:grid; grid-template-columns: ${columns}; gap:10px; padding:8px 10px; border-bottom:1px solid var(--border-color); align-items:center`;
 
-    // Set default qty_received to match qty_ordered if fulfillment and not specified
+    // Default kolom "Terima" (qty_received) mengikuti kolom "Pesan" (qty_ordered)
+    // pada mode fulfillment. Hanya pakai nilai tersimpan bila benar-benar ada
+    // penerimaan parsial (> 0); nilai 0 dianggap belum diisi → samakan dengan Pesan.
     const qtyOrdered = item?.qty_ordered || item?.qty || 1;
-    const qtyReceived =
-      item?.qty_received !== undefined
-        ? item.qty_received
-        : isFulfillment
-          ? qtyOrdered
-          : 0;
+    const qtyReceived = item?.qty_received
+      ? item.qty_received
+      : isFulfillment
+        ? qtyOrdered
+        : 0;
 
     row.innerHTML = `
             <div class="item-col-container">
@@ -248,6 +249,9 @@ function createPurchaseGrid(container, config = {}) {
 
     const ordInp = row.querySelector(".pg-ordered");
     const recInp = row.querySelector(".pg-received");
+    // Awali _prevVal dengan nilai Pesan saat ini agar auto-sync Terima←Pesan
+    // langsung aktif sejak baris dimuat (Terima ikut berubah saat Pesan diubah).
+    ordInp._prevVal = qtyOrdered;
     const beliInp = row.querySelector(".pg-beli");
     const jualInp = row.querySelector(".pg-jual");
     const btnPlus = row.querySelector(".btn-plus-disc");
@@ -467,13 +471,10 @@ function createPurchaseGrid(container, config = {}) {
 
           const qOrd = parseFloat(row.querySelector(".pg-ordered").value) || 0;
           const recInp = row.querySelector(".pg-received");
-          const qRec = recInp
-            ? parseFloat(recInp.value) || 0
-            : isFulfillment
-              ? qOrd
-              : isBranchRequest || showSupplierColumn
-                ? qOrd
-                : 0;
+          // Kolom "Terima" hanya muncul pada mode fulfillment. Bila tidak ada
+          // (pembelian biasa, request cabang, atau pilih-supplier), jumlah yang
+          // diterima dianggap sama dengan "Pesan" — bukan 0.
+          const qRec = recInp ? parseFloat(recInp.value) || 0 : qOrd;
 
           const hjInp = row.querySelector(".pg-jual");
           const hj = hjInp

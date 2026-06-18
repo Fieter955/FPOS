@@ -14,6 +14,7 @@ from .journal_service import (
     create_purchase_reversal_journal,
 )
 from .virtual_units import is_virtual_variant
+from .inventory_fifo import add_batch, reduce_batches_for_reversal
 
 
 PUSAT_BRANCH_ID = 1
@@ -178,6 +179,17 @@ def receive_branch_stock(db: Session, *, purchase: models.Purchase,
             item.stock += purchase_item.qty
 
         adjust_warehouse_stock(db, warehouse.id, item.id, purchase_item.qty)
+        # ── FIFO: catat lapisan persediaan baru (harga modal per-supplier) ──────
+        add_batch(
+            db,
+            item_id=item.id,
+            warehouse_id=warehouse.id,
+            qty=purchase_item.qty,
+            unit_cost=purchase_item.buy_price,
+            received_date=local_date,
+            supplier_id=purchase.supplier_id,
+            purchase_item_id=purchase_item.id,
+        )
         db.add(models.StockMovement(
             date=local_date,
             created_at=local_datetime,
@@ -213,6 +225,14 @@ def reverse_received_stock(db: Session, *, purchase: models.Purchase,
 
         qty_before = get_total_branch_stock(db, stock_branch_id, item.id)
         adjust_warehouse_stock(db, warehouse.id, item.id, -purchase_item.qty)
+        # ── FIFO: kurangi lapisan dari pembelian ini (sisanya batch terbaru) ────
+        reduce_batches_for_reversal(
+            db,
+            item_id=item.id,
+            warehouse_id=warehouse.id,
+            qty=purchase_item.qty,
+            prefer_purchase_item_id=purchase_item.id,
+        )
         if is_pusat_stock:
             if item.stock < purchase_item.qty:
                 raise HTTPException(400, f"Gagal dibatalkan! Stok pusat {item.name} tidak cukup.")

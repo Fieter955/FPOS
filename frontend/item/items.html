@@ -400,6 +400,19 @@
           return;
         }
 
+        // Jika tombol sudah disabled, jangan lakukan apa-apa
+        const sourceBtn = document.getElementById(
+          isPotongan
+            ? "btnAdvPotonganHargaJual"
+            : "btnAdv" +
+                (type === "levelHarga"
+                  ? "Harga"
+                  : type === "levelJumlah"
+                    ? "Jumlah"
+                    : "Satuan"),
+        );
+        if (sourceBtn && sourceBtn.classList.contains("disabled")) return;
+
         // Toggle: Jika mengklik tipe yang sama, maka tutup.
         if (relevantState === type) {
           targetContainer.style.display = "none";
@@ -407,8 +420,9 @@
           else currentAdvancedType = null;
 
           buttons.forEach((b) => {
-            const isTargetBtn = b.id.toLowerCase().includes(type.toLowerCase());
-            if (isTargetBtn) {
+            const btnId = b.id.toLowerCase();
+            const isTargetBtn = btnId.includes(type.toLowerCase());
+            if (isTargetBtn && !b.classList.contains("disabled")) {
               b.style.background = "var(--card-bg)";
               b.style.color = "var(--text-main)";
               b.style.borderColor = "var(--border-color)";
@@ -448,9 +462,21 @@
             // Update style tombol
             buttons.forEach((b) => {
               const btnId = b.id.toLowerCase();
-              const isCurrentType = btnId.includes(type.toLowerCase());
+              let isCurrentType = false;
 
-              // Jika ini bagian potongan, hanya update tombol potongan
+              if (isPotongan) {
+                isCurrentType = btnId.includes("potonganhargajual");
+              } else {
+                // Map type to button ID keyword
+                const typeMap = {
+                  levelHarga: "advharga",
+                  levelJumlah: "advjumlah",
+                  satuan: "advsatuan",
+                };
+                const keyword = typeMap[type] || type.toLowerCase();
+                isCurrentType = btnId.includes(keyword);
+              }
+
               if (isPotongan) {
                 if (btnId.includes("potonganhargajual")) {
                   b.style.background = isCurrentType
@@ -462,7 +488,6 @@
                     : "var(--border-color)";
                 }
               } else {
-                // Jika ini bagian advanced (satuan/harga/jumlah), jangan ganggu tombol potongan
                 if (!btnId.includes("potonganhargajual")) {
                   b.style.background = isCurrentType
                     ? "var(--primary)"
@@ -1181,6 +1206,26 @@
         document.getElementById("fBarang").reset();
         document.getElementById("autoBarcode").checked = true;
         toggleBarcodeUI();
+
+        // Reset Advanced Tabs State
+        currentAdvancedType = null;
+        currentPotonganType = null;
+        const advButtons = ["btnAdvSatuan", "btnAdvHarga", "btnAdvJumlah"];
+        advButtons.forEach((id) => {
+          const btn = document.getElementById(id);
+          if (btn) {
+            btn.classList.remove("disabled");
+            btn.style.background = "var(--card-bg)";
+            btn.style.color = "var(--text-main)";
+            btn.style.borderColor = "var(--border-color)";
+          }
+        });
+        const advContent = document.getElementById("advancedContent");
+        if (advContent) {
+          advContent.innerHTML = "";
+          advContent.style.display = "none";
+        }
+
         const setVal = (id, val) => {
           const el = document.getElementById(id);
           if (el) el.value = val;
@@ -1212,6 +1257,7 @@
         document.getElementById("fSupplierContext").value = "";
         document.getElementById("supSearchInput").value = "";
 
+        let detectedType = null;
         if (item) {
           editItemId = item.id;
           document.getElementById("mBarangTitle").textContent = "Edit Barang";
@@ -1245,7 +1291,19 @@
             toggleBarcodeUI();
             document.getElementById("fBarcode").value = item.barcode;
           }
+
+          // Detect Pricing Type
           if (item.prices?.length) {
+            const hasGrosir = item.prices.some(
+              (p) => p.name === "Grosir" && p.min_qty > 1,
+            );
+            const hasLevelHarga = item.prices.some(
+              (p) => p.name !== "Grosir" && p.name !== "Harga Diskon",
+            );
+
+            if (hasLevelHarga) detectedType = "levelHarga";
+            else if (hasGrosir) detectedType = "levelJumlah";
+
             item.prices.forEach((p) => {
               if (p.name === "Harga Diskon")
                 document.getElementById("fHJualDiskon").value = toRibuan(
@@ -1258,6 +1316,11 @@
               }
             });
           }
+
+          if (!detectedType && item.is_virtual_variant === false) {
+            // Check for multi units later after initSatuanGrid
+          }
+
           if (item.group_discounts?.length) {
             groupDiscounts = item.group_discounts.map((gd) => ({
               group_id: gd.group_id,
@@ -1294,7 +1357,31 @@
             onSupplierContextChange();
           }
         }
-        initSatuanGrid(item);
+
+        initSatuanGrid(item).then(() => {
+          // Detection part 2: Satuan
+          if (item && !detectedType && satuanRows.length > 2) {
+            // Index 0 is base, last one is draft. If length > 2, there's at least one real conversion.
+            detectedType = "satuan";
+          }
+
+          if (detectedType) {
+            loadAdvancedContent(detectedType);
+            const activeId =
+              "btnAdv" +
+              (detectedType === "levelHarga"
+                ? "Harga"
+                : detectedType === "levelJumlah"
+                  ? "Jumlah"
+                  : "Satuan");
+            advButtons.forEach((id) => {
+              if (id !== activeId) {
+                document.getElementById(id).classList.add("disabled");
+              }
+            });
+          }
+        });
+
         updateDiscountPreview();
         openModal("mBarang");
         setTimeout(() => document.getElementById("fNama").focus(), 100);
@@ -1349,32 +1436,40 @@
           if (!(await showConfirm(msg))) return;
         }
         let multi_prices = [];
+        // Harga Diskon selalu disertakan jika ada, karena posisinya di luar tab Harga Lanjutan
         if (toAngka(document.getElementById("fHJualDiskon").value) > 0)
           multi_prices.push({
             name: "Harga Diskon",
             price: toAngka(document.getElementById("fHJualDiskon").value),
             min_qty: 1,
           });
-        for (const [lowerName, price] of Object.entries(groupPrices)) {
-          if (price > 0 && lowerName !== "harga diskon") {
-            const g = allGroups.find((x) => x.name.toLowerCase() === lowerName);
-            multi_prices.push({
-              name: g ? g.name : lowerName,
-              price: price,
-              min_qty: 1,
+
+        if (currentAdvancedType === "levelHarga") {
+          for (const [lowerName, price] of Object.entries(groupPrices)) {
+            if (price > 0 && lowerName !== "harga diskon") {
+              const g = allGroups.find(
+                (x) => x.name.toLowerCase() === lowerName,
+              );
+              multi_prices.push({
+                name: g ? g.name : lowerName,
+                price: price,
+                min_qty: 1,
+              });
+            }
+          }
+        } else if (currentAdvancedType === "levelJumlah") {
+          if (satuanRows.length > 0 && satuanRows[0].tier_prices) {
+            satuanRows[0].tier_prices.forEach((t) => {
+              if (t.min_qty > 0 && t.price > 0)
+                multi_prices.push({
+                  name: "Grosir",
+                  price: t.price,
+                  min_qty: t.min_qty,
+                });
             });
           }
         }
-        if (satuanRows.length > 0 && satuanRows[0].tier_prices) {
-          satuanRows[0].tier_prices.forEach((t) => {
-            if (t.min_qty > 0 && t.price > 0)
-              multi_prices.push({
-                name: "Grosir",
-                price: t.price,
-                min_qty: t.min_qty,
-              });
-          });
-        }
+
         let settingsArr = [];
         selectedSups.forEach((sVal, sid) => {
           const s = supplierSettingsMap[sid] ||
@@ -1419,10 +1514,31 @@
           if (editItemId) saved = await api("PUT", `/items/${editItemId}`, p);
           else saved = await api("POST", "/items/", p);
           editItemId = saved.id;
-          await saveAllSatuanRows();
+          if (currentAdvancedType === "satuan") {
+            await saveAllSatuanRows();
+          }
           showToast("Barang disimpan ✓", "success");
-          closeModal("mBarang");
-          loadItems();
+
+          if (
+            await showConfirm(
+              "Barang berhasil disimpan. Apakah ingin menambah lagi dengan data yang sama?",
+            )
+          ) {
+            editItemId = null;
+            document.getElementById("mBarangTitle").textContent =
+              "Tambah Barang (Clone)";
+            document.getElementById("fKodeItem").value = "AUTO";
+            // Barcode direset ke AUTO agar tidak duplikat dengan yang baru disimpan
+            document.getElementById("autoBarcode").checked = true;
+            toggleBarcodeUI();
+            document.getElementById("fBarcode").value = "AUTO";
+
+            loadItems();
+            setTimeout(() => document.getElementById("fNama").focus(), 100);
+          } else {
+            closeModal("mBarang");
+            loadItems();
+          }
         } catch (ex) {
           showToast(ex.message, "error");
         }
@@ -1510,7 +1626,40 @@
       // tutup modal lalu buka editor harga lanjutan berdasarkan satuan.
       function confirmEditHarga() {
         closeModal("mEditHarga");
-        loadAdvancedContent("satuan");
+        const advButtons = ["btnAdvSatuan", "btnAdvHarga", "btnAdvJumlah"];
+        advButtons.forEach((id) => {
+          const btn = document.getElementById(id);
+          if (btn) {
+            btn.classList.remove("disabled");
+            btn.style.background = "var(--card-bg)";
+            btn.style.color = "var(--text-main)";
+            btn.style.borderColor = "var(--border-color)";
+          }
+        });
+
+        // CLEAR DATA to start from scratch as requested
+        groupPrices = {};
+        initialGroupPrices = {};
+        if (satuanRows.length > 0) {
+          const base = satuanRows[0];
+          // Reset tier prices in base row
+          base.tier_prices = [];
+          // Reset group prices in base row
+          base.group_prices = {};
+          satuanRows = [base];
+          ensureEmptySatuanRow();
+        }
+
+        currentAdvancedType = null;
+        const advContent = document.getElementById("advancedContent");
+        if (advContent) {
+          advContent.innerHTML = "";
+          advContent.style.display = "none";
+        }
+        showToast(
+          "Settingan harga direset. Silakan pilih kembali jenis pengaturan harga baru.",
+          "info",
+        );
       }
       async function addSupplier() {
         try {
@@ -1799,17 +1948,17 @@
                         <th>Jenis</th>
                         <th style="width: 60px" class="sep">Konv</th>
                         <th class="sep">H. Pokok</th>
-                        <th colspan="3" class="tier-label sep">Tier 1</th>
-                        <th colspan="3" class="tier-label sep">Tier 2</th>
-                        <th colspan="3" class="tier-label sep">Tier 3</th>
-                        <th colspan="3" class="tier-label">Tier 4</th>
+                        <th colspan="4" class="tier-label sep">Tier 1</th>
+                        <th colspan="4" class="tier-label sep">Tier 2</th>
+                        <th colspan="4" class="tier-label sep">Tier 3</th>
+                        <th colspan="4" class="tier-label">Tier 4</th>
                       </tr>
                       <tr>
                         <th colspan="5"></th>
-                        <th>Hingga Qty</th><th>% Mg</th><th class="sep">Harga</th>
-                        <th>Hingga Qty</th><th>% Mg</th><th class="sep">Harga</th>
-                        <th>Hingga Qty</th><th>% Mg</th><th class="sep">Harga</th>
-                        <th>Hingga Qty</th><th>% Mg</th><th>Harga</th>
+                        <th>Dari</th><th>Sampai</th><th>% Mg</th><th class="sep">Harga</th>
+                        <th>Dari</th><th>Sampai</th><th>% Mg</th><th class="sep">Harga</th>
+                        <th>Dari</th><th>Sampai</th><th>% Mg</th><th class="sep">Harga</th>
+                        <th>Dari</th><th>Sampai</th><th>% Mg</th><th>Harga</th>
                       </tr>`;
           }
         }
@@ -1853,7 +2002,23 @@
             } else if (currentAdvancedType === "levelJumlah") {
               for (let i = 0; i < 4; i++) {
                 const tier = row.tier_prices[i] || { min_qty: 0, price: 0 };
-                // Kolom "%" = MARGIN terhadap H. Pokok (buy_price_auto), bukan diskon
+                // Logika Range:
+                // Dari Qty (Tier 1) = 1
+                // Dari Qty (Tier N+1) = Sampai Qty (Tier N) + 1
+                let dariQty = 1;
+                if (i > 0) {
+                  const prevTier = row.tier_prices[i - 1];
+                  dariQty =
+                    prevTier && prevTier.sampai_qty
+                      ? prevTier.sampai_qty + 1
+                      : 0;
+                }
+                // Jika i > 0 dan dariQty masih 0 (karena tier sebelumnya belum ada sampai_qty), maka sembunyikan tier ini
+                if (i > 0 && !dariQty) {
+                  cols += `<td colspan="4" style="background:var(--bg-color); border-left:1px solid var(--border-color)"></td>`;
+                  continue;
+                }
+
                 const tierMargin =
                   row.buy_price_auto > 0 && tier.price > 0
                     ? ((tier.price - row.buy_price_auto) / row.buy_price_auto) *
@@ -1861,8 +2026,12 @@
                     : 0;
                 const marginVal = tier.price > 0 ? tierMargin.toFixed(2) : "";
                 const priceVal = tier.price > 0 ? toRibuan(tier.price) : "";
-                const qtyVal = tier.min_qty > 0 ? tier.min_qty : "";
-                cols += `<td><input type="number" class="input-control" value="${qtyVal}" onchange="updateAdvancedRowField(${idx}, 'tier_qty', this.value, ${i})" style="text-align:right;" placeholder="Qty"></td><td><input type="number" step="0.01" class="input-control" value="${marginVal}" onchange="updateAdvancedRowField(${idx}, 'tier_margin', this.value, ${i})" style="text-align:right;" placeholder="% Mg"></td><td class="${i < 3 ? "sep" : ""}"><input type="text" class="input-control" value="${priceVal}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'tier_price', this.value, ${i})" style="text-align:right; font-weight:700; color:var(--primary)" placeholder="Harga"></td>`;
+                const sampaiVal = tier.sampai_qty || "";
+
+                cols += `<td style="text-align:center; font-weight:600; color:var(--text-muted); font-size:12px; border-left:1px solid var(--border-color)">${dariQty}</td>
+                         <td><input type="number" class="input-control" value="${sampaiVal}" onchange="updateAdvancedRowField(${idx}, 'tier_sampai', this.value, ${i})" style="text-align:right;" placeholder="∞"></td>
+                         <td><input type="number" step="0.01" class="input-control" value="${marginVal}" onchange="updateAdvancedRowField(${idx}, 'tier_margin', this.value, ${i})" style="text-align:right;" placeholder="% Mg"></td>
+                         <td class="${i < 3 ? "sep" : ""}"><input type="text" class="input-control" value="${priceVal}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'tier_price', this.value, ${i})" style="text-align:right; font-weight:700; color:var(--primary)" placeholder="Harga"></td>`;
               }
             }
             return `<tr class="${isBase ? "base-row" : ""} ${isDraft ? "empty-row" : ""}"> ${cols} </tr>`;
@@ -2020,11 +2189,46 @@
               }
             }
           }
-        } else if (field === "tier_qty") {
+        } else if (field === "tier_sampai") {
           const tierIdx = extra;
+          let sampaiVal = parseFloat(val) || 0;
+
+          // Cari Dari Qty untuk tier ini
+          let dariQty = 1;
+          if (tierIdx > 0) {
+            const prevTier = row.tier_prices[tierIdx - 1];
+            dariQty =
+              prevTier && prevTier.sampai_qty ? prevTier.sampai_qty + 1 : 0;
+          }
+
+          // Validasi: Sampai harus >= Dari
+          if (sampaiVal > 0 && sampaiVal < dariQty) {
+            showToast(`Qty Sampai harus ≥ ${dariQty}`, "error");
+            sampaiVal = dariQty;
+          }
+
           if (!row.tier_prices[tierIdx])
             row.tier_prices[tierIdx] = { min_qty: 0, price: 0 };
-          row.tier_prices[tierIdx].min_qty = parseFloat(val) || 0;
+
+          row.tier_prices[tierIdx].sampai_qty = sampaiVal;
+
+          // Cascade update: Sesuaikan min_qty (Dari) untuk semua tier berikutnya
+          for (let j = tierIdx; j < 3; j++) {
+            const currentSampai = row.tier_prices[j]?.sampai_qty;
+            if (!row.tier_prices[j + 1])
+              row.tier_prices[j + 1] = { min_qty: 0, price: 0 };
+
+            const nextDari = currentSampai ? currentSampai + 1 : 0;
+            row.tier_prices[j + 1].min_qty = nextDari;
+
+            // Jika Sampai tier berikutnya sudah diisi tapi jadi tidak valid (lebih kecil dari Dari baru)
+            if (
+              row.tier_prices[j + 1].sampai_qty > 0 &&
+              row.tier_prices[j + 1].sampai_qty < nextDari
+            ) {
+              row.tier_prices[j + 1].sampai_qty = nextDari;
+            }
+          }
         } else if (field === "tier_price") {
           const tierIdx = extra;
           if (!row.tier_prices[tierIdx])

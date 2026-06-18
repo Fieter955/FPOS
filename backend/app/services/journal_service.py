@@ -70,6 +70,10 @@ def create_customer_balance_write_off_journal(db: Session, *, date_val: date, am
 def create_purchase_journal(db: Session, *, date_val: date, number_ref: str,
                             supplier_name: str, total: float, paid: float,
                             user_id: int, branch_id: int):
+    # Pembelian bernilai 0 tidak menghasilkan debit/kredit apa pun -> jangan buat
+    # jurnal "hantu" tanpa baris (lihat detail jurnal yang kosong di Akuntansi).
+    if total <= 0:
+        return None
     entries = [{"code": ACCOUNT_INVENTORY, "debit": total, "credit": 0}]
     if paid > 0:
         entries.append({"code": ACCOUNT_CASH, "debit": 0, "credit": paid})

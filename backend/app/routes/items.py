@@ -11,6 +11,7 @@ from ..database import get_db
 from .. import models, schemas
 from ..auth import get_current_user
 from ..services.virtual_units import (
+    get_conversion_factor,
     get_effective_buy_price,
     get_effective_stock_from_source,
     get_stock_source_item,
@@ -29,7 +30,8 @@ def _serialize_item_for_user(item: models.Item, current_user: models.User):
     # Lantai harga modal (HPP) untuk penjaga anti-rugi diskon grup di POS.
     # Dikirim ke semua role agar harga grup konsisten antara admin & kasir,
     # tanpa pernah menampilkan harga modal di UI mana pun.
-    data["min_price"] = float(item.buy_price or 0)
+    _fifo_min = getattr(item, "_fifo_min_price", None)
+    data["min_price"] = float(_fifo_min if _fifo_min is not None else (item.buy_price or 0))
     if not _is_admin_user(current_user):
         data["buy_price"] = 0
     return data
@@ -43,6 +45,8 @@ def _serialize_item_lite(item: models.Item, current_user: models.User):
     cat = item.category
     unit = item.unit
     buy = float(item.buy_price or 0)
+    _fifo_min = getattr(item, "_fifo_min_price", None)
+    min_price = float(_fifo_min if _fifo_min is not None else buy)
     return {
         "id": item.id,
         "code": item.code,
@@ -55,7 +59,7 @@ def _serialize_item_lite(item: models.Item, current_user: models.User):
             "id": unit.id, "name": unit.name, "abbreviation": unit.abbreviation,
         } if unit else None,
         "buy_price": buy if _is_admin_user(current_user) else 0,
-        "min_price": buy,
+        "min_price": min_price,
         "sell_price": float(item.sell_price or 0),
         "stock": float(item.stock or 0),
         "min_stock": float(item.min_stock or 0),
@@ -88,6 +92,7 @@ def _apply_virtual_item_metrics(items, db: Session, current_user: models.User):
             item_map[parent.id] = parent
 
     local_stock_map = None
+    min_cost_map = {}   # item_id -> harga modal batch FIFO tertua (per satuan dasar)
     b_id = current_user.active_branch_id
     if b_id:
         gudang = db.query(models.Warehouse.id).filter(models.Warehouse.branch_id == b_id).first()
@@ -102,6 +107,24 @@ def _apply_virtual_item_metrics(items, db: Session, current_user: models.User):
                     models.WarehouseStock.item_id.in_(stock_item_ids),
                 ).all()
                 local_stock_map = {item_id: stock for item_id, stock in local_stocks}
+
+                # Lantai HPP (min_price): harga modal batch FIFO TERTUA per item di
+                # gudang ini. SATU query; baris pertama (terlama) tiap item dipakai.
+                batch_rows = db.query(
+                    models.StockBatch.item_id,
+                    models.StockBatch.unit_cost,
+                ).filter(
+                    models.StockBatch.warehouse_id == gudang[0],
+                    models.StockBatch.item_id.in_(stock_item_ids),
+                    models.StockBatch.qty_remaining > 1e-9,
+                ).order_by(
+                    models.StockBatch.item_id.asc(),
+                    models.StockBatch.received_date.asc(),
+                    models.StockBatch.id.asc(),
+                ).all()
+                for it_id, cost in batch_rows:
+                    if it_id not in min_cost_map:
+                        min_cost_map[it_id] = float(cost or 0)
         else:
             local_stock_map = {}
 
@@ -114,6 +137,16 @@ def _apply_virtual_item_metrics(items, db: Session, current_user: models.User):
         )
         item.stock = round(get_effective_stock_from_source(item, source_stock), 4)
         item.buy_price = round(get_effective_buy_price(db, item, item_map=item_map), 4)
+
+        # Lantai HPP per satuan jual: biaya batch tertua dari sumber stok (induk),
+        # dikonversi ke satuan item ini bila multi-satuan. Fallback ke buy_price
+        # (dilakukan di serializer) bila item belum punya batch.
+        base_min = min_cost_map.get(stock_source.id)
+        if base_min is not None:
+            factor = get_conversion_factor(item) if is_virtual_variant(item) else 1.0
+            item._fifo_min_price = round(base_min * (factor or 1.0), 4)
+        else:
+            item._fifo_min_price = None
 
     return items
 

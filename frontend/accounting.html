@@ -966,7 +966,7 @@
               <td style="color:#ef4444;font-weight:700">${fmtRp(j.total_credit)}</td>
             </tr>
             <tr id="det_${j.id}" style="display:none;background:rgba(0,0,0,0.1);"><td colspan="5" style="padding:10px 20px;">
-              <table style="width:100%;font-size:12px;">${(j.lines || []).map((l) => `<tr><td>${l.debit_account || l.credit_account}</td><td style="text-align:right">${l.debit_account ? fmtRp(l.amount) : "-"}</td><td style="text-align:right">${l.credit_account ? fmtRp(l.amount) : "-"}</td></tr>`).join("")}</table>
+              ${(j.lines && j.lines.length) ? `<table style="width:100%;font-size:12px;">${j.lines.map((l) => `<tr><td>${l.debit_account || l.credit_account}</td><td style="text-align:right">${l.debit_account ? fmtRp(l.amount) : "-"}</td><td style="text-align:right">${l.credit_account ? fmtRp(l.amount) : "-"}</td></tr>`).join("")}</table>` : `<div style="color:var(--text-muted);font-style:italic;font-size:12px;">— Tidak ada baris jurnal (nilai transaksi Rp 0) —</div>`}
             </td></tr>`,
                 )
                 .join("")

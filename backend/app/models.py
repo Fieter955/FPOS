@@ -764,6 +764,52 @@ class WarehouseStock(Base):
     item = relationship("Item")
 
 
+# ─── FIFO: Lapisan Persediaan (Stock Batch) ────────────────────────────────────
+class StockBatch(Base):
+    """Satu lapisan persediaan FIFO: sisa stok dari satu pembelian (atau saldo
+    awal) di satu gudang, beserta harga modal (unit_cost) saat diterima.
+    HPP saat jual diambil dari batch TERTUA dulu (urut received_date, id).
+    Ini yang membuat HPP presisi per-supplier tanpa SKU/barcode terpisah di POS."""
+    __tablename__ = "stock_batches"
+    __table_args__ = (
+        Index("ix_stock_batches_item", "item_id"),
+        Index("ix_stock_batches_wh_item", "warehouse_id", "item_id"),
+        Index("ix_stock_batches_fifo", "warehouse_id", "item_id", "received_date", "id"),
+        Index("ix_stock_batches_purchase_item", "purchase_item_id"),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
+    purchase_item_id = Column(Integer, ForeignKey("purchase_items.id"), nullable=True)
+    unit_cost = Column(Float, default=0)        # harga modal per satuan dasar
+    qty_received = Column(Float, default=0)     # jumlah awal saat diterima
+    qty_remaining = Column(Float, default=0)    # sisa yang belum terjual
+    received_date = Column(Date, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    item = relationship("Item")
+    supplier = relationship("Supplier")
+
+
+class SaleItemBatch(Base):
+    """Alokasi 1 baris penjualan ke batch FIFO yang dikonsumsinya. Menyimpan qty
+    & unit_cost agar pembalikan (batal/retur jual) dan swap (Fase 3) presisi."""
+    __tablename__ = "sale_item_batches"
+    __table_args__ = (
+        Index("ix_sale_item_batches_sale_item", "sale_item_id"),
+        Index("ix_sale_item_batches_batch", "batch_id"),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    sale_item_id = Column(Integer, ForeignKey("sale_items.id"), nullable=False)
+    batch_id = Column(Integer, ForeignKey("stock_batches.id"), nullable=False)
+    qty = Column(Float, nullable=False)         # dalam satuan dasar (base unit)
+    unit_cost = Column(Float, default=0)
+
+    sale_item = relationship("SaleItem")
+    batch = relationship("StockBatch")
+
+
 class WarehouseTransfer(Base):
     """Transfer stok antar gudang"""
     __tablename__ = "warehouse_transfers"

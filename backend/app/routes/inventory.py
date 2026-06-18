@@ -22,6 +22,27 @@ WITA = pytz.timezone("Asia/Makassar")
 def get_local_date(): return datetime.now(WITA).date()
 def get_local_datetime(): return datetime.now(WITA)
 
+
+# ─── 0. DIAGNOSTIK FIFO ─────────────────────────────────────────────────────
+@router.get("/fifo-drift")
+def get_fifo_drift(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Daftar (gudang, item) di mana Σ batch.qty_remaining != stok gudang.
+    Idealnya KOSONG. Memantau kesehatan lapisan FIFO (invarian Σ batch == stok)."""
+    from ..services.inventory_fifo import reconcile_report
+    b_id = current_user.active_branch_id
+    drift = []
+    if b_id:
+        wh_ids = [w.id for w in db.query(models.Warehouse.id).filter(
+            models.Warehouse.branch_id == b_id).all()]
+        for wid in wh_ids:
+            drift.extend(reconcile_report(db, warehouse_id=wid))
+    else:
+        drift = reconcile_report(db)
+    return {"count": len(drift), "items": drift}
+
 # ─── 1. DAFTAR MUTASI STOK ──────────────────────────────────────────────────
 @router.get("/movements")
 def get_movements(
