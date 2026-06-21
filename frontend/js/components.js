@@ -169,11 +169,12 @@ function createPurchaseGrid(container, config = {}) {
             <div class="purchase-grid-header" style="display:grid; grid-template-columns: ${columns}; gap:10px; padding:10px; background:var(--bg-color); font-weight:700; font-size:12px; border-radius:8px 8px 0 0">
                 <div>Nama Barang</div>
                 <div style="text-align:center">Pesan</div>
-                ${showSupplierColumn
-      ? "<div>Pilih Supplier</div>"
-      : isBranchRequest
-        ? ""
-        : `
+                ${
+                  showSupplierColumn
+                    ? "<div>Pilih Supplier</div>"
+                    : isBranchRequest
+                      ? ""
+                      : `
                 ${isFulfillment ? '<div style="text-align:center">Terima</div>' : ""}
                 <div>Harga Beli</div>
                 <div style="text-align:center">Margin (%)</div>
@@ -181,7 +182,7 @@ function createPurchaseGrid(container, config = {}) {
                 <div style="text-align:center">Diskon (%)</div>
                 <div style="text-align:right">Total</div>
                 `
-    }
+                }
                 <div></div>
             </div>
             <div class="purchase-grid-body" style="border:1px solid var(--border-color); border-top:none; border-radius:0 0 8px 8px; min-height:100px"></div>
@@ -223,10 +224,11 @@ function createPurchaseGrid(container, config = {}) {
                 ${allowNameEdit ? `<input type="text" class="input-control pg-name-edit" value="${item?.name || ""}" placeholder="Nama barang (bisa diubah)..." style="font-size:11px; margin-top:4px; border-color:var(--primary)" />` : ""}
             </div>
             <input type="number" class="combobox-input pg-ordered" value="${qtyOrdered}" style="text-align:center" />
-            ${showSupplierColumn
-        ? '<div id="pg-supp-' + id + '"></div>'
-        : !isBranchRequest
-          ? `
+            ${
+              showSupplierColumn
+                ? '<div id="pg-supp-' + id + '"></div>'
+                : !isBranchRequest
+                  ? `
                 ${isFulfillment ? `<input type="number" class="combobox-input pg-received" value="${qtyReceived}" style="text-align:center; border-color:var(--primary)" />` : ""}
                 <input type="text" class="combobox-input pg-beli" value="${toRibuan(item?.buy_price || 0)}" style="text-align:left" />
                 <input type="number" step="0.01" class="combobox-input pg-margin" value="${item?.profit_margin || 0}" style="text-align:center" />
@@ -238,8 +240,8 @@ function createPurchaseGrid(container, config = {}) {
                 </div>
                 <div class="purchase-grid-netto">Rp 0</div>
             `
-          : ""
-      }
+                  : ""
+            }
             ${readonlySelector ? "<div></div>" : `<button class="btn btn-del-row" style="color:var(--danger); background:transparent; padding:0; justify-content:center">✕</button>`}
         `;
 
@@ -547,7 +549,8 @@ function createPurchaseSummaryGrid(container, config = {}) {
 
   let currentData = [];
   // Lebar kolom tetap (px) + Nama Barang dilebarkan. Tabel boleh scroll horizontal.
-  const kolom = "40px minmax(260px, 1fr) 130px 70px 110px 120px 170px 120px 90px 120px";
+  const kolom =
+    "40px minmax(260px, 1fr) 130px 70px 110px 120px 170px 150px 90px 120px";
   const lebarMin = "1300px";
 
   // Daftar Jenis & Satuan (untuk combo per baris). Dimuat sekali saat init.
@@ -720,9 +723,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
     };
     const bangunDiskon = () => {
       const discs =
-        row._detail.discs && row._detail.discs.length
-          ? row._detail.discs
-          : [0];
+        row._detail.discs && row._detail.discs.length ? row._detail.discs : [0];
       discCell.innerHTML = "";
       discs.forEach((d) => {
         const inp = document.createElement("input");
@@ -825,10 +826,16 @@ function createPurchaseSummaryGrid(container, config = {}) {
       taxInp.value = d.ppn || 0;
       const j = cariByName(daftarJenis, d.category_name);
       if (j) d.category_id = j.id;
-      comboJenis.set(j ? j.id : "", d.category_name && d.category_name !== "-" ? d.category_name : "");
+      comboJenis.set(
+        j ? j.id : "",
+        d.category_name && d.category_name !== "-" ? d.category_name : "",
+      );
       const u = cariByName(daftarSatuan, d.unit_name);
       if (u) d.unit_id = u.id;
-      comboSatuan.set(u ? u.id : "", d.unit_name && d.unit_name !== "-" ? d.unit_name : "");
+      comboSatuan.set(
+        u ? u.id : "",
+        d.unit_name && d.unit_name !== "-" ? d.unit_name : "",
+      );
       bangunDiskon();
       hitungTotal(row);
     };
@@ -1060,10 +1067,10 @@ function createFilterBar(container, config = {}) {
   let combo = useEntitySelect
     ? createStandardSelect(entityCont, entities, cb)
     : createPremiumCombo(
-      entityCont,
-      [{ id: "", name: "Semua" }, ...entities],
-      cb,
-    );
+        entityCont,
+        [{ id: "", name: "Semua" }, ...entities],
+        cb,
+      );
   const trigger = () => {
     if (onFilter) onFilter();
   };
@@ -1202,7 +1209,7 @@ function createPaymentModal(config = {}) {
         const bal = await api("GET", "/accounting/liquid-balances");
         cashBalDiv.textContent = fmtRp(bal.cash_balance);
         bankBalDiv.textContent = fmtRp(bal.bank_balance);
-      } catch (e) { }
+      } catch (e) {}
     },
     close,
   };
@@ -1400,7 +1407,7 @@ async function createOrderManager(containerId, config = {}) {
         ? initialData.tax_percent
         : initialData.subtotal - initialData.discount > 0
           ? (initialData.tax / (initialData.subtotal - initialData.discount)) *
-          100
+            100
           : initialData.tax || 0;
 
     const fmtPct = (v) =>
@@ -1483,15 +1490,15 @@ function createItemChangeModal(nameChanges) {
           </thead>
           <tbody>
             ${nameChanges
-        .map(
-          (nc) => `
+              .map(
+                (nc) => `
               <tr style="border-bottom:1px solid var(--border-color)">
                 <td style="padding:8px; color:var(--text-main)">${nc.oldName}</td>
                 <td style="padding:8px; color:var(--primary); font-weight:700">${nc.newName}</td>
               </tr>
             `,
-        )
-        .join("")}
+              )
+              .join("")}
           </tbody>
         </table>
       </div>

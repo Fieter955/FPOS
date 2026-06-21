@@ -43,6 +43,38 @@ def get_fifo_drift(
         drift = reconcile_report(db)
     return {"count": len(drift), "items": drift}
 
+
+@router.get("/value-drift")
+def get_value_drift(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Selisih NILAI persediaan: saldo GL Persediaan (1-1400) vs Σ(qty_remaining×unit_cost)
+    lapisan batch, untuk cabang aktif. Beda dari /fifo-drift yang cek KUANTITAS. Idealnya ~0;
+    jika tidak, ada jalur yang menilai batch beda dari yang masuk ke pembukuan."""
+    from .accounting import get_account_balance
+    b_id = current_user.active_branch_id
+    akun = db.query(models.Account).filter(models.Account.code == "1-1400").first()
+    gl = get_account_balance(db, akun.id, branch_id=b_id) if akun else 0.0
+    if b_id:
+        wh_ids = [w.id for w in db.query(models.Warehouse.id).filter(
+            models.Warehouse.branch_id == b_id).all()]
+    else:
+        wh_ids = [w.id for w in db.query(models.Warehouse.id).all()]
+    nilai_batch = 0.0
+    if wh_ids:
+        nilai_batch = float(
+            db.query(func.coalesce(func.sum(models.StockBatch.qty_remaining * models.StockBatch.unit_cost), 0.0))
+            .filter(models.StockBatch.warehouse_id.in_(wh_ids)).scalar() or 0.0
+        )
+    return {
+        "branch_id": b_id,
+        "gl_persediaan": round(float(gl), 2),
+        "nilai_batch": round(nilai_batch, 2),
+        "selisih": round(float(gl) - nilai_batch, 2),
+        "seimbang": abs(float(gl) - nilai_batch) < 1,
+    }
+
 # ─── 1. DAFTAR MUTASI STOK ──────────────────────────────────────────────────
 @router.get("/movements")
 def get_movements(
@@ -245,23 +277,9 @@ def stock_adjustment(
 
     opname_mode = (data.opname_mode or "running").strip().lower()
     is_opening = opname_mode in ("opening", "setup", "awal", "saldo_awal", "initial")
-    if is_opening:
-        # Pastikan akun Modal Transisi tersedia agar jurnal tidak gagal
-        acc = db.query(models.Account).filter(models.Account.code == "3-1999").first()
-        if not acc:
-            db.add(
-                models.Account(
-                    code="3-1999",
-                    name="Modal Transisi (Setup Awal Stok)",
-                    type="equity",
-                    subtype="capital",
-                    normal_balance="credit",
-                    is_active=True,
-                )
-            )
-            db.flush()
 
-    # 4. Jurnal akuntansi pakai SAVEPOINT agar rollback-nya terisolasi
+    # 4. Jurnal akuntansi diposting DI DALAM transaksi yang sama dengan StockMovement (atomic):
+    #    bila jurnal gagal, SELURUH opname ikut rollback — tidak ada lagi stok berubah tanpa jurnal.
     if diff != 0:
         # Susut berbatch → pakai biaya FIFO yang benar-benar keluar; selain itu
         # (surplus, atau mode tanpa gudang) → harga beli seperti semula.
@@ -272,48 +290,46 @@ def stock_adjustment(
         )
 
         if nilai_penyesuaian > 0:
-            try:
-                savepoint = db.begin_nested()  # ← Buat savepoint
-                from .accounting import create_auto_journal
-                
-                if diff > 0:
-                    credit_code = "3-1999" if is_opening else "4-1300"
+            from .accounting import create_auto_journal, pastikan_akun_ada
+
+            if diff > 0:
+                credit_code = "3-1999" if is_opening else "4-1300"
+                entries = [
+                    {"code": "1-1400", "debit": nilai_penyesuaian, "credit": 0},
+                    {"code": credit_code, "debit": 0, "credit": nilai_penyesuaian},
+                ]
+                desc_prefix = "Setup Stok Awal" if is_opening else "Opname Surplus"
+                desc = f"{desc_prefix}: {item.name} (+{abs(diff)}) - {data.description}"
+            else:
+                if is_opening:
                     entries = [
-                        {"code": "1-1400", "debit": nilai_penyesuaian, "credit": 0},
-                        {"code": credit_code, "debit": 0, "credit": nilai_penyesuaian},
+                        {"code": "3-1999", "debit": nilai_penyesuaian, "credit": 0},
+                        {"code": "1-1400", "debit": 0, "credit": nilai_penyesuaian},
                     ]
-                    desc_prefix = "Setup Stok Awal" if is_opening else "Opname Surplus"
-                    desc = f"{desc_prefix}: {item.name} (+{abs(diff)}) - {data.description}"
+                    desc = f"Setup Stok Awal: {item.name} (-{abs(diff)}) - {data.description}"
                 else:
-                    if is_opening:
-                        entries = [
-                            {"code": "3-1999", "debit": nilai_penyesuaian, "credit": 0},
-                            {"code": "1-1400", "debit": 0, "credit": nilai_penyesuaian},
-                        ]
-                        desc = f"Setup Stok Awal: {item.name} (-{abs(diff)}) - {data.description}"
-                    else:
-                        entries = [
-                            {"code": "5-2700", "debit": nilai_penyesuaian, "credit": 0},
-                            {"code": "1-1400", "debit": 0, "credit": nilai_penyesuaian},
-                        ]
-                        desc = f"Opname Susut: {item.name} (-{abs(diff)}) - {data.description}"
+                    entries = [
+                        {"code": "5-2700", "debit": nilai_penyesuaian, "credit": 0},
+                        {"code": "1-1400", "debit": 0, "credit": nilai_penyesuaian},
+                    ]
+                    desc = f"Opname Susut: {item.name} (-{abs(diff)}) - {data.description}"
 
-                create_auto_journal(
-                    db=db,
-                    date_val=get_local_date(),
-                    number_ref=ref_jurnal,
-                    description=desc,
-                    entries=entries,
-                    user_id=current_user.id,
-                    branch_id=current_user.active_branch_id
-                )
-                savepoint.commit()  # ← Commit savepoint jurnal saja
-                
-            except Exception as e:
-                savepoint.rollback()  # ← Hanya rollback jurnal, StockMovement AMAN
-                print(f"⚠️ Jurnal akuntansi dilewati: {e}")
+            # 🔒 Pastikan akun yang dipakai ada SEBELUM posting → jurnal tidak gagal lalu
+            # meninggalkan StockMovement tanpa pasangan GL. Karena diposting di transaksi
+            # utama, kalau toh gagal (mis. tanggal masuk periode tutup buku) SELURUH opname
+            # rollback — bukan stok berubah diam-diam tanpa jurnal.
+            pastikan_akun_ada(db, [e["code"] for e in entries])
+            create_auto_journal(
+                db=db,
+                date_val=get_local_date(),
+                number_ref=ref_jurnal,
+                description=desc,
+                entries=entries,
+                user_id=current_user.id,
+                branch_id=current_user.active_branch_id
+            )
 
-    # 5. Commit semua (StockMovement pasti tersimpan)
+    # 5. Commit semua (StockMovement + jurnal sekaligus, atomic)
     db.commit()
     
     new_local_stock = get_warehouse_stock(db, gudang_aktif.id, item.id) if gudang_aktif else item.stock

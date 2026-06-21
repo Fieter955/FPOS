@@ -160,7 +160,7 @@ def restore_sale_return(
     warehouse_id: int,
     fallback_cost: float = 0.0,
     received_date: Optional[date] = None,
-) -> None:
+) -> float:
     """Pulihkan `qty` (satuan dasar) ke lapisan untuk RETUR JUAL — bisa SEBAGIAN.
 
     Beda dari restore_allocations (yang memulihkan seluruh baris saat BATAL jual),
@@ -170,10 +170,16 @@ def restore_sale_return(
     mencukupi (penjualan PRA-FIFO tanpa alokasi / porsi fallback), sisanya dibuatkan
     satu lapisan baru di `received_date` (default hari ini) bernilai `fallback_cost`
     supaya invarian Σ batch == stok tetap terjaga.
+
+    Mengembalikan TOTAL biaya modal yang benar-benar dipulihkan (Σ qty × unit_cost lapisan
+    asal + porsi fallback). Pemanggil memakai angka ini sebagai nilai COGS yang dibalik agar
+    GL Persediaan/HPP tetap sama dengan ledger batch — pada retur SEBAGIAN lintas lapisan beda
+    harga, rata-rata `buy_price` bisa meleset dari lapisan yang nyatanya dipulihkan (drift).
     """
     remaining = float(qty or 0)
     if remaining <= EPS:
-        return
+        return 0.0
+    biaya_dipulihkan = 0.0
     allocs = (
         db.query(models.SaleItemBatch)
         .filter(models.SaleItemBatch.sale_item_id == sale_item_id)
@@ -187,6 +193,9 @@ def restore_sale_return(
         batch = db.query(models.StockBatch).with_for_update().get(a.batch_id)
         if batch:
             batch.qty_remaining = float(batch.qty_remaining) + give
+        # Biaya asal lapisan saat dikonsumsi (SaleItemBatch.unit_cost); fallback ke unit_cost batch.
+        unit = a.unit_cost if a.unit_cost is not None else (float(batch.unit_cost) if batch else 0.0)
+        biaya_dipulihkan += give * float(unit or 0)
         a.qty = float(a.qty) - give
         if a.qty <= EPS:
             db.delete(a)
@@ -201,6 +210,9 @@ def restore_sale_return(
             unit_cost=fallback_cost,
             received_date=received_date or date.today(),
         )
+        biaya_dipulihkan += remaining * float(fallback_cost or 0)
+
+    return biaya_dipulihkan
 
 
 def reduce_batches_for_reversal(

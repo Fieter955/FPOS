@@ -171,6 +171,14 @@ def receive_branch_stock(db: Session, *, purchase: models.Purchase,
     warehouse = get_or_create_default_warehouse(db, target_branch_id)
     is_pusat_stock = target_branch_id == PUSAT_BRANCH_ID
 
+    # ── Faktor biaya "landed": sebar diskon header + pajak ke biaya per unit, agar Σ biaya
+    # batch persis = total yang didebit ke GL Persediaan (1-1400). `subtotal` sudah net
+    # disc1/disc2; bila tak tersedia → faktor 1 (fallback aman). Ini mencegah selisih
+    # GL-vs-batch tumbuh tiap pembelian (lihat Fase 4).
+    _subtotal = float(purchase.subtotal or 0)
+    _total_landed = _subtotal - float(purchase.discount or 0) + float(purchase.tax or 0)
+    faktor_landed = (_total_landed / _subtotal) if _subtotal > 0 else 1.0
+
     for purchase_item in purchase.items:
         item = db.query(models.Item).with_for_update().get(purchase_item.item_id)
         qty_before = get_total_branch_stock(db, target_branch_id, item.id)
@@ -179,13 +187,17 @@ def receive_branch_stock(db: Session, *, purchase: models.Purchase,
             item.stock += purchase_item.qty
 
         adjust_warehouse_stock(db, warehouse.id, item.id, purchase_item.qty)
-        # ── FIFO: catat lapisan persediaan baru (harga modal per-supplier) ──────
+        # ── FIFO: catat lapisan persediaan baru pada BIAYA LANDED (net disc1/disc2 ×
+        # faktor diskon-header+pajak) supaya nilai batch = nilai yang masuk neraca ──────
+        _qty = float(purchase_item.qty or 0)
+        net_per_unit = (float(purchase_item.total or 0) / _qty) if _qty > 0 else float(purchase_item.buy_price or 0)
+        unit_cost_landed = net_per_unit * faktor_landed
         add_batch(
             db,
             item_id=item.id,
             warehouse_id=warehouse.id,
             qty=purchase_item.qty,
-            unit_cost=purchase_item.buy_price,
+            unit_cost=unit_cost_landed,
             received_date=local_date,
             supplier_id=purchase.supplier_id,
             purchase_item_id=purchase_item.id,

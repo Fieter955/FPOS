@@ -419,6 +419,37 @@
             <h3 style="margin: 0 0 12px">Riwayat Tutup Buku</h3>
             <div id="bkHistory" style="color: var(--text-muted)">Memuat...</div>
           </div>
+
+          <div
+            class="card"
+            style="
+              padding: 24px;
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              border-radius: 12px;
+              margin-top: 16px;
+            "
+          >
+            <h3 style="margin: 0 0 8px">⚖️ Samakan Nilai Persediaan</h3>
+            <p style="color: var(--text-muted); margin: 0 0 16px; font-size: 14px; line-height: 1.6">
+              Memeriksa apakah <b>nilai persediaan di laporan keuangan</b> sudah sama dengan
+              <b>catatan stok rinci</b>. Bila ada selisih (sisa dari pindah sistem), tombol di bawah
+              akan menyamakannya. <b>Tidak memengaruhi laba/rugi</b> — selisih dicatat sebagai
+              pembetulan modal awal. Aman dijalankan ulang.
+            </p>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap">
+              <button class="btn btn-primary" onclick="cekSelisihPersediaan()">🔍 Cek Selisih</button>
+              <button
+                id="btnSamakanPersediaan"
+                class="btn"
+                style="display: none; background: #10b981; color: #fff"
+                onclick="samakanPersediaan()"
+              >
+                ✓ Samakan Sekarang
+              </button>
+            </div>
+            <div id="reconResult" style="margin-top: 16px; color: var(--text-muted); font-size: 14px"></div>
+          </div>
         </div>
       </main>
     </div>
@@ -1195,6 +1226,82 @@
         } catch (ex) {
           if (typeof hideLoading === "function") hideLoading();
           showToast(ex.message, "error");
+        }
+      }
+
+      // ── Samakan Nilai Persediaan (GL vs catatan stok rinci) ──────────────────
+      let _reconPerluSamakan = false;
+      function renderReconResult(res) {
+        const box = document.getElementById("reconResult");
+        const perlu = (res.hasil || []).filter((r) => Math.abs(r.selisih) >= 1);
+        _reconPerluSamakan = perlu.length > 0;
+        const btn = document.getElementById("btnSamakanPersediaan");
+        if (!_reconPerluSamakan) {
+          box.innerHTML = "✅ Sudah sama. Tidak ada selisih yang perlu dirapikan.";
+          btn.style.display = "none";
+          return;
+        }
+        let html =
+          '<div style="margin-bottom:8px">Ditemukan selisih yang perlu disamakan:</div>' +
+          '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+          '<th>Cabang</th><th style="text-align:right">Di Laporan</th>' +
+          '<th style="text-align:right">Catatan Stok</th><th style="text-align:right">Selisih</th>' +
+          "</tr></thead><tbody>";
+        perlu.forEach((r) => {
+          html +=
+            `<tr><td>${r.branch}</td>` +
+            `<td style="text-align:right">${fmtRp(r.gl_persediaan)}</td>` +
+            `<td style="text-align:right">${fmtRp(r.nilai_batch)}</td>` +
+            `<td style="text-align:right;font-weight:700">${fmtRp(r.selisih)}</td></tr>`;
+        });
+        html +=
+          "</tbody></table></div>" +
+          '<div style="margin-top:8px;font-size:13px">Klik <b>Samakan Sekarang</b> untuk merapikan — tidak memengaruhi laba/rugi.</div>';
+        box.innerHTML = html;
+        btn.style.display = "inline-block";
+      }
+
+      async function cekSelisihPersediaan() {
+        const box = document.getElementById("reconResult");
+        box.innerHTML = "Memeriksa...";
+        document.getElementById("btnSamakanPersediaan").style.display = "none";
+        try {
+          const res = await api(
+            "POST",
+            "/accounting/reconcile-inventory-value?dry_run=true",
+          );
+          renderReconResult(res);
+        } catch (e) {
+          box.innerHTML = `<span style="color:#ef4444">${e.message}</span>`;
+        }
+      }
+
+      async function samakanPersediaan() {
+        if (!_reconPerluSamakan) return;
+        const ok = await showConfirm(
+          "Samakan nilai persediaan sekarang?\n\n" +
+            "Selisih dicatat sebagai pembetulan modal awal. Laba/rugi TIDAK berubah.",
+        );
+        if (!ok) return;
+        try {
+          if (typeof showLoading === "function") showLoading("Menyamakan...");
+          const res = await api(
+            "POST",
+            "/accounting/reconcile-inventory-value?dry_run=false",
+          );
+          if (typeof hideLoading === "function") hideLoading();
+          const n = (res.hasil || []).filter((r) => r.diposting).length;
+          showToast(`Selesai. ${n} cabang disamakan ✓`, "success");
+          // Tampilkan ulang (harusnya jadi "sudah sama") + segarkan neraca bila ada.
+          const ulang = await api(
+            "POST",
+            "/accounting/reconcile-inventory-value?dry_run=true",
+          );
+          renderReconResult(ulang);
+          if (typeof loadNeraca === "function") loadNeraca();
+        } catch (e) {
+          if (typeof hideLoading === "function") hideLoading();
+          showToast(e.message, "error");
         }
       }
 

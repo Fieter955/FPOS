@@ -276,6 +276,14 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
     is_tax_included = data.get("is_tax_included", sale.is_tax_included if hasattr(sale, 'is_tax_included') else True)
     tax_percent = data.get("tax_percent", sale.tax_percent if hasattr(sale, 'tax_percent') else 0.0)
 
+    # 🔒 Pastikan semua akun jurnal retur tersedia SEBELUM stok dimutasi, supaya jurnal tidak
+    # gagal di tengah jalan dan meninggalkan stok berpindah tanpa pencatatan GL.
+    from .accounting import pastikan_akun_ada
+    _akun_wajib = ["2-1300", "4-1200", "1-1400", "5-1100"]
+    if not is_tax_included:
+        _akun_wajib.append("5-2000")
+    pastikan_akun_ada(db, _akun_wajib)
+
     retur = models.SaleReturn(
         number=number,
         date=get_local_date(),
@@ -320,9 +328,8 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
             line_tax = line_sales * (tax_percent / 100)
         total_tax += line_tax
         
-        # Hitung COGS (Harga Beli saat itu)
-        total_cogs += it["qty"] * (sale_item.buy_price or 0)
-
+        # COGS yang dibalik dihitung di bawah (blok "Kembalikan stok"): dari biaya lapisan FIFO
+        # yang NYATA dipulihkan (mode gudang) atau rata-rata buy_price (mode tanpa gudang).
         db.add(models.SaleReturnItem(
             return_id=retur.id, item_id=it["item_id"],
             qty=it["qty"], price=actual_price, total=line_sales + line_tax
@@ -341,9 +348,11 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
             adjust_warehouse_stock(db, gudang_aktif.id, stock_item.id, required_qty)
             # 🧱 FIFO: pulihkan lapisan yang dulu dikonsumsi penjualan ini (retur bisa
             # sebagian) agar Σ batch == stok tetap terjaga & barang siap dijual lagi
-            # dengan biaya asalnya.
+            # dengan biaya asalnya. Nilai kembalian = biaya modal NYATA lapisan yang
+            # dipulihkan → dipakai sebagai COGS yang dibalik supaya GL Persediaan/HPP tetap
+            # sama dengan ledger batch (anti-drift pada retur sebagian).
             from ..services.inventory_fifo import restore_sale_return
-            restore_sale_return(
+            total_cogs += restore_sale_return(
                 db,
                 sale_item_id=sale_item.id,
                 qty=required_qty,
@@ -351,6 +360,9 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
                 warehouse_id=gudang_aktif.id,
                 fallback_cost=(sale_item.buy_price or 0),
             )
+        else:
+            # Mode tanpa gudang (tak ada lapisan FIFO) → rata-rata buy_price seperti semula.
+            total_cogs += it["qty"] * (sale_item.buy_price or 0)
         db.add(models.StockMovement(
             date=get_local_date(),
             item_id=stock_item.id,
@@ -376,25 +388,22 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
         if cust:
             cust.deposit_balance = (cust.deposit_balance or 0) + total
             
-    db.commit(); db.refresh(retur)
-    
-    # Buat Jurnal
-    try:
-        from ..services import journal_service
-        journal_service.create_sale_return_journal(
-            db,
-            date_val=retur.date,
-            number_ref=retur.number,
-            customer_name=sale.customer.name if sale.customer else "Umum",
-            total_sales=total_sales,
-            total_tax=total_tax,
-            total_cogs=total_cogs,
-            is_tax_included=is_tax_included,
-            user_id=current_user.id,
-            branch_id=sale.branch_id
-        )
-    except Exception as e:
-        print(f"⚠ Gagal buat jurnal retur: {e}")
+    # Buat jurnal DI DALAM transaksi yang sama dengan mutasi stok. Bila jurnal gagal,
+    # seluruh retur (stok + saldo deposit) ikut rollback → tidak ada lagi "stok pindah tanpa
+    # jurnal". Akun wajib sudah dipastikan ada di awal sehingga ini praktis tidak akan gagal.
+    from ..services import journal_service
+    journal_service.create_sale_return_journal(
+        db,
+        date_val=retur.date,
+        number_ref=retur.number,
+        customer_name=sale.customer.name if sale.customer else "Umum",
+        total_sales=total_sales,
+        total_tax=total_tax,
+        total_cogs=total_cogs,
+        is_tax_included=is_tax_included,
+        user_id=current_user.id,
+        branch_id=sale.branch_id
+    )
 
     write_audit(db, current_user.id, "CREATE", "sale_returns", retur.id,
                 f"Retur penjualan {sale.number} sebesar {total}")
@@ -458,6 +467,15 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
     # Ambil info pajak dari pembelian asli jika tidak dikirim dari frontend
     is_tax_included = data.get("is_tax_included", purchase.is_tax_included if hasattr(purchase, 'is_tax_included') else True)
     tax_percent = data.get("tax_percent", purchase.tax_percent if hasattr(purchase, 'tax_percent') else 0.0)
+
+    # 🔒 Pastikan akun jurnal retur tersedia SEBELUM stok dimutasi, supaya jurnal tidak gagal
+    # di tengah jalan dan meninggalkan stok berpindah tanpa pencatatan GL. (Akun selisih
+    # 4-2000/5-1200 sengaja TIDAK dipaksa ada — sudah ada fallback 2-kaki di journal_service.)
+    from .accounting import pastikan_akun_ada
+    _akun_wajib = ["1-1600", "1-1400"]
+    if not is_tax_included:
+        _akun_wajib.append("5-2000")
+    pastikan_akun_ada(db, _akun_wajib)
 
     retur = models.PurchaseReturn(
         number=number,
@@ -551,25 +569,22 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
         if supp:
             supp.deposit_balance = (supp.deposit_balance or 0) + total
             
-    db.commit(); db.refresh(retur)
-    
-    # Buat Jurnal
-    try:
-        from ..services import journal_service
-        journal_service.create_purchase_return_journal(
-            db,
-            date_val=retur.date,
-            number_ref=retur.number,
-            supplier_name=purchase.supplier.name if purchase.supplier else "-",
-            total_inventory=total_inventory,
-            total_carrying=total_carrying,
-            total_tax=total_tax,
-            is_tax_included=is_tax_included,
-            user_id=current_user.id,
-            branch_id=purchase.branch_id
-        )
-    except Exception as e:
-        print(f"⚠ Gagal buat jurnal retur: {e}")
+    # Buat jurnal DI DALAM transaksi yang sama dengan mutasi stok → bila jurnal gagal, seluruh
+    # retur (stok + saldo supplier) ikut rollback. Akun wajib sudah dipastikan ada di awal.
+    from ..services import journal_service
+    journal_service.create_purchase_return_journal(
+        db,
+        date_val=retur.date,
+        number_ref=retur.number,
+        supplier_name=purchase.supplier.name if purchase.supplier else "-",
+        total_inventory=total_inventory,
+        # Mode gudang → kirim biaya landed nyata; mode tanpa gudang → None (pajak dibalik terpisah).
+        total_carrying=(total_carrying if gudang_aktif else None),
+        total_tax=total_tax,
+        is_tax_included=is_tax_included,
+        user_id=current_user.id,
+        branch_id=purchase.branch_id
+    )
 
     write_audit(db, current_user.id, "CREATE", "purchase_returns", retur.id, f"Retur {purchase.number}")
     db.commit()

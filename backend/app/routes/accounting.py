@@ -340,10 +340,17 @@ def create_account(
 
     normal = "debit" if data.type in ["asset", "expense"] else "credit"
 
+    # Saldo awal TIDAK diisi lewat editor akun: field opening_balance hanya tampak di laporan
+    # global (per-cabang diabaikan di get_account_balance), sehingga nilai non-nol bisa membuat
+    # neraca cabang tak balance. Saldo awal yang benar dicatat sebagai JURNAL berimbang lewat
+    # menu Setup Saldo Awal / Jurnal Manual.
+    if data.opening_balance and abs(float(data.opening_balance)) > 0.005:
+        raise HTTPException(400, "Saldo awal tidak diisi di sini. Gunakan menu Setup Saldo Awal atau Jurnal Manual agar tercatat berimbang & per-cabang.")
+
     obj = models.Account(
         code=data.code, name=data.name, type=data.type,
         subtype=data.subtype, normal_balance=normal,
-        opening_balance=data.opening_balance
+        opening_balance=0.0
     )
     db.add(obj)
     db.commit()
@@ -362,7 +369,11 @@ def update_account(
     obj = db.query(models.Account).with_for_update().get(account_id)
     if not obj:
         raise HTTPException(404, "Akun tidak ditemukan")
-    for k, v in data.model_dump(exclude_unset=True).items():
+    perubahan = data.model_dump(exclude_unset=True)
+    # Lihat catatan di create_account: saldo awal tak boleh di-set dari editor akun.
+    if perubahan.get("opening_balance") and abs(float(perubahan["opening_balance"])) > 0.005:
+        raise HTTPException(400, "Saldo awal tidak diisi di sini. Gunakan menu Setup Saldo Awal atau Jurnal Manual agar tercatat berimbang & per-cabang.")
+    for k, v in perubahan.items():
         setattr(obj, k, v)
     db.commit()
     db.refresh(obj)
@@ -470,6 +481,31 @@ def ensure_default_accounts(db: Session) -> int:
         created += 1
     db.flush()
     return created
+
+
+def pastikan_akun_ada(db: Session, codes: list[str]) -> None:
+    """Pastikan akun-akun (kode) yang WAJIB dipakai sebuah jurnal otomatis benar-benar ada
+    SEBELUM transaksi memutasi stok.
+
+    Tujuan: mencegah jurnal gagal di tengah jalan (mis. akun di-rename/dihapus di COA klien)
+    yang akan membuat stok berpindah TANPA jurnal pendamping → GL menyimpang diam-diam.
+    Akun yang hilang dibuat ulang dari template COA default (idempotent). Kode non-default
+    dibiarkan: bila benar-benar tak ada, create_auto_journal yang akan menolak dengan jelas
+    sehingga seluruh transaksi rollback (tidak ada commit sebagian)."""
+    template = {row[0]: row for row in get_default_accounts()}  # code -> (code,name,type,subtype,normal)
+    perlu_flush = False
+    for code in codes:
+        if db.query(models.Account.id).filter(models.Account.code == code).first():
+            continue
+        t = template.get(code)
+        if not t:
+            continue
+        db.add(models.Account(
+            code=t[0], name=t[1], type=t[2], subtype=t[3], normal_balance=t[4], is_active=True
+        ))
+        perlu_flush = True
+    if perlu_flush:
+        db.flush()
 
 
 @router.post("/accounts/seed-default")
@@ -1107,6 +1143,25 @@ def get_balance_sheet(
     ytd_expense = sum(get_account_balance(db, a.id, year_start, as_of, b_id) for a in expense_accounts)
     current_period_profit = ytd_revenue - ytd_expense
 
+    # ── Laba Ditahan dinamis (akumulasi laba/rugi tahun-tahun SEBELUM tahun berjalan) ──
+    # Aset/kewajiban/ekuitas dijumlahkan kumulatif sejak awal, tetapi laba tahun-tahun lalu
+    # tidak pernah dipindah ke akun ekuitas karena sistem tidak memposting jurnal penutup
+    # (Tutup Buku hanya mengunci periode). Tanpa baris ini, neraca akan meleset sebesar laba
+    # akumulasi sebelum 1 Januari tahun berjalan begitu data sudah lintas tahun. Dihitung live
+    # dari baris jurnal → konsisten dengan restatement Fase 3 (koreksi back-date ikut terhitung)
+    # dan tetap balance walau buku dibuka-tutup berkali-kali.
+    batas_tahun_lalu = year_start - timedelta(days=1)
+    laba_ditahan_akumulasi = (
+        sum(get_account_balance(db, a.id, None, batas_tahun_lalu, b_id) for a in revenue_accounts)
+        - sum(get_account_balance(db, a.id, None, batas_tahun_lalu, b_id) for a in expense_accounts)
+    )
+    if abs(laba_ditahan_akumulasi) >= 1:
+        equity_items.append({
+            "code": "3-1300*",
+            "name": f"Laba Ditahan (s/d {year_start.year - 1})",
+            "amount": laba_ditahan_akumulasi
+        })
+
     if current_period_profit != 0:
         equity_items.append({
             "code": "3-9999",
@@ -1149,6 +1204,73 @@ def get_balance_sheet(
         "balanced": abs(total_assets - total_liabilities_equity) < 1,
         "current_period_profit": current_period_profit
     }
+
+
+@router.post("/reconcile-inventory-value")
+def reconcile_inventory_value(
+    dry_run: bool = True,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_admin),
+):
+    """Samakan saldo GL Persediaan (1-1400) dengan Σ nilai lapisan batch FIFO, PER CABANG.
+
+    Selisih (artefak setup/migrasi) dirapikan ke Modal Transisi (3-1999) → TIDAK menyentuh
+    laba-rugi. `dry_run=True` (default) hanya menampilkan angka; tanpa dry_run → posting jurnal.
+    Idempoten: cabang dengan |selisih| < 1 dilewati, jadi aman dijalankan ulang (setelah
+    Bagian A aktif, pembelian tak menambah selisih sehingga ini tetap ~0)."""
+    akun = db.query(models.Account).filter(models.Account.code == "1-1400").first()
+    if not akun:
+        raise HTTPException(400, "Akun Persediaan (1-1400) tidak ditemukan.")
+    if not dry_run:
+        pastikan_akun_ada(db, ["1-1400", "3-1999"])
+
+    hasil = []
+    for br in db.query(models.Branch).order_by(models.Branch.id).all():
+        gl = float(get_account_balance(db, akun.id, branch_id=br.id))
+        wh_ids = [w.id for w in db.query(models.Warehouse.id).filter(
+            models.Warehouse.branch_id == br.id).all()]
+        nilai_batch = 0.0
+        if wh_ids:
+            nilai_batch = float(
+                db.query(func.coalesce(func.sum(
+                    models.StockBatch.qty_remaining * models.StockBatch.unit_cost), 0.0))
+                .filter(models.StockBatch.warehouse_id.in_(wh_ids)).scalar() or 0.0
+            )
+        selisih = round(gl - nilai_batch, 2)
+        baris = {
+            "branch_id": br.id, "branch": br.name,
+            "gl_persediaan": round(gl, 2), "nilai_batch": round(nilai_batch, 2),
+            "selisih": selisih, "diposting": False, "journal_number": None,
+        }
+        if not dry_run and abs(selisih) >= 1:
+            # selisih>0 → GL lebih tinggi: turunkan Persediaan, lawan ke Modal Transisi.
+            if selisih > 0:
+                entries = [
+                    {"code": "1-1400", "debit": 0, "credit": selisih},
+                    {"code": "3-1999", "debit": selisih, "credit": 0},
+                ]
+            else:
+                entries = [
+                    {"code": "1-1400", "debit": -selisih, "credit": 0},
+                    {"code": "3-1999", "debit": 0, "credit": -selisih},
+                ]
+            j = create_auto_journal(
+                db=db, date_val=get_local_date(),
+                number_ref=f"RECON-INV-C{br.id}",
+                description=f"Penyetaraan nilai persediaan (GL vs batch FIFO) - {br.name}",
+                entries=entries, user_id=current_user.id, branch_id=br.id,
+                allow_closed_period=True,
+            )
+            baris["diposting"] = True
+            baris["journal_number"] = j.number
+            write_audit(db, current_user.id, "CREATE", "journals", j.id,
+                        f"Penyetaraan persediaan C{br.id}: {selisih}")
+        hasil.append(baris)
+
+    if not dry_run:
+        db.commit()
+    return {"dry_run": dry_run, "hasil": hasil}
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 👇 FITUR BARU: LAPORAN ARUS KAS (CASH FLOW STATEMENT) 👇
@@ -1202,17 +1324,25 @@ def get_cash_flow_statement(
                 net_cash_change -= line.amount
                 
         if touches_cash and net_cash_change != 0:
+            # Pasangan HPP↔Persediaan pada jurnal PENJUALAN bersifat non-kas & saling meniadakan
+            # (Dr 5-1100 = Cr 1-1400) → diabaikan agar arus kas penjualan = nilai uang masuk saja.
+            # TAPI pembelian persediaan TUNAI (Dr 1-1400 / Cr Kas) TIDAK punya 5-1100 — di situ
+            # 1-1400 adalah lawan kas yang sah, jadi JANGAN diabaikan; kalau diabaikan, arus keluar
+            # pembelian hilang & saldo kas akhir tak rekonsiliasi.
+            jurnal_punya_hpp = any(
+                (l.debit_account and l.debit_account.code == "5-1100")
+                or (l.credit_account and l.credit_account.code == "5-1100")
+                for l in j.lines
+            )
             for line in j.lines:
-                # 👇 FIX BUG: FILTER AKUN NON-KAS (BARANG/HPP) 👇
                 debit_code = line.debit_account.code if line.debit_account else None
                 credit_code = line.credit_account.code if line.credit_account else None
-                
-                # Abaikan Persediaan Barang (1-1400) dan HPP (5-1100)
-                if debit_code in ["1-1400", "5-1100"]:
+
+                # Abaikan Persediaan/HPP HANYA pada jurnal ber-HPP (pola penjualan).
+                if jurnal_punya_hpp and (
+                    debit_code in ["1-1400", "5-1100"] or credit_code in ["1-1400", "5-1100"]
+                ):
                     continue
-                if credit_code in ["1-1400", "5-1100"]:
-                    continue
-                # 👆 BATAS FILTER 👆
 
                 if line.debit_account_id and line.debit_account_id not in cash_acc_ids:
                     acc_impacts[line.debit_account_id] = acc_impacts.get(line.debit_account_id, 0) - line.amount
