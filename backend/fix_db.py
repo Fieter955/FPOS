@@ -75,6 +75,7 @@ add("customers", "email",           "TEXT")
 print("\n=== suppliers ===")
 add("suppliers", "PpnSupplier",  "REAL DEFAULT 0")
 add("suppliers", "credit_limit",    "REAL DEFAULT 0")
+add("suppliers", "due_date",      "INTEGER DEFAULT 0")
 add("suppliers", "deposit_balance", "REAL DEFAULT 0")
 add("suppliers", "email",        "TEXT")
 add("suppliers", "notes",        "TEXT")
@@ -130,6 +131,10 @@ add("sale_returns", "reason", "TEXT")
 
 print("\n=== purchase_returns ===")
 add("purchase_returns", "reason", "TEXT")
+
+print("\n=== purchase_items ===")
+add("purchase_items", "disc3", "REAL DEFAULT 0")
+add("purchase_items", "disc4", "REAL DEFAULT 0")
 
 print("\n=== sale_items ===")
 add("sale_items", "buy_price", "REAL DEFAULT 0")

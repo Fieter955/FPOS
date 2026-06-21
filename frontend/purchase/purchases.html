@@ -274,6 +274,17 @@
             >
           </div>
 
+          <div class="input-group" style="display: flex">
+            <div style="margin-right: 16px">
+              <label style="margin-bottom: 6px">Tanggal Jatuh Tempo</label>
+              <input type="date" id="bDueDate" class="input-control" />
+            </div>
+            <div>
+              <label style="margin-bottom: 6px">Jatuh Tempo (Hari)</label>
+              <input type="number" id="bDueDays" class="input-control" min="0" />
+            </div>
+          </div>
+
           <div class="input-group">
             <label style="margin-bottom: 6px">Catatan</label>
             <textarea
@@ -416,6 +427,31 @@
         },
       });
 
+      function updateDueDate() {
+        const baseDateStr = document.getElementById("bDate").value;
+        const days = parseInt(document.getElementById("bDueDays").value) || 0;
+        if (baseDateStr) {
+          const d = new Date(baseDateStr);
+          d.setDate(d.getDate() + days);
+          document.getElementById("bDueDate").value = d.toISOString().split("T")[0];
+        }
+      }
+
+      function updateDueDays() {
+        const baseDateStr = document.getElementById("bDate").value;
+        const targetDateStr = document.getElementById("bDueDate").value;
+        if (baseDateStr && targetDateStr) {
+          const d1 = new Date(baseDateStr);
+          const d2 = new Date(targetDateStr);
+          const diffDays = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
+          document.getElementById("bDueDays").value = diffDays >= 0 ? diffDays : 0;
+        }
+      }
+
+      document.getElementById("bDate").addEventListener("change", updateDueDate);
+      document.getElementById("bDueDays").addEventListener("input", updateDueDate);
+      document.getElementById("bDueDate").addEventListener("change", updateDueDays);
+
       function switchTab(tab) {
         currentTab = tab;
         document
@@ -447,6 +483,8 @@
         document.getElementById("formGridContainer").innerHTML =
           '<div id="gridTarget"></div>';
         document.getElementById("bDate").value = today();
+        document.getElementById("bDueDays").value = 0;
+        updateDueDate();
         document.getElementById("bDisc").value = 0;
         document.getElementById("bTax").value = 0;
         document.getElementById("totalLabel").textContent = "Rp 0";
@@ -472,6 +510,10 @@
         );
         createPremiumCombo("supplierCombobox", allSuppliers, {
           onSelect: async (sel) => {
+            if (sel && typeof sel.due_date !== "undefined") {
+              document.getElementById("bDueDays").value = sel.due_date;
+              updateDueDate();
+            }
             const items = await api(
               "GET",
               `/purchases/items/?supplier_id=${sel.id}`,
@@ -493,21 +535,100 @@
             sell_price: it.item?.sell_price || 0,
             profit_margin: it.item?.profit_margin || 0,
           }));
-          formGrid = createPurchaseGrid("gridTarget", {
+          formGrid = createPurchaseSummaryGrid("gridTarget", {
             initialItems: items,
             onChange: hitungGrandTotal,
+            onDetail: bukaDetailItem,
+            getSupplierId: ambilSupplierIdTerpilih,
           });
         } else {
-          formGrid = createPurchaseGrid("gridTarget", {
+          formGrid = createPurchaseSummaryGrid("gridTarget", {
             onChange: hitungGrandTotal,
+            onDetail: bukaDetailItem,
+            getSupplierId: ambilSupplierIdTerpilih,
           });
         }
+      }
+
+      // Ambil id supplier yang sedang dipilih pada combobox supplier (atau null).
+      // Dipakai grid untuk menyimpan harga beli & PPN ke data barang per supplier.
+      function ambilSupplierIdTerpilih() {
+        const v = document.querySelector(
+          "#supplierCombobox .combobox-value",
+        )?.value;
+        return v ? parseInt(v) : null;
+      }
+
+      // Simpan seluruh state form ke sessionStorage lalu buka halaman detail item.
+      // Dipakai sebagai callback onDetail dari grid (tombol "Detail" tiap baris).
+      function bukaDetailItem(rowIndex, detail) {
+        const supEl = document.querySelector(
+          "#supplierCombobox .combobox-value",
+        );
+        const supInput = document.querySelector(
+          "#supplierCombobox .combobox-input",
+        );
+        const supId = supEl && supEl.value ? parseInt(supEl.value) : null;
+        const supData = (allSuppliers || []).find((s) => s.id === supId);
+        const draft = {
+          mode: currentFormMode,
+          supplier_id: supId,
+          supplier_name: supInput ? supInput.value : "",
+          supplier_ppn: supData ? supData.PpnSupplier || 0 : 0,
+          date: document.getElementById("bDate").value,
+          disc: document.getElementById("bDisc").value,
+          tax: document.getElementById("bTax").value,
+          notes: document.getElementById("bNotes").value,
+          rows: formGrid.getDetailRows(),
+          editRow: rowIndex,
+        };
+        sessionStorage.setItem("purchase_form_draft", JSON.stringify(draft));
+        location.href = "detail_item.html";
+      }
+
+      // Pulihkan form pembelian dari draft sessionStorage (setelah kembali dari detail_item).
+      async function restoreFormFromDraft(draft) {
+        currentFormMode = draft.mode || "purchase";
+        document.getElementById("formTitle").textContent =
+          currentFormMode === "po"
+            ? "📝 Catat Pesanan (Draft)"
+            : "📥 Catat Pembelian";
+
+        currentTab = currentFormMode;
+        document
+          .querySelectorAll(".view-section")
+          .forEach((el) => (el.style.display = "none"));
+        document.getElementById("viewForm").style.display = "block";
+
+        await openForm();
+
+        document.getElementById("bDate").value = draft.date || today();
+        document.getElementById("bDisc").value = draft.disc || 0;
+        document.getElementById("bTax").value = draft.tax || 0;
+        document.getElementById("bNotes").value = draft.notes || "";
+
+        if (draft.supplier_id) {
+          document
+            .getElementById("supplierCombobox")
+            ._combo.set(draft.supplier_id, draft.supplier_name || "");
+          const items = await api(
+            "GET",
+            `/purchases/items/?supplier_id=${draft.supplier_id}`,
+          );
+          formGrid.updateDataSource(items);
+        }
+
+        if (draft.rows && draft.rows.length) {
+          formGrid.loadRows(draft.rows);
+        }
+        hitungGrandTotal();
       }
 
       function hitungGrandTotal() {
         if (!formGrid) return;
         const items = formGrid.getData();
-        let sub = items.reduce((acc, it) => acc + it.qty * it.buy_price, 0);
+        // pakai total net per-baris (sudah termasuk diskon bertingkat dari Detail Item)
+        let sub = items.reduce((acc, it) => acc + (it.total || 0), 0);
         const disc = parseFloat(document.getElementById("bDisc").value) || 0;
         const tax = parseFloat(document.getElementById("bTax").value) || 0;
         const grand = (sub - (sub * disc) / 100) * (1 + tax / 100);
@@ -1005,6 +1126,21 @@
 
       (async () => {
         await initFilters();
+        // Jika kembali dari detail_item.html, pulihkan form pembelian dari draft.
+        const kembaliDariDetail = sessionStorage.getItem(
+          "purchase_form_return",
+        );
+        const draftRaw = sessionStorage.getItem("purchase_form_draft");
+        if (kembaliDariDetail && draftRaw) {
+          sessionStorage.removeItem("purchase_form_return");
+          sessionStorage.removeItem("purchase_form_draft");
+          try {
+            await restoreFormFromDraft(JSON.parse(draftRaw));
+            return;
+          } catch (e) {
+            console.error("Gagal memulihkan form:", e);
+          }
+        }
         load();
       })();
     </script>

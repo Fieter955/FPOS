@@ -341,6 +341,10 @@ def create_transfer(data: TransferCreate, db: Session = Depends(get_db),
             # Baru pindah fisik
             adjust_warehouse_stock(db, from_w.id, it.item_id, -it.qty)
             adjust_warehouse_stock(db, to_w.id, it.item_id, it.qty)
+            # 🧱 FIFO: pindahkan lapisan biaya ikut barangnya (asal → tujuan)
+            from ..services.inventory_fifo import transfer_batches
+            transfer_batches(db, item_id=it.item_id, from_warehouse_id=from_w.id,
+                             to_warehouse_id=to_w.id, qty=it.qty)
 
             db.add(models.StockMovement(
                 date=data.date, created_at=local_datetime,
@@ -361,6 +365,10 @@ def create_transfer(data: TransferCreate, db: Session = Depends(get_db),
             # Baru pindah fisik
             adjust_warehouse_stock(db, from_w.id, it.item_id, -it.qty)
             adjust_warehouse_stock(db, to_w.id, it.item_id, it.qty)
+            # 🧱 FIFO: pindahkan lapisan biaya ikut barangnya (asal → tujuan)
+            from ..services.inventory_fifo import transfer_batches
+            transfer_batches(db, item_id=it.item_id, from_warehouse_id=from_w.id,
+                             to_warehouse_id=to_w.id, qty=it.qty)
 
             # Mutasi KELUAR dari Cabang Asal
             db.add(models.StockMovement(

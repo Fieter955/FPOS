@@ -151,16 +151,24 @@ def next_journal_number(db: Session, branch_id: int) -> str:
 
 
 def create_auto_journal(
-    db: Session, 
-    date_val: date, 
-    number_ref: str, 
-    description: str, 
+    db: Session,
+    date_val: date,
+    number_ref: str,
+    description: str,
     entries: list,
     user_id: int,
-    branch_id: int 
+    branch_id: int,
+    allow_closed_period: bool = False,
 ):
-    """Helper untuk membuat jurnal otomatis dari modul lain (Sales/Purchases/dll)"""
-    assert_books_open(db, branch_id, date_val, "Jurnal otomatis")
+    """Helper untuk membuat jurnal otomatis dari modul lain (Sales/Purchases/dll).
+
+    allow_closed_period=True hanya untuk RESTATEMENT (mis. koreksi HPP swap batch
+    Fase 3) yang sengaja memposting jurnal bertanggal di periode yang sudah Tutup
+    Buku — karena laporan dihitung live dari baris jurnal, neraca/laba-rugi periode
+    lama otomatis ikut menyesuaikan. Jalur ini wajib admin-only + tercatat di audit.
+    """
+    if not allow_closed_period:
+        assert_books_open(db, branch_id, date_val, "Jurnal otomatis")
 
     # 1. Validasi Keseimbangan (Balance)
     total_debit = sum(e["debit"] for e in entries)

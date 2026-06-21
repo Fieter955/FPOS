@@ -194,6 +194,16 @@
                   value="0"
                 />
               </div>
+              <div class="input-group">
+                <label>Jatuh Tempo</label>
+                <input
+                  id="sDueDate"
+                  type="number"
+                  class="input-control"
+                  placeholder="0"
+                  value="0"
+                />
+              </div>
             </div>
 
             <div class="input-group" style="margin-bottom: 16px">
@@ -354,6 +364,7 @@
           PpnSupplier: document.getElementById("PpnSupplier").value || null,
           credit_limit:
             parseFloat(document.getElementById("sCredit").value) || 0,
+          due_date: parseInt(document.getElementById("sDueDate").value) || 0,
           notes: document.getElementById("sNotes").value || null,
           item_ids: Array.from(selectedItems.keys()),
         };

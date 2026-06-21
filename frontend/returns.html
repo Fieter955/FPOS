@@ -387,6 +387,19 @@
       </div>
     </div>
 
+    <!-- Modal Swap Batch Antar-Supplier (FIFO — Fase 3) -->
+    <div class="modal-overlay" id="mSwap">
+      <div class="modal-box" style="max-width: 640px; width: 92vw">
+        <div class="modal-hdr">
+          <h2>🔁 Tukar Stok Antar-Supplier</h2>
+          <button class="btn-x" onclick="closeModal('mSwap')">×</button>
+        </div>
+        <div class="modal-body" id="mSwapBody" style="padding: 16px 0">
+          <!-- diisi oleh openSwapModal() -->
+        </div>
+      </div>
+    </div>
+
     <script src="/js/api.js"></script>
     <script src="/js/theme.js"></script>
     <script src="/js/components.js"></script>
@@ -402,6 +415,12 @@
       let mManualEntityCombo = null;
       let mManualSelectedEntity = null;
       let mManualValidItems = [];
+
+      // Fase 3 — swap batch antar-supplier (retur pembelian)
+      let pendingReturnPayload = null;
+      let pendingReturnType = null;
+      let swapSelectedBatchId = null;
+      let swapContext = null;
 
       function switchTab(tab) {
         currentTab = tab;
@@ -987,6 +1006,30 @@
           payload.purchase_id = activeItem.purchase_id;
         }
 
+        // FASE 3 — Retur PEMBELIAN: bila batch supplier ini sudah "terjual" menurut
+        // FIFO, tawarkan tukar (swap) ke supplier lain dulu sebelum retur diproses.
+        if (type !== "sales") {
+          let swapInfo = null;
+          try {
+            swapInfo = await api(
+              "GET",
+              `/returns/swap-candidates?purchase_id=${activeItem.purchase_id}&item_id=${activeItem.item_id}&qty=${qty}`,
+            );
+          } catch (e) {
+            swapInfo = null; // backend lama / mode global → retur biasa
+          }
+          if (swapInfo && swapInfo.needs_swap) {
+            pendingReturnPayload = payload;
+            pendingReturnType = type;
+            openSwapModal(swapInfo, qty);
+            return; // tunggu user menukar stok dulu
+          }
+        }
+
+        await submitReturn(type, payload);
+      }
+
+      async function submitReturn(type, payload) {
         try {
           showLoading("Memproses retur...");
           const res = await api(
@@ -999,6 +1042,70 @@
           showToast(`Berhasil! No. Retur: ${res.number}`);
           closeModal("mReturn");
           load();
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      // ── Swap batch antar-supplier (Fase 3) ────────────────────────────────
+      function openSwapModal(info, returnQty) {
+        swapContext = { info, returnQty };
+        swapSelectedBatchId = null;
+        const need = info.shortfall;
+        const cands = info.candidates || [];
+        const rows = cands
+          .map((c) => {
+            const cukup = c.qty_remaining + 1e-6 >= need;
+            return `
+            <label style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--border-color); border-radius:8px; margin-bottom:8px; cursor:${cukup ? "pointer" : "not-allowed"}; opacity:${cukup ? 1 : 0.5}">
+              <span style="display:flex; align-items:center; gap:10px">
+                <input type="radio" name="swapCand" value="${c.batch_id}" ${cukup ? "" : "disabled"}
+                  onchange="swapSelectedBatchId=${c.batch_id}; document.getElementById('btnSwapConfirm').disabled=false;" />
+                <span>
+                  <div style="font-weight:700">${c.supplier_name}</div>
+                  <div style="font-size:12px; color:var(--text-muted)">Modal ${fmtRp(c.unit_cost)} • sisa ${c.qty_remaining} • diterima ${fmtDate(c.received_date)}</div>
+                </span>
+              </span>
+            </label>`;
+          })
+          .join("");
+        document.getElementById("mSwapBody").innerHTML = `
+          <div style="background:rgba(245,158,11,.12); border:1px solid rgba(245,158,11,.3); color:#b45309; padding:12px; border-radius:8px; font-size:13px; margin-bottom:14px">
+            Stok dari <b>${info.from_supplier_name}</b> sudah <b>terjual</b> menurut FIFO
+            (tersisa ${info.on_hand}, perlu ${returnQty}). Tukar <b>${need}</b> unit ke
+            supplier lain yang stoknya masih ada agar barangnya bisa diretur. HPP
+            penjualan lama akan dikoreksi otomatis — termasuk bila periode sudah tutup buku.
+          </div>
+          ${cands.length ? rows : '<div style="color:#dc2626; font-size:13px">Tidak ada batch supplier lain yang stoknya cukup untuk ditukar.</div>'}
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px">
+            <button class="btn" onclick="closeModal('mSwap')">Batal</button>
+            <button class="btn btn-primary" id="btnSwapConfirm" disabled onclick="confirmSwap()">🔁 Tukar &amp; Lanjut Retur</button>
+          </div>`;
+        openModal("mSwap");
+      }
+
+      async function confirmSwap() {
+        if (!swapSelectedBatchId || !swapContext) return;
+        const { info } = swapContext;
+        try {
+          showLoading("Menukar stok & mengoreksi HPP...");
+          const res = await api("POST", "/returns/swap-batch", {
+            from_batch_id: info.from_batch_id,
+            to_batch_id: swapSelectedBatchId,
+            qty: info.shortfall,
+            reason:
+              (pendingReturnPayload && pendingReturnPayload.reason) ||
+              "Swap untuk retur pembelian",
+          });
+          hideLoading();
+          closeModal("mSwap");
+          showToast(res.message || "Swap berhasil");
+          if (pendingReturnPayload) {
+            await submitReturn(pendingReturnType, pendingReturnPayload);
+            pendingReturnPayload = null;
+            pendingReturnType = null;
+          }
         } catch (ex) {
           hideLoading();
           showToast(ex.message, "error");

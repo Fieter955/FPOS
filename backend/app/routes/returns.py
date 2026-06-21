@@ -6,7 +6,7 @@ from typing import Optional
 from datetime import date, datetime
 from ..database import get_db
 from .. import models
-from ..auth import get_current_user, write_audit
+from ..auth import get_current_user, write_audit, require_admin
 from ..services.virtual_units import get_required_stock_qty, is_virtual_variant
 
 router = APIRouter()
@@ -339,6 +339,18 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
         if gudang_aktif:
             from .warehouse import adjust_warehouse_stock
             adjust_warehouse_stock(db, gudang_aktif.id, stock_item.id, required_qty)
+            # 🧱 FIFO: pulihkan lapisan yang dulu dikonsumsi penjualan ini (retur bisa
+            # sebagian) agar Σ batch == stok tetap terjaga & barang siap dijual lagi
+            # dengan biaya asalnya.
+            from ..services.inventory_fifo import restore_sale_return
+            restore_sale_return(
+                db,
+                sale_item_id=sale_item.id,
+                qty=required_qty,
+                item_id=stock_item.id,
+                warehouse_id=gudang_aktif.id,
+                fallback_cost=(sale_item.buy_price or 0),
+            )
         db.add(models.StockMovement(
             date=get_local_date(),
             item_id=stock_item.id,
@@ -439,7 +451,8 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
         ).first()
 
     number = _next_number(db, "RP", models.PurchaseReturn)
-    total_inventory = 0.0
+    total_inventory = 0.0   # nilai refund barang (qty × harga retur)
+    total_carrying = 0.0    # biaya modal FIFO nyata yang keluar (untuk selisih harga)
     total_tax = 0.0
     
     # Ambil info pajak dari pembelian asli jika tidak dikirim dari frontend
@@ -499,8 +512,26 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
 
         before = item.stock
         item.stock -= it["qty"]
+        # Default (mode global / fallback): modal = nilai refund → tanpa selisih.
+        line_carrying = line_inventory
         if gudang_aktif:
             adjust_warehouse_stock(db, gudang_aktif.id, item.id, -it["qty"])
+            # 🧱 FIFO: kurangi lapisan — utamakan batch dari pembelian yang diretur.
+            # Bila batch itu sudah terjual (FIFO), fungsi ini mundur ke batch terbaru
+            # supaya Σ batch == stok tetap terjaga (kasus koreksi biaya/"swap" lintas
+            # supplier ditangani terpisah di Fase 3).
+            from ..services.inventory_fifo import reduce_batches_for_reversal
+            cost_consumed, leftover = reduce_batches_for_reversal(
+                db,
+                item_id=item.id,
+                warehouse_id=gudang_aktif.id,
+                qty=it["qty"],
+                prefer_purchase_item_id=pur_item.id,
+            )
+            # Modal nyata = biaya batch yang keluar; porsi leftover (drift) dinilai =
+            # harga retur agar tidak memunculkan selisih palsu pada porsi itu.
+            line_carrying = cost_consumed + leftover * actual_price
+        total_carrying += line_carrying
         db.add(models.StockMovement(
             date=get_local_date(),
             item_id=item.id,
@@ -531,6 +562,7 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
             number_ref=retur.number,
             supplier_name=purchase.supplier.name if purchase.supplier else "-",
             total_inventory=total_inventory,
+            total_carrying=total_carrying,
             total_tax=total_tax,
             is_tax_included=is_tax_included,
             user_id=current_user.id,
@@ -542,3 +574,264 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
     write_audit(db, current_user.id, "CREATE", "purchase_returns", retur.id, f"Retur {purchase.number}")
     db.commit()
     return {"id": retur.id, "number": retur.number, "total": total, "message": "Retur pembelian berhasil"}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FASE 3 — SWAP BATCH ANTAR-SUPPLIER + RESTATEMENT HPP
+# ══════════════════════════════════════════════════════════════════════════════
+# Skenario: barang supplier A sudah "terjual" menurut FIFO (batch A habis), tapi
+# pengguna ingin meretur barang A. Solusi: tukar alokasi penjualan dari batch A ke
+# batch supplier lain (B) yang stoknya masih ada → barang A kembali on-hand & bisa
+# diretur. Jurnal HPP penjualan lama dikoreksi (bertanggal periode asal, boleh sudah
+# Tutup Buku); karena laporan dihitung live, neraca/laba-rugi lama otomatis update.
+
+EPS_SWAP = 1e-6
+
+
+@router.get("/swap-candidates")
+def get_swap_candidates(
+    purchase_id: int,
+    item_id: int,
+    qty: float,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Cek apakah retur pembelian ini butuh SWAP. Bila batch dari pembelian tsb sudah
+    kurang dari qty yang mau diretur (terjual FIFO), kembalikan daftar batch item yang
+    sama dari SUPPLIER LAIN yang stoknya masih ada untuk ditukar."""
+    purchase = db.query(models.Purchase).get(purchase_id)
+    if not purchase:
+        raise HTTPException(404, "Pembelian tidak ditemukan")
+    pur_item = next((pi for pi in purchase.items if pi.item_id == item_id), None)
+    if not pur_item:
+        raise HTTPException(400, "Item tidak ada di pembelian ini")
+
+    gudang_aktif = None
+    if purchase.branch_id:
+        gudang_aktif = db.query(models.Warehouse).filter(
+            models.Warehouse.branch_id == purchase.branch_id,
+            models.Warehouse.is_default == True,
+        ).first()
+    if not gudang_aktif:
+        return {"needs_swap": False, "reason": "Mode tanpa gudang — retur biasa."}
+
+    from_batch = db.query(models.StockBatch).filter(
+        models.StockBatch.purchase_item_id == pur_item.id,
+        models.StockBatch.warehouse_id == gudang_aktif.id,
+    ).first()
+    if not from_batch:
+        return {"needs_swap": False, "reason": "Pembelian ini belum punya lapisan FIFO."}
+
+    on_hand = float(from_batch.qty_remaining or 0)
+    shortfall = float(qty) - on_hand
+    if shortfall <= EPS_SWAP:
+        return {"needs_swap": False, "from_batch_id": from_batch.id, "on_hand": round(on_hand, 4)}
+
+    # Hanya qty yang benar-benar "terjual" dari batch A yang bisa di-swap balik
+    swappable = float(
+        db.query(func.coalesce(func.sum(models.SaleItemBatch.qty), 0.0))
+        .filter(models.SaleItemBatch.batch_id == from_batch.id)
+        .scalar()
+        or 0.0
+    )
+
+    cands = (
+        db.query(models.StockBatch)
+        .filter(
+            models.StockBatch.item_id == item_id,
+            models.StockBatch.warehouse_id == gudang_aktif.id,
+            models.StockBatch.qty_remaining > EPS_SWAP,
+            models.StockBatch.id != from_batch.id,
+        )
+        .order_by(models.StockBatch.received_date.desc(), models.StockBatch.id.desc())
+        .all()
+    )
+    candidates = []
+    for b in cands:
+        supp = db.query(models.Supplier).get(b.supplier_id) if b.supplier_id else None
+        candidates.append({
+            "batch_id": b.id,
+            "supplier_id": b.supplier_id,
+            "supplier_name": supp.name if supp else "Tanpa supplier / saldo awal",
+            "unit_cost": float(b.unit_cost or 0),
+            "qty_remaining": float(b.qty_remaining or 0),
+            "received_date": str(b.received_date),
+        })
+
+    return {
+        "needs_swap": True,
+        "from_batch_id": from_batch.id,
+        "from_supplier_name": purchase.supplier.name if purchase.supplier else "-",
+        "from_unit_cost": float(from_batch.unit_cost or 0),
+        "on_hand": round(on_hand, 4),
+        "shortfall": round(shortfall, 4),
+        "swappable_sold_qty": round(swappable, 4),
+        "candidates": candidates,
+    }
+
+
+@router.post("/swap-batch")
+def swap_batch(
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_admin),
+):
+    """Pindahkan alokasi penjualan sebanyak `qty` (satuan dasar) dari from_batch (A)
+    ke to_batch (B), lalu posting jurnal KOREKSI HPP bertanggal di periode penjualan
+    asal (boleh sudah tutup buku). Tidak mengubah WarehouseStock — Σ batch == stok
+    tetap terjaga. ADMIN-ONLY + audit."""
+    from .accounting import create_auto_journal, get_books_locked_until
+    from ..services.journal_service import ACCOUNT_COGS, ACCOUNT_INVENTORY
+
+    qty = float(data.get("qty") or 0)
+    reason = data.get("reason")
+    if qty <= 0:
+        raise HTTPException(400, "qty harus > 0")
+
+    A = db.query(models.StockBatch).with_for_update().get(data.get("from_batch_id"))
+    B = db.query(models.StockBatch).with_for_update().get(data.get("to_batch_id"))
+    if not A or not B:
+        raise HTTPException(404, "Batch tidak ditemukan")
+    if A.id == B.id:
+        raise HTTPException(400, "Batch asal & tujuan tidak boleh sama")
+    if A.item_id != B.item_id or A.warehouse_id != B.warehouse_id:
+        raise HTTPException(400, "Batch harus item & gudang yang sama")
+    if float(B.qty_remaining or 0) + EPS_SWAP < qty:
+        raise HTTPException(400, f"Stok batch tujuan tidak cukup untuk swap (sisa {B.qty_remaining}).")
+
+    allocs = (
+        db.query(models.SaleItemBatch)
+        .join(models.SaleItem, models.SaleItem.id == models.SaleItemBatch.sale_item_id)
+        .join(models.Sale, models.Sale.id == models.SaleItem.sale_id)
+        .filter(
+            models.SaleItemBatch.batch_id == A.id,
+            models.SaleItemBatch.qty > EPS_SWAP,
+            models.Sale.status != "cancelled",
+        )
+        .order_by(models.Sale.date.desc(), models.SaleItem.id.desc())
+        .all()
+    )
+    total_sold_A = sum(float(a.qty) for a in allocs)
+    if total_sold_A + EPS_SWAP < qty:
+        raise HTTPException(
+            400,
+            f"Hanya {round(total_sold_A, 4)} unit dari batch ini yang tercatat terjual; tak bisa swap {qty}.",
+        )
+
+    from_cost = float(A.unit_cost or 0)
+    to_cost = float(B.unit_cost or 0)
+    remaining = qty
+    total_delta = 0.0
+    affected = []
+
+    for a in allocs:
+        if remaining <= EPS_SWAP:
+            break
+        take = min(float(a.qty), remaining)
+        si = a.sale_item
+        sale = si.sale
+        cost_delta = (to_cost - from_cost) * take
+
+        # 1) pindahkan alokasi A -> B
+        a.qty = float(a.qty) - take
+        if a.qty <= EPS_SWAP:
+            db.delete(a)
+        b_alloc = (
+            db.query(models.SaleItemBatch)
+            .filter(
+                models.SaleItemBatch.sale_item_id == si.id,
+                models.SaleItemBatch.batch_id == B.id,
+            )
+            .first()
+        )
+        if b_alloc:
+            b_alloc.qty = float(b_alloc.qty) + take
+            b_alloc.unit_cost = to_cost
+        else:
+            db.add(models.SaleItemBatch(sale_item_id=si.id, batch_id=B.id, qty=take, unit_cost=to_cost))
+
+        # 2) pindahkan lapisan fisik: A kembali on-hand, B dianggap terjual
+        A.qty_remaining = float(A.qty_remaining) + take
+        B.qty_remaining = float(B.qty_remaining) - take
+
+        # 3) koreksi HPP baris jual (incremental → aman thd porsi fallback)
+        if si.qty:
+            si.buy_price = float(si.buy_price or 0) + (cost_delta / si.qty)
+
+        # 4) jurnal koreksi bertanggal sale.date (boleh sudah tutup buku)
+        jid = None
+        if abs(cost_delta) > 0.005:
+            if cost_delta > 0:  # HPP naik (B lebih mahal): Dr HPP / Cr Persediaan
+                entries = [
+                    {"code": ACCOUNT_COGS, "debit": cost_delta, "credit": 0},
+                    {"code": ACCOUNT_INVENTORY, "debit": 0, "credit": cost_delta},
+                ]
+            else:               # HPP turun (B lebih murah): Dr Persediaan / Cr HPP
+                d = -cost_delta
+                entries = [
+                    {"code": ACCOUNT_INVENTORY, "debit": d, "credit": 0},
+                    {"code": ACCOUNT_COGS, "debit": 0, "credit": d},
+                ]
+            j = create_auto_journal(
+                db,
+                date_val=sale.date,
+                number_ref=f"SWAP-{sale.number}",
+                description=(
+                    f"Koreksi HPP swap batch (Sale {sale.number}): "
+                    f"{from_cost:.0f} -> {to_cost:.0f} x {round(take, 4)}"
+                ),
+                entries=entries,
+                user_id=current_user.id,
+                branch_id=sale.branch_id,
+                allow_closed_period=True,
+            )
+            jid = j.id
+
+        locked_until = get_books_locked_until(db, sale.branch_id)
+        was_locked = bool(locked_until and sale.date <= locked_until)
+
+        db.add(models.Restatement(
+            sale_item_id=si.id,
+            from_batch_id=A.id,
+            to_batch_id=B.id,
+            qty=take,
+            cost_delta=cost_delta,
+            correction_journal_id=jid,
+            period_was_locked=was_locked,
+            sale_date=sale.date,
+            reason=reason,
+            created_by=current_user.id,
+        ))
+
+        affected.append({
+            "sale_id": sale.id,
+            "sale_number": sale.number,
+            "sale_date": str(sale.date),
+            "qty": round(take, 4),
+            "cost_delta": round(cost_delta, 2),
+            "journal_id": jid,
+            "period_was_locked": was_locked,
+        })
+        total_delta += cost_delta
+        remaining -= take
+
+    write_audit(
+        db, current_user.id, "SWAP_BATCH", "stock_batches", A.id,
+        f"Swap {round(qty,4)} unit batch#{A.id}->#{B.id}; koreksi HPP {round(total_delta,2)}; "
+        f"{len(affected)} penjualan; sebagian periode terkunci="
+        f"{any(x['period_was_locked'] for x in affected)}",
+    )
+    db.commit()
+
+    return {
+        "success": True,
+        "swapped_qty": round(qty, 4),
+        "total_cost_delta": round(total_delta, 2),
+        "freed_on_hand_from_batch": round(float(A.qty_remaining or 0), 4),
+        "affected_sales": affected,
+        "message": (
+            f"Swap berhasil: {round(qty,4)} unit dipindah dari batch#{A.id} ke batch#{B.id}. "
+            f"Stok supplier asal kini bisa diretur. Koreksi HPP total Rp{round(total_delta,2)} "
+            f"diposting ke {len(affected)} periode penjualan."
+        ),
+    }

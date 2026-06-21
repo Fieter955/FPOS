@@ -151,6 +151,58 @@ def restore_allocations(db: Session, sale_item_id: int) -> None:
         db.delete(a)
 
 
+def restore_sale_return(
+    db: Session,
+    *,
+    sale_item_id: int,
+    qty: float,
+    item_id: int,
+    warehouse_id: int,
+    fallback_cost: float = 0.0,
+    received_date: Optional[date] = None,
+) -> None:
+    """Pulihkan `qty` (satuan dasar) ke lapisan untuk RETUR JUAL — bisa SEBAGIAN.
+
+    Beda dari restore_allocations (yang memulihkan seluruh baris saat BATAL jual),
+    retur sering hanya sebagian qty. Strategi: pulihkan dulu dari alokasi asli
+    (SaleItemBatch) TERBARU dulu, agar barang kembali ke batch tempat ia diambil
+    (received_date & biaya asli terjaga, urutan FIFO konsisten). Bila alokasi tak
+    mencukupi (penjualan PRA-FIFO tanpa alokasi / porsi fallback), sisanya dibuatkan
+    satu lapisan baru di `received_date` (default hari ini) bernilai `fallback_cost`
+    supaya invarian Σ batch == stok tetap terjaga.
+    """
+    remaining = float(qty or 0)
+    if remaining <= EPS:
+        return
+    allocs = (
+        db.query(models.SaleItemBatch)
+        .filter(models.SaleItemBatch.sale_item_id == sale_item_id)
+        .order_by(models.SaleItemBatch.id.desc())
+        .all()
+    )
+    for a in allocs:
+        if remaining <= EPS:
+            break
+        give = min(float(a.qty), remaining)
+        batch = db.query(models.StockBatch).with_for_update().get(a.batch_id)
+        if batch:
+            batch.qty_remaining = float(batch.qty_remaining) + give
+        a.qty = float(a.qty) - give
+        if a.qty <= EPS:
+            db.delete(a)
+        remaining -= give
+
+    if remaining > EPS:
+        add_batch(
+            db,
+            item_id=item_id,
+            warehouse_id=warehouse_id,
+            qty=remaining,
+            unit_cost=fallback_cost,
+            received_date=received_date or date.today(),
+        )
+
+
 def reduce_batches_for_reversal(
     db: Session,
     *,
@@ -158,11 +210,17 @@ def reduce_batches_for_reversal(
     warehouse_id: int,
     qty: float,
     prefer_purchase_item_id: Optional[int] = None,
-) -> float:
-    """Kurangi lapisan saat PEMBELIAN dibatalkan: utamakan batch dari pembelian
-    itu, sisanya dari batch TERBARU (kebalikan FIFO). Kecukupan stok agregat sudah
-    dicek pemanggil. Kembalikan sisa yang tak tertutup (idealnya ~0)."""
+) -> Tuple[float, float]:
+    """Kurangi lapisan saat barang KELUAR untuk pembalikan (batal beli / retur beli):
+    utamakan batch dari pembelian itu, sisanya dari batch TERBARU (kebalikan FIFO).
+    Kecukupan stok agregat sudah dicek pemanggil.
+
+    Kembalikan (cost_consumed, leftover):
+      • cost_consumed = Σ(qty_dipotong × unit_cost) — BIAYA MODAL nyata barang yg keluar,
+        dipakai pemanggil untuk menilai persediaan & menghitung selisih harga retur.
+      • leftover = sisa qty yang tak tertutup lapisan (idealnya ~0; >0 hanya bila ada drift)."""
     remaining = float(qty or 0)
+    cost_consumed = 0.0
 
     if prefer_purchase_item_id:
         pref = (
@@ -179,6 +237,7 @@ def reduce_batches_for_reversal(
                 break
             take = min(float(b.qty_remaining), remaining)
             b.qty_remaining -= take
+            cost_consumed += take * float(b.unit_cost or 0)
             remaining -= take
 
     if remaining > EPS:
@@ -198,9 +257,37 @@ def reduce_batches_for_reversal(
                 break
             take = min(float(b.qty_remaining), remaining)
             b.qty_remaining -= take
+            cost_consumed += take * float(b.unit_cost or 0)
             remaining -= take
 
-    return remaining
+    return cost_consumed, remaining
+
+
+def transfer_batches(
+    db: Session,
+    *,
+    item_id: int,
+    from_warehouse_id: int,
+    to_warehouse_id: int,
+    qty: float,
+) -> None:
+    """Pindahkan lapisan biaya antar gudang (TRANSFER stok): konsumsi FIFO di gudang
+    asal lalu buat ulang lapisan identik (biaya/tanggal/supplier) di gudang tujuan,
+    sehingga biaya & urutan FIFO ikut berpindah bersama barangnya dan invarian
+    Σ batch == stok tetap terjaga di KEDUA gudang. Pemanggil tetap meng-update
+    WarehouseStock kedua gudang seperti biasa (fungsi ini hanya menyentuh lapisan)."""
+    allocs = consume_fifo(db, item_id=item_id, warehouse_id=from_warehouse_id, qty=qty)
+    for batch, q, cost in allocs:
+        add_batch(
+            db,
+            item_id=item_id,
+            warehouse_id=to_warehouse_id,
+            qty=q,
+            unit_cost=cost,
+            received_date=batch.received_date if batch else date.today(),
+            supplier_id=batch.supplier_id if batch else None,
+            purchase_item_id=batch.purchase_item_id if batch else None,
+        )
 
 
 def total_remaining(db: Session, item_id: int, warehouse_id: int) -> float:

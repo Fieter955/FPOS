@@ -417,7 +417,17 @@ def update_item(item_id: int, item: schemas.ItemUpdate, db: Session = Depends(ge
         )
     
     data = item.model_dump(exclude_unset=True, exclude={"prices", "supplier_ids", "supplier_settings", "group_discounts"})
-    
+
+    # Cegah bentrok nama (Item.name unik) agar tidak jatuh ke error 500 yang membingungkan
+    nama_baru = data.get("name")
+    if nama_baru and nama_baru != obj.name:
+        bentrok = db.query(models.Item).filter(
+            models.Item.name == nama_baru,
+            models.Item.id != item_id,
+        ).first()
+        if bentrok:
+            raise HTTPException(400, f"Nama barang '{nama_baru}' sudah dipakai item lain.")
+
     need_barcode_gen = False
     if data.get("barcode") == "AUTO":
         need_barcode_gen = True
@@ -475,6 +485,42 @@ def update_item(item_id: int, item: schemas.ItemUpdate, db: Session = Depends(ge
     db.commit()
     db.refresh(obj)
     return obj
+
+@router.put("/{item_id}/harga-supplier")
+def ubah_harga_beli_supplier(
+    item_id: int,
+    data: schemas.HargaSupplierUpdate,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """Set harga beli dan/atau PPN item ini khusus untuk satu supplier (upsert ItemSupplier).
+    Hanya field yang dikirim yang di-update — tidak mengubah Item.buy_price global maupun
+    baris supplier lain. Harga 0/None dianggap 'belum di-set' dan tidak menimpa harga lama."""
+    item = db.query(models.Item).get(item_id)
+    if not item:
+        raise HTTPException(404, "Item tidak ditemukan")
+    spec = db.query(models.ItemSupplier).filter(
+        models.ItemSupplier.item_id == item_id,
+        models.ItemSupplier.supplier_id == data.supplier_id,
+    ).first()
+    if spec:
+        if data.harga_beli is not None and data.harga_beli > 0:
+            spec.buy_price = data.harga_beli
+        if data.ppn_type is not None:
+            spec.ppn_type = data.ppn_type
+        if data.ppn_percent is not None:
+            spec.ppn_percent = data.ppn_percent
+    else:
+        db.add(models.ItemSupplier(
+            item_id=item_id,
+            supplier_id=data.supplier_id,
+            buy_price=(data.harga_beli if data.harga_beli and data.harga_beli > 0 else item.buy_price),
+            barcode=item.barcode,
+            ppn_type=(data.ppn_type if data.ppn_type is not None else "included"),
+            ppn_percent=(data.ppn_percent if data.ppn_percent is not None else 0),
+        ))
+    db.commit()
+    return {"message": "Data supplier untuk item diperbarui"}
 
 @router.delete("/{item_id}")
 def delete_item(item_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
@@ -713,6 +759,18 @@ def _import_items_sync(contents: bytes, filename: str, db: Session, current_user
                     reference="IMPORT-EXCEL",
                     notes=f"Saldo Awal - {gudang_aktif.name}"
                 ))
+                # 🧱 FIFO: lapisan saldo awal. Tanggal sentinel 2000-01-01 (sama dgn
+                # seed di main.py) agar stok awal dianggap TERTUA → keluar duluan.
+                from ..services.inventory_fifo import add_batch
+                from datetime import date as _date
+                add_batch(
+                    db,
+                    item_id=new_item.id,
+                    warehouse_id=gudang_aktif.id,
+                    qty=imported_stock,
+                    unit_cost=buy_price,
+                    received_date=_date(2000, 1, 1),
+                )
 
             items_imported += 1
 

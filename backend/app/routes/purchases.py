@@ -100,7 +100,11 @@ def get_items_for_purchase(
     from ..services.virtual_units import is_virtual_variant
     from sqlalchemy.orm import joinedload
 
-    query = db.query(models.Item).options(joinedload(models.Item.suppliers)).filter(
+    query = db.query(models.Item).options(
+        joinedload(models.Item.suppliers),
+        joinedload(models.Item.category),
+        joinedload(models.Item.unit),
+    ).filter(
         models.Item.is_active == True,
         (models.Item.is_virtual_variant == False) | (models.Item.is_virtual_variant == None),
     )
@@ -121,20 +125,78 @@ def get_items_for_purchase(
             "sell_price": item.sell_price,
             "profit_margin": item.profit_margin,
             "unit_name": item.unit.name if item.unit else "pcs",
+            "category_name": item.category.name if item.category else "-",
             "suppliers": [{"id": s.id, "name": s.name} for s in item.suppliers],
-            "supplier_details": [{"supplier_id": s.supplier_id, "buy_price": s.buy_price} for s in item.supplier_details]
+            "supplier_details": [
+                {
+                    "supplier_id": s.supplier_id,
+                    "buy_price": s.buy_price,
+                    "ppn_type": s.ppn_type or "included",
+                    "ppn_percent": s.ppn_percent or 0,
+                }
+                for s in item.supplier_details
+            ],
+            # Default PPN (dipakai grid bila supplier difilter & punya setelan khusus)
+            "ppn_type": "included",
+            "ppn_percent": 0,
         }
 
         if supplier_id:
             spec = next((s for s in item.supplier_details if s.supplier_id == supplier_id), None)
             if spec:
-                item_data["buy_price"] = spec.buy_price
+                # buy_price 0/None pada baris supplier dianggap "belum di-set" → tetap pakai
+                # harga beli umum item, jangan ditimpa 0 (banyak baris lama berisi 0).
+                if spec.buy_price:
+                    item_data["buy_price"] = spec.buy_price
                 if spec.barcode:
                     item_data["barcode"] = spec.barcode
+                item_data["ppn_type"] = spec.ppn_type or "included"
+                item_data["ppn_percent"] = spec.ppn_percent or 0
 
         results.append(item_data)
 
     return results
+
+
+# Mengambil riwayat harga beli sebuah item (opsional difilter per supplier)
+# Dipakai oleh halaman detail_item.html untuk tabel "History Harga Beli untuk Supplier".
+@router.get("/item-history/")
+def get_item_purchase_history(
+    item_id: int,
+    supplier_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    from sqlalchemy.orm import joinedload
+
+    query = (
+        db.query(models.PurchaseItem)
+        .join(models.Purchase, models.PurchaseItem.purchase_id == models.Purchase.id)
+        .options(joinedload(models.PurchaseItem.item).joinedload(models.Item.unit))
+        .filter(models.PurchaseItem.item_id == item_id)
+    )
+
+    if supplier_id:
+        query = query.filter(models.Purchase.supplier_id == supplier_id)
+
+    rows = query.order_by(models.Purchase.date.desc(), models.PurchaseItem.id.desc()).limit(20).all()
+
+    hasil = []
+    for pi in rows:
+        harga = pi.buy_price or 0
+        disc1 = pi.disc1 or 0
+        disc2 = pi.disc2 or 0
+        harga_setelah_potongan = harga * (1 - disc1 / 100) * (1 - disc2 / 100)
+        hasil.append({
+            "tanggal": pi.purchase.date.isoformat() if pi.purchase and pi.purchase.date else None,
+            "jumlah": pi.qty,
+            "satuan": pi.item.unit.name if pi.item and pi.item.unit else "pcs",
+            "harga": harga,
+            "potongan": disc1,
+            "harga_setelah_potongan": round(harga_setelah_potongan, 2),
+        })
+
+    return hasil
 
 
 # Mengambil detail lengkap satu transaksi pembelian berdasarkan ID

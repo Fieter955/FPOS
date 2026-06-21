@@ -83,6 +83,8 @@ def create_supplier(
         email=s.email,
         address=s.address,
         PpnSupplier=s.PpnSupplier,
+        credit_limit=s.credit_limit,
+        due_date=s.due_date,
         is_active=True
     )
     db.add(obj)

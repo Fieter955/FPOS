@@ -278,6 +278,7 @@ class Supplier(Base):
     email = Column(String(100))
     PpnSupplier = Column(Float, default=0)
     credit_limit = Column(Float, default=0)
+    due_date = Column(Integer, default=0)
     deposit_balance = Column(Float, default=0)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -357,6 +358,8 @@ class PurchaseItem(Base):
     discount = Column(Float, default=0)
     disc1 = Column(Float, default=0)
     disc2 = Column(Float, default=0)
+    disc3 = Column(Float, default=0)
+    disc4 = Column(Float, default=0)
     total = Column(Float, nullable=False)
     purchase = relationship("Purchase", back_populates="items")
     item = relationship("Item", back_populates="purchase_items")
@@ -808,6 +811,34 @@ class SaleItemBatch(Base):
 
     sale_item = relationship("SaleItem")
     batch = relationship("StockBatch")
+
+
+class Restatement(Base):
+    """Jejak audit koreksi HPP saat SWAP batch antar-supplier (Fase 3).
+
+    Tiap baris = pemindahan alokasi sebagian/seluruh 1 baris jual dari from_batch
+    (supplier yang ingin diretur, sudah 'terjual' oleh FIFO) ke to_batch (supplier
+    lain yang stoknya masih ada), beserta jurnal koreksinya. Jurnal bisa bertanggal
+    di periode yang sudah Tutup Buku (period_was_locked=True) — disengaja & admin-only.
+    """
+    __tablename__ = "restatements"
+    __table_args__ = (
+        Index("ix_restatements_sale_item", "sale_item_id"),
+        Index("ix_restatements_from_batch", "from_batch_id"),
+        Index("ix_restatements_to_batch", "to_batch_id"),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    sale_item_id = Column(Integer, ForeignKey("sale_items.id"), nullable=False)
+    from_batch_id = Column(Integer, ForeignKey("stock_batches.id"), nullable=True)
+    to_batch_id = Column(Integer, ForeignKey("stock_batches.id"), nullable=True)
+    qty = Column(Float, nullable=False)            # satuan dasar yang dipindah
+    cost_delta = Column(Float, default=0)          # (to_cost - from_cost) * qty
+    correction_journal_id = Column(Integer, ForeignKey("journals.id"), nullable=True)
+    period_was_locked = Column(Boolean, default=False)
+    sale_date = Column(Date, nullable=True)        # tanggal penjualan asal (periode koreksi)
+    reason = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class WarehouseTransfer(Base):

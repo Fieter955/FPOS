@@ -580,6 +580,7 @@
           "PpnSupplier",
         ].forEach((id) => (document.getElementById(id).value = ""));
         document.getElementById("sCredit").value = "0";
+        document.getElementById("sDueDate").value = "0";
         renderSelectedItems();
         await loadAllItems();
         openModal("mSup");
@@ -597,6 +598,7 @@
         document.getElementById("sAlamat").value = s.address || "";
         document.getElementById("PpnSupplier").value = s.PpnSupplier || 0;
         document.getElementById("sCredit").value = s.credit_limit || 0;
+        document.getElementById("sDueDate").value = s.due_date || 0;
         document.getElementById("sDeposit").value = fmtRp(
           s.deposit_balance || 0,
         );
@@ -636,6 +638,8 @@
             parseFloat(document.getElementById("PpnSupplier").value) || 0,
           credit_limit:
             parseFloat(document.getElementById("sCredit").value) || 0,
+          due_date:
+            parseInt(document.getElementById("sDueDate").value) || 0,
           notes: document.getElementById("sNotes").value || null,
           item_ids: Array.from(selectedItems.keys()),
           // 🔑 KODE TIDAK DIKIRIM, BACKEND AUTO-GENERATE

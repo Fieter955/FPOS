@@ -125,6 +125,14 @@ class ItemSupplierCreate(BaseModel):
 class ItemSupplierOut(ItemSupplierCreate):
     model_config = {"from_attributes": True}
 
+# Update harga beli (dan PPN) satu item untuk satu supplier saja (tanpa mengubah supplier lain).
+# Semua field selain supplier_id opsional → hanya field yang dikirim yang di-update.
+class HargaSupplierUpdate(BaseModel):
+    supplier_id: int
+    harga_beli: Optional[float] = None
+    ppn_type: Optional[str] = None      # included | excluded
+    ppn_percent: Optional[float] = None
+
 # ─── Item Group Discount (Potongan Harga Jual per grup pelanggan) ───────────────
 class ItemGroupDiscountCreate(BaseModel):
     group_id: int
@@ -266,6 +274,7 @@ class SupplierCreate(BaseModel):
     email: Optional[str] = None
     PpnSupplier: float = 0
     credit_limit: float = 0
+    due_date: int = 0
     item_ids: Optional[List[int]] = None
     model_config = {"from_attributes": True}
 
@@ -276,6 +285,7 @@ class SupplierUpdate(BaseModel):
     email: Optional[str] = None
     PpnSupplier: Optional[float] = None
     credit_limit: Optional[float] = None
+    due_date: Optional[int] = None
     is_active: Optional[bool] = None
     item_ids: Optional[List[int]] = None
     model_config = {"from_attributes": True}
@@ -289,6 +299,7 @@ class SupplierOut(BaseModel):
     email: Optional[str]
     PpnSupplier: Optional[float]
     credit_limit: float
+    due_date: int = 0
     deposit_balance: float = 0
     is_active: bool
     items: List[ItemOut] = []
@@ -308,6 +319,7 @@ class SupplierListOut(BaseModel):
     email: Optional[str]
     PpnSupplier: Optional[float]
     credit_limit: float
+    due_date: int = 0
     deposit_balance: float = 0
     is_active: bool
     model_config = {"from_attributes": True}
@@ -334,6 +346,8 @@ class PurchaseItemCreate(BaseModel):
     buy_price: float
     disc1: float = 0
     disc2: float = 0
+    disc3: float = 0
+    disc4: float = 0
     sell_price: float = 0
     profit_margin: float = 0
     discount: float = 0
@@ -364,6 +378,8 @@ class PurchaseItemOut(BaseModel):
     discount: float
     disc1: float = 0
     disc2: float = 0
+    disc3: float = 0
+    disc4: float = 0
     total: float
     item: Optional[ItemOut] = None
     model_config = {"from_attributes": True}

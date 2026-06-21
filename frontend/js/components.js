@@ -169,12 +169,11 @@ function createPurchaseGrid(container, config = {}) {
             <div class="purchase-grid-header" style="display:grid; grid-template-columns: ${columns}; gap:10px; padding:10px; background:var(--bg-color); font-weight:700; font-size:12px; border-radius:8px 8px 0 0">
                 <div>Nama Barang</div>
                 <div style="text-align:center">Pesan</div>
-                ${
-                  showSupplierColumn
-                    ? "<div>Pilih Supplier</div>"
-                    : isBranchRequest
-                      ? ""
-                      : `
+                ${showSupplierColumn
+      ? "<div>Pilih Supplier</div>"
+      : isBranchRequest
+        ? ""
+        : `
                 ${isFulfillment ? '<div style="text-align:center">Terima</div>' : ""}
                 <div>Harga Beli</div>
                 <div style="text-align:center">Margin (%)</div>
@@ -182,7 +181,7 @@ function createPurchaseGrid(container, config = {}) {
                 <div style="text-align:center">Diskon (%)</div>
                 <div style="text-align:right">Total</div>
                 `
-                }
+    }
                 <div></div>
             </div>
             <div class="purchase-grid-body" style="border:1px solid var(--border-color); border-top:none; border-radius:0 0 8px 8px; min-height:100px"></div>
@@ -224,11 +223,10 @@ function createPurchaseGrid(container, config = {}) {
                 ${allowNameEdit ? `<input type="text" class="input-control pg-name-edit" value="${item?.name || ""}" placeholder="Nama barang (bisa diubah)..." style="font-size:11px; margin-top:4px; border-color:var(--primary)" />` : ""}
             </div>
             <input type="number" class="combobox-input pg-ordered" value="${qtyOrdered}" style="text-align:center" />
-            ${
-              showSupplierColumn
-                ? '<div id="pg-supp-' + id + '"></div>'
-                : !isBranchRequest
-                  ? `
+            ${showSupplierColumn
+        ? '<div id="pg-supp-' + id + '"></div>'
+        : !isBranchRequest
+          ? `
                 ${isFulfillment ? `<input type="number" class="combobox-input pg-received" value="${qtyReceived}" style="text-align:center; border-color:var(--primary)" />` : ""}
                 <input type="text" class="combobox-input pg-beli" value="${toRibuan(item?.buy_price || 0)}" style="text-align:left" />
                 <input type="number" step="0.01" class="combobox-input pg-margin" value="${item?.profit_margin || 0}" style="text-align:center" />
@@ -240,8 +238,8 @@ function createPurchaseGrid(container, config = {}) {
                 </div>
                 <div class="purchase-grid-netto">Rp 0</div>
             `
-                  : ""
-            }
+          : ""
+      }
             ${readonlySelector ? "<div></div>" : `<button class="btn btn-del-row" style="color:var(--danger); background:transparent; padding:0; justify-content:center">✕</button>`}
         `;
 
@@ -522,6 +520,463 @@ function createPurchaseGrid(container, config = {}) {
 }
 
 /**
+ * createPurchaseSummaryGrid
+ * Grid ringkas untuk halaman purchases.html. Kolom mengikuti desain:
+ * No | Nama Barang | Jenis | Jumlah | Satuan | Harga Beli | Diskon | Total | Tax | (aksi)
+ *
+ * Semua kolom utama bisa diedit LANGSUNG di tabel dan tersimpan otomatis (saat blur):
+ *  - Jenis & Satuan  → master barang (PUT /items/{id})
+ *  - Harga Beli & Tax(PPN) → data barang untuk supplier yang dipilih (PUT /items/{id}/harga-supplier)
+ *  - Jumlah & Diskon → hanya per-transaksi (ikut tersimpan saat pembelian disimpan)
+ *
+ * Tax = PPN: saat barang dipilih, nilainya diambil dari setelan supplier
+ * (ppn_percent bila ppn_type "excluded", 0 bila "included").
+ * Tombol "Detail" tetap ada untuk margin/harga jual & history (detail_item.html).
+ */
+function createPurchaseSummaryGrid(container, config = {}) {
+  const target =
+    typeof container === "string"
+      ? document.getElementById(container)
+      : container;
+  const {
+    initialItems = [],
+    onChange = null,
+    onDetail = null,
+    getSupplierId = null,
+  } = config;
+
+  let currentData = [];
+  // Lebar kolom tetap (px) + Nama Barang dilebarkan. Tabel boleh scroll horizontal.
+  const kolom = "40px minmax(260px, 1fr) 130px 70px 110px 120px 170px 120px 90px 120px";
+  const lebarMin = "1300px";
+
+  // Daftar Jenis & Satuan (untuk combo per baris). Dimuat sekali saat init.
+  let daftarJenis = [];
+  let daftarSatuan = [];
+
+  const fmtRp = (n) =>
+    new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
+    }).format(n || 0);
+  const toAngka = (s) =>
+    parseFloat(String(s).replace(/\./g, "").replace(",", ".")) || 0;
+  const toRibuan = (n) => (n || 0).toLocaleString("id-ID");
+
+  const cariByName = (daftar, name) => {
+    const t = (name || "").trim().toLowerCase();
+    if (!t || t === "-") return null;
+    return (daftar || []).find(
+      (d) => (d.name || "").trim().toLowerCase() === t,
+    );
+  };
+
+  target.innerHTML = `
+        <div style="overflow-x:auto">
+          <div class="purchase-grid-container" style="min-width:${lebarMin}">
+            <div class="purchase-grid-header" style="display:grid; grid-template-columns:${kolom}; gap:10px; padding:10px; background:var(--bg-color); font-weight:700; font-size:12px; border-radius:8px 8px 0 0">
+                <div style="text-align:center">No</div>
+                <div>Nama Barang</div>
+                <div>Jenis</div>
+                <div style="text-align:center">Jumlah</div>
+                <div>Satuan</div>
+                <div style="text-align:right">Harga Beli</div>
+                <div style="text-align:center">Diskon (%)</div>
+                <div style="text-align:right">Total</div>
+                <div style="text-align:center">Tax (%)</div>
+                <div></div>
+            </div>
+            <div class="purchase-grid-body" style="border:1px solid var(--border-color); border-top:none; border-radius:0 0 8px 8px; min-height:100px"></div>
+          </div>
+        </div>
+    `;
+
+  const body = target.querySelector(".purchase-grid-body");
+
+  // harga neto setelah seluruh diskon bertingkat
+  const hitungNeto = (detail) => {
+    let neto = detail.buy_price || 0;
+    (detail.discs || []).forEach((d) => {
+      neto = neto * (1 - (parseFloat(d) || 0) / 100);
+    });
+    return neto;
+  };
+
+  const renumber = () => {
+    Array.from(body.children).forEach((row, i) => {
+      const noCell = row.querySelector(".pg2-no");
+      if (noCell) noCell.textContent = i + 1;
+    });
+  };
+
+  // Perbarui sel Total (qty × harga neto setelah diskon)
+  const hitungTotal = (row) => {
+    const d = row._detail;
+    const totalCell = row.querySelector(".pg2-total");
+    if (totalCell) totalCell.textContent = fmtRp((d.qty || 0) * hitungNeto(d));
+  };
+
+  // Simpan perubahan ke MASTER barang (jenis/satuan) — berlaku semua supplier.
+  const simpanMaster = async (row, patch) => {
+    const id = row._detail.item_id;
+    if (!id || typeof api !== "function") return;
+    try {
+      await api("PUT", `/items/${id}`, patch);
+    } catch (e) {
+      if (typeof showToast === "function")
+        showToast("Gagal simpan ke barang: " + e.message, "error");
+    }
+  };
+
+  const ambilSupplierId = () => {
+    try {
+      return typeof getSupplierId === "function" ? getSupplierId() : null;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  // Simpan perubahan ke data barang untuk SUPPLIER yang dipilih (harga beli / PPN).
+  const simpanSupplier = async (row, patch) => {
+    const id = row._detail.item_id;
+    if (!id || typeof api !== "function") return;
+    const sid = ambilSupplierId();
+    if (!sid) {
+      if (typeof showToast === "function")
+        showToast(
+          "Pilih supplier dulu — harga/PPN belum tersimpan ke supplier",
+          "warning",
+        );
+      return;
+    }
+    try {
+      await api("PUT", `/items/${id}/harga-supplier`, {
+        supplier_id: sid,
+        ...patch,
+      });
+    } catch (e) {
+      if (typeof showToast === "function")
+        showToast("Gagal simpan ke supplier: " + e.message, "error");
+    }
+  };
+
+  const addRow = (item = null) => {
+    const row = document.createElement("div");
+    row.className = "purchase-grid-row";
+    row.style = `display:grid; grid-template-columns:${kolom}; gap:10px; padding:8px 10px; border-bottom:1px solid var(--border-color); align-items:center`;
+
+    // state lengkap baris
+    row._detail = {
+      item_id: item?.id || item?.item_id || null,
+      name: item?.name || "",
+      code: item?.code || "",
+      category_id: item?.category_id || null,
+      category_name: item?.category_name || "-",
+      unit_id: item?.unit_id || null,
+      unit_name: item?.unit_name || "-",
+      qty: item?.qty || item?.qty_ordered || 1,
+      buy_price: item?.buy_price || 0,
+      sell_price: item?.sell_price || 0,
+      profit_margin: item?.profit_margin || 0,
+      discs:
+        item?.discs ||
+        [item?.disc1 || 0, item?.disc2 || 0].filter((v, i) => i === 0 || v),
+      ppn: item?.ppn || 0,
+      ppn_type: item?.ppn_type || "included",
+      ppn_percent: item?.ppn_percent || 0,
+    };
+
+    row.innerHTML = `
+            <div class="pg2-no" style="text-align:center; color:var(--text-muted); font-weight:600"></div>
+            <div class="pg2-combo"></div>
+            <div class="pg2-jenis"></div>
+            <input type="number" class="combobox-input pg2-qty" value="${row._detail.qty}" min="0" style="text-align:center" />
+            <div class="pg2-satuan"></div>
+            <input type="text" class="combobox-input pg2-beli" value="0" style="text-align:right" />
+            <div class="pg2-disc disc-group"></div>
+            <div class="pg2-total purchase-grid-netto" style="text-align:right">Rp 0</div>
+            <input type="number" class="combobox-input pg2-tax" value="0" min="0" step="0.01" style="text-align:center" />
+            <div style="display:flex; gap:6px; justify-content:flex-end; align-items:center">
+                <button class="btn btn-primary pg2-detail" style="padding:6px 10px; font-size:12px; border-radius:8px" title="Detail Item">Detail</button>
+                <button class="btn pg2-del" style="color:var(--danger); background:transparent; padding:0; justify-content:center" title="Hapus baris">✕</button>
+            </div>
+        `;
+
+    body.appendChild(row);
+
+    const qtyInp = row.querySelector(".pg2-qty");
+    const beliInp = row.querySelector(".pg2-beli");
+    const taxInp = row.querySelector(".pg2-tax");
+    const discCell = row.querySelector(".pg2-disc");
+    const detailBtn = row.querySelector(".pg2-detail");
+    const delBtn = row.querySelector(".pg2-del");
+
+    // ── Diskon bertingkat (maks 4: disc1 lalu disc2 dari harga hasil disc1) ──
+    const bacaDiskon = () => {
+      row._detail.discs = Array.from(
+        discCell.querySelectorAll(".pg2-disc-inp"),
+      ).map((inp) => parseFloat(inp.value) || 0);
+    };
+    const bangunDiskon = () => {
+      const discs =
+        row._detail.discs && row._detail.discs.length
+          ? row._detail.discs
+          : [0];
+      discCell.innerHTML = "";
+      discs.forEach((d) => {
+        const inp = document.createElement("input");
+        inp.type = "number";
+        inp.min = "0";
+        inp.className = "combobox-input pg2-disc-inp";
+        inp.value = d || 0;
+        inp.style.textAlign = "center";
+        inp.oninput = () => {
+          bacaDiskon();
+          hitungTotal(row);
+          if (onChange) onChange();
+        };
+        discCell.appendChild(inp);
+      });
+      if (discs.length < 4) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "btn-plus-disc";
+        btn.textContent = "+";
+        btn.title = "Tambah diskon bertingkat";
+        btn.onclick = () => {
+          bacaDiskon();
+          row._detail.discs.push(0);
+          bangunDiskon();
+          hitungTotal(row);
+          if (onChange) onChange();
+        };
+        discCell.appendChild(btn);
+      }
+    };
+
+    // Combo Nama Barang (pemilih item)
+    const combo = createPremiumCombo(
+      row.querySelector(".pg2-combo"),
+      currentData,
+      {
+        isItem: true,
+        placeholder: "Cari barang...",
+        onSelect: (sel) => {
+          row._detail.item_id = sel.id;
+          row._detail.name = sel.name || "";
+          row._detail.code = sel.code || "";
+          row._detail.category_id = sel.category_id || null;
+          row._detail.category_name = sel.category_name || "-";
+          row._detail.unit_id = sel.unit_id || null;
+          row._detail.unit_name = sel.unit_name || "-";
+          row._detail.buy_price = sel.buy_price || 0;
+          row._detail.sell_price = sel.sell_price || 0;
+          row._detail.profit_margin = sel.profit_margin || 0;
+          // Tax = PPN dari setelan supplier: ambil bila "excluded", 0 bila "included".
+          row._detail.ppn_type = sel.ppn_type || "included";
+          row._detail.ppn_percent = sel.ppn_percent || 0;
+          row._detail.ppn =
+            row._detail.ppn_type === "excluded" ? row._detail.ppn_percent : 0;
+          isi();
+          if (onChange) onChange();
+        },
+      },
+    );
+    row._combo = combo;
+
+    // Combo Jenis (kategori) — ubah master barang
+    const comboJenis = createPremiumCombo(
+      row.querySelector(".pg2-jenis"),
+      daftarJenis,
+      {
+        placeholder: "Jenis...",
+        onSelect: (sel) => {
+          row._detail.category_id = sel.id;
+          row._detail.category_name = sel.name;
+          simpanMaster(row, { category_id: sel.id });
+          if (onChange) onChange();
+        },
+      },
+    );
+    row._comboJenis = comboJenis;
+
+    // Combo Satuan — ubah master barang
+    const comboSatuan = createPremiumCombo(
+      row.querySelector(".pg2-satuan"),
+      daftarSatuan,
+      {
+        placeholder: "Satuan...",
+        onSelect: (sel) => {
+          row._detail.unit_id = sel.id;
+          row._detail.unit_name = sel.name;
+          simpanMaster(row, { unit_id: sel.id });
+          if (onChange) onChange();
+        },
+      },
+    );
+    row._comboSatuan = comboSatuan;
+
+    // Isi seluruh input/combo dari row._detail (dipakai saat pilih item / pulihkan baris)
+    const isi = () => {
+      const d = row._detail;
+      qtyInp.value = d.qty || 0;
+      beliInp.value = toRibuan(d.buy_price || 0);
+      taxInp.value = d.ppn || 0;
+      const j = cariByName(daftarJenis, d.category_name);
+      if (j) d.category_id = j.id;
+      comboJenis.set(j ? j.id : "", d.category_name && d.category_name !== "-" ? d.category_name : "");
+      const u = cariByName(daftarSatuan, d.unit_name);
+      if (u) d.unit_id = u.id;
+      comboSatuan.set(u ? u.id : "", d.unit_name && d.unit_name !== "-" ? d.unit_name : "");
+      bangunDiskon();
+      hitungTotal(row);
+    };
+    row._isi = isi;
+
+    // ── Jumlah ──
+    qtyInp.oninput = () => {
+      row._detail.qty = parseFloat(qtyInp.value) || 0;
+      hitungTotal(row);
+      if (onChange) onChange();
+    };
+
+    // ── Harga Beli (format ribuan saat ketik, simpan ke supplier saat blur) ──
+    beliInp.oninput = (e) => {
+      e.target.value = toRibuan(toAngka(e.target.value));
+      row._detail.buy_price = toAngka(e.target.value);
+      hitungTotal(row);
+      if (onChange) onChange();
+    };
+    beliInp.addEventListener("blur", () => {
+      row._detail.buy_price = toAngka(beliInp.value);
+      simpanSupplier(row, { harga_beli: row._detail.buy_price });
+    });
+
+    // ── Tax / PPN (simpan ke supplier saat blur) ──
+    taxInp.addEventListener("blur", () => {
+      const val = parseFloat(taxInp.value) || 0;
+      row._detail.ppn = val;
+      row._detail.ppn_type = val > 0 ? "excluded" : "included";
+      row._detail.ppn_percent = val;
+      simpanSupplier(row, {
+        ppn_type: row._detail.ppn_type,
+        ppn_percent: val,
+      });
+      if (onChange) onChange();
+    });
+
+    detailBtn.onclick = () => {
+      if (!row._detail.item_id) {
+        showToast("Pilih barang dulu sebelum membuka detail", "warning");
+        return;
+      }
+      // sinkronkan qty & diskon terbaru dari input
+      row._detail.qty = parseFloat(qtyInp.value) || 0;
+      bacaDiskon();
+      const idx = Array.from(body.children).indexOf(row);
+      if (onDetail) onDetail(idx, row._detail);
+    };
+
+    delBtn.onclick = () => {
+      row.remove();
+      renumber();
+      if (onChange) onChange();
+    };
+
+    if (row._detail.item_id) {
+      combo.set(row._detail.item_id, row._detail.name);
+    }
+    isi();
+    renumber();
+    return row;
+  };
+
+  initialItems.forEach((it) => addRow(it));
+  if (initialItems.length === 0) addRow();
+
+  // Muat daftar Jenis & Satuan sekali, lalu segarkan combo baris yang sudah ada.
+  (async () => {
+    if (typeof api !== "function") return;
+    try {
+      [daftarJenis, daftarSatuan] = await Promise.all([
+        api("GET", "/items/categories"),
+        api("GET", "/items/units"),
+      ]);
+    } catch (e) {
+      console.error("Gagal memuat kategori/satuan:", e);
+      return;
+    }
+    Array.from(body.children).forEach((row) => {
+      if (row._comboJenis) row._comboJenis.updateData(daftarJenis);
+      if (row._comboSatuan) row._comboSatuan.updateData(daftarSatuan);
+      if (row._isi) row._isi();
+    });
+  })();
+
+  const methods = {
+    addRow,
+    updateDataSource: (newData) => {
+      currentData = newData;
+      Array.from(body.children).forEach((row) => {
+        if (row._combo) row._combo.updateData(newData);
+      });
+    },
+    // bentuk data SAMA dengan createPurchaseGrid agar simpanPembelian tetap jalan
+    getData: () => {
+      const data = [];
+      Array.from(body.children).forEach((row) => {
+        const d = row._detail;
+        if (!d.item_id) return;
+        const neto = hitungNeto(d);
+        const discs = d.discs || [];
+        data.push({
+          item_id: parseInt(d.item_id),
+          qty: d.qty || 0,
+          qty_ordered: d.qty || 0,
+          qty_received: d.qty || 0,
+          buy_price: d.buy_price || 0,
+          disc1: discs[0] || 0,
+          disc2: discs[1] || 0,
+          disc3: discs[2] || 0,
+          disc4: discs[3] || 0,
+          discount: (d.buy_price || 0) - neto,
+          sell_price: d.sell_price || 0,
+          profit_margin: d.profit_margin || 0,
+          total: (d.qty || 0) * neto,
+        });
+      });
+      return data;
+    },
+    // snapshot seluruh baris (termasuk state detail) untuk round-trip ke detail_item
+    getDetailRows: () =>
+      Array.from(body.children).map((row) => ({ ...row._detail })),
+    // pulihkan satu baris (dipakai saat kembali dari detail_item)
+    setRowDetail: (index, detail) => {
+      const row = body.children[index];
+      if (!row) return;
+      row._detail = { ...detail };
+      if (detail.item_id && row._combo)
+        row._combo.set(detail.item_id, detail.name);
+      if (row._isi) row._isi();
+    },
+    // bangun ulang seluruh baris dari snapshot (dipakai saat pulihkan form)
+    loadRows: (rows) => {
+      body.innerHTML = "";
+      (rows || []).forEach((r) => addRow(r));
+      if (body.children.length === 0) addRow();
+    },
+    clear: () => {
+      body.innerHTML = "";
+      addRow();
+      if (onChange) onChange();
+    },
+  };
+  target._grid = methods;
+  return methods;
+}
+
+/**
  * createStandardSelect
  */
 function createStandardSelect(container, data, config = {}) {
@@ -605,10 +1060,10 @@ function createFilterBar(container, config = {}) {
   let combo = useEntitySelect
     ? createStandardSelect(entityCont, entities, cb)
     : createPremiumCombo(
-        entityCont,
-        [{ id: "", name: "Semua" }, ...entities],
-        cb,
-      );
+      entityCont,
+      [{ id: "", name: "Semua" }, ...entities],
+      cb,
+    );
   const trigger = () => {
     if (onFilter) onFilter();
   };
@@ -747,7 +1202,7 @@ function createPaymentModal(config = {}) {
         const bal = await api("GET", "/accounting/liquid-balances");
         cashBalDiv.textContent = fmtRp(bal.cash_balance);
         bankBalDiv.textContent = fmtRp(bal.bank_balance);
-      } catch (e) {}
+      } catch (e) { }
     },
     close,
   };
@@ -945,7 +1400,7 @@ async function createOrderManager(containerId, config = {}) {
         ? initialData.tax_percent
         : initialData.subtotal - initialData.discount > 0
           ? (initialData.tax / (initialData.subtotal - initialData.discount)) *
-            100
+          100
           : initialData.tax || 0;
 
     const fmtPct = (v) =>
@@ -1028,15 +1483,15 @@ function createItemChangeModal(nameChanges) {
           </thead>
           <tbody>
             ${nameChanges
-              .map(
-                (nc) => `
+        .map(
+          (nc) => `
               <tr style="border-bottom:1px solid var(--border-color)">
                 <td style="padding:8px; color:var(--text-main)">${nc.oldName}</td>
                 <td style="padding:8px; color:var(--primary); font-weight:700">${nc.newName}</td>
               </tr>
             `,
-              )
-              .join("")}
+        )
+        .join("")}
           </tbody>
         </table>
       </div>

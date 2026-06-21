@@ -193,9 +193,30 @@ def stock_adjustment(
 
     # Terapkan perubahan fisik
     item.stock += diff
-    
+
     if gudang_aktif:
         adjust_warehouse_stock(db, gudang_aktif.id, item.id, diff)
+
+    # 🧱 FIFO: jaga lapisan persediaan agar Σ batch == stok tetap terjaga.
+    #   • Surplus (diff>0): buat lapisan baru senilai harga beli (selaras nilai jurnal).
+    #   • Susut  (diff<0): konsumsi FIFO; nilai jurnal dipakai dari biaya batch yang
+    #     benar-benar keluar (lebih presisi daripada harga beli "umum").
+    # (item opname dijamin BUKAN multi-satuan — sudah ditolak di atas, jadi item.id
+    #  adalah item stok nyata dan diff sudah dalam satuan dasar.)
+    fifo_nilai_keluar = None
+    if gudang_aktif and diff != 0:
+        from ..services.inventory_fifo import add_batch, consume_fifo
+        if diff > 0:
+            add_batch(
+                db, item_id=item.id, warehouse_id=gudang_aktif.id,
+                qty=diff, unit_cost=item.buy_price or 0,
+                received_date=get_local_date(),
+            )
+        else:
+            _allocs = consume_fifo(
+                db, item_id=item.id, warehouse_id=gudang_aktif.id, qty=-diff,
+            )
+            fifo_nilai_keluar = sum(q * c for (_b, q, c) in _allocs)
 
     # 1. 🛡️ GENERATE REFERENSI TUNGGAL 🛡️
     ref_jurnal = f"OPN-{get_local_datetime().strftime('%Y%m%d%H%M%S')}"
@@ -242,8 +263,14 @@ def stock_adjustment(
 
     # 4. Jurnal akuntansi pakai SAVEPOINT agar rollback-nya terisolasi
     if diff != 0:
-        nilai_penyesuaian = abs(diff) * (item.buy_price or 0)
-        
+        # Susut berbatch → pakai biaya FIFO yang benar-benar keluar; selain itu
+        # (surplus, atau mode tanpa gudang) → harga beli seperti semula.
+        nilai_penyesuaian = (
+            fifo_nilai_keluar
+            if fifo_nilai_keluar is not None
+            else abs(diff) * (item.buy_price or 0)
+        )
+
         if nilai_penyesuaian > 0:
             try:
                 savepoint = db.begin_nested()  # ← Buat savepoint

@@ -576,7 +576,7 @@ if FRONTEND_DIR.exists():
         return FileResponse(str(FRONTEND_DIR / "index.html"))
 
     HTML_PAGES = [
-        "index", "dashboard", "pos", "sales", "purchases", "catat-pembelian", "returns",
+        "index", "dashboard", "pos", "sales", "returns",
         "customers", "suppliers", "inventory", "reports",
         "accounting", "shifts", "konsinyasi", "ai_advisor",
         "settings", "warehouse", "assembly", "discounts", "onboarding",
@@ -606,6 +606,22 @@ if FRONTEND_DIR.exists():
                 return handler
             app.add_api_route(f"/item/{page}", make_item_handler(page), methods=["GET"])
             app.add_api_route(f"/item/{page}.html", make_item_handler(page), methods=["GET"])
+
+    # Serve pages in purchase subdirectory
+    PURCHASE_PAGES = ["purchases", "catat-pembelian", "detail_item"]
+    for page in PURCHASE_PAGES:
+        html_file = FRONTEND_DIR / "purchase" / f"{page}.html"
+        if html_file.exists():
+            def make_purchase_handler(p):
+                async def handler():
+                    return FileResponse(str(FRONTEND_DIR / "purchase" / f"{p}.html"))
+                handler.__name__ = f"page_purchase_{p}"
+                return handler
+            app.add_api_route(f"/purchase/{page}", make_purchase_handler(page), methods=["GET"])
+            app.add_api_route(f"/purchase/{page}.html", make_purchase_handler(page), methods=["GET"])
+            # alias tanpa prefix subdirektori (misal /purchases → purchase/purchases.html)
+            app.add_api_route(f"/{page}", make_purchase_handler(page), methods=["GET"])
+            app.add_api_route(f"/{page}.html", make_purchase_handler(page), methods=["GET"])
 
     # Serve pages in supplier subdirectory
     SUPPLIER_PAGES = ["dashboard", "tambahSuplier"]
