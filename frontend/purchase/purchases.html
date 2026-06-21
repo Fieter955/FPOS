@@ -154,6 +154,12 @@
             <h2 id="formTitle">📥 Catat Pembelian</h2>
           </div>
 
+          <div style="display: flex; gap: 24px; margin-bottom: 16px; font-size: 13px; background: var(--card-bg); padding: 12px 16px; border-radius: 12px; border: 1px solid var(--border-color); flex-wrap: wrap;">
+            <div><span style="color: var(--text-muted)">🕒 Jam:</span> <strong id="infoTime" style="color: var(--text-main); margin-left: 4px;">-</strong></div>
+            <div><span style="color: var(--text-muted)">👤 User:</span> <strong id="infoUser" style="color: var(--text-main); margin-left: 4px;">-</strong></div>
+            <div><span style="color: var(--text-muted)">🏢 Cabang:</span> <strong id="infoBranch" style="color: var(--text-main); margin-left: 4px;">-</strong></div>
+          </div>
+
           <div
             style="
               display: grid;
@@ -217,13 +223,20 @@
                   style="width: 100px; display: flex; justify-content: flex-end"
                 ></div>
               </div>
-              <input
-                type="number"
-                id="bTax"
-                class="input-control"
-                value="0"
-                oninput="hitungGrandTotal()"
-              />
+              <div style="display: flex; gap: 8px;">
+                <input
+                  type="number"
+                  id="bTax"
+                  class="input-control"
+                  style="flex: 1;"
+                  value="0"
+                  oninput="hitungGrandTotal()"
+                />
+                <select id="bTaxType" class="input-control" style="flex: 1;" onchange="hitungGrandTotal()">
+                  <option value="include">Include</option>
+                  <option value="exclude">Exclude</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -452,6 +465,31 @@
       document.getElementById("bDueDays").addEventListener("input", updateDueDate);
       document.getElementById("bDueDate").addEventListener("change", updateDueDays);
 
+      // Realtime Info
+      setInterval(() => {
+        const el = document.getElementById("infoTime");
+        if (el) el.textContent = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      }, 1000);
+
+      async function loadUserInfo() {
+        const user = getUser();
+        const elUser = document.getElementById("infoUser");
+        if (elUser) elUser.textContent = user.name || user.username || "-";
+        
+        const elBranch = document.getElementById("infoBranch");
+        if (elBranch) {
+          try {
+            const branches = await cachedApi("/branches/");
+            const activeId = localStorage.getItem("active_branch_id") || user.active_branch_id;
+            const b = branches.find(x => x.id == activeId);
+            elBranch.textContent = b ? b.name : "Toko Utama";
+          } catch(e) {
+            elBranch.textContent = "Toko Utama";
+          }
+        }
+      }
+      loadUserInfo();
+
       function switchTab(tab) {
         currentTab = tab;
         document
@@ -631,7 +669,9 @@
         let sub = items.reduce((acc, it) => acc + (it.total || 0), 0);
         const disc = parseFloat(document.getElementById("bDisc").value) || 0;
         const tax = parseFloat(document.getElementById("bTax").value) || 0;
-        const grand = (sub - (sub * disc) / 100) * (1 + tax / 100);
+        const taxType = document.getElementById("bTaxType")?.value || "include";
+        let grand = sub - (sub * disc) / 100;
+        if (taxType === "exclude") grand = grand * (1 + tax / 100);
         document.getElementById("totalLabel").textContent = fmtRp(grand);
       }
 
@@ -652,7 +692,7 @@
             discount: parseFloat(document.getElementById("bDisc").value) || 0,
             tax: taxValue,
             tax_percent: taxValue,
-            is_tax_included: taxValue > 0 ? true : false,
+            is_tax_included: document.getElementById("bTaxType")?.value === "include",
             notes: document.getElementById("bNotes").value || null,
             items: items,
             paid: 0,
