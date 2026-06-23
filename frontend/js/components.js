@@ -587,7 +587,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
                 <div style="text-align:right">Harga Beli</div>
                 <div style="text-align:center">Diskon (%)</div>
                 <div style="text-align:right">Total</div>
-                <div style="text-align:center">Tax (%)</div>
+                <div style="text-align:center">PPN Included (%)</div>
                 <div></div>
             </div>
             <div class="purchase-grid-body" style="border:1px solid var(--border-color); border-top:none; border-radius:0 0 8px 8px; min-height:100px"></div>
