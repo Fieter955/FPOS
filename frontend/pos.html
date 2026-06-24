@@ -589,6 +589,10 @@
             <span style="color: var(--text-muted)">Subtotal</span
             ><span id="subtotalEl">Rp 0</span>
           </div>
+          <div class="ttl-row" id="ppnRow" style="display: none">
+            <span style="color: var(--text-muted)" id="ppnLabel">Termasuk PPN</span
+            ><span id="ppnEl">Rp 0</span>
+          </div>
           <div
             class="ttl-row"
             style="
@@ -1195,6 +1199,9 @@
         });
       }
 
+      // Status PKP toko: bila ON, harga jual dianggap SUDAH termasuk PPN (tarif dari setelan).
+      var PKP = { is_pkp: false, tarif: 0 };
+
       async function init() {
         try {
           const [items, cats, custs, groups] = await Promise.all([
@@ -1206,6 +1213,13 @@
           allItems = items;
           allCusts = custs;
           allGroups = groups;
+          try {
+            const st = await api("GET", "/accounting/pkp-status");
+            PKP.is_pkp = !!st.is_pkp;
+            PKP.tarif = parseFloat(st.tarif_ppn) || 0;
+          } catch (e) {
+            /* abaikan bila tak ada akses */
+          }
           const bar = document.getElementById("catBar");
           cats.forEach((c) => {
             const b = document.createElement("button");
@@ -1405,9 +1419,15 @@
           if (sd && parseFloat(sd.buy_price) > 0) hpp = parseFloat(sd.buy_price);
         }
 
+        // Mode PKP harga-include: harga jual masih mengandung PPN, sedangkan modal (hpp)
+        // sudah BERSIH PPN → naikkan lantai sebesar PPN agar perbandingan adil (harga
+        // label vs modal+PPN). PKP mati / tarif 0 → faktor 1 (perilaku lama, nol berubah).
+        const pkpFactor = PKP.is_pkp && PKP.tarif > 0 ? 1 + PKP.tarif / 100 : 1;
+        const hppFloor = hpp * pkpFactor;
+
         if (hpp <= 0) return Math.round(discountedPrice); // HPP tak diketahui
-        if (discountedPrice >= hpp - 0.01) return Math.round(discountedPrice); // (a)
-        if (levelPrice >= hpp - 0.01) return Math.round(levelPrice); // (b)
+        if (discountedPrice >= hppFloor - 0.01) return Math.round(discountedPrice); // (a)
+        if (levelPrice >= hppFloor - 0.01) return Math.round(levelPrice); // (b)
 
         // (c) Level Harga pun di bawah HPP -> catat untuk peringatan, pakai harga normal.
         groupPriceBlockedItems.push(item.name);
@@ -1743,6 +1763,19 @@
         const sub = cart.reduce((s, c) => s + c.price * c.qty, 0);
         document.getElementById("subtotalEl").textContent = fmtRp(sub);
         document.getElementById("totalEl").textContent = fmtRp(sub);
+        // Mode PKP: harga sudah termasuk PPN → tampilkan porsi PPN (info), total TIDAK berubah.
+        const ppnRow = document.getElementById("ppnRow");
+        const taxEl = document.getElementById("taxPct");
+        if (PKP.is_pkp && PKP.tarif > 0) {
+          const ppn = sub - sub / (1 + PKP.tarif / 100);
+          document.getElementById("ppnLabel").textContent = `Termasuk PPN (${PKP.tarif}%)`;
+          document.getElementById("ppnEl").textContent = fmtRp(ppn);
+          if (ppnRow) ppnRow.style.display = "";
+          if (taxEl) taxEl.value = PKP.tarif;
+        } else {
+          if (ppnRow) ppnRow.style.display = "none";
+          if (taxEl) taxEl.value = 0;
+        }
       }
 
       // =======================================================================
@@ -1774,7 +1807,10 @@
             date: today(), // Menggunakan tanggal WITA
             customer_id: document.getElementById("custSel").value || null,
             discount: 0,
-            tax: 0,
+            // Mode PKP: kirim tarif PPN; harga jual dianggap SUDAH termasuk PPN (dikupas di server).
+            tax: PKP.is_pkp && PKP.tarif > 0 ? PKP.tarif : 0,
+            tax_percent: PKP.is_pkp && PKP.tarif > 0 ? PKP.tarif : 0,
+            is_tax_included: true,
             paid: paid,
             payment_method: payMethod,
             items: cart.map((c) => ({

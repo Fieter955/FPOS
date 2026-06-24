@@ -73,7 +73,9 @@ class Branch(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     is_setup_complete = Column(Boolean, default=False)
-    
+    is_pkp = Column(Boolean, default=False)  # Toko sudah PKP? → PPN pembelian dipisah ke PPN Masukan (1-1550), bukan dilebur ke modal
+    tarif_ppn = Column(Float, default=11)    # Tarif PPN penjualan (%) saat PKP — harga jual dianggap SUDAH termasuk PPN ini
+
     # Relasi ke tabel lain
     users = relationship("User", back_populates="branch")
     warehouses = relationship("Warehouse", back_populates="branch")
@@ -320,6 +322,7 @@ class Purchase(Base):
     tax = Column(Float, default=0)
     tax_percent = Column(Float, default=0)
     is_tax_included = Column(Boolean, default=True)
+    ppn_dipisah = Column(Boolean, default=False)  # PPN dicatat terpisah ke 1-1550 saat dibeli (mode PKP)? → batal/retur mengikuti mode ini, bukan saklar saat ini
     total = Column(Float, default=0)
     paid = Column(Float, default=0)
     status = Column(String(20), default="unpaid")

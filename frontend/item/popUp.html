@@ -399,6 +399,21 @@
           </div>
         </div>
 
+        <!-- Rincian PPN + untung bersih. Hanya tampil saat toko PKP & harga jual termasuk
+             PPN (diisi oleh updatePpnBreakdown di items.html). Tersembunyi default. -->
+        <div
+          id="ppnBreakdown"
+          style="
+            display: none;
+            margin-top: 8px;
+            padding: 10px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--card-bg);
+            font-size: 0.85em;
+          "
+        ></div>
+
         <div class="input-group" style="display: none">
           <label style="color: #f59e0b; font-weight: bold"
             >Harga Diskon / Grosir</label

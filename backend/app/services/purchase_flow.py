@@ -29,6 +29,14 @@ def get_local_datetime() -> datetime:
     return datetime.now(WITA)
 
 
+def toko_pkp(db: Session) -> bool:
+    """True bila toko sudah PKP. Status disimpan company-wide di Toko Pusat (Branch id 1).
+    Saat PKP, PPN pembelian dipisah ke akun PPN Masukan (1-1550) dan TIDAK dilebur ke modal."""
+    branch = (db.query(models.Branch).get(PUSAT_BRANCH_ID)
+              or db.query(models.Branch).order_by(models.Branch.id).first())
+    return bool(getattr(branch, "is_pkp", False)) if branch else False
+
+
 def calculate_purchase_totals(data: schemas.PurchaseCreate, *, received: bool = False) -> dict:
     subtotal = 0.0
     for line in data.items:
@@ -167,7 +175,8 @@ def update_supplier_item_master(db: Session, data: schemas.PurchaseCreate):
 
 
 def receive_branch_stock(db: Session, *, purchase: models.Purchase,
-                         target_branch_id: int, local_datetime: datetime, local_date: date):
+                         target_branch_id: int, local_datetime: datetime, local_date: date,
+                         pisah_ppn: bool = False):
     warehouse = get_or_create_default_warehouse(db, target_branch_id)
     is_pusat_stock = target_branch_id == PUSAT_BRANCH_ID
 
@@ -176,7 +185,12 @@ def receive_branch_stock(db: Session, *, purchase: models.Purchase,
     # disc1/disc2; bila tak tersedia → faktor 1 (fallback aman). Ini mencegah selisih
     # GL-vs-batch tumbuh tiap pembelian (lihat Fase 4).
     _subtotal = float(purchase.subtotal or 0)
-    _total_landed = _subtotal - float(purchase.discount or 0) + float(purchase.tax or 0)
+    if pisah_ppn:
+        # Toko PKP: PPN TIDAK masuk biaya barang (dipisah ke PPN Masukan 1-1550) → nilai batch
+        # = net (subtotal − diskon), sama persis dengan debit net ke 1-1400 (invarian nilai aman).
+        _total_landed = _subtotal - float(purchase.discount or 0)
+    else:
+        _total_landed = _subtotal - float(purchase.discount or 0) + float(purchase.tax or 0)
     faktor_landed = (_total_landed / _subtotal) if _subtotal > 0 else 1.0
 
     for purchase_item in purchase.items:
@@ -334,16 +348,26 @@ def create_supplier_purchase(db: Session, *, data: schemas.PurchaseCreate,
         from .journal_service import create_pusat_fulfillment_journal
 
         # 🛡️ NEW LOGIC: If Pusat fulfills for another branch, DEFER stock and branch journal
-        is_fulfillment = (branch_id == PUSAT_BRANCH_ID and 
-                          target_branch_id and 
+        is_fulfillment = (branch_id == PUSAT_BRANCH_ID and
+                          target_branch_id and
                           target_branch_id != PUSAT_BRANCH_ID)
+
+        # Mode PKP: pisahkan PPN ke PPN Masukan (1-1550), bukan dilebur ke modal. Hanya untuk
+        # pembelian normal dari supplier (bukan fulfillment antar-cabang).
+        pisah_ppn = (not is_fulfillment) and toko_pkp(db) and float(totals["tax"] or 0) > 0
+        purchase.ppn_dipisah = pisah_ppn  # diingat per-faktur → batal/retur memakai mode yang SAMA dgn saat dibeli (aman walau saklar PKP berubah)
 
         if not is_fulfillment:
             # Normal Flow: Stock increases immediately
+            if pisah_ppn:
+                # 🔒 Pastikan akun PPN Masukan ada SEBELUM stok dimutasi (jurnal atomic).
+                from ..routes.accounting import pastikan_akun_ada
+                pastikan_akun_ada(db, ["1-1550"])
             stock_branch_id = target_branch_id or branch_id
             receive_branch_stock(db, purchase=purchase, target_branch_id=stock_branch_id,
-                                 local_datetime=local_datetime, local_date=tanggal)
-        
+                                 local_datetime=local_datetime, local_date=tanggal,
+                                 pisah_ppn=pisah_ppn)
+
         update_supplier_item_master(db, data)
 
         supplier = db.query(models.Supplier).get(data.supplier_id)
@@ -368,6 +392,8 @@ def create_supplier_purchase(db: Session, *, data: schemas.PurchaseCreate,
                 number_ref=number,
                 supplier_name=supplier_name,
                 total=totals["total"],
+                tax=float(totals["tax"] or 0),
+                pisah_ppn=pisah_ppn,
                 paid=data.paid or 0,
                 user_id=current_user.id,
                 branch_id=branch_id,
@@ -438,16 +464,26 @@ def update_draft_purchase(db: Session, *, purchase: models.Purchase,
         from .journal_service import create_pusat_fulfillment_journal
 
         # 🛡️ NEW LOGIC: If Pusat fulfills for another branch, DEFER stock and branch journal
-        is_fulfillment = (purchase.branch_id == PUSAT_BRANCH_ID and 
-                          final_target_branch_id and 
+        is_fulfillment = (purchase.branch_id == PUSAT_BRANCH_ID and
+                          final_target_branch_id and
                           final_target_branch_id != PUSAT_BRANCH_ID)
+
+        # Mode PKP: pisahkan PPN ke PPN Masukan (1-1550), bukan dilebur ke modal. Hanya untuk
+        # pembelian normal dari supplier (bukan fulfillment antar-cabang).
+        pisah_ppn = (not is_fulfillment) and toko_pkp(db) and float(totals["tax"] or 0) > 0
+        purchase.ppn_dipisah = pisah_ppn  # diingat per-faktur → batal/retur memakai mode yang SAMA dgn saat dibeli (aman walau saklar PKP berubah)
 
         if not is_fulfillment:
             # Normal Flow: Stock increases immediately
+            if pisah_ppn:
+                # 🔒 Pastikan akun PPN Masukan ada SEBELUM stok dimutasi (jurnal atomic).
+                from ..routes.accounting import pastikan_akun_ada
+                pastikan_akun_ada(db, ["1-1550"])
             stock_branch_id = final_target_branch_id or purchase.branch_id
             receive_branch_stock(db, purchase=purchase, target_branch_id=stock_branch_id,
-                                 local_datetime=local_datetime, local_date=tanggal)
-        
+                                 local_datetime=local_datetime, local_date=tanggal,
+                                 pisah_ppn=pisah_ppn)
+
         update_supplier_item_master(db, data)
         
         supplier = db.query(models.Supplier).get(data.supplier_id)
@@ -474,6 +510,8 @@ def update_draft_purchase(db: Session, *, purchase: models.Purchase,
                 number_ref=purchase.number,
                 supplier_name=supplier_name,
                 total=totals["total"],
+                tax=float(totals["tax"] or 0),
+                pisah_ppn=pisah_ppn,
                 paid=data.paid or 0,
                 user_id=current_user.id,
                 branch_id=purchase.branch_id,
@@ -519,6 +557,14 @@ def cancel_purchase_flow(db: Session, *, purchase: models.Purchase,
         raise HTTPException(403, "Pembayaran/pembatalan supplier hanya boleh dilakukan oleh cabang pemilik faktur.")
 
     stock_branch_id = purchase.target_branch_id or purchase.branch_id
+
+    # Faktur ini dulu dicatat mode PKP? → batalkan PPN-nya keluar dari 1-1550 juga. Pakai
+    # flag tersimpan di faktur (BUKAN saklar saat ini) supaya tetap benar walau saklar berubah.
+    pisah_ppn = bool(getattr(purchase, "ppn_dipisah", False)) and float(purchase.tax or 0) > 0
+    if pisah_ppn:
+        from ..routes.accounting import pastikan_akun_ada
+        pastikan_akun_ada(db, ["1-1550"])
+
     reverse_received_stock(
         db,
         purchase=purchase,
@@ -544,6 +590,8 @@ def cancel_purchase_flow(db: Session, *, purchase: models.Purchase,
             date_val=local_date,
             number_ref=purchase.number,
             total=purchase.total,
+            tax=float(purchase.tax or 0),
+            pisah_ppn=pisah_ppn,
             paid=purchase.paid,
             user_id=current_user.id,
             branch_id=purchase.branch_id,

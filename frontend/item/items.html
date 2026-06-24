@@ -891,6 +891,58 @@
 
       function updateDiscountPreview() {
         onGroupSelectChange();
+        updatePpnBreakdown();
+      }
+
+      // Status PKP toko untuk rincian PPN di kolom harga. Default MATI → panel disembunyikan,
+      // tampilan kembali persis seperti sebelum ada fitur ini (nol perubahan saat non-PKP).
+      var PKP_ITEM = { is_pkp: false, tarif: 0 };
+
+      async function loadPkpStatusItem() {
+        try {
+          const st = await api("GET", "/accounting/pkp-status");
+          PKP_ITEM.is_pkp = !!st.is_pkp;
+          PKP_ITEM.tarif = parseFloat(st.tarif_ppn) || 0;
+          updatePpnBreakdown(); // segarkan bila modal kebetulan sudah terbuka
+        } catch (e) {
+          /* diam: bila gagal, panel tetap tersembunyi (perilaku lama) */
+        }
+      }
+
+      // Rincian PPN + untung bersih di kolom Harga Jual. Karena harga jual saat PKP dianggap
+      // SUDAH termasuk PPN (include), PPN-nya dikupas mundur agar pemilik lihat pendapatan asli
+      // (tanpa PPN) dan untung sebenarnya — bukan tertipu "margin" label yang sebagian PPN.
+      function updatePpnBreakdown() {
+        const box = document.getElementById("ppnBreakdown");
+        if (!box) return;
+        if (!PKP_ITEM.is_pkp || !(PKP_ITEM.tarif > 0)) {
+          box.style.display = "none"; // PKP mati / tarif 0 → sembunyikan
+          return;
+        }
+        const tarif = PKP_ITEM.tarif;
+        const label = toAngka(document.getElementById("fHJual")?.value) || 0; // harga (incl PPN)
+        const modal = toAngka(document.getElementById("fHBeli")?.value) || 0; // modal (bersih PPN)
+        if (label <= 0) {
+          box.style.display = "none";
+          return;
+        }
+        const bersih = label / (1 + tarif / 100); // pendapatan asli (sebelum PPN)
+        const ppn = label - bersih;
+        const untung = bersih - modal;
+        const minimal = Math.round(modal * (1 + tarif / 100)); // harga label impas
+        const rugi = untung < -0.5;
+        const baris = (kiri, kanan, gaya = "") =>
+          `<div style="display:flex;justify-content:space-between;${gaya}"><span style="color:var(--text-muted)">${kiri}</span><span>${kanan}</span></div>`;
+        box.innerHTML =
+          baris("Harga bersih (masuk kantong)", `<b>${fmtRp(Math.round(bersih))}</b>`) +
+          baris(`PPN ${tarif}% (titipan negara)`, fmtRp(Math.round(ppn))) +
+          baris("Modal barang", fmtRp(modal)) +
+          `<hr style="border:none;border-top:1px dashed var(--border-color);margin:6px 0" />` +
+          `<div style="display:flex;justify-content:space-between;font-weight:700;color:${rugi ? "#dc2626" : "#16a34a"}"><span>${rugi ? "⛔ RUGI" : "✅ Untung bersih"}</span><span>${rugi ? "−" : "+"}${fmtRp(Math.abs(Math.round(untung)))}</span></div>` +
+          (rugi
+            ? `<div style="margin-top:6px;color:#dc2626">⚠️ Di bawah harga minimal ${fmtRp(minimal)} — toko yang nanggung PPN, bukan pembeli.</div>`
+            : `<div style="margin-top:4px;color:var(--text-muted)">Harga minimal (impas): ${fmtRp(minimal)}</div>`);
+        box.style.display = "";
       }
 
       // Isi <select> grup diskon dari allGroups. Dipisah dari pemuatan data agar bisa dipanggil
@@ -2502,6 +2554,7 @@
         loadComponents();
         loadCustomerGroups();
         loadSuppliers();
+        loadPkpStatusItem();
       });
     </script>
   </body>

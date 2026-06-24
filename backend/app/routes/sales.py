@@ -28,6 +28,36 @@ from .accounting import create_auto_journal  # ✅ Import di atas, sekali saja
 router = APIRouter()
 
 
+def hitung_total_penjualan(gross_subtotal: float, disc_persen: float, tarif_persen: float,
+                           termasuk_ppn: bool) -> dict:
+    """Hitung subtotal/diskon/PPN/total satu penjualan.
+    - tarif_persen<=0  → tanpa PPN (perilaku lama, identik dengan sebelum fitur PKP).
+    - termasuk_ppn=True  (harga jual SUDAH termasuk PPN) → PPN dikupas MUNDUR; total = harga.
+    - termasuk_ppn=False (PPN ditambah di atas)          → PPN ditambahkan; total = harga + PPN.
+    subtotal & discount yang dikembalikan SELALU ex-PPN supaya Pendapatan (4-1100) bersih dan
+    jurnal balance: 4-1100=subtotal, 4-1150=discount, 2-1200=tax, kas/piutang=total."""
+    disc_gross = gross_subtotal * ((disc_persen or 0) / 100)
+    if tarif_persen and tarif_persen > 0:
+        f = 1 + tarif_persen / 100
+        if termasuk_ppn:
+            after = gross_subtotal - disc_gross          # yang benar-benar dibayar pelanggan
+            subtotal = gross_subtotal / f
+            diskon = disc_gross / f
+            pajak = after - after / f
+            total = after
+        else:
+            subtotal = gross_subtotal
+            diskon = disc_gross
+            pajak = (gross_subtotal - disc_gross) * (tarif_persen / 100)
+            total = gross_subtotal - disc_gross + pajak
+    else:
+        subtotal = gross_subtotal
+        diskon = disc_gross
+        pajak = 0.0
+        total = gross_subtotal - disc_gross
+    return {"subtotal": subtotal, "discount": diskon, "tax": pajak, "total": total}
+
+
 def _is_admin_user(user: models.User) -> bool:
     return (user.role or "") == "admin"
 
@@ -172,10 +202,19 @@ def create_sale(
 
     # ── Kalkulasi Header ──────────────────────────────────────────────────────
     number      = data.number or _next_number(db, current_user)
-    subtotal    = sum((it.sell_price * (1 - it.discount / 100)) * it.qty for it in data.items)
-    disc_amount = subtotal * (data.discount / 100)
-    tax_amount  = (subtotal - disc_amount) * (data.tax / 100)
-    total       = subtotal - disc_amount + tax_amount
+    gross_subtotal = sum((it.sell_price * (1 - it.discount / 100)) * it.qty for it in data.items)
+    # PPN penjualan: bila tarif (data.tax) > 0 & is_tax_included → harga dianggap SUDAH termasuk
+    # PPN (dikupas mundur). Bila tarif 0 (default/non-PKP) → hasil identik perilaku lama.
+    _t = hitung_total_penjualan(
+        gross_subtotal,
+        data.discount or 0,
+        data.tax or 0,
+        data.is_tax_included if data.is_tax_included is not None else True,
+    )
+    subtotal    = _t["subtotal"]
+    disc_amount = _t["discount"]
+    tax_amount  = _t["tax"]
+    total       = _t["total"]
     change      = max(0, data.paid - total)
     status      = "paid" if data.paid >= total else ("partial" if data.paid > 0 else "unpaid")
 
@@ -614,6 +653,11 @@ async def print_receipt_api(
 
         struk += f"{garis}\n"
         struk += lr(f"BRS={brs}  , QTY={format_qty(total_qty)}", format_rp(getattr(sale, 'total', 0)))
+        # Mode PKP: harga sudah termasuk PPN → tampilkan porsinya (info; tidak menambah total).
+        if float(getattr(sale, 'tax', 0) or 0) > 0:
+            _tp = float(getattr(sale, 'tax_percent', 0) or 0)
+            _lbl = f"Termasuk PPN({_tp:g}%) =" if _tp else "Termasuk PPN ="
+            struk += lr(_lbl, format_rp(sale.tax))
         struk += lr("Tunai    =", format_rp(getattr(sale, 'paid', 0)))
         struk += f"{'-' * 22:>{W}}\n"
         struk += lr("Kembali  =", format_rp(getattr(sale, 'change', 0)))

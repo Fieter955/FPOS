@@ -163,6 +163,9 @@ def run_migrations():
     add_col("print_jobs", "content_type", "TEXT DEFAULT 'text'")
     add_col("item_supplier", "ppn_type", "TEXT DEFAULT 'included'")
     add_col("item_supplier", "ppn_percent", "REAL DEFAULT 0")
+    add_col("branches", "is_pkp", "INTEGER DEFAULT 0")
+    add_col("branches", "tarif_ppn", "REAL DEFAULT 11")
+    add_col("purchases", "ppn_dipisah", "INTEGER DEFAULT 0")
 
     # ─── Index performa (idempotent; aman dijalankan berulang) ─────────────────
     # SQLite TIDAK meng-index foreign key otomatis → tanpa ini, filter/join jadi

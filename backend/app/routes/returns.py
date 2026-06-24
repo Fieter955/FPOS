@@ -281,7 +281,7 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
     from .accounting import pastikan_akun_ada
     _akun_wajib = ["2-1300", "4-1200", "1-1400", "5-1100"]
     if not is_tax_included:
-        _akun_wajib.append("5-2000")
+        _akun_wajib.append("2-1200")  # PPN Keluaran dibalik ke Hutang PPN (konsisten dgn jurnal jual)
     pastikan_akun_ada(db, _akun_wajib)
 
     retur = models.SaleReturn(
@@ -473,7 +473,9 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
     # 4-2000/5-1200 sengaja TIDAK dipaksa ada — sudah ada fallback 2-kaki di journal_service.)
     from .accounting import pastikan_akun_ada
     _akun_wajib = ["1-1600", "1-1400"]
-    if not is_tax_included:
+    if getattr(purchase, "ppn_dipisah", False):
+        _akun_wajib.append("1-1550")  # PKP: PPN Masukan (1-1550) ikut dibalik saat retur
+    elif not is_tax_included:
         _akun_wajib.append("5-2000")
     pastikan_akun_ada(db, _akun_wajib)
 
@@ -582,6 +584,8 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
         total_carrying=(total_carrying if gudang_aktif else None),
         total_tax=total_tax,
         is_tax_included=is_tax_included,
+        # Ikuti mode PPN saat faktur DIBELI (tersimpan di faktur), bukan saklar PKP saat ini.
+        ppn_dipisah=bool(getattr(purchase, "ppn_dipisah", False)),
         user_id=current_user.id,
         branch_id=purchase.branch_id
     )
