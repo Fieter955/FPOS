@@ -11,12 +11,12 @@
 
 .combobox-input {
   width: 100%;
-  padding: 10px 12px;
+  padding: 0.625rem 0.75rem;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 0.5rem;
   background: var(--input-bg);
   color: var(--text-main);
-  font-size: 14px;
+  font-size: var(--fs-sm);
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
@@ -29,11 +29,11 @@
 /* Premium Dropdown Styling */
 .premium-dropdown {
   position: fixed;
-  max-height: min(50vh, 280px);
+  max-height: min(50vh, 17.5rem);
   overflow-y: auto;
   background: var(--card-bg);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border-radius: 0.625rem;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
   z-index: 999999;
   display: none;
@@ -57,15 +57,15 @@
 }
 
 .premium-dropdown-item {
-  padding: 10px 14px;
+  padding: 0.625rem 0.875rem;
   cursor: pointer;
   border-bottom: 1px solid var(--border-color);
   color: var(--text-main);
-  font-size: 14px;
+  font-size: var(--fs-sm);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-xs);
   transition: background 0.15s;
 }
 
@@ -87,37 +87,37 @@
 
 .premium-dropdown-item small {
   color: var(--text-muted);
-  margin-left: 8px;
-  font-size: 12px;
+  margin-left: var(--space-xs);
+  font-size: var(--fs-xs);
 }
 
 /* Purchase Grid Component Styling */
 .purchase-grid-container {
   width: 100%;
   overflow-x: auto;
-  padding-bottom: 8px;
+  padding-bottom: var(--space-xs);
 }
 
 .purchase-grid-header {
   display: grid;
-  grid-template-columns: 2fr 100px 1.2fr 100px 1.2fr var(--disc-col-width, 100px) 1.2fr 40px;
-  gap: 12px;
-  padding: 12px 0;
+  grid-template-columns: 2fr 6.25rem 1.2fr 6.25rem 1.2fr var(--disc-col-width, 6.25rem) 1.2fr 2.5rem;
+  gap: var(--space-sm);
+  padding: var(--space-sm) 0;
   border-bottom: 2px solid var(--border-color);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--text-muted);
-  min-width: 900px;
+  min-width: 56.25rem;
 }
 
 .purchase-grid-row {
   display: grid;
-  grid-template-columns: 2fr 100px 1.2fr 100px 1.2fr var(--disc-col-width, 100px) 1.2fr 40px;
-  gap: 12px;
+  grid-template-columns: 2fr 6.25rem 1.2fr 6.25rem 1.2fr var(--disc-col-width, 6.25rem) 1.2fr 2.5rem;
+  gap: var(--space-sm);
   align-items: center;
-  padding: 8px 0;
+  padding: var(--space-xs) 0;
   border-bottom: 1px solid var(--border-color);
-  min-width: 900px;
+  min-width: 56.25rem;
 }
 
 .purchase-grid-row:last-child {
@@ -134,15 +134,15 @@
 .disc-group {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 0.25rem;
   width: 100%;
 }
 
 .disc-group .input-control,
 .disc-group .combobox-input {
-  padding: 8px 6px;
-  font-size: 13px;
-  min-width: 50px;
+  padding: var(--space-xs) 0.375rem;
+  font-size: 0.8125rem;
+  min-width: 3.125rem;
   flex: 1;
 }
 
@@ -150,9 +150,9 @@
   background: var(--primary-light);
   color: var(--primary);
   border: 1px solid var(--primary);
-  border-radius: 4px;
-  width: 24px;
-  height: 24px;
+  border-radius: 0.25rem;
+  width: 1.5rem;
+  height: 1.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -170,24 +170,24 @@
 /* Fulfillment Grid (Dual Qty) */
 .fulfillment-grid-header {
   display: grid;
-  grid-template-columns: 2fr 80px 80px 1.2fr 80px 1.2fr var(--disc-col-width, 80px) 1.3fr;
-  gap: 12px;
-  padding: 12px 0;
+  grid-template-columns: 2fr 5rem 5rem 1.2fr 5rem 1.2fr var(--disc-col-width, 5rem) 1.3fr;
+  gap: var(--space-sm);
+  padding: var(--space-sm) 0;
   border-bottom: 2px solid var(--border-color);
-  font-size: 12px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-muted);
-  min-width: 900px;
+  min-width: 56.25rem;
 }
 
 .fulfillment-grid-row {
   display: grid;
-  grid-template-columns: 2fr 80px 80px 1.2fr 80px 1.2fr var(--disc-col-width, 80px) 1.3fr;
-  gap: 12px;
+  grid-template-columns: 2fr 5rem 5rem 1.2fr 5rem 1.2fr var(--disc-col-width, 5rem) 1.3fr;
+  gap: var(--space-sm);
   align-items: center;
-  padding: 8px 0;
+  padding: var(--space-xs) 0;
   border-bottom: 1px solid var(--border-color);
-  min-width: 900px;
+  min-width: 56.25rem;
 }
 
 .fulfillment-grid-row:last-child {
@@ -195,7 +195,7 @@
 }
 
 .purchase-grid-empty {
-  padding: 40px;
+  padding: 2.5rem;
   text-align: center;
   color: var(--text-muted);
   font-style: italic;
@@ -242,13 +242,13 @@
     display: flex !important;
     flex-direction: column;
     align-items: stretch !important;
-    gap: 8px;
+    gap: var(--space-xs);
     min-width: 0 !important;
     grid-template-columns: none !important;
     border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 12px !important;
-    margin-bottom: 10px;
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm) !important;
+    margin-bottom: 0.625rem;
   }
   /* tiap sel: nama kolom di kiri, nilai/input di kanan */
   .purchase-grid-row > [data-label],
@@ -256,13 +256,13 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: 0.625rem;
     width: 100%;
   }
   .purchase-grid-row > [data-label]::before,
   .fulfillment-grid-row > [data-label]::before {
     content: attr(data-label);
-    font-size: 12px;
+    font-size: var(--fs-xs);
     font-weight: 600;
     color: var(--text-muted);
     flex-shrink: 0;

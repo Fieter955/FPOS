@@ -581,15 +581,15 @@
           <div
             class="ttl-row"
             style="
-              font-size: 28px;
+              font-size: clamp(1.25rem, 6vw, 1.75rem);
               font-weight: 900;
               border-top: 2px solid var(--border-color);
-              padding-top: 8px;
-              margin-bottom: 10px;
+              padding-top: 0.5rem;
+              margin-bottom: 0.625rem;
             "
           >
             <span>TOTAL</span
-            ><span id="totalEl" style="color: var(--primary)">Rp 0</span>
+            ><span id="totalEl" style="color: var(--primary); min-width: 0; text-align: right; overflow-wrap: anywhere">Rp 0</span>
           </div>
           <input type="hidden" id="discPct" value="0" />
           <input type="hidden" id="taxPct" value="0" />
@@ -647,12 +647,12 @@
           value="1"
           min="1"
           style="
-            font-size: 32px;
+            font-size: 2rem;
             font-weight: 900;
             text-align: center;
-            margin: 15px 0;
-            padding: 15px;
-            border-radius: 15px;
+            margin: 0.9375rem 0;
+            padding: 0.9375rem;
+            border-radius: 0.9375rem;
             color: var(--primary);
           "
         />
@@ -770,22 +770,23 @@
       id="modalPay"
       style="display: none; z-index: 9999"
     >
-      <div class="modal-box" style="max-width: 420px">
+      <div class="modal-box" style="max-width: 26.25rem">
         <h2 style="margin-top: 0; text-align: center">💳 Pembayaran</h2>
         <div
           style="
-            font-size: 48px;
+            font-size: clamp(1.875rem, 10vw, 3rem);
             font-weight: 900;
             color: var(--primary);
-            margin: 15px 0;
+            margin: 0.9375rem 0;
             text-align: center;
+            overflow-wrap: anywhere;
           "
           id="payTotalDisplay"
         >
           Rp 0
         </div>
 
-        <label style="color: var(--text-muted); font-size: 13px"
+        <label style="color: var(--text-muted); font-size: 0.8125rem"
           >Uang Diterima dari Pelanggan:</label
         >
         <input
@@ -794,11 +795,11 @@
           class="input-control"
           value="0"
           style="
-            font-size: 24px;
+            font-size: 1.5rem;
             font-weight: bold;
             text-align: right;
-            margin-bottom: 15px;
-            padding: 12px;
+            margin-bottom: 0.9375rem;
+            padding: 0.75rem;
           "
         />
 

@@ -13,7 +13,8 @@
       "Bash(rm -f _pos_check.js)",
       "Bash(python -c \"import ast; ast.parse\\(open\\('app/services/journal_service.py',encoding='utf-8'\\).read\\(\\)\\); print\\('journal_service.py OK'\\)\")",
       "Bash(git check-ignore *)",
-      "Bash(node --check frontend/js/components.js)"
+      "Bash(node --check frontend/js/components.js)",
+      "Bash(awk '-F[: ]+' '{if\\($\\(NF-0\\)+0>=28 || $NF+0>=28\\) print}')"
     ]
   },
   "worktree": {

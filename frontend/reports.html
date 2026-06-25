@@ -396,12 +396,12 @@
             isPos = profit >= 0;
           document.getElementById("plResult").innerHTML = `
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px">
-        <div class="card" style="padding:20px"><div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">Total Penjualan</div><div style="font-size:24px;font-weight:900;color:#10b981">${fmtRp(d.total_sales || 0)}</div></div>
-        <div class="card" style="padding:20px"><div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">Total HPP / Modal</div><div style="font-size:24px;font-weight:900;color:#ef4444">${fmtRp(d.total_cogs || 0)}</div></div>
-        <div class="card" style="padding:20px"><div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">Total Pembelian</div><div style="font-size:24px;font-weight:900">${fmtRp(d.total_purchases || 0)}</div></div>
+        <div class="card" style="padding:20px"><div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">Total Penjualan</div><div style="font-size:1.5rem;font-weight:900;color:#10b981;overflow-wrap:anywhere">${fmtRp(d.total_sales || 0)}</div></div>
+        <div class="card" style="padding:20px"><div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">Total HPP / Modal</div><div style="font-size:1.5rem;font-weight:900;color:#ef4444;overflow-wrap:anywhere">${fmtRp(d.total_cogs || 0)}</div></div>
+        <div class="card" style="padding:20px"><div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">Total Pembelian</div><div style="font-size:1.5rem;font-weight:900;overflow-wrap:anywhere">${fmtRp(d.total_purchases || 0)}</div></div>
         <div class="card" style="padding:20px;border:2px solid ${isPos ? "#10b981" : "#ef4444"}">
           <div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">Laba Kotor</div>
-          <div style="font-size:32px;font-weight:900;color:${isPos ? "#10b981" : "#ef4444"}">${fmtRp(profit)}</div>
+          <div style="font-size:clamp(1.375rem,7vw,2rem);font-weight:900;color:${isPos ? "#10b981" : "#ef4444"};overflow-wrap:anywhere">${fmtRp(profit)}</div>
           <div style="font-size:13px;margin-top:4px;color:${isPos ? "#10b981" : "#ef4444"}">${isPos ? "📈 Untung" : "📉 Rugi"}</div>
         </div>
       </div>`;
