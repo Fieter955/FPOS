@@ -36,10 +36,23 @@ function createPremiumCombo(container, data, config = {}) {
 
   const positionDropdown = () => {
     const rect = input.getBoundingClientRect();
-    dropdown.style.setProperty("top", `${rect.bottom + 2}px`, "important");
-    dropdown.style.setProperty("left", `${rect.left}px`, "important");
-    dropdown.style.setProperty("width", `${rect.width}px`, "important");
-    dropdown.style.setProperty("bottom", "auto", "important");
+    const lebarLayar = document.documentElement.clientWidth;
+    const tinggiLayar = document.documentElement.clientHeight;
+    // Lebar dropdown tidak boleh melebihi layar (penting di HP)
+    const lebar = Math.min(rect.width, lebarLayar - 16);
+    // Geser kiri agar tepi kanan dropdown tetap di dalam layar
+    let kiri = Math.max(8, Math.min(rect.left, lebarLayar - lebar - 8));
+    dropdown.style.setProperty("width", `${lebar}px`, "important");
+    dropdown.style.setProperty("left", `${kiri}px`, "important");
+    // Kalau ruang di bawah input sempit & ruang di atas lebih lega → buka ke ATAS
+    const ruangBawah = tinggiLayar - rect.bottom;
+    if (ruangBawah < 260 && rect.top > ruangBawah) {
+      dropdown.style.setProperty("bottom", `${tinggiLayar - rect.top + 2}px`, "important");
+      dropdown.style.setProperty("top", "auto", "important");
+    } else {
+      dropdown.style.setProperty("top", `${rect.bottom + 2}px`, "important");
+      dropdown.style.setProperty("bottom", "auto", "important");
+    }
   };
 
   const render = (q = "") => {
@@ -247,6 +260,28 @@ function createPurchaseGrid(container, config = {}) {
 
     body.appendChild(row);
 
+    // === Tampilan KARTU di HP (<=640px): beri nama kolom (data-label) ke
+    // tiap sel. Input "telanjang" dibungkus <label class="pg-cell"> agar
+    // bisa menampilkan label lewat ::before. Tidak mengubah tampilan desktop. ===
+    if (!isBranchRequest && !showSupplierColumn) {
+      const labelKolom = isFulfillment
+        ? ["", "Pesan", "Terima", "Harga Beli", "Margin (%)", "Harga Jual", "Diskon (%)", "Total", ""]
+        : ["", "Pesan", "Harga Beli", "Margin (%)", "Harga Jual", "Diskon (%)", "Total", ""];
+      Array.from(row.children).forEach((sel, i) => {
+        const teks = labelKolom[i];
+        if (!teks) return;
+        if (sel.tagName === "INPUT") {
+          const bungkus = document.createElement("label");
+          bungkus.className = "pg-cell";
+          bungkus.setAttribute("data-label", teks);
+          sel.replaceWith(bungkus);
+          bungkus.appendChild(sel);
+        } else {
+          sel.setAttribute("data-label", teks);
+        }
+      });
+    }
+
     const ordInp = row.querySelector(".pg-ordered");
     const recInp = row.querySelector(".pg-received");
     // Awali _prevVal dengan nilai Pesan saat ini agar auto-sync Terima←Pesan
@@ -304,7 +339,9 @@ function createPurchaseGrid(container, config = {}) {
         1,
         ...groups.map((g) => g.querySelectorAll(".pg-disc").length),
       );
-      const w = Math.max(100, maxInputs * 60 + 30);
+      // Batasi lebar kolom diskon di HP agar grid tidak melebar tak terkendali
+      const batasAtas = window.innerWidth < 640 ? 160 : 99999;
+      const w = Math.min(batasAtas, Math.max(100, maxInputs * 60 + 30));
       target.style.setProperty("--disc-col-width", `${w}px`);
     };
 
@@ -1113,7 +1150,7 @@ function createPaymentModal(config = {}) {
   const title =
     type === "ap" ? "Bayar Hutang Supplier" : "Terima Pembayaran Piutang";
   const apiPath = type === "ap" ? "/purchases" : "/sales";
-  overlay.innerHTML = `<div class="modal-box" style="max-width:480px; width:calc(100% - 32px)"><div class="modal-hdr"><h2>💸 ${title}</h2><button class="btn-x">×</button></div><input type="hidden" class="p-id" /><input type="hidden" class="p-remaining" /><div class="p-info" style="background:var(--bg-color); border-radius:12px; padding:14px; margin-bottom:16px; font-size:15px;"></div><div class="input-group" style="margin-bottom:16px"><label>Metode Pembayaran *</label><select class="input-control p-method"><option value="cash">Kas</option><option value="bank">Bank</option><option value="mix">Gabungan</option></select></div><div class="p-balances" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;"><div style="background:var(--bg-color); border-radius:10px; padding:12px"><div>Saldo Kas</div><div class="p-cash-balance" style="font-weight:800">Rp 0</div></div><div style="background:var(--bg-color); border-radius:10px; padding:12px"><div>Saldo Bank</div><div class="p-bank-balance" style="font-weight:800">Rp 0</div></div></div><div class="row2" style="margin-bottom:16px"><div class="input-group p-cash-group"><label>Dari Kas</label><input type="text" class="input-control p-cash-amt" placeholder="0" /></div><div class="input-group p-bank-group"><label>Dari Bank</label><input type="text" class="input-control p-bank-amt" placeholder="0" /></div></div><div style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2); border-radius:12px; padding:14px; margin-bottom:16px;"><div style="display:flex; justify-content:space-between;"><span>Total Bayar</span><b class="p-total-label" style="font-size:18px; color:#10b981">Rp 0</b></div></div><div class="input-group"><label>Catatan</label><input type="text" class="input-control p-note" /></div><div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px;"><button class="btn p-cancel">Batal</button><button class="btn btn-primary p-submit">✓ Konfirmasi</button></div></div>`;
+  overlay.innerHTML = `<div class="modal-box" style="width:min(92vw, 480px)"><div class="modal-hdr"><h2>💸 ${title}</h2><button class="btn-x">×</button></div><input type="hidden" class="p-id" /><input type="hidden" class="p-remaining" /><div class="p-info" style="background:var(--bg-color); border-radius:12px; padding:14px; margin-bottom:16px; font-size:15px;"></div><div class="input-group" style="margin-bottom:16px"><label>Metode Pembayaran *</label><select class="input-control p-method"><option value="cash">Kas</option><option value="bank">Bank</option><option value="mix">Gabungan</option></select></div><div class="p-balances" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;"><div style="background:var(--bg-color); border-radius:10px; padding:12px"><div>Saldo Kas</div><div class="p-cash-balance" style="font-weight:800">Rp 0</div></div><div style="background:var(--bg-color); border-radius:10px; padding:12px"><div>Saldo Bank</div><div class="p-bank-balance" style="font-weight:800">Rp 0</div></div></div><div class="row2" style="margin-bottom:16px"><div class="input-group p-cash-group"><label>Dari Kas</label><input type="text" class="input-control p-cash-amt" placeholder="0" /></div><div class="input-group p-bank-group"><label>Dari Bank</label><input type="text" class="input-control p-bank-amt" placeholder="0" /></div></div><div style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2); border-radius:12px; padding:14px; margin-bottom:16px;"><div style="display:flex; justify-content:space-between;"><span>Total Bayar</span><b class="p-total-label" style="font-size:18px; color:#10b981">Rp 0</b></div></div><div class="input-group"><label>Catatan</label><input type="text" class="input-control p-note" /></div><div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px;"><button class="btn p-cancel">Batal</button><button class="btn btn-primary p-submit">✓ Konfirmasi</button></div></div>`;
   const idInp = overlay.querySelector(".p-id"),
     remInp = overlay.querySelector(".p-remaining"),
     infoDiv = overlay.querySelector(".p-info"),
@@ -1238,7 +1275,7 @@ async function createOrderManager(containerId, config = {}) {
   let supplierCombo = null;
 
   target.innerHTML = `
-        <div class="order-manager-wrap" style="display:${type === "po" ? "none" : "grid"}; grid-template-columns: ${isBranchRequest ? "1fr" : "1.5fr 1fr"}; gap: 24px; margin-bottom: 24px">
+        <div class="order-manager-wrap ${isBranchRequest ? "" : "om-grid"}" style="${type === "po" ? "display:none;" : ""} margin-bottom: 24px">
             <div class="card" style="padding:24px">
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px">
                     <div class="input-group" style="${isBranchRequest || isSplitFulfillment || (from_po && readonlySelector) ? "display:none" : ""}">
@@ -1645,4 +1682,67 @@ function setupBarcodeScanner(onScan, config = {}) {
       buffer += e.key;
     }
   });
+}
+
+/**
+ * aktifkanTabelResponsif (Tabel → Kartu di HP)
+ * --------------------------------------------
+ * Membuat tabel data (.tbl / .tbl-input) bisa tampil sebagai KARTU bertumpuk
+ * di layar kecil (<=640px). Caranya: menyalin teks judul kolom dari <thead>
+ * ke atribut data-label pada tiap <td> di kolom yang sama. CSS-lah yang
+ * menampilkan label itu (lewat td::before) hanya di layar HP — tampilan
+ * desktop tidak berubah sama sekali.
+ *
+ * Fungsi ini:
+ *  - Berjalan OTOMATIS di setiap halaman yang memuat components.js.
+ *  - Memantau isi <tbody> yang dimuat belakangan (async) lewat MutationObserver,
+ *    jadi tidak perlu dipanggil ulang manual tiap kali data dimuat.
+ */
+function aktifkanTabelResponsif() {
+  // Beri data-label ke semua sel <td> dalam satu tabel sesuai judul kolomnya.
+  const beriLabelTabel = (tabel) => {
+    const header = tabel.tHead && tabel.tHead.rows[0];
+    if (!header || !header.cells.length) return;
+    const judul = Array.from(header.cells).map((th) => th.textContent.trim());
+    Array.from(tabel.tBodies).forEach((tbody) => {
+      Array.from(tbody.rows).forEach((baris) => {
+        Array.from(baris.cells).forEach((sel, i) => {
+          // Hanya isi kalau belum ada label & ada judul kolomnya
+          if (judul[i] && !sel.hasAttribute("data-label")) {
+            sel.setAttribute("data-label", judul[i]);
+          }
+        });
+      });
+    });
+  };
+
+  const SELEKTOR = "table.tbl, table.tbl-input";
+
+  // Telusuri node yang baru ditambahkan dan beri label tabel yang relevan.
+  const prosesNode = (node) => {
+    if (node.nodeType !== 1) return; // hanya Element
+    if (node.matches && node.matches(SELEKTOR)) beriLabelTabel(node);
+    if (node.querySelectorAll)
+      node.querySelectorAll(SELEKTOR).forEach(beriLabelTabel);
+    // Baris/sel yang ditambahkan ke tabel yang SUDAH ada (kasus paling umum:
+    // <tbody> diisi JS setelah halaman jalan).
+    const tabelInduk = node.closest && node.closest(SELEKTOR);
+    if (tabelInduk) beriLabelTabel(tabelInduk);
+  };
+
+  // 1) Label tabel yang sudah ada saat halaman dimuat.
+  document.querySelectorAll(SELEKTOR).forEach(beriLabelTabel);
+
+  // 2) Pantau penambahan node berikutnya (data async, tab di-switch, dll).
+  const pengamat = new MutationObserver((daftarMutasi) => {
+    daftarMutasi.forEach((m) => m.addedNodes.forEach(prosesNode));
+  });
+  pengamat.observe(document.body, { childList: true, subtree: true });
+}
+
+// Jalankan otomatis di setiap halaman yang memuat components.js.
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", aktifkanTabelResponsif);
+} else {
+  aktifkanTabelResponsif();
 }

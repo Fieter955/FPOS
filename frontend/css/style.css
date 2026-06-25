@@ -31,6 +31,25 @@
     0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
 
   --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* === Skala ukuran DINAMIS (mobile-first) ===
+     clamp(min, melar, maks) → maks = nilai desktop lama, jadi tampilan
+     layar lebar TIDAK berubah; hanya mengecil otomatis di layar kecil. */
+  --fs-h1: clamp(22px, 4.5vw, 32px);
+  --fs-h3: clamp(17px, 3.2vw, 22px);
+  --fs-lg: clamp(16px, 3vw, 20px);
+  --fs-base: clamp(14px, 2.6vw, 16px);
+  --fs-sm: clamp(12.5px, 2.2vw, 14px);
+  --fs-xs: clamp(11px, 2vw, 12px);
+
+  --space-xs: clamp(6px, 1.4vw, 8px);
+  --space-sm: clamp(8px, 1.8vw, 12px);
+  --space-md: clamp(12px, 2.4vw, 16px);
+  --space-lg: clamp(16px, 3vw, 24px);
+  --space-xl: clamp(20px, 4vw, 32px);
+
+  --content-pad: clamp(16px, 4vw, 32px);
+  --tap-min: 44px; /* target sentuh minimum di HP */
 }
 
 /* Modern Dark Mode (Deep Slate) */
@@ -51,15 +70,29 @@ body.dark-mode {
   font-family: "Poppins", sans-serif;
 }
 
+html {
+  -webkit-text-size-adjust: 100%; /* cegah iOS membesarkan teks sendiri saat landscape */
+}
+
 body {
   margin: 0;
   background-color: var(--bg-color);
   color: var(--text-main);
-  font-size: 16px;
+  font-size: var(--fs-base);
   transition:
     background-color 0.4s ease,
     color 0.4s ease;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Cegah media & tabel melebihi lebar layar (sumber utama scroll horizontal di HP) */
+img,
+svg,
+video {
+  max-width: 100%;
+}
+table {
+  max-width: 100%;
 }
 
 /* App Layout */
@@ -70,7 +103,7 @@ body {
 }
 .main-content {
   flex: 1;
-  padding: 32px;
+  padding: var(--content-pad);
   overflow-y: auto;
 }
 
@@ -79,7 +112,7 @@ body {
   background: var(--card-bg);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  padding: 32px;
+  padding: var(--space-xl);
   box-shadow: var(--shadow-lg);
   transition: var(--transition);
 }
@@ -93,7 +126,7 @@ h3 {
   margin-top: 0;
 }
 h1 {
-  font-size: 32px;
+  font-size: var(--fs-h1);
   letter-spacing: -0.5px;
 }
 p {
@@ -106,9 +139,9 @@ p {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 14px 28px;
-  font-size: 16px;
+  gap: var(--space-xs);
+  padding: clamp(11px, 2.6vw, 14px) clamp(18px, 4vw, 28px);
+  font-size: var(--fs-base);
   font-weight: 600;
   letter-spacing: 0.3px;
   border-radius: var(--radius-sm);
@@ -161,8 +194,8 @@ p {
 }
 .input-control {
   width: 100%;
-  padding: 16px 20px;
-  font-size: 16px;
+  padding: clamp(12px, 2.8vw, 16px) clamp(14px, 3vw, 20px);
+  font-size: 16px; /* tetap 16px: cegah iOS auto-zoom saat fokus input */
   font-weight: 500;
   background: var(--input-bg);
   color: var(--text-main);
@@ -187,14 +220,16 @@ body.dark-mode .input-control::placeholder {
 /* Grid Dashboard */
 .grid-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 24px;
+  /* min(100%, 280px): tetap 280px di layar lebar (desktop identik),
+     tapi turun jadi 1 kolom penuh kalau layar lebih sempit dari 280px */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--space-lg);
 }
 .menu-card {
   background: var(--card-bg);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  padding: 32px 24px;
+  padding: var(--space-xl) var(--space-lg);
   text-align: center;
   cursor: pointer;
   box-shadow: var(--shadow-sm);
@@ -208,7 +243,7 @@ body.dark-mode .input-control::placeholder {
   box-shadow: var(--shadow-lg);
 }
 .menu-card h3 {
-  font-size: 22px;
+  font-size: var(--fs-h3);
   margin: 20px 0 8px;
 }
 .menu-card p {
@@ -320,7 +355,7 @@ body.dark-mode .input-control::placeholder {
   position: fixed;
   width: calc(100% - 32px);
   max-width: 400px;
-  max-height: 240px;
+  max-height: min(50vh, 240px);
   overflow-y: auto;
   background: var(--card-bg);
   border: 1px solid var(--border-color);
@@ -361,6 +396,14 @@ body.dark-mode .input-control::placeholder {
 .item-dropdown-item.highlight {
   background: var(--primary-light);
   color: var(--primary);
+}
+/* Nama barang panjang dipotong "…" agar tidak meluber keluar dropdown */
+.item-dropdown-item > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .item-dropdown-item .item-code {
   font-size: 12px;
@@ -476,5 +519,117 @@ body.dark-mode .input-control::placeholder {
   }
   .item-chip .chip-name {
     max-width: 120px;
+  }
+}
+
+/* ============================================================
+   RESPONSIF GLOBAL (mobile-first)
+   ============================================================ */
+
+/* Utilitas teks panjang — dipakai ulang di render nama barang/supplier/akun.
+   Opt-in (lewat class), jadi TIDAK mengubah tampilan elemen lain.
+   .trunc  → potong jadi 1 baris + "…"
+   .clamp-2 → maks 2 baris + "…" (nama produk di kartu, dll) */
+.trunc {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+/* Pembungkus tabel: kolom banyak bisa di-scroll samping di tablet/desktop */
+.tbl-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+/* Tabel data → KARTU bertumpuk di HP (<=640px).
+   Nama kolom (data-label) diisi otomatis oleh aktifkanTabelResponsif()
+   di components.js. Di layar >640px tabel tampil normal seperti biasa. */
+@media (max-width: 640px) {
+  table.tbl,
+  table.tbl-input {
+    border: 0;
+  }
+  /* sembunyikan header secara visual tapi tetap terbaca oleh skrip & screen reader */
+  table.tbl thead,
+  table.tbl-input thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  table.tbl tr,
+  table.tbl-input tr {
+    display: block;
+    margin-bottom: var(--space-sm);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: var(--space-xs);
+    background: var(--card-bg);
+  }
+  table.tbl td,
+  table.tbl-input td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-md);
+    border: none;
+    padding: 6px 8px;
+    text-align: right;
+    /* nama panjang tanpa spasi tetap membungkus, tidak meluber keluar kartu */
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  table.tbl td::before,
+  table.tbl-input td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-align: left;
+    flex-shrink: 0;
+  }
+}
+
+/* ── Penyeragaman mobile lintas-halaman (hanya <=640px, desktop TIDAK berubah) ──
+   Banyak halaman memakai grid 2 kolom inline (form tambah/edit di modal) dan
+   bar tab. Dua aturan ini merapikan semuanya sekaligus tanpa menyentuh tiap
+   halaman satu per satu. */
+@media (max-width: 640px) {
+  /* Form 2 kolom (mis. "grid-template-columns:1fr 1fr") → 1 kolom di HP */
+  [style*="grid-template-columns: 1fr 1fr"],
+  [style*="grid-template-columns:1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+  /* Bar tab: tidak meluber — bisa digeser ke samping di HP */
+  body .tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+  body .tabs::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* HP kecil/sempit (<=480px): rapatkan elemen yang masih kebesaran.
+   Hanya berlaku di layar mungil — desktop & HP biasa tidak berubah. */
+@media (max-width: 480px) {
+  .icon-wrapper {
+    width: 60px;
+    height: 60px;
+    font-size: 28px;
+  }
+  .menu-card h3 {
+    margin: 12px 0 6px;
   }
 }

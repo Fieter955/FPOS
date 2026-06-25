@@ -7,30 +7,6 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
-    />
-    <meta name="theme-color" content="#1a1a1a" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta
-      name="apple-mobile-web-app-status-bar-style"
-      content="black-translucent"
-    />
-    <link rel="manifest" href="/manifest.json" />
-    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-    <meta name="theme-color" content="#1a1a1a" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta
-      name="apple-mobile-web-app-status-bar-style"
-      content="black-translucent"
-    />
-    <link rel="manifest" href="/manifest.json" />
-    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-    <title>Kasir - iPos 5.0</title>
-    <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#1a1a1a" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -39,6 +15,9 @@
       content="black-translucent"
     />
     <meta name="apple-mobile-web-app-title" content="iPos 5.0" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <title>Kasir - iPos 5.0</title>
     <link rel="stylesheet" href="/css/style.css" />
     <style>
       * {
@@ -263,6 +242,12 @@
         margin-bottom: 6px;
         color: var(--text-main);
         line-height: 1.3;
+        /* nama produk panjang maks 2 baris + "…" → tinggi kartu tetap rata */
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        overflow-wrap: anywhere;
       }
       .item-price {
         font-size: 15px;

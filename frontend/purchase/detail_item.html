@@ -33,6 +33,16 @@
         flex-direction: column;
       }
 
+      /* HP/tablet kecil: jangan paksa panel selebar 440/480px (sumber scroll
+         samping). Panel menumpuk penuh-lebar; desktop tetap 2 panel. */
+      @media (max-width: 980px) {
+        .left-panel,
+        .right-panel {
+          min-width: 0;
+          flex-basis: 100%;
+        }
+      }
+
       /* ===== Seksi form ===== */
       .form-section {
         display: flex;

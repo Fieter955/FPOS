@@ -76,6 +76,19 @@
     pointer-events: none !important;
     border-color: #d1d5db !important;
   }
+
+  /* HP (<=640px): form barang dibuat 1 kolom agar tiap kolom tidak sempit.
+     Di layar lebar (desktop) tetap 2 kolom seperti semula. */
+  @media (max-width: 640px) {
+    #detaiBarang {
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+    .grid {
+      grid-template-columns: 1fr;
+      grid-template-areas: none;
+    }
+  }
 </style>
 
 <!-- Container untuk Modal Supplier Cepat -->

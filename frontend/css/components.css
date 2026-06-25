@@ -29,7 +29,7 @@
 /* Premium Dropdown Styling */
 .premium-dropdown {
   position: fixed;
-  max-height: 280px;
+  max-height: min(50vh, 280px);
   overflow-y: auto;
   background: var(--card-bg);
   border: 1px solid var(--border-color);
@@ -65,7 +65,18 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   transition: background 0.15s;
+}
+
+/* Nama barang/supplier/akun yang panjang dipotong "…" — tidak meluber keluar
+   dropdown di HP. Berlaku untuk SEMUA combo (createPremiumCombo). */
+.premium-dropdown-item > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .premium-dropdown-item:hover,
@@ -188,4 +199,86 @@
   text-align: center;
   color: var(--text-muted);
   font-style: italic;
+}
+
+/* ============================================================
+   RESPONSIF — komponen bersama (mobile-first)
+   ============================================================ */
+
+/* Grid form OrderManager: 1 kolom di HP, 2 kolom di layar lebar */
+.om-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-lg);
+}
+@media (min-width: 768px) {
+  .om-grid {
+    grid-template-columns: 1.5fr 1fr;
+  }
+}
+
+/* Pembungkus sel grid pembelian (dipasang createPurchaseGrid) supaya tiap
+   input bisa diberi label kolom saat grid tampil sebagai kartu di HP. */
+.pg-cell {
+  display: block;
+  min-width: 0;
+}
+
+/* Grid Pembelian/Fulfillment → KARTU per-item di HP & tablet kecil (<=768px).
+   Ambang dinaikkan dari 640px supaya HP landscape & tablet portrait tidak
+   terpaksa scroll samping (grid butuh min-width 900px). Tablet besar &
+   desktop (>=769px) tetap tampil grid penuh.
+   atribut data-label dipasang dari header oleh createPurchaseGrid. */
+@media (max-width: 768px) {
+  .purchase-grid-header,
+  .fulfillment-grid-header {
+    display: none !important;
+  }
+  .purchase-grid-container {
+    overflow-x: visible;
+  }
+  .purchase-grid-row,
+  .fulfillment-grid-row {
+    display: flex !important;
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 8px;
+    min-width: 0 !important;
+    grid-template-columns: none !important;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 12px !important;
+    margin-bottom: 10px;
+  }
+  /* tiap sel: nama kolom di kiri, nilai/input di kanan */
+  .purchase-grid-row > [data-label],
+  .fulfillment-grid-row > [data-label] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+  }
+  .purchase-grid-row > [data-label]::before,
+  .fulfillment-grid-row > [data-label]::before {
+    content: attr(data-label);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .pg-cell > input {
+    flex: 1;
+    width: auto;
+    text-align: right !important;
+  }
+  /* sel pemilih barang tampil penuh di atas kartu */
+  .purchase-grid-row > .item-col-container,
+  .fulfillment-grid-row > .item-col-container {
+    width: 100%;
+  }
+  .purchase-grid-row > .btn-del-row,
+  .fulfillment-grid-row > .btn-del-row {
+    align-self: flex-end;
+  }
 }
