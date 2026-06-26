@@ -1,812 +1,755 @@
 <!doctype html>
 <html lang="id">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Pembelian - FPOS</title>
-    <link rel="stylesheet" href="/css/style.css" />
-    <link rel="stylesheet" href="/css/components.css" />
 
-    <style>
-      input[type="number"]::-webkit-inner-spin-button,
-      input[type="number"]::-webkit-outer-spin-button {
-        -webkit-appearance: none;
-        margin: 0;
-      }
-      input[type="number"] {
-        -moz-appearance: textfield;
-      }
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pembelian - FPOS</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/components.css" />
 
-      .tabs .btn {
-        white-space: nowrap;
-        border-radius: 8px;
-        font-weight: 600;
-        font-size: 14px;
-        padding: 8px 16px;
-      }
-      .tabs {
-        position: relative;
-        z-index: 100;
-        width: 100%;
-      }
-      .view-section {
-        animation: fadeIn 0.2s ease;
-      }
+  <style>
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
 
-      .modal-box.wide {
-        width: 95%;
-        margin: 16px auto;
-        max-height: calc(100vh - 40px);
-        overflow-y: auto;
-        padding: 24px;
-        background: var(--card-bg);
-        border-radius: 20px;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="app-container">
-      <main class="main-content">
-        <button
-          class="btn"
-          style="
+    input[type="number"] {
+      -moz-appearance: textfield;
+    }
+
+    .tabs .btn {
+      white-space: nowrap;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      padding: 8px 16px;
+    }
+
+    .tabs {
+      position: relative;
+      z-index: 100;
+      width: 100%;
+    }
+
+    .view-section {
+      animation: fadeIn 0.2s ease;
+    }
+
+    .modal-box.wide {
+      width: 95%;
+      margin: 16px auto;
+      max-height: calc(100vh - 40px);
+      overflow-y: auto;
+      padding: 24px;
+      background: var(--card-bg);
+      border-radius: 20px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app-container">
+    <main class="main-content">
+      <button class="btn" style="
             background: transparent;
             color: var(--text-muted);
             padding: 0;
             margin-bottom: 16px;
-          "
-          onclick="location.href = '/dashboard'"
-        >
-          ← Kembali
-        </button>
+          " onclick="location.href = '/dashboard'">
+        ← Kembali
+      </button>
 
-        <div
-          class="pg-header"
-          style="flex-direction: column; align-items: flex-start; gap: 16px"
-        >
-          <div>
-            <h1>📥 Pembelian & Pesanan</h1>
-            <p>Kelola pesanan, penerimaan barang, dan pembayaran.</p>
-          </div>
-          <div class="tabs">
-            <div
-              style="
+      <div class="pg-header" style="flex-direction: column; align-items: flex-start; gap: 16px">
+        <div>
+          <h1>📥 Pembelian & Pesanan</h1>
+          <p>Kelola pesanan, penerimaan barang, dan pembayaran.</p>
+        </div>
+        <div class="tabs">
+          <div style="
                 display: flex;
                 gap: 8px;
                 overflow-x: auto;
                 width: 100%;
                 padding-bottom: 4px;
-              "
-            >
-              <button
-                id="btnTabList"
-                class="btn btn-primary"
-                onclick="switchTab('list')"
-              >
-                Tampilan Utama
-              </button>
-              <button
-                id="btnTabPO"
-                class="btn"
-                style="
+              ">
+            <button id="btnTabList" class="btn btn-primary" onclick="switchTab('list')">
+              Tampilan Utama
+            </button>
+            <button id="btnTabPO" class="btn" style="
                   background: var(--bg-color);
                   border: 1px solid var(--border-color);
                   color: var(--text-main);
-                "
-                onclick="switchTab('po')"
-              >
-                📝 Catat Pesanan
-              </button>
-              <button
-                id="btnTabPurchase"
-                class="btn"
-                style="
+                " onclick="switchTab('po')">
+              📝 Catat Pesanan
+            </button>
+            <button id="btnTabPurchase" class="btn" style="
                   background: var(--bg-color);
                   border: 1px solid var(--border-color);
                   color: var(--text-main);
-                "
-                onclick="switchTab('purchase')"
-              >
-                📥 Catat Pembelian
-              </button>
-              <button
-                id="btnTabPayment"
-                class="btn"
-                style="
+                " onclick="switchTab('purchase')">
+              📥 Catat Pembelian
+            </button>
+            <button id="btnTabPayment" class="btn" style="
                   background: var(--bg-color);
                   border: 1px solid var(--border-color);
                   color: var(--text-main);
-                "
-                onclick="switchTab('payment')"
-              >
-                💸 Catat Pembayaran
-              </button>
-            </div>
+                " onclick="switchTab('payment')">
+              💸 Catat Pembayaran
+            </button>
           </div>
         </div>
+      </div>
 
-        <div id="viewList" class="view-section">
-          <div id="mainFilterContainer"></div>
-          <div class="tbl-wrap">
-            <table class="tbl">
-              <thead>
-                <tr>
-                  <th>No. Faktur</th>
-                  <th>Tanggal</th>
-                  <th>Supplier</th>
-                  <th>Total</th>
-                  <th>Terbayar</th>
-                  <th>Status</th>
-                  <th>Aksi</th>
-                </tr>
-              </thead>
-              <tbody id="tblBody"></tbody>
-            </table>
-          </div>
+      <div id="viewList" class="view-section">
+        <div id="mainFilterContainer"></div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>No. Faktur</th>
+                <th>Tanggal</th>
+                <th>Supplier</th>
+                <th>Total</th>
+                <th>Terbayar</th>
+                <th>Status</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="tblBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="viewForm" class="view-section" style="display: none; padding-top: 16px">
+        <div class="modal-hdr">
+          <h2 id="formTitle">📥 Catat Pembelian</h2>
         </div>
 
         <div
-          id="viewForm"
-          class="view-section"
-          style="display: none; padding-top: 16px"
-        >
-          <div class="modal-hdr">
-            <h2 id="formTitle">📥 Catat Pembelian</h2>
-          </div>
+          style="display: flex; gap: 24px; margin-bottom: 16px; font-size: 13px; background: var(--card-bg); padding: 12px 16px; border-radius: 12px; border: 1px solid var(--border-color); flex-wrap: wrap;">
+          <div><span style="color: var(--text-muted)">🕒 Jam:</span> <strong id="infoTime"
+              style="color: var(--text-main); margin-left: 4px;">-</strong></div>
+          <div><span style="color: var(--text-muted)">👤 User:</span> <strong id="infoUser"
+              style="color: var(--text-main); margin-left: 4px;">-</strong></div>
+          <div><span style="color: var(--text-muted)">🏢 Cabang:</span> <strong id="infoBranch"
+              style="color: var(--text-main); margin-left: 4px;">-</strong></div>
+        </div>
 
-          <div style="display: flex; gap: 24px; margin-bottom: 16px; font-size: 13px; background: var(--card-bg); padding: 12px 16px; border-radius: 12px; border: 1px solid var(--border-color); flex-wrap: wrap;">
-            <div><span style="color: var(--text-muted)">🕒 Jam:</span> <strong id="infoTime" style="color: var(--text-main); margin-left: 4px;">-</strong></div>
-            <div><span style="color: var(--text-muted)">👤 User:</span> <strong id="infoUser" style="color: var(--text-main); margin-left: 4px;">-</strong></div>
-            <div><span style="color: var(--text-muted)">🏢 Cabang:</span> <strong id="infoBranch" style="color: var(--text-main); margin-left: 4px;">-</strong></div>
-          </div>
-
-          <div
-            style="
+        <div style="
               display: grid;
               grid-template-columns: 1fr 1fr;
               gap: 16px;
               margin-bottom: 16px;
-            "
-          >
-            <div class="input-group">
-              <label style="margin-bottom: 6px">Supplier *</label>
-              <div id="supplierCombobox"></div>
-            </div>
-            <div class="input-group">
-              <label style="margin-bottom: 6px">Tanggal *</label>
-              <input type="date" id="bDate" class="input-control" />
-            </div>
+            ">
+          <div class="input-group">
+            <label style="margin-bottom: 6px">Supplier *</label>
+            <div id="supplierCombobox"></div>
           </div>
-          <div
-            style="
-              display: grid;
-              grid-template-columns: 1fr 1fr;
-              gap: 16px;
-              margin-bottom: 16px;
-            "
-          >
-            <div class="input-group">
-              <div
-                style="
-                  display: flex;
-                  justify-content: space-between;
-                  align-items: center;
-                  margin-bottom: 6px;
-                "
-              >
-                <label style="margin: 0">Diskon Global (%)</label>
-                <div
-                  id="buttonDisc"
-                  style="width: 100px; display: flex; justify-content: flex-end"
-                ></div>
-              </div>
-              <input
-                type="number"
-                id="bDisc"
-                class="input-control"
-                value="0"
-                oninput="hitungGrandTotal()"
-              />
-            </div>
-            <div class="input-group">
-              <div
-                style="
-                  display: flex;
-                  justify-content: space-between;
-                  align-items: center;
-                  margin-bottom: 6px;
-                "
-              >
-                <label style="margin: 0">PPN (%)</label>
-                <div
-                  id="buttonPPN"
-                  style="width: 100px; display: flex; justify-content: flex-end"
-                ></div>
-              </div>
-              <div style="display: flex; gap: 8px;">
-                <input
-                  type="number"
-                  id="bTax"
-                  class="input-control"
-                  style="flex: 1;"
-                  value="0"
-                  oninput="hitungGrandTotal()"
-                />
-                <select id="bTaxType" class="input-control" style="flex: 1;" onchange="hitungGrandTotal()">
-                  <option value="include">Include</option>
-                  <option value="exclude">Exclude</option>
-                </select>
-              </div>
-            </div>
+          <div class="input-group">
+            <label style="margin-bottom: 6px">Tanggal *</label>
+            <input type="date" id="bDate" class="input-control" />
           </div>
+        </div>
+        <!-- Removed Diskon & PPN top block, moved to summary box below -->
 
-          <div class="card" style="padding: 20px; margin-bottom: 20px">
-            <div
-              style="
+        <div class="card" style="padding: 20px; margin-bottom: 20px">
+          <div style="
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
                 margin-bottom: 16px;
-              "
-            >
-              <h3>Daftar Barang</h3>
-              <button
-                class="btn btn-primary"
-                id="btnAddRow"
-                onclick="formGrid.addRow()"
-              >
-                + Tambah Baris
-              </button>
+              ">
+            <h3>Daftar Barang</h3>
+            <button class="btn btn-primary" id="btnAddRow" onclick="formGrid.addRow()">
+              + Tambah Baris
+            </button>
+          </div>
+          <div id="formGridContainer"></div>
+        </div>
+
+        <!-- SUMMARY BOX (iPOS 5 style) -->
+        <div class="summary-box-container" style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-bottom: 16px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);">
+          <div style="display: flex; flex-wrap: wrap; gap: 24px; font-size: 12px; font-weight: 500; color: #334155;">
+            <!-- Kiri -->
+            <div style="flex: 1; min-width: 320px; display: grid; grid-template-columns: 90px 70px 1fr 30px; gap: 6px; align-items: center;">
+              
+              <div style="text-align: right;">Sub Total :</div>
+              <input type="text" id="sumQty" readonly class="input-control" style="text-align: right; background: #f1f5f9; height: 24px; padding: 0 6px;" value="0,00" />
+              <input type="text" id="sumSubTotal" readonly class="input-control" style="text-align: right; background: #f1f5f9; height: 24px; padding: 0 6px;" value="0,00" />
+              <div></div>
+
+              <div style="text-align: right; display: flex; justify-content: flex-end; align-items: center; gap: 4px;">Potongan : <span style="font-size: 10px;">(%)</span></div>
+              <input type="number" id="bDisc" class="input-control" style="text-align: right; height: 24px; padding: 0 6px;" value="0" oninput="hitungGrandTotal()" />
+              <input type="text" id="bDiscAmt" readonly class="input-control" style="text-align: right; background: #f1f5f9; height: 24px; padding: 0 6px;" value="0,00" />
+              <button class="btn-icon" style="background: #c4b5fd; border: 1px solid #a78bfa; color: white; border-radius: 4px; height: 24px; width: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✏️</button>
+
+              <div style="text-align: right;">Potongan Nota :</div>
+              <input type="text" readonly class="input-control" style="text-align: right; height: 24px; padding: 0 6px;" value="0,00" />
+              <input type="text" readonly class="input-control" style="text-align: right; background: #f1f5f9; height: 24px; padding: 0 6px;" value="0,00" />
+              <button class="btn-icon" style="background: #c4b5fd; border: 1px solid #a78bfa; color: white; border-radius: 4px; height: 24px; width: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✏️</button>
+
+              <div style="text-align: right;">Pajak :</div>
+              <div style="display: flex; gap: 2px;">
+                 <input type="number" id="bTax" class="input-control" style="text-align: right; background: #bfdbfe; border: 1px solid #93c5fd; height: 24px; padding: 0 6px; width: 100%;" value="0" oninput="hitungGrandTotal()" />
+              </div>
+              <input type="text" id="bTaxAmt" readonly class="input-control" style="text-align: right; background: #f1f5f9; height: 24px; padding: 0 6px;" value="0,00" />
+              <button class="btn-icon" style="background: #c4b5fd; border: 1px solid #a78bfa; color: white; border-radius: 4px; height: 24px; width: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✏️</button>
+
+              <div style="text-align: right;">Biaya Lain :</div>
+              <button class="btn-icon" style="background: #fef08a; border: 1px solid #fde047; border-radius: 4px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #ca8a04;">🪙</button>
+              <input type="text" readonly class="input-control" style="text-align: right; background: #f1f5f9; height: 24px; padding: 0 6px;" value="0,00" />
+              <button class="btn-icon" style="background: #c4b5fd; border: 1px solid #a78bfa; color: white; border-radius: 4px; height: 24px; width: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✏️</button>
             </div>
-            <div id="formGridContainer"></div>
-          </div>
 
-          <div
-            style="
-              background: var(--bg-color);
-              border-radius: 12px;
-              padding: 16px;
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              margin-bottom: 16px;
-            "
-          >
-            <span
-              style="
-                font-size: 15px;
-                font-weight: 600;
-                color: var(--text-muted);
-              "
-              >TOTAL AKHIR</span
-            >
-            <span
-              id="totalLabel"
-              style="font-size: 24px; font-weight: 900; color: var(--primary)"
-              >Rp 0</span
-            >
-          </div>
+            <!-- Kanan -->
+            <div style="flex: 1; min-width: 320px; display: grid; grid-template-columns: 80px 1fr 30px; gap: 6px; align-items: center;">
+              
+              <div style="text-align: right;">Total Akhir :</div>
+              <input type="text" id="totalAkhir" readonly class="input-control" style="text-align: right; background: #f1f5f9; height: 24px; padding: 0 6px;" value="0,00" />
+              <div></div>
 
-          <div class="input-group" style="display: flex">
-            <div style="margin-right: 16px">
-              <label style="margin-bottom: 6px">Tanggal Jatuh Tempo</label>
-              <input type="date" id="bDueDate" class="input-control" />
-            </div>
-            <div>
-              <label style="margin-bottom: 6px">Jatuh Tempo (Hari)</label>
-              <input type="number" id="bDueDays" class="input-control" min="0" />
+              <div style="text-align: right;">DP PO :</div>
+              <input type="text" readonly class="input-control" style="text-align: right; background: #f1f5f9; height: 24px; padding: 0 6px;" value="0,00" />
+              <button class="btn-icon" style="background: #c4b5fd; border: 1px solid #a78bfa; color: white; border-radius: 4px; height: 24px; width: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✏️</button>
+
+              <div style="text-align: right;">Deposit :</div>
+              <input type="text" readonly class="input-control" style="text-align: right; background: #f1f5f9; height: 24px; padding: 0 6px;" value="0,00" />
+              <button class="btn-icon" style="background: #c4b5fd; border: 1px solid #a78bfa; color: white; border-radius: 4px; height: 24px; width: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✏️</button>
+
+              <div style="text-align: right;">Tunai / DP :</div>
+              <input type="text" readonly class="input-control" style="text-align: right; background: #f1f5f9; height: 24px; padding: 0 6px;" value="0,00" />
+              <button class="btn-icon" style="background: #c4b5fd; border: 1px solid #a78bfa; color: white; border-radius: 4px; height: 24px; width: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✏️</button>
+
+              <div style="text-align: right;">Kredit :</div>
+              <input type="text" id="sumKredit" readonly class="input-control" style="text-align: right; background: #f1f5f9; height: 24px; padding: 0 6px;" value="0,00" />
+              <button class="btn-icon" style="background: #c4b5fd; border: 1px solid #a78bfa; color: white; border-radius: 4px; height: 24px; width: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✏️</button>
             </div>
           </div>
-
-          <div class="input-group">
-            <label style="margin-bottom: 6px">Catatan</label>
-            <textarea
-              id="bNotes"
-              class="input-control"
-              rows="2"
-              placeholder="Keterangan..."
-            ></textarea>
+          <div style="display: flex; justify-content: flex-end; margin-top: 16px;">
+             <button type="button" class="btn" style="background: #f1f5f9; border: 1px solid #cbd5e1; color: #0f172a; padding: 6px 16px; border-radius: 4px; display: flex; align-items: center; gap: 8px; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.05);" onclick="switchTab('list')">
+               <span style="color: #ef4444; font-size: 16px; transform: scaleX(-1); display: inline-block;">➔</span> Tutup
+             </button>
           </div>
+          <select id="bTaxType" style="display: none;"><option value="include">Include</option><option value="exclude" selected>Exclude</option></select>
+          <span id="totalLabel" style="display: none;">Rp 0</span>
+        </div>
 
-          <div
-            style="
+        <div class="input-group" style="display: flex">
+          <div style="margin-right: 16px">
+            <label style="margin-bottom: 6px">Tanggal Jatuh Tempo</label>
+            <input type="date" id="bDueDate" class="input-control" />
+          </div>
+          <div>
+            <label style="margin-bottom: 6px">Jatuh Tempo (Hari)</label>
+            <input type="number" id="bDueDays" class="input-control" min="0" />
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label style="margin-bottom: 6px">Catatan</label>
+          <textarea id="bNotes" class="input-control" rows="2" placeholder="Keterangan..."></textarea>
+        </div>
+
+        <div style="
               display: grid;
               grid-template-columns: 1fr 1fr;
               gap: 12px;
               margin-top: 16px;
-            "
-          >
-            <button onclick="switchTab('list')" class="btn">← Batal</button>
-            <button
-              onclick="simpanPembelian()"
-              class="btn btn-primary"
-              id="btnSimpan"
-            >
-              ✓ Simpan
-            </button>
-          </div>
+            ">
+          <button onclick="switchTab('list')" class="btn">← Batal</button>
+          <button onclick="simpanPembelian()" class="btn btn-primary" id="btnSimpan">
+            ✓ Simpan
+          </button>
         </div>
-
-        <div
-          id="viewPayment"
-          class="view-section"
-          style="display: none; padding-top: 16px"
-        >
-          <div id="paymentFilterContainer"></div>
-          <div class="tbl-wrap">
-            <table class="tbl">
-              <thead>
-                <tr>
-                  <th>No. Faktur</th>
-                  <th>Tanggal</th>
-                  <th>Supplier</th>
-                  <th style="text-align: right">Total</th>
-                  <th style="text-align: right">Terbayar</th>
-                  <th style="text-align: right">Sisa Hutang</th>
-                  <th>Status</th>
-                  <th>Aksi</th>
-                </tr>
-              </thead>
-              <tbody id="paymentTblBody"></tbody>
-            </table>
-          </div>
-        </div>
-      </main>
-    </div>
-
-    <div class="modal-overlay" id="mDetail">
-      <div class="modal-box wide">
-        <div class="modal-hdr">
-          <h2>Detail Pembelian</h2>
-          <button class="btn-x" onclick="closeModal('mDetail')">×</button>
-        </div>
-        <div id="mDetailBody"></div>
       </div>
-    </div>
 
-    <!-- Modal Peringatan Mismatch -->
-    <div class="modal-overlay" id="mMismatch">
-      <div
-        class="modal-box"
-        style="max-width: 550px; border: 2px solid var(--border-color)"
-      >
-        <div class="modal-hdr">
-          <h2 style="color: var(--danger); font-size: 22px">
-            ⚠️ Mismatch Barang
-          </h2>
-          <button class="btn-x" onclick="closeModal('mMismatch')">×</button>
+      <div id="viewPayment" class="view-section" style="display: none; padding-top: 16px">
+        <div id="paymentFilterContainer"></div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>No. Faktur</th>
+                <th>Tanggal</th>
+                <th>Supplier</th>
+                <th style="text-align: right">Total</th>
+                <th style="text-align: right">Terbayar</th>
+                <th style="text-align: right">Sisa Hutang</th>
+                <th>Status</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="paymentTblBody"></tbody>
+          </table>
         </div>
-        <div id="mMismatchBody" style="padding: 16px 0">
-          <!-- Content built by buildMismatchSummary -->
-        </div>
-        <div
-          id="mMismatchFooter"
-          style="
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-overlay" id="mDetail">
+    <div class="modal-box wide">
+      <div class="modal-hdr">
+        <h2>Detail Pembelian</h2>
+        <button class="btn-x" onclick="closeModal('mDetail')">×</button>
+      </div>
+      <div id="mDetailBody"></div>
+    </div>
+  </div>
+
+  <!-- Modal Peringatan Mismatch -->
+  <div class="modal-overlay" id="mMismatch">
+    <div class="modal-box" style="max-width: 550px; border: 2px solid var(--border-color)">
+      <div class="modal-hdr">
+        <h2 style="color: var(--danger); font-size: 22px">
+          ⚠️ Mismatch Barang
+        </h2>
+        <button class="btn-x" onclick="closeModal('mMismatch')">×</button>
+      </div>
+      <div id="mMismatchBody" style="padding: 16px 0">
+        <!-- Content built by buildMismatchSummary -->
+      </div>
+      <div id="mMismatchFooter" style="
             display: flex;
             flex-direction: column;
             gap: 10px;
             margin-top: 16px;
-          "
-        >
-          <!-- Buttons dynamically built -->
-        </div>
+          ">
+        <!-- Buttons dynamically built -->
       </div>
     </div>
+  </div>
 
-    <script src="/js/api.js"></script>
-    <script src="/js/theme.js"></script>
-    <script src="/js/components.js"></script>
-    <script src="/js/print.js"></script>
-    <script>
-      requireAuth();
-      const myBranchId = localStorage.getItem("active_branch_id") || 1;
-      let currentTab = "list",
-        currentFormMode = "purchase",
-        draftId = null;
-      let mainFilter = null,
-        paymentFilter = null,
-        formGrid = null,
-        allSuppliers = [];
-      let pendingPaymentData = null; // To store data while mismatch modal is open
+  <script src="/js/api.js"></script>
+  <script src="/js/theme.js"></script>
+  <script src="/js/components.js"></script>
+  <script src="/js/print.js"></script>
+  <script>
+    requireAuth();
+    const myBranchId = localStorage.getItem("active_branch_id") || 1;
+    let currentTab = "list",
+      currentFormMode = "purchase",
+      draftId = null;
+    let mainFilter = null,
+      paymentFilter = null,
+      formGrid = null,
+      allSuppliers = [];
+    let pendingPaymentData = null; // To store data while mismatch modal is open
 
-      // Setup Global Barcode Scanner
-      setupBarcodeScanner(async (scode) => {
-        // Hanya aktif jika sedang di tab form (po atau purchase)
-        if (currentTab !== "po" && currentTab !== "purchase") return;
+    // Setup Global Barcode Scanner
+    setupBarcodeScanner(async (scode) => {
+      // Hanya aktif jika sedang di tab form (po atau purchase)
+      if (currentTab !== "po" && currentTab !== "purchase") return;
 
-        try {
-          // Cari item berdasarkan barcode/kode
-          const items = await api("GET", "/items/?limit=1&search=" + scode);
-          if (items && items.length > 0) {
-            const item = items[0];
-            if (formGrid) {
-              formGrid.addRow(item);
-              showToast("Berhasil menambah: " + item.name);
-            }
-          } else {
-            showToast("Barcode " + scode + " tidak ditemukan!", "error");
+      try {
+        // Cari item berdasarkan barcode/kode
+        const items = await api("GET", "/items/?limit=1&search=" + scode);
+        if (items && items.length > 0) {
+          const item = items[0];
+          if (formGrid) {
+            formGrid.addRow(item);
+            showToast("Berhasil menambah: " + item.name);
           }
-        } catch (e) {
-          console.error("Scanner Error:", e);
+        } else {
+          showToast("Barcode " + scode + " tidak ditemukan!", "error");
         }
-      });
+      } catch (e) {
+        console.error("Scanner Error:", e);
+      }
+    });
 
-      // Initialize Shared Payment Modal
-      const apModal = createPaymentModal({
-        type: "ap",
-        onSuccess: () => {
-          if (currentTab === "payment") loadPayments();
-          else load();
+    // Initialize Shared Payment Modal
+    const apModal = createPaymentModal({
+      type: "ap",
+      onSuccess: () => {
+        if (currentTab === "payment") loadPayments();
+        else load();
+      },
+    });
+
+    function updateDueDate() {
+      const baseDateStr = document.getElementById("bDate").value;
+      const days = parseInt(document.getElementById("bDueDays").value) || 0;
+      if (baseDateStr) {
+        const d = new Date(baseDateStr);
+        d.setDate(d.getDate() + days);
+        document.getElementById("bDueDate").value = d.toISOString().split("T")[0];
+      }
+    }
+
+    function updateDueDays() {
+      const baseDateStr = document.getElementById("bDate").value;
+      const targetDateStr = document.getElementById("bDueDate").value;
+      if (baseDateStr && targetDateStr) {
+        const d1 = new Date(baseDateStr);
+        const d2 = new Date(targetDateStr);
+        const diffDays = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
+        document.getElementById("bDueDays").value = diffDays >= 0 ? diffDays : 0;
+      }
+    }
+
+    document.getElementById("bDate").addEventListener("change", updateDueDate);
+    document.getElementById("bDueDays").addEventListener("input", updateDueDate);
+    document.getElementById("bDueDate").addEventListener("change", updateDueDays);
+
+    // Realtime Info
+    setInterval(() => {
+      const el = document.getElementById("infoTime");
+      if (el) el.textContent = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    }, 1000);
+
+    async function loadUserInfo() {
+      const user = getUser();
+      const elUser = document.getElementById("infoUser");
+      if (elUser) elUser.textContent = user.name || user.username || "-";
+
+      const elBranch = document.getElementById("infoBranch");
+      if (elBranch) {
+        try {
+          const branches = await cachedApi("/branches/");
+          const activeId = localStorage.getItem("active_branch_id") || user.active_branch_id;
+          const b = branches.find(x => x.id == activeId);
+          elBranch.textContent = b ? b.name : "Toko Utama";
+        } catch (e) {
+          elBranch.textContent = "Toko Utama";
+        }
+      }
+    }
+    loadUserInfo();
+
+    function switchTab(tab) {
+      currentTab = tab;
+      document
+        .querySelectorAll(".view-section")
+        .forEach((el) => (el.style.display = "none"));
+      document.querySelectorAll(".tabs .btn").forEach((btn) => {
+        btn.style.background = "var(--bg-color)";
+        btn.style.color = "var(--text-main)";
+      });
+      document.getElementById(
+        "view" +
+        (tab === "list" ? "List" : tab === "payment" ? "Payment" : "Form"),
+      ).style.display = "block";
+      if (tab === "list") load();
+      else if (tab === "po") {
+        currentFormMode = "po";
+        document.getElementById("formTitle").textContent =
+          "📝 Catat Pesanan (Draft)";
+        openForm();
+      } else if (tab === "purchase") {
+        currentFormMode = "purchase";
+        document.getElementById("formTitle").textContent =
+          "📥 Catat Pembelian";
+        openForm();
+      } else if (tab === "payment") openPaymentTab();
+    }
+
+    async function openForm(existing = null) {
+      document.getElementById("formGridContainer").innerHTML =
+        '<div id="gridTarget"></div>';
+      document.getElementById("bDate").value = today();
+      document.getElementById("bDueDays").value = 0;
+      updateDueDate();
+      document.getElementById("bDisc").value = 0;
+      document.getElementById("bTax").value = 0;
+      document.getElementById("totalLabel").textContent = "Rp 0";
+      draftId = existing ? existing.id : null;
+
+      // Toggle buttons removed for new summary UI
+
+      allSuppliers = await api(
+        "GET",
+        "/suppliers/?limit=5000&active_only=true",
+      );
+      createPremiumCombo("supplierCombobox", allSuppliers, {
+        onSelect: async (sel) => {
+          if (sel && typeof sel.due_date !== "undefined") {
+            document.getElementById("bDueDays").value = sel.due_date;
+            updateDueDate();
+          }
+          const items = await api(
+            "GET",
+            `/purchases/items/?supplier_id=${sel.id}`,
+          );
+          if (formGrid) formGrid.updateDataSource(items);
         },
       });
 
-      function updateDueDate() {
-        const baseDateStr = document.getElementById("bDate").value;
-        const days = parseInt(document.getElementById("bDueDays").value) || 0;
-        if (baseDateStr) {
-          const d = new Date(baseDateStr);
-          d.setDate(d.getDate() + days);
-          document.getElementById("bDueDate").value = d.toISOString().split("T")[0];
-        }
-      }
-
-      function updateDueDays() {
-        const baseDateStr = document.getElementById("bDate").value;
-        const targetDateStr = document.getElementById("bDueDate").value;
-        if (baseDateStr && targetDateStr) {
-          const d1 = new Date(baseDateStr);
-          const d2 = new Date(targetDateStr);
-          const diffDays = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
-          document.getElementById("bDueDays").value = diffDays >= 0 ? diffDays : 0;
-        }
-      }
-
-      document.getElementById("bDate").addEventListener("change", updateDueDate);
-      document.getElementById("bDueDays").addEventListener("input", updateDueDate);
-      document.getElementById("bDueDate").addEventListener("change", updateDueDays);
-
-      // Realtime Info
-      setInterval(() => {
-        const el = document.getElementById("infoTime");
-        if (el) el.textContent = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-      }, 1000);
-
-      async function loadUserInfo() {
-        const user = getUser();
-        const elUser = document.getElementById("infoUser");
-        if (elUser) elUser.textContent = user.name || user.username || "-";
-        
-        const elBranch = document.getElementById("infoBranch");
-        if (elBranch) {
-          try {
-            const branches = await cachedApi("/branches/");
-            const activeId = localStorage.getItem("active_branch_id") || user.active_branch_id;
-            const b = branches.find(x => x.id == activeId);
-            elBranch.textContent = b ? b.name : "Toko Utama";
-          } catch(e) {
-            elBranch.textContent = "Toko Utama";
-          }
-        }
-      }
-      loadUserInfo();
-
-      function switchTab(tab) {
-        currentTab = tab;
+      if (existing) {
         document
-          .querySelectorAll(".view-section")
-          .forEach((el) => (el.style.display = "none"));
-        document.querySelectorAll(".tabs .btn").forEach((btn) => {
-          btn.style.background = "var(--bg-color)";
-          btn.style.color = "var(--text-main)";
+          .getElementById("supplierCombobox")
+          ._combo.set(existing.supplier_id, existing.supplier?.name || "");
+        const items = existing.items.map((it) => ({
+          id: it.item_id,
+          name: it.item?.name,
+          code: it.item?.code,
+          qty: it.qty,
+          buy_price: it.buy_price,
+          sell_price: it.item?.sell_price || 0,
+          profit_margin: it.item?.profit_margin || 0,
+        }));
+        formGrid = createPurchaseSummaryGrid("gridTarget", {
+          initialItems: items,
+          onChange: hitungGrandTotal,
+          onDetail: bukaDetailItem,
+          getSupplierId: ambilSupplierIdTerpilih,
         });
-        document.getElementById(
-          "view" +
-            (tab === "list" ? "List" : tab === "payment" ? "Payment" : "Form"),
-        ).style.display = "block";
-        if (tab === "list") load();
-        else if (tab === "po") {
-          currentFormMode = "po";
-          document.getElementById("formTitle").textContent =
-            "📝 Catat Pesanan (Draft)";
-          openForm();
-        } else if (tab === "purchase") {
-          currentFormMode = "purchase";
-          document.getElementById("formTitle").textContent =
-            "📥 Catat Pembelian";
-          openForm();
-        } else if (tab === "payment") openPaymentTab();
+      } else {
+        formGrid = createPurchaseSummaryGrid("gridTarget", {
+          onChange: hitungGrandTotal,
+          onDetail: bukaDetailItem,
+          getSupplierId: ambilSupplierIdTerpilih,
+        });
       }
+    }
 
-      async function openForm(existing = null) {
-        document.getElementById("formGridContainer").innerHTML =
-          '<div id="gridTarget"></div>';
-        document.getElementById("bDate").value = today();
-        document.getElementById("bDueDays").value = 0;
-        updateDueDate();
-        document.getElementById("bDisc").value = 0;
-        document.getElementById("bTax").value = 0;
-        document.getElementById("totalLabel").textContent = "Rp 0";
-        draftId = existing ? existing.id : null;
+    // Ambil id supplier yang sedang dipilih pada combobox supplier (atau null).
+    // Dipakai grid untuk menyimpan harga beli & PPN ke data barang per supplier.
+    function ambilSupplierIdTerpilih() {
+      const v = document.querySelector(
+        "#supplierCombobox .combobox-value",
+      )?.value;
+      return v ? parseInt(v) : null;
+    }
 
-        // Inisialisasi Toggle Button
-        createToggleButton("buttonDisc", {
-          targetId: "bDisc",
-          activeLabel: "Kunci",
-          inactiveLabel: "Buka",
-          isActive: true, // Default Terkunci
-        });
-        createToggleButton("buttonPPN", {
-          targetId: "bTax",
-          activeLabel: "Kunci",
-          inactiveLabel: "Buka",
-          isActive: true, // Default Terkunci
-        });
+    // Simpan seluruh state form ke sessionStorage lalu buka halaman detail item.
+    // Dipakai sebagai callback onDetail dari grid (tombol "Detail" tiap baris).
+    function bukaDetailItem(rowIndex, detail) {
+      const supEl = document.querySelector(
+        "#supplierCombobox .combobox-value",
+      );
+      const supInput = document.querySelector(
+        "#supplierCombobox .combobox-input",
+      );
+      const supId = supEl && supEl.value ? parseInt(supEl.value) : null;
+      const supData = (allSuppliers || []).find((s) => s.id === supId);
+      const draft = {
+        mode: currentFormMode,
+        supplier_id: supId,
+        supplier_name: supInput ? supInput.value : "",
+        supplier_ppn: supData ? supData.PpnSupplier || 0 : 0,
+        date: document.getElementById("bDate").value,
+        disc: document.getElementById("bDisc").value,
+        tax: document.getElementById("bTax").value,
+        notes: document.getElementById("bNotes").value,
+        rows: formGrid.getDetailRows(),
+        editRow: rowIndex,
+      };
+      sessionStorage.setItem("purchase_form_draft", JSON.stringify(draft));
+      location.href = "detail_item.html";
+    }
 
-        allSuppliers = await api(
+    // Pulihkan form pembelian dari draft sessionStorage (setelah kembali dari detail_item).
+    async function restoreFormFromDraft(draft) {
+      currentFormMode = draft.mode || "purchase";
+      document.getElementById("formTitle").textContent =
+        currentFormMode === "po"
+          ? "📝 Catat Pesanan (Draft)"
+          : "📥 Catat Pembelian";
+
+      currentTab = currentFormMode;
+      document
+        .querySelectorAll(".view-section")
+        .forEach((el) => (el.style.display = "none"));
+      document.getElementById("viewForm").style.display = "block";
+
+      await openForm();
+
+      document.getElementById("bDate").value = draft.date || today();
+      document.getElementById("bDisc").value = draft.disc || 0;
+      document.getElementById("bTax").value = draft.tax || 0;
+      document.getElementById("bNotes").value = draft.notes || "";
+
+      if (draft.supplier_id) {
+        document
+          .getElementById("supplierCombobox")
+          ._combo.set(draft.supplier_id, draft.supplier_name || "");
+        const items = await api(
           "GET",
-          "/suppliers/?limit=5000&active_only=true",
+          `/purchases/items/?supplier_id=${draft.supplier_id}`,
         );
-        createPremiumCombo("supplierCombobox", allSuppliers, {
-          onSelect: async (sel) => {
-            if (sel && typeof sel.due_date !== "undefined") {
-              document.getElementById("bDueDays").value = sel.due_date;
-              updateDueDate();
-            }
-            const items = await api(
-              "GET",
-              `/purchases/items/?supplier_id=${sel.id}`,
-            );
-            if (formGrid) formGrid.updateDataSource(items);
-          },
-        });
-
-        if (existing) {
-          document
-            .getElementById("supplierCombobox")
-            ._combo.set(existing.supplier_id, existing.supplier?.name || "");
-          const items = existing.items.map((it) => ({
-            id: it.item_id,
-            name: it.item?.name,
-            code: it.item?.code,
-            qty: it.qty,
-            buy_price: it.buy_price,
-            sell_price: it.item?.sell_price || 0,
-            profit_margin: it.item?.profit_margin || 0,
-          }));
-          formGrid = createPurchaseSummaryGrid("gridTarget", {
-            initialItems: items,
-            onChange: hitungGrandTotal,
-            onDetail: bukaDetailItem,
-            getSupplierId: ambilSupplierIdTerpilih,
-          });
-        } else {
-          formGrid = createPurchaseSummaryGrid("gridTarget", {
-            onChange: hitungGrandTotal,
-            onDetail: bukaDetailItem,
-            getSupplierId: ambilSupplierIdTerpilih,
-          });
-        }
+        formGrid.updateDataSource(items);
       }
 
-      // Ambil id supplier yang sedang dipilih pada combobox supplier (atau null).
-      // Dipakai grid untuk menyimpan harga beli & PPN ke data barang per supplier.
-      function ambilSupplierIdTerpilih() {
-        const v = document.querySelector(
-          "#supplierCombobox .combobox-value",
-        )?.value;
-        return v ? parseInt(v) : null;
+      if (draft.rows && draft.rows.length) {
+        formGrid.loadRows(draft.rows);
+      }
+      hitungGrandTotal();
+    }
+
+    function formatTotalStr(num) {
+      return new Intl.NumberFormat("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num || 0);
+    }
+
+    function hitungGrandTotal() {
+      if (!formGrid) return;
+      const items = formGrid.getData();
+      // pakai total net per-baris (sudah termasuk diskon bertingkat dari Detail Item)
+      let sub = items.reduce((acc, it) => acc + (it.total || 0), 0);
+      let totalQty = items.reduce((acc, it) => acc + (it.qty || 0), 0);
+      
+      const disc = parseFloat(document.getElementById("bDisc").value) || 0;
+      const tax = parseFloat(document.getElementById("bTax").value) || 0;
+      const taxType = document.getElementById("bTaxType")?.value || "exclude";
+      
+      let discAmt = (sub * disc) / 100;
+      let grand = sub - discAmt;
+      let taxAmt = 0;
+      
+      if (taxType === "exclude") {
+          taxAmt = (grand * tax) / 100;
+          grand = grand + taxAmt;
+      } else {
+          taxAmt = grand - (grand / (1 + tax / 100));
       }
 
-      // Simpan seluruh state form ke sessionStorage lalu buka halaman detail item.
-      // Dipakai sebagai callback onDetail dari grid (tombol "Detail" tiap baris).
-      function bukaDetailItem(rowIndex, detail) {
-        const supEl = document.querySelector(
-          "#supplierCombobox .combobox-value",
-        );
-        const supInput = document.querySelector(
-          "#supplierCombobox .combobox-input",
-        );
-        const supId = supEl && supEl.value ? parseInt(supEl.value) : null;
-        const supData = (allSuppliers || []).find((s) => s.id === supId);
-        const draft = {
-          mode: currentFormMode,
-          supplier_id: supId,
-          supplier_name: supInput ? supInput.value : "",
-          supplier_ppn: supData ? supData.PpnSupplier || 0 : 0,
+      const elQty = document.getElementById("sumQty");
+      if (elQty) {
+          elQty.value = formatTotalStr(totalQty);
+          document.getElementById("sumSubTotal").value = formatTotalStr(sub);
+          document.getElementById("bDiscAmt").value = formatTotalStr(discAmt);
+          document.getElementById("bTaxAmt").value = formatTotalStr(taxAmt);
+          document.getElementById("totalAkhir").value = formatTotalStr(grand);
+          document.getElementById("sumKredit").value = formatTotalStr(grand);
+      }
+      
+      const elTotalLabel = document.getElementById("totalLabel");
+      if (elTotalLabel) elTotalLabel.textContent = fmtRp(grand);
+    }
+
+    async function simpanPembelian() {
+      const sid = document.querySelector(
+        "#supplierCombobox .combobox-value",
+      )?.value;
+      if (!sid) return showToast("Pilih supplier dulu", "error");
+      const items = formGrid.getData();
+      if (!items.length)
+        return showToast("Tambahkan minimal 1 barang", "error");
+      try {
+        showLoading();
+        taxValue = parseFloat(document.getElementById("bTax").value || 0);
+        const payload = {
           date: document.getElementById("bDate").value,
-          disc: document.getElementById("bDisc").value,
-          tax: document.getElementById("bTax").value,
-          notes: document.getElementById("bNotes").value,
-          rows: formGrid.getDetailRows(),
-          editRow: rowIndex,
+          supplier_id: parseInt(sid),
+          discount: parseFloat(document.getElementById("bDisc").value) || 0,
+          tax: taxValue,
+          tax_percent: taxValue,
+          is_tax_included: document.getElementById("bTaxType")?.value === "include",
+          notes: document.getElementById("bNotes").value || null,
+          items: items,
+          paid: 0,
+          status: currentFormMode === "po" ? "draft" : "unpaid",
         };
-        sessionStorage.setItem("purchase_form_draft", JSON.stringify(draft));
-        location.href = "detail_item.html";
+        if (draftId) await api("PUT", `/purchases/${draftId}`, payload);
+        else await api("POST", "/purchases/", payload);
+        hideLoading();
+        showToast("Berhasil disimpan ✓");
+        switchTab("list");
+      } catch (ex) {
+        hideLoading();
+        showToast(ex.message, "error");
+      }
+    }
+
+    async function openPaymentTab() {
+      await loadPayments();
+    }
+    async function loadPayments() {
+      if (!paymentFilter) return;
+      const f = paymentFilter.getValues();
+      let url = `/purchases/?limit=500&start_date=${f.start_date}&end_date=${f.end_date}`;
+      if (f.entity_id) url += `&supplier_id=${f.entity_id}`;
+      if (f.status) url += `&status=${f.status}`;
+      try {
+        const data = await api("GET", url);
+        const tbody = document.getElementById("paymentTblBody");
+        tbody.innerHTML = data.length
+          ? data
+            .map(
+              (p) =>
+                `<tr><td>${p.number}</td><td>${fmtDate(p.date)}</td><td>${p.supplier?.name || "-"}</td><td style="text-align:right">${fmtRp(p.total)}</td><td style="text-align:right">${fmtRp(p.paid)}</td><td style="text-align:right">${fmtRp(p.total - p.paid)}</td><td>${sb(p.status, p)}</td><td><button class="btn btn-primary" onclick="startPaymentProcess(${p.id})">💸 Bayar</button></td></tr>`,
+            )
+            .join("")
+          : '<tr><td colspan="8" style="text-align:center">Tidak ada data</td></tr>';
+      } catch (ex) {
+        showToast(ex.message, "error");
+      }
+    }
+
+    const sb = (s, p) => {
+      let labels = "";
+      if (p && p.is_branch_request) {
+        labels +=
+          '<span style="background:rgba(37,99,235,0.15);color:#2563eb;padding:4px 10px;border-radius:6px;font-weight:700;margin-right:4px;">📦 PO</span>';
       }
 
-      // Pulihkan form pembelian dari draft sessionStorage (setelah kembali dari detail_item).
-      async function restoreFormFromDraft(draft) {
-        currentFormMode = draft.mode || "purchase";
-        document.getElementById("formTitle").textContent =
-          currentFormMode === "po"
-            ? "📝 Catat Pesanan (Draft)"
-            : "📥 Catat Pembelian";
-
-        currentTab = currentFormMode;
-        document
-          .querySelectorAll(".view-section")
-          .forEach((el) => (el.style.display = "none"));
-        document.getElementById("viewForm").style.display = "block";
-
-        await openForm();
-
-        document.getElementById("bDate").value = draft.date || today();
-        document.getElementById("bDisc").value = draft.disc || 0;
-        document.getElementById("bTax").value = draft.tax || 0;
-        document.getElementById("bNotes").value = draft.notes || "";
-
-        if (draft.supplier_id) {
-          document
-            .getElementById("supplierCombobox")
-            ._combo.set(draft.supplier_id, draft.supplier_name || "");
-          const items = await api(
-            "GET",
-            `/purchases/items/?supplier_id=${draft.supplier_id}`,
-          );
-          formGrid.updateDataSource(items);
-        }
-
-        if (draft.rows && draft.rows.length) {
-          formGrid.loadRows(draft.rows);
-        }
-        hitungGrandTotal();
-      }
-
-      function hitungGrandTotal() {
-        if (!formGrid) return;
-        const items = formGrid.getData();
-        // pakai total net per-baris (sudah termasuk diskon bertingkat dari Detail Item)
-        let sub = items.reduce((acc, it) => acc + (it.total || 0), 0);
-        const disc = parseFloat(document.getElementById("bDisc").value) || 0;
-        const tax = parseFloat(document.getElementById("bTax").value) || 0;
-        const taxType = document.getElementById("bTaxType")?.value || "include";
-        let grand = sub - (sub * disc) / 100;
-        if (taxType === "exclude") grand = grand * (1 + tax / 100);
-        document.getElementById("totalLabel").textContent = fmtRp(grand);
-      }
-
-      async function simpanPembelian() {
-        const sid = document.querySelector(
-          "#supplierCombobox .combobox-value",
-        )?.value;
-        if (!sid) return showToast("Pilih supplier dulu", "error");
-        const items = formGrid.getData();
-        if (!items.length)
-          return showToast("Tambahkan minimal 1 barang", "error");
-        try {
-          showLoading();
-          taxValue = parseFloat(document.getElementById("bTax").value || 0);
-          const payload = {
-            date: document.getElementById("bDate").value,
-            supplier_id: parseInt(sid),
-            discount: parseFloat(document.getElementById("bDisc").value) || 0,
-            tax: taxValue,
-            tax_percent: taxValue,
-            is_tax_included: document.getElementById("bTaxType")?.value === "include",
-            notes: document.getElementById("bNotes").value || null,
-            items: items,
-            paid: 0,
-            status: currentFormMode === "po" ? "draft" : "unpaid",
-          };
-          if (draftId) await api("PUT", `/purchases/${draftId}`, payload);
-          else await api("POST", "/purchases/", payload);
-          hideLoading();
-          showToast("Berhasil disimpan ✓");
-          switchTab("list");
-        } catch (ex) {
-          hideLoading();
-          showToast(ex.message, "error");
-        }
-      }
-
-      async function openPaymentTab() {
-        await loadPayments();
-      }
-      async function loadPayments() {
-        if (!paymentFilter) return;
-        const f = paymentFilter.getValues();
-        let url = `/purchases/?limit=500&start_date=${f.start_date}&end_date=${f.end_date}`;
-        if (f.entity_id) url += `&supplier_id=${f.entity_id}`;
-        if (f.status) url += `&status=${f.status}`;
-        try {
-          const data = await api("GET", url);
-          const tbody = document.getElementById("paymentTblBody");
-          tbody.innerHTML = data.length
-            ? data
-                .map(
-                  (p) =>
-                    `<tr><td>${p.number}</td><td>${fmtDate(p.date)}</td><td>${p.supplier?.name || "-"}</td><td style="text-align:right">${fmtRp(p.total)}</td><td style="text-align:right">${fmtRp(p.paid)}</td><td style="text-align:right">${fmtRp(p.total - p.paid)}</td><td>${sb(p.status, p)}</td><td><button class="btn btn-primary" onclick="startPaymentProcess(${p.id})">💸 Bayar</button></td></tr>`,
-                )
-                .join("")
-            : '<tr><td colspan="8" style="text-align:center">Tidak ada data</td></tr>';
-        } catch (ex) {
-          showToast(ex.message, "error");
-        }
-      }
-
-      const sb = (s, p) => {
-        let labels = "";
-        if (p && p.is_branch_request) {
-          labels +=
-            '<span style="background:rgba(37,99,235,0.15);color:#2563eb;padding:4px 10px;border-radius:6px;font-weight:700;margin-right:4px;">📦 PO</span>';
-        }
-
-        if (s === "paid")
-          return (
-            labels +
-            '<span style="background:rgba(16,185,129,0.15);color:#10b981;padding:4px 10px;border-radius:6px;font-weight:700;">✓ Lunas</span>'
-          );
-        if (s === "unpaid")
-          return (
-            labels +
-            '<span style="background:rgba(239,68,68,0.15);color:#ef4444;padding:4px 10px;border-radius:6px;font-weight:700;">✗ Belum Lunas</span>'
-          );
-        if (s === "draft")
-          return (
-            labels +
-            '<span style="background:rgba(100,116,139,0.15);color:#64748b;padding:4px 10px;border-radius:6px;font-weight:700;">📝 DRAFT</span>'
-          );
+      if (s === "paid")
         return (
           labels +
-          `<span style="background:rgba(148,163,184,0.15);color:#94a3b8;padding:4px 10px;border-radius:6px;font-weight:700;">${String(s).toUpperCase()}</span>`
+          '<span style="background:rgba(16,185,129,0.15);color:#10b981;padding:4px 10px;border-radius:6px;font-weight:700;">✓ Lunas</span>'
         );
-      };
+      if (s === "unpaid")
+        return (
+          labels +
+          '<span style="background:rgba(239,68,68,0.15);color:#ef4444;padding:4px 10px;border-radius:6px;font-weight:700;">✗ Belum Lunas</span>'
+        );
+      if (s === "draft")
+        return (
+          labels +
+          '<span style="background:rgba(100,116,139,0.15);color:#64748b;padding:4px 10px;border-radius:6px;font-weight:700;">📝 DRAFT</span>'
+        );
+      return (
+        labels +
+        `<span style="background:rgba(148,163,184,0.15);color:#94a3b8;padding:4px 10px;border-radius:6px;font-weight:700;">${String(s).toUpperCase()}</span>`
+      );
+    };
 
-      function today() {
-        return new Date().toISOString().split("T")[0];
-      }
-      function loadDraft(id) {
-        location.href = `catat-pembelian.html?id=${id}`;
-      }
-      function fmtRp(n) {
-        return new Intl.NumberFormat("id-ID", {
-          style: "currency",
-          currency: "IDR",
-          minimumFractionDigits: 0,
-        }).format(n || 0);
-      }
-      function fmtDate(d) {
-        if (!d) return "-";
-        return new Date(d + "T00:00:00").toLocaleDateString("id-ID", {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        });
-      }
+    function today() {
+      return new Date().toISOString().split("T")[0];
+    }
+    function loadDraft(id) {
+      location.href = `catat-pembelian.html?id=${id}`;
+    }
+    function fmtRp(n) {
+      return new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        minimumFractionDigits: 0,
+      }).format(n || 0);
+    }
+    function fmtDate(d) {
+      if (!d) return "-";
+      return new Date(d + "T00:00:00").toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+    }
 
-      async function load() {
-        if (!mainFilter) return;
-        const f = mainFilter.getValues();
-        let url = `/purchases/?limit=200&start_date=${f.start_date}&end_date=${f.end_date}`;
-        if (f.status) url += `&status=${f.status}`;
-        if (f.entity_id) url += `&supplier_id=${f.entity_id}`;
-        try {
-          const d = await api("GET", url);
-          const tbody = document.getElementById("tblBody");
-          tbody.innerHTML = d.length
-            ? d
-                .map((p) => {
-                  const canPay = isMainStore() || !p.is_branch_request;
-                  const payBtn =
-                    p.status === "draft" && canPay
-                      ? `<button class="btn" style="padding:4px 8px;font-size:12px;background:var(--primary);color:white;border:none" onclick="startPaymentProcess(${p.id})">💸 Bayar</button>`
-                      : "";
-                  const prosesBtn =
-                    p.status === "draft"
-                      ? `<button class="btn btn-primary" style="padding:4px 8px;font-size:12px" onclick="loadDraft(${p.id})">Proses</button>`
-                      : "";
+    async function load() {
+      if (!mainFilter) return;
+      const f = mainFilter.getValues();
+      let url = `/purchases/?limit=200&start_date=${f.start_date}&end_date=${f.end_date}`;
+      if (f.status) url += `&status=${f.status}`;
+      if (f.entity_id) url += `&supplier_id=${f.entity_id}`;
+      try {
+        const d = await api("GET", url);
+        const tbody = document.getElementById("tblBody");
+        tbody.innerHTML = d.length
+          ? d
+            .map((p) => {
+              const canPay = isMainStore() || !p.is_branch_request;
+              const payBtn =
+                p.status === "draft" && canPay
+                  ? `<button class="btn" style="padding:4px 8px;font-size:12px;background:var(--primary);color:white;border:none" onclick="startPaymentProcess(${p.id})">💸 Bayar</button>`
+                  : "";
+              const prosesBtn =
+                p.status === "draft"
+                  ? `<button class="btn btn-primary" style="padding:4px 8px;font-size:12px" onclick="loadDraft(${p.id})">Proses</button>`
+                  : "";
 
-                  return `<tr>
+              return `<tr>
               <td style="font-family:monospace;font-weight:700;color:var(--primary)">${p.number}</td>
               <td>${fmtDate(p.date)}</td>
               <td>${p.supplier?.name || "-"}</td>
@@ -822,51 +765,51 @@
                 </div>
               </td>
             </tr>`;
-                })
-                .join("")
-            : '<tr><td colspan="7" style="text-align:center">Tidak ada data</td></tr>';
-        } catch (ex) {
-          showToast(ex.message, "error");
-        }
+            })
+            .join("")
+          : '<tr><td colspan="7" style="text-align:center">Tidak ada data</td></tr>';
+      } catch (ex) {
+        showToast(ex.message, "error");
       }
+    }
 
-      async function initFilters() {
-        const suppliers = await api(
-          "GET",
-          "/suppliers/?limit=5000&active_only=true",
-        );
-        const statusOpts = [
-          { label: "Draft / Pesanan", value: "draft" },
-          { label: "Belum Lunas", value: "unpaid" },
-          { label: "Sebagian", value: "partial" },
-          { label: "Lunas", value: "paid" },
-        ];
+    async function initFilters() {
+      const suppliers = await api(
+        "GET",
+        "/suppliers/?limit=5000&active_only=true",
+      );
+      const statusOpts = [
+        { label: "Draft / Pesanan", value: "draft" },
+        { label: "Belum Lunas", value: "unpaid" },
+        { label: "Sebagian", value: "partial" },
+        { label: "Lunas", value: "paid" },
+      ];
 
-        mainFilter = createFilterBar("mainFilterContainer", {
-          onFilter: load,
-          statusOptions: statusOpts,
-          entities: suppliers,
-          useEntitySelect: true,
-          entityPlaceholder: "Semua Supplier",
-        });
+      mainFilter = createFilterBar("mainFilterContainer", {
+        onFilter: load,
+        statusOptions: statusOpts,
+        entities: suppliers,
+        useEntitySelect: true,
+        entityPlaceholder: "Semua Supplier",
+      });
 
-        paymentFilter = createFilterBar("paymentFilterContainer", {
-          onFilter: loadPayments,
-          statusOptions: statusOpts.slice(1),
-          entities: suppliers,
-          useEntitySelect: true,
-          entityPlaceholder: "Semua Supplier",
-        });
-      }
+      paymentFilter = createFilterBar("paymentFilterContainer", {
+        onFilter: loadPayments,
+        statusOptions: statusOpts.slice(1),
+        entities: suppliers,
+        useEntitySelect: true,
+        entityPlaceholder: "Semua Supplier",
+      });
+    }
 
-      function parseNum(s) {
-        return parseFloat(String(s).replace(/\./g, "").replace(",", ".")) || 0;
-      }
-      async function showDetail(id) {
-        try {
-          const p = await api("GET", `/purchases/${id}`);
-          document.getElementById("mDetailBody").innerHTML =
-            `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+    function parseNum(s) {
+      return parseFloat(String(s).replace(/\./g, "").replace(",", ".")) || 0;
+    }
+    async function showDetail(id) {
+      try {
+        const p = await api("GET", `/purchases/${id}`);
+        document.getElementById("mDetailBody").innerHTML =
+          `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
             <div><div style="font-size:13px;color:var(--text-muted)">Tanggal</div><div style="font-weight:700">${fmtDate(p.date)}</div></div>
             <div><div style="font-size:13px;color:var(--text-muted)">Supplier</div><div style="font-weight:700">${p.supplier?.name || "-"}</div></div>
             <div><div style="font-size:13px;color:var(--text-muted)">Status</div>${sb(p.status, p)}</div>
@@ -875,21 +818,21 @@
           <table class="tbl" style="margin-bottom:16px">
             <thead><tr><th>Barang</th><th style="text-align:center">Qty</th><th style="text-align:right">Harga Beli</th><th style="text-align:center">Margin</th><th style="text-align:right">Harga Jual</th><th style="text-align:center">Diskon</th><th style="text-align:right">Total</th></tr></thead>
             <tbody>${(p.items || [])
-              .map((i) => {
-                const sellPrice = i.item?.sell_price || 0;
-                const hb = i.buy_price || 0;
-                const d1 = i.disc1 || 0;
-                const d2 = i.disc2 || 0;
-                const discText =
-                  d2 > 0 ? `${d1}% + ${d2}%` : d1 > 0 ? `${d1}%` : "-";
+            .map((i) => {
+              const sellPrice = i.item?.sell_price || 0;
+              const hb = i.buy_price || 0;
+              const d1 = i.disc1 || 0;
+              const d2 = i.disc2 || 0;
+              const discText =
+                d2 > 0 ? `${d1}% + ${d2}%` : d1 > 0 ? `${d1}%` : "-";
 
-                const hargaNeto = hb * (1 - d1 / 100) * (1 - d2 / 100);
-                const margin =
-                  hargaNeto > 0
-                    ? (((sellPrice - hargaNeto) / hargaNeto) * 100).toFixed(1)
-                    : 0;
+              const hargaNeto = hb * (1 - d1 / 100) * (1 - d2 / 100);
+              const margin =
+                hargaNeto > 0
+                  ? (((sellPrice - hargaNeto) / hargaNeto) * 100).toFixed(1)
+                  : 0;
 
-                return `<tr>
+              return `<tr>
                     <td>${i.item?.name || "-"}</td>
                     <td style="text-align:center">${i.qty}</td>
                     <td style="text-align:right">${fmtRp(hb)}</td>
@@ -898,8 +841,8 @@
                     <td style="text-align:center; color:var(--danger)">${discText}</td>
                     <td style="text-align:right;font-weight:700">${fmtRp(i.total)}</td>
                 </tr>`;
-              })
-              .join("")}</tbody>
+            })
+            .join("")}</tbody>
           </table>
           <div style="background:var(--bg-color);border-radius:12px;padding:16px">
             <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span>Subtotal</span><span>${fmtRp(p.subtotal)}</span></div>
@@ -911,77 +854,77 @@
             <button onclick="exportPurchasePDF(${p.id})" class="btn" style="background:var(--primary); color:white; border:none">📄 Export PDF</button>
             <button onclick="hapus(${p.id})" class="btn btn-danger">🗑 Batalkan</button>
           </div>`;
-          openModal("mDetail");
-        } catch (ex) {
-          showToast(ex.message, "error");
+        openModal("mDetail");
+      } catch (ex) {
+        showToast(ex.message, "error");
+      }
+    }
+
+    // --- LOGIKA VALIDASI MISMATCH & PEMBAYARAN CERDAS ---
+
+    async function startPaymentProcess(id) {
+      try {
+        showLoading("Mengecek data...");
+        const p = await api("GET", `/purchases/${id}`);
+        hideLoading();
+
+        const mismatchUnder = p.items.filter(
+          (it) => (it.qty_ordered || it.qty) > (it.qty_received || it.qty),
+        );
+        const mismatchOver = p.items.filter(
+          (it) => (it.qty_received || it.qty) > (it.qty_ordered || it.qty),
+        );
+
+        pendingPaymentData = p;
+
+        if (mismatchUnder.length > 0 || mismatchOver.length > 0) {
+          console.log("Mismatch detected:", {
+            under: mismatchUnder,
+            over: mismatchOver,
+          });
+          buildMismatchSummary(mismatchUnder, mismatchOver, p.supplier?.name);
+          openModal("mMismatch");
+        } else {
+          apModal.open({
+            id: p.id,
+            total: p.total,
+            paid: p.paid,
+            name: p.supplier?.name || "-",
+          });
         }
+      } catch (ex) {
+        hideLoading();
+        showToast(ex.message, "error");
+      }
+    }
+
+    function buildMismatchSummary(under, over, supplierName) {
+      const hasUnder = under.length > 0;
+      const hasOver = over.length > 0;
+
+      let title = "⚠️ Mismatch Barang Ditemukan";
+      let titleColor = "var(--danger)";
+      let msg = `Ditemukan ketidaksesuaian jumlah barang untuk supplier <b>${supplierName || "-"}</b>.`;
+
+      if (hasOver && !hasUnder) {
+        title = "📦 Barang Diterima Berlebih";
+        titleColor = "var(--primary)";
+        msg =
+          "Barang yang diterima <b>lebih banyak</b> dari pesanan awal. Stok akan bertambah sesuai jumlah yang diterima. Anda yakin?";
       }
 
-      // --- LOGIKA VALIDASI MISMATCH & PEMBAYARAN CERDAS ---
+      document.querySelector("#mMismatch h2").textContent = title;
+      document.querySelector("#mMismatch h2").style.color = titleColor;
 
-      async function startPaymentProcess(id) {
-        try {
-          showLoading("Mengecek data...");
-          const p = await api("GET", `/purchases/${id}`);
-          hideLoading();
+      let html = `<p style="font-size: 14px; color: var(--text-muted); margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">${msg}</p>`;
 
-          const mismatchUnder = p.items.filter(
-            (it) => (it.qty_ordered || it.qty) > (it.qty_received || it.qty),
-          );
-          const mismatchOver = p.items.filter(
-            (it) => (it.qty_received || it.qty) > (it.qty_ordered || it.qty),
-          );
+      // Perbaikan Tabel untuk Dark Mode
+      const tableStyle = `style="font-size: 13px; width: 100%; border-collapse: collapse; border: 1px solid var(--border-color);"`;
+      const thStyle = `style="background: var(--border-color); color: var(--text-main); padding: 8px; text-align: left;"`;
+      const tdStyle = `style="padding: 8px; border-bottom: 1px solid var(--border-color); color: var(--text-main);"`;
 
-          pendingPaymentData = p;
-
-          if (mismatchUnder.length > 0 || mismatchOver.length > 0) {
-            console.log("Mismatch detected:", {
-              under: mismatchUnder,
-              over: mismatchOver,
-            });
-            buildMismatchSummary(mismatchUnder, mismatchOver, p.supplier?.name);
-            openModal("mMismatch");
-          } else {
-            apModal.open({
-              id: p.id,
-              total: p.total,
-              paid: p.paid,
-              name: p.supplier?.name || "-",
-            });
-          }
-        } catch (ex) {
-          hideLoading();
-          showToast(ex.message, "error");
-        }
-      }
-
-      function buildMismatchSummary(under, over, supplierName) {
-        const hasUnder = under.length > 0;
-        const hasOver = over.length > 0;
-
-        let title = "⚠️ Mismatch Barang Ditemukan";
-        let titleColor = "var(--danger)";
-        let msg = `Ditemukan ketidaksesuaian jumlah barang untuk supplier <b>${supplierName || "-"}</b>.`;
-
-        if (hasOver && !hasUnder) {
-          title = "📦 Barang Diterima Berlebih";
-          titleColor = "var(--primary)";
-          msg =
-            "Barang yang diterima <b>lebih banyak</b> dari pesanan awal. Stok akan bertambah sesuai jumlah yang diterima. Anda yakin?";
-        }
-
-        document.querySelector("#mMismatch h2").textContent = title;
-        document.querySelector("#mMismatch h2").style.color = titleColor;
-
-        let html = `<p style="font-size: 14px; color: var(--text-muted); margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">${msg}</p>`;
-
-        // Perbaikan Tabel untuk Dark Mode
-        const tableStyle = `style="font-size: 13px; width: 100%; border-collapse: collapse; border: 1px solid var(--border-color);"`;
-        const thStyle = `style="background: var(--border-color); color: var(--text-main); padding: 8px; text-align: left;"`;
-        const tdStyle = `style="padding: 8px; border-bottom: 1px solid var(--border-color); color: var(--text-main);"`;
-
-        if (hasOver) {
-          html += `<div style="color:var(--success); font-weight:700; margin-bottom:6px; font-size:12px">BARANG LEBIH (STOK AKAN BERTAMBAH):</div>
+      if (hasOver) {
+        html += `<div style="color:var(--success); font-weight:700; margin-bottom:6px; font-size:12px">BARANG LEBIH (STOK AKAN BERTAMBAH):</div>
             <div class="tbl-wrap" style="max-height: 150px; overflow-y: auto; margin-bottom: 16px; border-radius: 8px; overflow: hidden;">
                 <table ${tableStyle}>
                     <thead><tr style="background: var(--bg-color);"><th ${thStyle}>Barang</th><th ${thStyle} style="text-align:center">Pesan</th><th ${thStyle} style="text-align:center">Terima</th></tr></thead>
@@ -990,10 +933,10 @@
                     </tbody>
                 </table>
             </div>`;
-        }
+      }
 
-        if (hasUnder) {
-          html += `<div style="color:var(--danger); font-weight:700; margin-bottom:6px; font-size:12px">BARANG KURANG:</div>
+      if (hasUnder) {
+        html += `<div style="color:var(--danger); font-weight:700; margin-bottom:6px; font-size:12px">BARANG KURANG:</div>
             <div class="tbl-wrap" style="max-height: 150px; overflow-y: auto; margin-bottom: 16px; border-radius: 8px; overflow: hidden;">
                 <table ${tableStyle}>
                     <thead><tr style="background: var(--bg-color);"><th ${thStyle}>Barang</th><th ${thStyle} style="text-align:center">Pesan</th><th ${thStyle} style="text-align:center">Terima</th></tr></thead>
@@ -1002,187 +945,188 @@
                     </tbody>
                 </table>
             </div>`;
-        }
-
-        document.getElementById("mMismatchBody").innerHTML = html;
-
-        // Bangun Tombol Footer (Iya Yakin, Reorder, Tidak)
-        let footerHtml = ``;
-
-        if (hasUnder) {
-          footerHtml += `<button class="btn btn-primary" onclick="handleReorderToOtherSupplier()" style="width:100%">Simpan & Buat Order Baru</button>`;
-          footerHtml += `<button class="btn" onclick="handleContinuePayment()" style="width:100%; background: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-main);">Tetap Lanjutkan (Abaikan Kurang)</button>`;
-        } else if (hasOver) {
-          footerHtml += `<button class="btn btn-primary" onclick="handleContinuePayment()" style="width:100%">Iya, Saya Yakin (Catat Lebih)</button>`;
-        }
-
-        footerHtml += `<button class="btn" onclick="closeModal('mMismatch')" style="width:100%; background: transparent; border: 1px solid var(--danger); color: var(--danger);">Tidak, Cek Lagi</button>`;
-
-        document.getElementById("mMismatchFooter").innerHTML = footerHtml;
       }
 
-      async function handleContinuePayment() {
-        closeModal("mMismatch");
-        const p = pendingPaymentData;
-        if (!p) return;
+      document.getElementById("mMismatchBody").innerHTML = html;
 
-        // Jika status masih DRAFT, kita harus memfinalisasi agar stok & jurnal tercatat
+      // Bangun Tombol Footer (Iya Yakin, Reorder, Tidak)
+      let footerHtml = ``;
+
+      if (hasUnder) {
+        footerHtml += `<button class="btn btn-primary" onclick="handleReorderToOtherSupplier()" style="width:100%">Simpan & Buat Order Baru</button>`;
+        footerHtml += `<button class="btn" onclick="handleContinuePayment()" style="width:100%; background: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-main);">Tetap Lanjutkan (Abaikan Kurang)</button>`;
+      } else if (hasOver) {
+        footerHtml += `<button class="btn btn-primary" onclick="handleContinuePayment()" style="width:100%">Iya, Saya Yakin (Catat Lebih)</button>`;
+      }
+
+      footerHtml += `<button class="btn" onclick="closeModal('mMismatch')" style="width:100%; background: transparent; border: 1px solid var(--danger); color: var(--danger);">Tidak, Cek Lagi</button>`;
+
+      document.getElementById("mMismatchFooter").innerHTML = footerHtml;
+    }
+
+    async function handleContinuePayment() {
+      closeModal("mMismatch");
+      const p = pendingPaymentData;
+      if (!p) return;
+
+      // Jika status masih DRAFT, kita harus memfinalisasi agar stok & jurnal tercatat
+      if (p.status === "draft") {
+        try {
+          showLoading("Memfinalisasi pesanan...");
+          // Filter hanya item yang benar-benar diterima (qty_received > 0)
+          const itemsToSave = p.items
+            .filter((it) => (it.qty_received || it.qty) > 0)
+            .map((it) => ({
+              item_id: it.item_id,
+              qty: it.qty_received || it.qty,
+              qty_ordered: it.qty_ordered || it.qty,
+              qty_received: it.qty_received || it.qty,
+              buy_price: it.buy_price,
+            }));
+
+          const payload = {
+            date: p.date,
+            supplier_id: p.supplier_id,
+            discount: p.subtotal > 0 ? (p.discount / p.subtotal) * 100 : 0,
+            tax:
+              p.subtotal - p.discount > 0
+                ? (p.tax / (p.subtotal - p.discount)) * 100
+                : 0,
+            notes: p.notes,
+            items: itemsToSave,
+            status: "unpaid", // Ubah jadi Unpaid agar masuk ke stok
+          };
+
+          const updated = await api("PUT", `/purchases/${p.id}`, payload);
+          pendingPaymentData = updated; // Update local data with finalized version
+          hideLoading();
+        } catch (ex) {
+          hideLoading();
+          return showToast("Gagal memfinalisasi: " + ex.message, "error");
+        }
+      }
+
+      const finalP = pendingPaymentData;
+      apModal.open({
+        id: finalP.id,
+        total: finalP.total,
+        paid: finalP.paid,
+        name: finalP.supplier?.name || "-",
+      });
+    }
+
+    async function handleReorderToOtherSupplier() {
+      const p = pendingPaymentData;
+      if (!p) return;
+
+      try {
+        showLoading("Memproses reorder...");
+
+        // 1. Jika masih DRAFT, finalisasi dulu yang sekarang (hanya item yang ada)
         if (p.status === "draft") {
-          try {
-            showLoading("Memfinalisasi pesanan...");
-            // Filter hanya item yang benar-benar diterima (qty_received > 0)
-            const itemsToSave = p.items
-              .filter((it) => (it.qty_received || it.qty) > 0)
-              .map((it) => ({
-                item_id: it.item_id,
-                qty: it.qty_received || it.qty,
-                qty_ordered: it.qty_ordered || it.qty,
-                qty_received: it.qty_received || it.qty,
-                buy_price: it.buy_price,
-              }));
+          const itemsToSave = p.items
+            .filter((it) => (it.qty_received || it.qty) > 0)
+            .map((it) => ({
+              item_id: it.item_id,
+              qty: it.qty_received || it.qty,
+              qty_ordered: it.qty_ordered || it.qty,
+              qty_received: it.qty_received || it.qty,
+              buy_price: it.buy_price,
+            }));
 
-            const payload = {
-              date: p.date,
-              supplier_id: p.supplier_id,
-              discount: p.subtotal > 0 ? (p.discount / p.subtotal) * 100 : 0,
-              tax:
-                p.subtotal - p.discount > 0
-                  ? (p.tax / (p.subtotal - p.discount)) * 100
-                  : 0,
-              notes: p.notes,
-              items: itemsToSave,
-              status: "unpaid", // Ubah jadi Unpaid agar masuk ke stok
-            };
-
-            const updated = await api("PUT", `/purchases/${p.id}`, payload);
-            pendingPaymentData = updated; // Update local data with finalized version
-            hideLoading();
-          } catch (ex) {
-            hideLoading();
-            return showToast("Gagal memfinalisasi: " + ex.message, "error");
-          }
+          const payload = {
+            date: p.date,
+            supplier_id: p.supplier_id,
+            discount: p.subtotal > 0 ? (p.discount / p.subtotal) * 100 : 0,
+            tax:
+              p.subtotal - p.discount > 0
+                ? (p.tax / (p.subtotal - p.discount)) * 100
+                : 0,
+            notes: p.notes,
+            items: itemsToSave,
+            status: "unpaid",
+          };
+          await api("PUT", `/purchases/${p.id}`, payload);
         }
 
-        const finalP = pendingPaymentData;
-        apModal.open({
-          id: finalP.id,
-          total: finalP.total,
-          paid: finalP.paid,
-          name: finalP.supplier?.name || "-",
-        });
-      }
-
-      async function handleReorderToOtherSupplier() {
-        const p = pendingPaymentData;
-        if (!p) return;
-
-        try {
-          showLoading("Memproses reorder...");
-
-          // 1. Jika masih DRAFT, finalisasi dulu yang sekarang (hanya item yang ada)
-          if (p.status === "draft") {
-            const itemsToSave = p.items
-              .filter((it) => (it.qty_received || it.qty) > 0)
-              .map((it) => ({
-                item_id: it.item_id,
-                qty: it.qty_received || it.qty,
-                qty_ordered: it.qty_ordered || it.qty,
-                qty_received: it.qty_received || it.qty,
-                buy_price: it.buy_price,
-              }));
-
-            const payload = {
-              date: p.date,
-              supplier_id: p.supplier_id,
-              discount: p.subtotal > 0 ? (p.discount / p.subtotal) * 100 : 0,
-              tax:
-                p.subtotal - p.discount > 0
-                  ? (p.tax / (p.subtotal - p.discount)) * 100
-                  : 0,
-              notes: p.notes,
-              items: itemsToSave,
-              status: "unpaid",
-            };
-            await api("PUT", `/purchases/${p.id}`, payload);
-          }
-
-          // 2. Buat draft reorder di backend untuk item yang kurang
-          const newPurchase = await api(
-            "POST",
-            `/purchases/${p.id}/reorder-missing`,
-          );
-          hideLoading();
-
-          showToast("Draft pesanan baru untuk sisa barang berhasil dibuat ✓");
-          closeModal("mMismatch");
-
-          // 3. Tanya apakah mau bayar yang sekarang dulu
-          if (
-            await showConfirm(
-              "Draft pesanan baru sudah siap. Selesaikan pembayaran faktur saat ini dulu?",
-            )
-          ) {
-            // Refresh data p karena mungkin sudah difinalisasi
-            const currentP = await api("GET", `/purchases/${p.id}`);
-            apModal.open({
-              id: currentP.id,
-              total: currentP.total,
-              paid: currentP.paid,
-              name: currentP.supplier?.name || "-",
-              onSuccess: () => {
-                setTimeout(() => {
-                  location.href = `catat-pembelian.html?id=${newPurchase.id}`;
-                }, 1000);
-              },
-            });
-          } else {
-            location.href = `catat-pembelian.html?id=${newPurchase.id}`;
-          }
-        } catch (ex) {
-          hideLoading();
-          showToast(ex.message, "error");
-        }
-      }
-
-      async function hapus(id) {
-        if (
-          !(await showConfirm(
-            "Yakin ingin membatalkan pembelian ini? Stok akan dikurangi dan jurnal akan dibalik.",
-          ))
-        )
-          return;
-        try {
-          showLoading("Membatalkan...");
-          await api("POST", `/purchases/${id}/cancel`);
-          hideLoading();
-          showToast("Berhasil dibatalkan ✓");
-          closeModal("mDetail");
-          load();
-        } catch (ex) {
-          hideLoading();
-          showToast(ex.message, "error");
-        }
-      }
-
-      (async () => {
-        await initFilters();
-        // Jika kembali dari detail_item.html, pulihkan form pembelian dari draft.
-        const kembaliDariDetail = sessionStorage.getItem(
-          "purchase_form_return",
+        // 2. Buat draft reorder di backend untuk item yang kurang
+        const newPurchase = await api(
+          "POST",
+          `/purchases/${p.id}/reorder-missing`,
         );
-        const draftRaw = sessionStorage.getItem("purchase_form_draft");
-        if (kembaliDariDetail && draftRaw) {
-          sessionStorage.removeItem("purchase_form_return");
-          sessionStorage.removeItem("purchase_form_draft");
-          try {
-            await restoreFormFromDraft(JSON.parse(draftRaw));
-            return;
-          } catch (e) {
-            console.error("Gagal memulihkan form:", e);
-          }
+        hideLoading();
+
+        showToast("Draft pesanan baru untuk sisa barang berhasil dibuat ✓");
+        closeModal("mMismatch");
+
+        // 3. Tanya apakah mau bayar yang sekarang dulu
+        if (
+          await showConfirm(
+            "Draft pesanan baru sudah siap. Selesaikan pembayaran faktur saat ini dulu?",
+          )
+        ) {
+          // Refresh data p karena mungkin sudah difinalisasi
+          const currentP = await api("GET", `/purchases/${p.id}`);
+          apModal.open({
+            id: currentP.id,
+            total: currentP.total,
+            paid: currentP.paid,
+            name: currentP.supplier?.name || "-",
+            onSuccess: () => {
+              setTimeout(() => {
+                location.href = `catat-pembelian.html?id=${newPurchase.id}`;
+              }, 1000);
+            },
+          });
+        } else {
+          location.href = `catat-pembelian.html?id=${newPurchase.id}`;
         }
+      } catch (ex) {
+        hideLoading();
+        showToast(ex.message, "error");
+      }
+    }
+
+    async function hapus(id) {
+      if (
+        !(await showConfirm(
+          "Yakin ingin membatalkan pembelian ini? Stok akan dikurangi dan jurnal akan dibalik.",
+        ))
+      )
+        return;
+      try {
+        showLoading("Membatalkan...");
+        await api("POST", `/purchases/${id}/cancel`);
+        hideLoading();
+        showToast("Berhasil dibatalkan ✓");
+        closeModal("mDetail");
         load();
-      })();
-    </script>
-  </body>
+      } catch (ex) {
+        hideLoading();
+        showToast(ex.message, "error");
+      }
+    }
+
+    (async () => {
+      await initFilters();
+      // Jika kembali dari detail_item.html, pulihkan form pembelian dari draft.
+      const kembaliDariDetail = sessionStorage.getItem(
+        "purchase_form_return",
+      );
+      const draftRaw = sessionStorage.getItem("purchase_form_draft");
+      if (kembaliDariDetail && draftRaw) {
+        sessionStorage.removeItem("purchase_form_return");
+        sessionStorage.removeItem("purchase_form_draft");
+        try {
+          await restoreFormFromDraft(JSON.parse(draftRaw));
+          return;
+        } catch (e) {
+          console.error("Gagal memulihkan form:", e);
+        }
+      }
+      load();
+    })();
+  </script>
+</body>
+
 </html>

@@ -386,9 +386,11 @@ def create_sale_return_journal(db: Session, *, date_val: date, number_ref: str,
         {"code": ACCOUNT_COGS, "debit": 0, "credit": total_cogs}
     ]
     
-    if total_tax > 0 and not is_tax_included:
+    if total_tax > 0:
         # PPN Keluaran yang dipungut saat jual ikut dibalik → kurangi Hutang PPN (2-1200),
-        # KONSISTEN dgn jurnal penjualan yang meng-kredit 2-1200 (bukan beban 5-2000).
+        # KONSISTEN dgn jurnal penjualan yang meng-kredit 2-1200. Berlaku untuk penjualan
+        # INKLUSIF (PKP: PPN dikupas mundur dari harga jual oleh pemanggil) MAUPUN eksklusif
+        # (PPN ditambah di atas). `is_tax_included` tak lagi menentukan — yang penting ada PPN.
         entries.append({"code": ACCOUNT_PPN_KELUARAN, "debit": total_tax, "credit": 0})
 
     return _auto_journal(

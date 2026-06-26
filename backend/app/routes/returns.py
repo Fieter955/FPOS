@@ -280,8 +280,8 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
     # gagal di tengah jalan dan meninggalkan stok berpindah tanpa pencatatan GL.
     from .accounting import pastikan_akun_ada
     _akun_wajib = ["2-1300", "4-1200", "1-1400", "5-1100"]
-    if not is_tax_included:
-        _akun_wajib.append("2-1200")  # PPN Keluaran dibalik ke Hutang PPN (konsisten dgn jurnal jual)
+    if tax_percent and tax_percent > 0:
+        _akun_wajib.append("2-1200")  # PPN Keluaran dibalik ke Hutang PPN (inklusif & eksklusif)
     pastikan_akun_ada(db, _akun_wajib)
 
     retur = models.SaleReturn(
@@ -320,12 +320,22 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
         input_price = it.get("price")
         actual_price = input_price if input_price is not None else sale_item.sell_price
 
-        line_sales = it["qty"] * actual_price
+        gross_line = it["qty"] * actual_price
+        # Pisahkan PPN agar KONSISTEN dgn jurnal JUAL: 4-1200 (Retur Penjualan) menerima nilai
+        # EX-PPN & 2-1200 (PPN Keluaran) ikut dibalik. Inklusif → kupas PPN MUNDUR (mirror
+        # hitung_total_penjualan di sales.py); eksklusif → PPN ditambah di atas. Tarif 0 /
+        # non-PKP → line_sales = gross & line_tax = 0 (identik perilaku lama, nol regresi).
+        if tax_percent and tax_percent > 0:
+            if is_tax_included:
+                line_sales = gross_line / (1 + tax_percent / 100)
+                line_tax = gross_line - line_sales
+            else:
+                line_sales = gross_line
+                line_tax = gross_line * (tax_percent / 100)
+        else:
+            line_sales = gross_line
+            line_tax = 0.0
         total_sales += line_sales
-        
-        line_tax = 0.0
-        if not is_tax_included:
-            line_tax = line_sales * (tax_percent / 100)
         total_tax += line_tax
         
         # COGS yang dibalik dihitung di bawah (blok "Kembalikan stok"): dari biaya lapisan FIFO
@@ -439,7 +449,9 @@ def get_purchase_returns(skip: int = 0, limit: int = 100,
             "purchase_id": r.purchase_id,
             "purchase_number": purchase.number if purchase else "-",
             "supplier_name": purchase.supplier.name if purchase and purchase.supplier else "-",
-            "total": r.total, "reason": r.reason, "notes": r.notes,
+            "total": r.total,
+            "total_carrying": r.total_carrying, "selisih": r.selisih,
+            "reason": r.reason, "notes": r.notes,
             "items": items_out
         })
     return result
@@ -564,7 +576,19 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
 
     total = total_inventory + total_tax
     retur.total = total
-    
+    # Keterlacakan selisih retur (untung+/rugi−) — sejajar dgn variance jurnal di
+    # journal_service.create_purchase_return_journal: mode gudang/FIFO pakai modal NYATA yang
+    # keluar; mode PKP (ppn_dipisah) hitung selisih pada nilai NET; tanpa gudang → tak ada selisih.
+    if gudang_aktif:
+        retur.total_carrying = total_carrying
+        if getattr(purchase, "ppn_dipisah", False) and total_tax > 0.005:
+            retur.selisih = total_inventory - total_carrying
+        else:
+            retur.selisih = (total_inventory + total_tax) - total_carrying
+    else:
+        retur.total_carrying = total_inventory  # tanpa lapisan FIFO: modal = nilai refund
+        retur.selisih = 0.0
+
     # Update Supplier Deposit Balance
     if purchase.supplier_id:
         supp = db.query(models.Supplier).with_for_update().get(purchase.supplier_id)
@@ -592,7 +616,12 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
 
     write_audit(db, current_user.id, "CREATE", "purchase_returns", retur.id, f"Retur {purchase.number}")
     db.commit()
-    return {"id": retur.id, "number": retur.number, "total": total, "message": "Retur pembelian berhasil"}
+    return {
+        "id": retur.id, "number": retur.number, "total": total,
+        "total_carrying": round(retur.total_carrying or 0, 2),
+        "selisih": round(retur.selisih or 0, 2),
+        "message": "Retur pembelian berhasil",
+    }
 
 
 # ══════════════════════════════════════════════════════════════════════════════

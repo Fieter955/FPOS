@@ -377,6 +377,8 @@ class PurchaseReturn(Base):
     tax_percent = Column(Float, default=0)
     is_tax_included = Column(Boolean, default=True)
     total = Column(Float, default=0)
+    total_carrying = Column(Float, default=0)  # modal FIFO NYATA barang yang keluar (untuk keterlacakan selisih)
+    selisih = Column(Float, default=0)         # untung(+)/rugi(-) retur = refund − modal nyata
     reason = Column(String(200))
     notes = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

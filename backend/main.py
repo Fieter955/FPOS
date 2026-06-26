@@ -166,6 +166,8 @@ def run_migrations():
     add_col("branches", "is_pkp", "INTEGER DEFAULT 0")
     add_col("branches", "tarif_ppn", "REAL DEFAULT 11")
     add_col("purchases", "ppn_dipisah", "INTEGER DEFAULT 0")
+    add_col("purchase_returns", "total_carrying", "REAL DEFAULT 0")
+    add_col("purchase_returns", "selisih", "REAL DEFAULT 0")
 
     # ─── Index performa (idempotent; aman dijalankan berulang) ─────────────────
     # SQLite TIDAK meng-index foreign key otomatis → tanpa ini, filter/join jadi
