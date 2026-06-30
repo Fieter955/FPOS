@@ -291,6 +291,7 @@ def create_purchase(
         purchase = models.Purchase(
             number=number,
             date=tanggal,
+            due_date=data.due_date,
             branch_id=current_user.active_branch_id,
             created_at=get_local_datetime(),
             supplier_id=data.supplier_id,

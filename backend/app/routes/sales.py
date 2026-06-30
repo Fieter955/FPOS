@@ -58,6 +58,38 @@ def hitung_total_penjualan(gross_subtotal: float, disc_persen: float, tarif_pers
     return {"subtotal": subtotal, "discount": diskon, "tax": pajak, "total": total}
 
 
+def hitung_total_penjualan_per_baris(baris: list, disc_persen: float, termasuk_ppn: bool) -> dict:
+    """Versi PER-BARIS dari hitung_total_penjualan: tiap baris boleh punya tarif PPN sendiri
+    (mis. barang kena PPN 11% dicampur barang non-PPN 0%). `baris` = list of {"gross","tarif"} di
+    mana gross = sell_price*(1-disc/100)*qty. Diskon header (disc_persen) disebar proporsional.
+    Hasil identik dengan hitung_total_penjualan bila semua baris bertarif sama (nol regresi)."""
+    disc_ratio = (disc_persen or 0) / 100
+    subtotal = diskon = pajak = total = 0.0
+    for b in baris:
+        g = float(b.get("gross") or 0)
+        tarif = float(b.get("tarif") or 0)
+        dg = g * disc_ratio
+        if tarif > 0:
+            f = 1 + tarif / 100
+            if termasuk_ppn:
+                after = g - dg                # yang benar-benar dibayar pelanggan utk baris ini
+                subtotal += g / f
+                diskon   += dg / f
+                pajak    += after - after / f
+                total    += after
+            else:
+                subtotal += g
+                diskon   += dg
+                p = (g - dg) * (tarif / 100)
+                pajak    += p
+                total    += g - dg + p
+        else:
+            subtotal += g
+            diskon   += dg
+            total    += g - dg
+    return {"subtotal": subtotal, "discount": diskon, "tax": pajak, "total": total}
+
+
 def _is_admin_user(user: models.User) -> bool:
     return (user.role or "") == "admin"
 
@@ -203,18 +235,38 @@ def create_sale(
     # ── Kalkulasi Header ──────────────────────────────────────────────────────
     number      = data.number or _next_number(db, current_user)
     gross_subtotal = sum((it.sell_price * (1 - it.discount / 100)) * it.qty for it in data.items)
-    # PPN penjualan: bila tarif (data.tax) > 0 & is_tax_included → harga dianggap SUDAH termasuk
-    # PPN (dikupas mundur). Bila tarif 0 (default/non-PKP) → hasil identik perilaku lama.
-    _t = hitung_total_penjualan(
-        gross_subtotal,
-        data.discount or 0,
-        data.tax or 0,
-        data.is_tax_included if data.is_tax_included is not None else True,
-    )
+    is_inc = data.is_tax_included if data.is_tax_included is not None else True
+    # Tarif PPN efektif TIAP BARIS (PKP). Urutan sumber tarif:
+    #   tarif yang dikirim baris → tarif barang (Item.ppn_percent) → tarif transaksi (data.tax).
+    # data.tax<=0 (non-PKP / struk biasa) → semua 0 → hasil identik perilaku lama (nol regresi).
+    line_rates = []
+    if (data.tax or 0) > 0:
+        _ids = [it.item_id for it in data.items]
+        _rows = db.query(models.Item.id, models.Item.ppn_percent).filter(models.Item.id.in_(_ids)).all()
+        _ppn_map = {rid: rppn for (rid, rppn) in _rows}
+        for it in data.items:
+            if it.ppn_percent is not None:
+                line_rates.append(float(it.ppn_percent))
+            else:
+                mp = _ppn_map.get(it.item_id)
+                line_rates.append(float(mp) if mp is not None else float(data.tax or 0))
+    else:
+        line_rates = [0.0 for _ in data.items]
+
+    # PPN penjualan dihitung PER BARIS (harga jual dianggap SUDAH termasuk PPN saat termasuk_ppn),
+    # lalu dijumlah → subtotal/discount/tax/total. Konsisten dengan jurnal (4-1100/4-1150/2-1200).
+    _baris = [
+        {"gross": (it.sell_price * (1 - it.discount / 100)) * it.qty, "tarif": line_rates[idx]}
+        for idx, it in enumerate(data.items)
+    ]
+    _t = hitung_total_penjualan_per_baris(_baris, data.discount or 0, is_inc)
     subtotal    = _t["subtotal"]
     disc_amount = _t["discount"]
     tax_amount  = _t["tax"]
     total       = _t["total"]
+    # tax_percent header (tampilan/struk): satu nilai bila semua baris bertarif sama, else 0
+    # (struk menampilkan "Termasuk PPN" tanpa persen saat tarif campur).
+    eff_tax_percent = line_rates[0] if (line_rates and len(set(line_rates)) == 1) else 0
     change      = max(0, data.paid - total)
     status      = "paid" if data.paid >= total else ("partial" if data.paid > 0 else "unpaid")
 
@@ -246,7 +298,7 @@ def create_sale(
         subtotal=subtotal,
         discount=disc_amount,
         tax=tax_amount,
-        tax_percent=data.tax_percent or 0,
+        tax_percent=eff_tax_percent,
         is_tax_included=data.is_tax_included if data.is_tax_included is not None else True,
         total=total,
         paid=data.paid,
@@ -267,7 +319,7 @@ def create_sale(
     total_hpp = 0.0
 
     # ── Loop Item ─────────────────────────────────────────────────────────────
-    for it in data.items:
+    for idx, it in enumerate(data.items):
         item = db.query(models.Item).with_for_update().get(it.item_id)
         if not item:
             raise HTTPException(404, f"Item {it.item_id} tidak ditemukan")
@@ -313,6 +365,7 @@ def create_sale(
             buy_price=current_buy_price,
             sell_price=it.sell_price,
             discount=it.discount,
+            ppn_percent=line_rates[idx],   # tarif PPN baris ini → dipakai saat retur per-baris
             total=line_total
         )
         db.add(sale_item)

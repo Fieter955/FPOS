@@ -158,14 +158,19 @@ def run_migrations():
     add_col("purchases", "target_branch_id", "INTEGER")
     add_col("purchase_items", "qty_ordered", "FLOAT DEFAULT 0")
     add_col("purchase_items", "qty_received", "FLOAT DEFAULT 0")
+    add_col("purchase_items", "ppn_percent", "REAL")  # tarif PPN per-baris beli; NULL → ikut tarif barang/toko (Included/PKP)
     add_col("shifts", "branch_id", "INTEGER DEFAULT 1")
     add_col("warehouses", "branch_id", "INTEGER DEFAULT 1")
     add_col("print_jobs", "content_type", "TEXT DEFAULT 'text'")
     add_col("item_supplier", "ppn_type", "TEXT DEFAULT 'included'")
     add_col("item_supplier", "ppn_percent", "REAL DEFAULT 0")
+    add_col("items", "ppn_percent", "REAL")               # tarif PPN per-barang; NULL → ikut tarif toko (data lama tak berubah)
+    add_col("sale_items", "ppn_percent", "REAL DEFAULT 0")  # tarif PPN baris penjualan → untuk balik PPN per-baris saat retur
+    add_col("suppliers", "ppn_type", "TEXT")
     add_col("branches", "is_pkp", "INTEGER DEFAULT 0")
     add_col("branches", "tarif_ppn", "REAL DEFAULT 11")
     add_col("purchases", "ppn_dipisah", "INTEGER DEFAULT 0")
+    add_col("purchases", "due_date", "DATE")  # tanggal jatuh tempo pembayaran (data lama tetap NULL)
     add_col("purchase_returns", "total_carrying", "REAL DEFAULT 0")
     add_col("purchase_returns", "selisih", "REAL DEFAULT 0")
 
@@ -576,12 +581,16 @@ if FRONTEND_DIR.exists():
     if (FRONTEND_DIR / "css").exists():
         app.mount("/css", CachedStaticFiles(directory=str(FRONTEND_DIR / "css"), max_age=_ASSET_MAX_AGE, immutable=_ASSET_IMMUTABLE), name="css")
 
+    # Halaman HTML harus selalu divalidasi ulang ke server (ETag tetap → 304 bila tak berubah),
+    # supaya hasil edit frontend tidak tertutup cache lama webview/browser.
+    _HTML_NO_CACHE = {"Cache-Control": "no-cache"}
+
     @app.get("/")
     async def root():
-        return FileResponse(str(FRONTEND_DIR / "index.html"))
+        return FileResponse(str(FRONTEND_DIR / "index.html"), headers=_HTML_NO_CACHE)
 
     HTML_PAGES = [
-        "index", "dashboard", "pos", "sales", "returns",
+        "index", "dashboard", "pos", "pos_2", "sales", "returns",
         "customers", "suppliers", "inventory", "reports",
         "accounting", "shifts", "konsinyasi", "ai_advisor",
         "settings", "warehouse", "assembly", "discounts", "onboarding",
@@ -593,7 +602,7 @@ if FRONTEND_DIR.exists():
         if html_file.exists():
             def make_handler(p):
                 async def handler():
-                    return FileResponse(str(FRONTEND_DIR / f"{p}.html"))
+                    return FileResponse(str(FRONTEND_DIR / f"{p}.html"), headers=_HTML_NO_CACHE)
                 handler.__name__ = f"page_{p}"
                 return handler
             app.add_api_route(f"/{page}", make_handler(page), methods=["GET"])
@@ -606,7 +615,7 @@ if FRONTEND_DIR.exists():
         if html_file.exists():
             def make_item_handler(p):
                 async def handler():
-                    return FileResponse(str(FRONTEND_DIR / "item" / f"{p}.html"))
+                    return FileResponse(str(FRONTEND_DIR / "item" / f"{p}.html"), headers=_HTML_NO_CACHE)
                 handler.__name__ = f"page_item_{p}"
                 return handler
             app.add_api_route(f"/item/{page}", make_item_handler(page), methods=["GET"])
@@ -619,7 +628,7 @@ if FRONTEND_DIR.exists():
         if html_file.exists():
             def make_purchase_handler(p):
                 async def handler():
-                    return FileResponse(str(FRONTEND_DIR / "purchase" / f"{p}.html"))
+                    return FileResponse(str(FRONTEND_DIR / "purchase" / f"{p}.html"), headers=_HTML_NO_CACHE)
                 handler.__name__ = f"page_purchase_{p}"
                 return handler
             app.add_api_route(f"/purchase/{page}", make_purchase_handler(page), methods=["GET"])
@@ -635,7 +644,7 @@ if FRONTEND_DIR.exists():
         if html_file.exists():
             def make_supplier_handler(p):
                 async def handler():
-                    return FileResponse(str(FRONTEND_DIR / "supplier" / f"{p}.html"))
+                    return FileResponse(str(FRONTEND_DIR / "supplier" / f"{p}.html"), headers=_HTML_NO_CACHE)
                 handler.__name__ = f"page_supplier_{p}"
                 return handler
             app.add_api_route(f"/supplier/{page}", make_supplier_handler(page), methods=["GET"])

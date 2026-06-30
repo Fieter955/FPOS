@@ -1407,8 +1407,12 @@
 
         // Mode PKP harga-include: harga jual masih mengandung PPN, sedangkan modal (hpp)
         // sudah BERSIH PPN → naikkan lantai sebesar PPN agar perbandingan adil (harga
-        // label vs modal+PPN). PKP mati / tarif 0 → faktor 1 (perilaku lama, nol berubah).
-        const pkpFactor = PKP.is_pkp && PKP.tarif > 0 ? 1 + PKP.tarif / 100 : 1;
+        // label vs modal+PPN). Tarif PER BARANG (item.ppn_percent), fallback tarif toko.
+        // PKP mati / tarif 0 (barang non-PPN) → faktor 1 (perilaku lama, nol berubah).
+        const tarifItem = PKP.is_pkp
+          ? (item.ppn_percent != null ? item.ppn_percent : PKP.tarif) || 0
+          : 0;
+        const pkpFactor = tarifItem > 0 ? 1 + tarifItem / 100 : 1;
         const hppFloor = hpp * pkpFactor;
 
         if (hpp <= 0) return Math.round(discountedPrice); // HPP tak diketahui
@@ -1592,6 +1596,7 @@
             qty: roundQty(qty),
             stock: availableQty,
             supplier_id: pendingSupplierId, // 🔥 Simpan ID Supplier jika dari barcode khusus
+            ppn_percent: item.ppn_percent, // tarif PPN barang (null = ikut tarif toko)
           });
         }
         notifyGroupPriceBlocked();
@@ -1750,13 +1755,30 @@
         document.getElementById("subtotalEl").textContent = fmtRp(sub);
         document.getElementById("totalEl").textContent = fmtRp(sub);
         // Mode PKP: harga sudah termasuk PPN → tampilkan porsi PPN (info), total TIDAK berubah.
+        // PPN dihitung PER BARIS pakai tarif barang (c.ppn_percent), fallback tarif toko.
         const ppnRow = document.getElementById("ppnRow");
         const taxEl = document.getElementById("taxPct");
-        if (PKP.is_pkp && PKP.tarif > 0) {
-          const ppn = sub - sub / (1 + PKP.tarif / 100);
-          document.getElementById("ppnLabel").textContent = `Termasuk PPN (${PKP.tarif}%)`;
-          document.getElementById("ppnEl").textContent = fmtRp(ppn);
-          if (ppnRow) ppnRow.style.display = "";
+        if (PKP.is_pkp) {
+          let ppn = 0;
+          const tarifSet = new Set();
+          cart.forEach((c) => {
+            const r = (c.ppn_percent != null ? c.ppn_percent : PKP.tarif) || 0;
+            if (r > 0) {
+              const g = c.price * c.qty;
+              ppn += g - g / (1 + r / 100);
+              tarifSet.add(r);
+            }
+          });
+          if (ppn > 0) {
+            document.getElementById("ppnLabel").textContent =
+              tarifSet.size === 1
+                ? `Termasuk PPN (${[...tarifSet][0]}%)`
+                : "Termasuk PPN";
+            document.getElementById("ppnEl").textContent = fmtRp(ppn);
+            if (ppnRow) ppnRow.style.display = "";
+          } else {
+            if (ppnRow) ppnRow.style.display = "none";
+          }
           if (taxEl) taxEl.value = PKP.tarif;
         } else {
           if (ppnRow) ppnRow.style.display = "none";
@@ -1804,6 +1826,7 @@
               qty: c.qty,
               sell_price: c.price,
               discount: 0,
+              ppn_percent: c.ppn_percent, // tarif PPN baris (null → server pakai tarif barang/toko)
             })),
           });
           if (typeof hideLoading === "function") hideLoading();

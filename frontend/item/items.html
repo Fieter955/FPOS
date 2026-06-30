@@ -589,55 +589,79 @@
         const ppnGroup = document.getElementById("ppnPercentGroup");
         const hBeliEl = document.getElementById("fHBeli");
         const ppnInput = document.getElementById("fPpnPercent");
+        if (!(ppnSelect && ppnGroup && hBeliEl && ppnInput)) return;
 
-        if (ppnSelect && ppnGroup && hBeliEl && ppnInput) {
-          const currentPpnStatus = ppnSelect.value;
+        const currentPpnStatus = ppnSelect.value;
 
-          // 1. Update Visibility & Initial Value FIRST
-          if (currentPpnStatus === "excluded") {
-            ppnGroup.style.display = "block";
-            const contextVal =
-              document.getElementById("fSupplierContext")?.value;
-            let targetPpn = 11;
-            if (contextVal && contextVal !== "") {
-              const supplierData = allSups.find(
-                (sup) => String(sup.id) === String(contextVal),
-              );
-              if (supplierData && supplierData.PpnSupplier != null)
-                targetPpn = supplierData.PpnSupplier;
-            }
-            // Only set if current value is 0 or it's a fresh toggle to excluded
-            if (
-              parseFloat(ppnInput.value) === 0 ||
-              lastPpnStatus === "included"
-            ) {
-              ppnInput.value = targetPpn;
-            }
-          } else {
-            ppnGroup.style.display = "none";
-          }
-
-          // 2. Perform Calculation
-          const ppnPercent = parseFloat(ppnInput.value) || 0;
-          let hBeli = toAngka(hBeliEl.value);
-
-          if (lastPpnStatus === "included" && currentPpnStatus === "excluded") {
-            // Include -> Exclude: Harga beli naik
-            hBeli = Math.round(hBeli * (1 + ppnPercent / 100));
-            hBeliEl.value = toRibuan(hBeli);
-            calcMarginFromHJual();
-          } else if (
-            lastPpnStatus === "excluded" &&
-            currentPpnStatus === "included"
-          ) {
-            // Exclude -> Include: Harga beli turun
-            hBeli = Math.round(hBeli / (1 + ppnPercent / 100));
-            hBeliEl.value = toRibuan(hBeli);
-            calcMarginFromHJual();
-          }
-
-          lastPpnStatus = currentPpnStatus;
+        // Mode "none" (Tanpa PPN): barang bebas PPN → tarif tak relevan. Sembunyikan
+        // field tarif, jangan konversi harga modal, dan keluar lebih awal.
+        if (currentPpnStatus === "none") {
+          ppnGroup.style.display = "none";
+          lastPpnStatus = "none";
+          updatePpnModeHint();
+          updatePpnBreakdown();
+          return;
         }
+
+        // Tarif PPN SELALU tampil (apa pun modenya): pengguna tetap mengisi berapa persen
+        // PPN-nya, baik harga modal sudah maupun belum termasuk PPN.
+        ppnGroup.style.display = "";
+
+        // Default tarif bila kosong: ikut supplier terpilih → tarif toko → fallback 11.
+        if (!(parseFloat(ppnInput.value) > 0)) {
+          const contextVal = document.getElementById("fSupplierContext")?.value;
+          let targetPpn = PKP_ITEM.tarif > 0 ? PKP_ITEM.tarif : 11;
+          if (contextVal && contextVal !== "") {
+            const supplierData = allSups.find(
+              (sup) => String(sup.id) === String(contextVal),
+            );
+            if (supplierData && supplierData.PpnSupplier != null)
+              targetPpn = supplierData.PpnSupplier;
+          }
+          ppnInput.value = targetPpn;
+        }
+
+        // Konversi angka Harga Modal saat ganti mode agar NILAI EKONOMIS (total bayar ke
+        // supplier) TETAP. Konvensi standar — sinkron dengan grid pembelian (components.js):
+        //   included = angka SUDAH termasuk PPN (gross) · excluded = angka BELUM termasuk (net).
+        const ppnPercent = parseFloat(ppnInput.value) || 0;
+        let hBeli = toAngka(hBeliEl.value);
+        if (lastPpnStatus === "included" && currentPpnStatus === "excluded") {
+          // gross → net: kupas PPN dari dalam (angka TURUN)
+          hBeli = Math.round(hBeli / (1 + ppnPercent / 100));
+          hBeliEl.value = toRibuan(hBeli);
+          calcMarginFromHJual();
+        } else if (
+          lastPpnStatus === "excluded" &&
+          currentPpnStatus === "included"
+        ) {
+          // net → gross: lebur PPN ke dalam (angka NAIK)
+          hBeli = Math.round(hBeli * (1 + ppnPercent / 100));
+          hBeliEl.value = toRibuan(hBeli);
+          calcMarginFromHJual();
+        }
+
+        lastPpnStatus = currentPpnStatus;
+        updatePpnModeHint();
+        updatePpnBreakdown();
+      }
+
+      // Penjelasan singkat (bahasa awam) arti mode PPN yang sedang dipilih.
+      function updatePpnModeHint() {
+        const el = document.getElementById("ppnModeHint");
+        if (!el) return;
+        const mode = document.getElementById("fPpn")?.value || "included";
+        el.textContent =
+          mode === "none"
+            ? "Barang ini tidak dikenakan PPN (Non-PPN). Tidak ada PPN saat beli maupun jual."
+            : mode === "included"
+              ? "Angka Harga Modal sudah termasuk PPN (seperti di nota supplier). PPN-nya dikupas otomatis sebagai PPN Masukan."
+              : "Angka Harga Modal belum termasuk PPN. PPN ditambahkan di atasnya saat membeli (jadi PPN Masukan).";
+      }
+
+      // Saat tarif PPN diketik ulang: cukup segarkan rincian (harga modal/jual tidak diubah).
+      function onPpnPercentInput() {
+        updatePpnBreakdown();
       }
 
       function switchTab(t) {
@@ -909,39 +933,69 @@
         }
       }
 
-      // Rincian PPN + untung bersih di kolom Harga Jual. Karena harga jual saat PKP dianggap
-      // SUDAH termasuk PPN (include), PPN-nya dikupas mundur agar pemilik lihat pendapatan asli
-      // (tanpa PPN) dan untung sebenarnya — bukan tertipu "margin" label yang sebagian PPN.
+      // Rincian PPN beli & jual dalam satu panel. Tujuannya pengguna paham (1) beda "sudah" vs
+      // "belum" termasuk PPN lewat angka nyata (DPP / PPN / total), dan (2) hubungan PPN Masukan
+      // (saat beli) ↔ PPN Keluaran (saat jual) ↔ yang disetor ke negara. Harga jual dianggap
+      // SUDAH termasuk PPN (konvensi PKP) → dikupas mundur. Tampil saat tarif PPN > 0 & modal terisi.
       function updatePpnBreakdown() {
         const box = document.getElementById("ppnBreakdown");
         if (!box) return;
-        if (!PKP_ITEM.is_pkp || !(PKP_ITEM.tarif > 0)) {
-          box.style.display = "none"; // PKP mati / tarif 0 → sembunyikan
+        const t = parseFloat(document.getElementById("fPpnPercent")?.value) || 0;
+        const mode = document.getElementById("fPpn")?.value || "included";
+        const angkaBeli = toAngka(document.getElementById("fHBeli")?.value) || 0;
+        const labelJual = toAngka(document.getElementById("fHJual")?.value) || 0;
+        if (mode === "none") {
+          box.style.display = "none"; // barang bebas PPN → tak ada yang dirinci
           return;
         }
-        const tarif = PKP_ITEM.tarif;
-        const label = toAngka(document.getElementById("fHJual")?.value) || 0; // harga (incl PPN)
-        const modal = toAngka(document.getElementById("fHBeli")?.value) || 0; // modal (bersih PPN)
-        if (label <= 0) {
-          box.style.display = "none";
+        if (!(t > 0) || angkaBeli <= 0) {
+          box.style.display = "none"; // tarif 0 / belum ada modal → tak ada yang dirinci
           return;
         }
-        const bersih = label / (1 + tarif / 100); // pendapatan asli (sebelum PPN)
-        const ppn = label - bersih;
-        const untung = bersih - modal;
-        const minimal = Math.round(modal * (1 + tarif / 100)); // harga label impas
-        const rugi = untung < -0.5;
-        const baris = (kiri, kanan, gaya = "") =>
-          `<div style="display:flex;justify-content:space-between;${gaya}"><span style="color:var(--text-muted)">${kiri}</span><span>${kanan}</span></div>`;
-        box.innerHTML =
-          baris("Harga bersih (masuk kantong)", `<b>${fmtRp(Math.round(bersih))}</b>`) +
-          baris(`PPN ${tarif}% (titipan negara)`, fmtRp(Math.round(ppn))) +
-          baris("Modal barang", fmtRp(modal)) +
-          `<hr style="border:none;border-top:1px dashed var(--border-color);margin:6px 0" />` +
-          `<div style="display:flex;justify-content:space-between;font-weight:700;color:${rugi ? "#dc2626" : "#16a34a"}"><span>${rugi ? "⛔ RUGI" : "✅ Untung bersih"}</span><span>${rugi ? "−" : "+"}${fmtRp(Math.abs(Math.round(untung)))}</span></div>` +
-          (rugi
-            ? `<div style="margin-top:6px;color:#dc2626">⚠️ Di bawah harga minimal ${fmtRp(minimal)} — toko yang nanggung PPN, bukan pembeli.</div>`
-            : `<div style="margin-top:4px;color:var(--text-muted)">Harga minimal (impas): ${fmtRp(minimal)}</div>`);
+
+        // Sisi beli: pecah harga modal jadi DPP + PPN Masukan + total bayar, sesuai mode.
+        let dpp, ppnMasuk, totalBeli;
+        if (mode === "included") {
+          totalBeli = angkaBeli; // angka diketik = total (sudah termasuk PPN)
+          dpp = angkaBeli / (1 + t / 100);
+          ppnMasuk = totalBeli - dpp;
+        } else {
+          dpp = angkaBeli; // angka diketik = harga dasar (belum termasuk PPN)
+          ppnMasuk = angkaBeli * (t / 100);
+          totalBeli = dpp + ppnMasuk;
+        }
+
+        const baris = (kiri, kanan, tebal = false) =>
+          `<div style="display:flex;justify-content:space-between;${tebal ? "font-weight:700;color:var(--primary)" : ""}"><span style="color:var(--text-muted)">${kiri}</span><span>${kanan}</span></div>`;
+        const garis = `<hr style="border:none;border-top:1px dashed var(--border-color);margin:6px 0" />`;
+        const judul = (txt) =>
+          `<div style="font-weight:700;margin:2px 0 4px">${txt}</div>`;
+
+        // Tebalkan baris yang = angka diketik pengguna (DPP saat "belum", Total saat "sudah").
+        let html = judul("🧾 Saat beli (bayar ke supplier)");
+        html += baris("Harga dasar (DPP)", fmtRp(Math.round(dpp)), mode === "excluded");
+        html += baris(`PPN ${t}% (PPN Masukan)`, fmtRp(Math.round(ppnMasuk)));
+        html += baris("Total bayar ke supplier", fmtRp(Math.round(totalBeli)), mode === "included");
+
+        if (labelJual > 0) {
+          const jualBersih = labelJual / (1 + t / 100); // pendapatan asli (sebelum PPN)
+          const ppnKeluar = labelJual - jualBersih;
+          const untung = jualBersih - dpp; // bandingkan bersih vs bersih (DPP)
+          const ppnSetor = ppnKeluar - ppnMasuk;
+          const rugi = untung < -0.5;
+          const minimal = Math.round(dpp * (1 + t / 100)); // harga jual impas
+          html += garis + judul("💰 Saat jual (terima dari pembeli)");
+          html += baris("Harga bersih (masuk kantong)", fmtRp(Math.round(jualBersih)));
+          html += baris(`PPN ${t}% (PPN Keluaran)`, fmtRp(Math.round(ppnKeluar)));
+          html += `<div style="display:flex;justify-content:space-between;font-weight:700;color:${rugi ? "#dc2626" : "#16a34a"}"><span>${rugi ? "⛔ RUGI" : "✅ Untung bersih"}</span><span>${rugi ? "−" : "+"}${fmtRp(Math.abs(Math.round(untung)))}</span></div>`;
+          html += garis;
+          html += baris("PPN disetor ke negara", fmtRp(Math.round(ppnSetor)), true);
+          html += `<div style="margin-top:2px;color:var(--text-muted)">= PPN saat jual − PPN saat beli</div>`;
+          if (rugi)
+            html += `<div style="margin-top:6px;color:#dc2626">⚠️ Di bawah harga jual minimal ${fmtRp(minimal)} — toko yang menanggung PPN, bukan pembeli.</div>`;
+        }
+
+        box.innerHTML = html;
         box.style.display = "";
       }
 
@@ -1066,8 +1120,11 @@
         const isAuto = document.getElementById("autoBarcode").checked;
         const finalBarcode = isAuto ? "" : currentBarcode;
         const currentPpnType = document.getElementById("fPpn").value;
+        // Mode "none" (Tanpa PPN) → tarif disimpan 0 agar konsisten dengan tipe.
         const currentPpnPercent =
-          parseFloat(document.getElementById("fPpnPercent").value) || 0;
+          currentPpnType === "none"
+            ? 0
+            : parseFloat(document.getElementById("fPpnPercent").value) || 0;
         if (oldContext === "") {
           generalBuyPrice = currentHBeli;
           generalBarcode = finalBarcode;
@@ -1122,11 +1179,19 @@
         const ppnGroup = document.getElementById("ppnPercentGroup");
         const ppnInput = document.getElementById("fPpnPercent");
         if (ppnSelect) ppnSelect.value = targetPpnType;
+        // Mode "none": sembunyikan tarif (bebas PPN); selain itu tarif selalu tampil.
         if (ppnGroup)
-          ppnGroup.style.display =
-            targetPpnType === "excluded" ? "block" : "none";
-        if (ppnInput) ppnInput.value = targetPpnPercent;
+          ppnGroup.style.display = targetPpnType === "none" ? "none" : "";
+        if (ppnInput)
+          ppnInput.value =
+            parseFloat(targetPpnPercent) > 0
+              ? targetPpnPercent
+              : PKP_ITEM.tarif > 0
+                ? PKP_ITEM.tarif
+                : 11;
         lastPpnStatus = targetPpnType; // sinkronkan agar toggle PPN berikutnya benar
+        updatePpnModeHint();
+        updatePpnBreakdown();
 
         currentSupplierContext = nextSupplierId;
         sharedFieldNotified = false; // izinkan lagi notif "berlaku semua supplier"
@@ -1289,8 +1354,10 @@
         setVal("fHJualDiskon", "0");
         setVal("fStokMin", "0");
         setVal("fPpn", "included");
+        setVal("fPpnPercent", PKP_ITEM.tarif > 0 ? PKP_ITEM.tarif : 11);
         lastPpnStatus = "included";
         togglePpnPercent();
+        updatePpnModeHint();
         document.getElementById("fIsDiscountable").checked = true;
         document.getElementById("fDiscountGroupSelect").selectedIndex = 0;
         setVal("fGroupPriceInput", "");
@@ -1323,6 +1390,21 @@
               item.is_discountable;
           document.getElementById("fHBeli").value = toRibuan(item.buy_price);
           document.getElementById("fHJual").value = toRibuan(item.sell_price);
+          // Tarif PPN barang (jika tersimpan) → prefill. null = belum diset, ikut tarif toko.
+          if (item.ppn_percent != null) {
+            document.getElementById("fPpnPercent").value = item.ppn_percent;
+            generalPpnPercent = parseFloat(item.ppn_percent) || 0;
+            // ppn_percent = 0 EKSPLISIT (bukan null) → barang ditandai Tanpa PPN.
+            if (parseFloat(item.ppn_percent) === 0) {
+              document.getElementById("fPpn").value = "none";
+              generalPpnType = "none";
+              lastPpnStatus = "none";
+              const grp = document.getElementById("ppnPercentGroup");
+              if (grp) grp.style.display = "none";
+            }
+          }
+          updatePpnModeHint();
+          updatePpnBreakdown();
           generalBuyPrice = parseFloat(item.buy_price) || 0;
           generalBarcode = item.barcode || "";
           initialBuyPrice = generalBuyPrice;
@@ -1458,8 +1540,12 @@
         const lastBuyPrice = toAngka(document.getElementById("fHBeli").value);
         const lastBarcode = document.getElementById("fBarcode").value;
         const lastPpnType = document.getElementById("fPpn").value;
+        // Mode "none" (Tanpa PPN) → tarif barang dipaksa 0 (bebas PPN). Override ini
+        // mengalir ke setelan umum/supplier & ppn_percent item di payload.
         const lastPpnPercent =
-          parseFloat(document.getElementById("fPpnPercent").value) || 0;
+          lastPpnType === "none"
+            ? 0
+            : parseFloat(document.getElementById("fPpnPercent").value) || 0;
         if (lastSupplierId === "" || lastSupplierId === "UNSELECTED") {
           generalBuyPrice = lastBuyPrice;
           generalBarcode = lastBarcode;
@@ -1551,6 +1637,8 @@
           sell_price: sellPrice,
           profit_margin:
             parseFloat(document.getElementById("fMargin").value) || 0,
+          // Tarif PPN barang (satu angka, dipakai beli & jual). Sumber: field tarif PPN.
+          ppn_percent: lastPpnPercent,
           min_stock: toAngka(document.getElementById("fStokMin").value),
           description: document.getElementById("fDesk").value || null,
           is_discountable: document.getElementById("fIsDiscountable").checked,

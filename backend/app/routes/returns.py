@@ -280,7 +280,9 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
     # gagal di tengah jalan dan meninggalkan stok berpindah tanpa pencatatan GL.
     from .accounting import pastikan_akun_ada
     _akun_wajib = ["2-1300", "4-1200", "1-1400", "5-1100"]
-    if tax_percent and tax_percent > 0:
+    # Pastikan 2-1200 ada bila penjualan asli MEMUNGUT PPN — termasuk faktur tarif-campur yang
+    # tax_percent header-nya 0 tetapi ada baris ber-PPN (sale.tax > 0).
+    if (tax_percent and tax_percent > 0) or (getattr(sale, "tax", 0) or 0) > 0:
         _akun_wajib.append("2-1200")  # PPN Keluaran dibalik ke Hutang PPN (inklusif & eksklusif)
     pastikan_akun_ada(db, _akun_wajib)
 
@@ -322,16 +324,20 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
 
         gross_line = it["qty"] * actual_price
         # Pisahkan PPN agar KONSISTEN dgn jurnal JUAL: 4-1200 (Retur Penjualan) menerima nilai
-        # EX-PPN & 2-1200 (PPN Keluaran) ikut dibalik. Inklusif → kupas PPN MUNDUR (mirror
-        # hitung_total_penjualan di sales.py); eksklusif → PPN ditambah di atas. Tarif 0 /
-        # non-PKP → line_sales = gross & line_tax = 0 (identik perilaku lama, nol regresi).
-        if tax_percent and tax_percent > 0:
+        # EX-PPN & 2-1200 (PPN Keluaran) ikut dibalik. Tarif PER BARIS: utamakan tarif yang
+        # TERSIMPAN di baris penjualan (akurat utk faktur tarif-campur); penjualan LAMA (ppn baris
+        # 0) → pakai tarif header sbg cadangan. Inklusif → kupas PPN MUNDUR (mirror
+        # hitung_total_penjualan di sales.py); eksklusif → PPN di atas. Tarif 0 → tanpa PPN.
+        line_tarif = sale_item.ppn_percent
+        if not line_tarif or line_tarif <= 0:
+            line_tarif = tax_percent or 0
+        if line_tarif and line_tarif > 0:
             if is_tax_included:
-                line_sales = gross_line / (1 + tax_percent / 100)
+                line_sales = gross_line / (1 + line_tarif / 100)
                 line_tax = gross_line - line_sales
             else:
                 line_sales = gross_line
-                line_tax = gross_line * (tax_percent / 100)
+                line_tax = gross_line * (line_tarif / 100)
         else:
             line_sales = gross_line
             line_tax = 0.0
@@ -514,12 +520,23 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
         input_price = it.get("price")
         actual_price = input_price if input_price is not None else pur_item.buy_price
 
-        line_inventory = it["qty"] * actual_price
-        total_inventory += line_inventory
-        
-        line_tax = 0.0
-        if not is_tax_included:
+        line_gross = it["qty"] * actual_price
+        if is_tax_included and getattr(purchase, "ppn_dipisah", False):
+            # PKP + Included: harga retur sudah termasuk PPN → kupas mundur PER-BARIS pakai tarif
+            # saat beli (pur_item.ppn_percent; mundur ke tarif header bila kosong). total_inventory =
+            # NET, total_tax = PPN → jurnal membalik PPN Masukan (1-1550).
+            r = float(pur_item.ppn_percent) if getattr(pur_item, "ppn_percent", None) is not None else float(tax_percent or 0)
+            line_inventory = line_gross / (1 + r / 100) if r > 0 else line_gross
+            line_tax = line_gross - line_inventory
+        elif is_tax_included:
+            # non-PKP Included: PPN melebur di modal (tak dipisah) → perilaku lama, tanpa kaki pajak.
+            line_inventory = line_gross
+            line_tax = 0.0
+        else:
+            # Excluded: harga ex-PPN, PPN ditambah di atas (satu tarif header).
+            line_inventory = line_gross
             line_tax = line_inventory * (tax_percent / 100)
+        total_inventory += line_inventory
         total_tax += line_tax
 
         db.add(models.PurchaseReturnItem(

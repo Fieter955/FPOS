@@ -186,10 +186,10 @@
               </div>
               <div class="input-group">
                 <label>Jenis PPN</label>
-                <select class="input-control">
-                  <option value="None">None</option>
-                  <option value="PPN">Include</option>
-                  <option value="Non-PPN">Exclude</option>
+                <select id="sPpnType" class="input-control">
+                  <option value="">— pilih —</option>
+                  <option value="included">Include (PPN sudah termasuk harga)</option>
+                  <option value="excluded">Exclude (PPN dipisah)</option>
                 </select>
               </div>
             </div>
@@ -373,6 +373,7 @@
           email: document.getElementById("sEmail").value || null,
           address: document.getElementById("sAlamat").value || null,
           PpnSupplier: document.getElementById("PpnSupplier").value || null,
+          ppn_type: document.getElementById("sPpnType").value || null,
           credit_limit:
             parseFloat(document.getElementById("sCredit").value) || 0,
           due_date: parseInt(document.getElementById("sDueDate").value) || 0,

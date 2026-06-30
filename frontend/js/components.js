@@ -543,6 +543,9 @@ function createPurchaseGrid(container, config = {}) {
             sell_price: hj,
             profit_margin: margin,
             total: (showSupplierColumn ? qOrd : qRec) * hargaNeto,
+            // Tarif PPN baris → dari master barang (grid ini tak punya kolom PPN).
+            // null aman: backend mundur ke Item.ppn_percent / tarif toko.
+            ppn_percent: row._itemData?.ppn_percent ?? null,
           });
         }
       });
@@ -582,6 +585,12 @@ function createPurchaseSummaryGrid(container, config = {}) {
     onChange = null,
     onDetail = null,
     getSupplierId = null,
+    // Tipe PPN transaksi saat ini ("include" | "exclude" | ""), dari dropdown form.
+    getTipePpn = null,
+    // Tarif PPN standar toko (angka), dipakai untuk popup "ubah ke X%".
+    getTarifStandar = null,
+    // Mode exclude: tulis persentase PPN ke field "Pajak" di ringkasan.
+    setPajakRingkasan = null,
   } = config;
 
   let currentData = [];
@@ -701,6 +710,98 @@ function createPurchaseSummaryGrid(container, config = {}) {
     }
   };
 
+  // Kosongkan satu baris (dipakai saat user menolak konversi tipe PPN → barang batal masuk).
+  const kosongkanBaris = (row) => {
+    const d = row._detail;
+    d.item_id = null;
+    d.name = "";
+    d.code = "";
+    d.buy_price = 0;
+    d.sell_price = 0;
+    d.profit_margin = 0;
+    d.discs = [0];
+    d.ppn = 0;
+    d.ppn_type = "included";
+    d.ppn_percent = 0;
+    if (row._combo) row._combo.clear();
+    if (row._isi) row._isi();
+    if (onChange) onChange();
+  };
+
+  // Validasi PPN barang yang baru dipilih terhadap setelan transaksi.
+  //  1) Tipe barang (include/exclude) harus sama dengan Tipe PPN transaksi.
+  //     Bila beda → tanya "ubah jadi <tipe transaksi>?". Tolak = barang batal masuk.
+  //  2) Persentase PPN harus sama dengan tarif standar toko.
+  //     Bila beda → tanya "ubah ke <tarif>% sesuai faktur?". Tolak = pakai apa adanya.
+  // Return true bila barang boleh masuk tabel, false bila dibatalkan.
+  const prosesPpnSaatPilih = async (row, sel) => {
+    const tipeTransaksi =
+      (typeof getTipePpn === "function" ? getTipePpn() : "") || "";
+
+    // Tipe transaksi "none" (Tanpa PPN): barang bebas PPN → tarif 0, tanpa konfirmasi.
+    if (tipeTransaksi === "none") {
+      row._detail.ppn_type = "none";
+      row._detail.ppn_percent = 0;
+      row._detail.ppn = 0;
+      return true;
+    }
+
+    let tipeBarang = sel.ppn_type === "excluded" ? "exclude" : "include";
+    let persen = sel.ppn_percent || 0;
+    const tarifStandar =
+      (typeof getTarifStandar === "function" ? getTarifStandar() : 11) || 11;
+    let perluSimpan = false;
+
+    // 1) Cek kecocokan tipe barang dengan tipe transaksi.
+    if (tipeTransaksi && tipeBarang !== tipeTransaksi) {
+      const labelBarang = tipeBarang === "include" ? "Include" : "Exclude";
+      const labelTransaksi =
+        tipeTransaksi === "include" ? "Include" : "Exclude";
+      const ya =
+        typeof showConfirm === "function"
+          ? await showConfirm(
+              `Barang "${sel.name}" untuk supplier ini tercatat PPN ${labelBarang}, padahal pembelian ini bertipe ${labelTransaksi}.\n\nUbah barang ini menjadi ${labelTransaksi}?`,
+            )
+          : true;
+      if (!ya) return false; // batal menambah barang
+      tipeBarang = tipeTransaksi;
+      perluSimpan = true;
+    }
+
+    // 2) Cek persentase PPN terhadap tarif standar toko.
+    if (persen !== tarifStandar && typeof showConfirm === "function") {
+      const ya = await showConfirm(
+        `PPN barang "${sel.name}" tercatat ${persen}%, bukan ${tarifStandar}%.\n\nUbah ke ${tarifStandar}% sesuai faktur?`,
+      );
+      if (ya) {
+        persen = tarifStandar;
+        perluSimpan = true;
+      }
+    }
+
+    // Terapkan hasil ke baris.
+    row._detail.ppn_type = tipeBarang === "exclude" ? "excluded" : "included";
+    row._detail.ppn_percent = persen;
+    row._detail.ppn = persen; // tampil di kolom (mode include); kolom tersembunyi saat exclude
+
+    // Mode exclude: kolom per-baris hilang → persentase ditulis ke ringkasan "Pajak".
+    if (tipeBarang === "exclude" && typeof setPajakRingkasan === "function") {
+      setPajakRingkasan(persen);
+    }
+
+    // Simpan konversi ke setelan supplier + sinkronkan data combo (sesi ini tak menanya lagi).
+    if (perluSimpan) {
+      simpanSupplier(row, {
+        ppn_type: row._detail.ppn_type,
+        ppn_percent: persen,
+      });
+      sel.ppn_type = row._detail.ppn_type;
+      sel.ppn_percent = persen;
+    }
+
+    return true;
+  };
+
   const addRow = (item = null) => {
     const row = document.createElement("div");
     row.className = "purchase-grid-row";
@@ -800,7 +901,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
       {
         isItem: true,
         placeholder: "Cari barang...",
-        onSelect: (sel) => {
+        onSelect: async (sel) => {
           row._detail.item_id = sel.id;
           row._detail.name = sel.name || "";
           row._detail.code = sel.code || "";
@@ -811,11 +912,13 @@ function createPurchaseSummaryGrid(container, config = {}) {
           row._detail.buy_price = sel.buy_price || 0;
           row._detail.sell_price = sel.sell_price || 0;
           row._detail.profit_margin = sel.profit_margin || 0;
-          // Tax = PPN dari setelan supplier: ambil bila "excluded", 0 bila "included".
-          row._detail.ppn_type = sel.ppn_type || "included";
-          row._detail.ppn_percent = sel.ppn_percent || 0;
-          row._detail.ppn =
-            row._detail.ppn_type === "excluded" ? row._detail.ppn_percent : 0;
+          // Validasi tipe & persentase PPN terhadap setelan transaksi.
+          // Bila user menolak konversi tipe, barang batal ditambahkan.
+          const lanjut = await prosesPpnSaatPilih(row, sel);
+          if (!lanjut) {
+            kosongkanBaris(row);
+            return;
+          }
           isi();
           if (onChange) onChange();
         },
@@ -897,11 +1000,15 @@ function createPurchaseSummaryGrid(container, config = {}) {
       simpanSupplier(row, { harga_beli: row._detail.buy_price });
     });
 
-    // ── Tax / PPN (simpan ke supplier saat blur) ──
+    // ── Kolom "PPN Included (%)" — hanya tampil saat transaksi Include.
+    //    Nilai disimpan ke setelan supplier saat blur; tipe ikut tipe transaksi.
     taxInp.addEventListener("blur", () => {
       const val = parseFloat(taxInp.value) || 0;
+      const tipeTransaksi =
+        (typeof getTipePpn === "function" ? getTipePpn() : "") || "";
       row._detail.ppn = val;
-      row._detail.ppn_type = val > 0 ? "excluded" : "included";
+      row._detail.ppn_type =
+        tipeTransaksi === "exclude" ? "excluded" : "included";
       row._detail.ppn_percent = val;
       simpanSupplier(row, {
         ppn_type: row._detail.ppn_type,
@@ -988,6 +1095,9 @@ function createPurchaseSummaryGrid(container, config = {}) {
           sell_price: d.sell_price || 0,
           profit_margin: d.profit_margin || 0,
           total: (d.qty || 0) * neto,
+          // Tarif PPN baris (kolom "PPN Include" mode Included). null → backend mundur
+          // ke Item.ppn_percent / tarif toko.
+          ppn_percent: d.ppn_percent ?? d.ppn ?? null,
         });
       });
       return data;

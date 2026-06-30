@@ -15,6 +15,31 @@
       margin: 0;
     }
 
+    /* Menyamakan tinggi combobox supplier dengan input lainnya (.input-control) */
+    #supplierCombobox .combobox-input {
+      padding: 1em 1.25em;
+      font-size: 16px;
+      font-weight: 500;
+      border: 2px solid var(--border-color);
+      border-radius: var(--radius-sm);
+    }
+
+    #supplierCombobox .combobox-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px var(--primary-light);
+    }
+
+    /* Hiding the PPN Included column when tax type is exclude */
+    body.hide-tax-col .purchase-grid-header,
+    body.hide-tax-col .purchase-grid-row {
+      grid-template-columns: 40px minmax(260px, 1fr) 130px 70px 110px 120px 170px 150px 120px !important;
+    }
+
+    body.hide-tax-col .purchase-grid-header>div:nth-child(9),
+    body.hide-tax-col .purchase-grid-row>input.pg2-tax {
+      display: none !important;
+    }
+
     input[type="number"] {
       -moz-appearance: textfield;
     }
@@ -110,6 +135,7 @@
               <tr>
                 <th>No. Faktur</th>
                 <th>Tanggal</th>
+                <th>Jatuh Tempo</th>
                 <th>Supplier</th>
                 <th>Total</th>
                 <th>Terbayar</th>
@@ -139,7 +165,7 @@
 
         <div style="
               display: grid;
-              grid-template-columns: 1fr 1fr;
+              grid-template-columns: 2fr 1fr 1fr;
               gap: 16px;
               margin-bottom: 16px;
             ">
@@ -151,118 +177,264 @@
             <label style="margin-bottom: 6px">Tanggal *</label>
             <input type="date" id="bDate" class="input-control" />
           </div>
+          <div class="input-group">
+            <label style="margin-bottom: 6px">Tipe PPN *</label>
+            <select id="bTaxType" class="input-control" onchange="handleTaxTypeChange()">
+              <option value="" disabled selected>-- Pilih --</option>
+              <option value="include">Include</option>
+              <option value="exclude">Exclude</option>
+              <option value="none">Tanpa PPN</option>
+            </select>
+          </div>
         </div>
         <!-- Removed Diskon & PPN top block, moved to summary box below -->
 
-        <div class="card" style="padding: 20px; margin-bottom: 20px">
-          <div style="
+        <!-- Tabel barang langsung bisa diisi (Tipe PPN default "Include"). -->
+        <div id="mainFormContentWrapper" style="position: relative;">
+          <div class="card" style="padding: 20px; margin-bottom: 20px">
+            <div style="
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
                 margin-bottom: 16px;
               ">
-            <h3>Daftar Barang</h3>
-            <button class="btn btn-primary" id="btnAddRow" onclick="formGrid.addRow()">
-              + Tambah Baris
-            </button>
+              <h3>Daftar Barang</h3>
+              <button class="btn btn-primary" id="btnAddRow" onclick="formGrid.addRow()">
+                + Tambah Baris
+              </button>
+            </div>
+            <div id="formGridContainer"></div>
           </div>
-          <div id="formGridContainer"></div>
-        </div>
 
-        <!-- SUMMARY BOX (iPOS 5 style) -->
-        <div class="summary-box-container" style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-bottom: 16px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);">
-          <div style="display: flex; flex-wrap: wrap; gap: 24px; font-size: 12px; font-weight: 500; color: #334155;">
-            <!-- Kiri -->
-            <div style="flex: 1; min-width: 320px; display: grid; grid-template-columns: 90px 70px 1fr 30px; gap: 6px; align-items: center;">
-              
-              <div style="text-align: right;">Sub Total :</div>
-              <input type="text" id="sumQty" readonly class="input-control" style="text-align: right; background: #f1f5f9; height: 24px; padding: 0 6px;" value="0,00" />
-              <input type="text" id="sumSubTotal" readonly class="input-control" style="text-align: right; background: #f1f5f9; height: 24px; padding: 0 6px;" value="0,00" />
-              <div></div>
+          <!-- SUMMARY BOX (Aesthetic Modern Style) -->
+          <div class="summary-box-container card"
+            style="padding: 24px; margin-bottom: 24px; border: 1px solid var(--border-color); background: var(--card-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);">
+            <div style="display: flex; flex-wrap: wrap; gap: 32px; font-size: 14px; color: var(--text-main);">
 
-              <div style="text-align: right; display: flex; justify-content: flex-end; align-items: center; gap: 4px;">Potongan : <span style="font-size: 10px;">(%)</span></div>
-              <input type="number" id="bDisc" class="input-control" style="text-align: right; height: 24px; padding: 0 6px;" value="0" oninput="hitungGrandTotal()" />
-              <input type="text" id="bDiscAmt" readonly class="input-control" style="text-align: right; background: #f1f5f9; height: 24px; padding: 0 6px;" value="0,00" />
-              <button class="btn-icon" style="background: #c4b5fd; border: 1px solid #a78bfa; color: white; border-radius: 4px; height: 24px; width: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✏️</button>
+              <!-- Kiri -->
+              <div style="flex: 1; min-width: 320px; display: flex; flex-direction: column; gap: 12px;">
 
-              <div style="text-align: right;">Potongan Nota :</div>
-              <input type="text" readonly class="input-control" style="text-align: right; height: 24px; padding: 0 6px;" value="0,00" />
-              <input type="text" readonly class="input-control" style="text-align: right; background: #f1f5f9; height: 24px; padding: 0 6px;" value="0,00" />
-              <button class="btn-icon" style="background: #c4b5fd; border: 1px solid #a78bfa; color: white; border-radius: 4px; height: 24px; width: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✏️</button>
+                <!-- Sub Total -->
+                <div style="display: grid; grid-template-columns: 120px 80px 1fr 36px; gap: 12px; align-items: center;">
+                  <div style="text-align: right; color: var(--text-muted); font-weight: 500;">Sub Total</div>
+                  <input type="text" id="sumQty" readonly class="input-control"
+                    style="text-align: right; background: transparent; border: none; font-weight: 600; padding: 0; height: auto; box-shadow: none;"
+                    value="0,00" />
+                  <input type="text" id="sumSubTotal" readonly class="input-control"
+                    style="text-align: right; background: transparent; border: none; font-weight: 600; padding: 0; height: auto; box-shadow: none;"
+                    value="0,00" />
+                  <div></div>
+                </div>
 
-              <div style="text-align: right;">Pajak :</div>
-              <div style="display: flex; gap: 2px;">
-                 <input type="number" id="bTax" class="input-control" style="text-align: right; background: #bfdbfe; border: 1px solid #93c5fd; height: 24px; padding: 0 6px; width: 100%;" value="0" oninput="hitungGrandTotal()" />
+                <!-- Potongan (Bulk) -->
+                <div style="display: grid; grid-template-columns: 120px 80px 1fr 36px; gap: 12px; align-items: center;">
+                  <div style="text-align: right; color: var(--text-muted); font-weight: 500;">Potongan <span
+                      style="font-size: 11px; opacity: 0.7;">(%)</span></div>
+                  <input type="number" id="bBulkDisc" class="input-control"
+                    style="text-align: right; height: 36px; padding: 0 12px; border-radius: 8px;" value="0"
+                    oninput="applyBulkDiscount()" />
+                  <input type="text" id="bBulkDiscAmt" readonly class="input-control"
+                    style="text-align: right; background: var(--bg-color); border: 1px dashed var(--border-color); height: 36px; padding: 0 12px; border-radius: 8px; color: var(--text-muted);"
+                    value="0,00" />
+                  <button type="button" class="btn"
+                    style="padding: 0; width: 36px; height: 36px; border-radius: 8px; background: var(--primary-light); color: var(--primary); border: none; display: flex; align-items: center; justify-content: center;"
+                    title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 20h9"></path>
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    </svg>
+                  </button>
+                </div>
+
+                <!-- Potongan Nota -->
+                <div style="display: grid; grid-template-columns: 120px 80px 1fr 36px; gap: 12px; align-items: center;">
+                  <div style="text-align: right; color: var(--text-muted); font-weight: 500;">Potongan Nota <span
+                      style="font-size: 11px; opacity: 0.7;">(%)</span></div>
+                  <input type="number" id="bDisc" class="input-control"
+                    style="text-align: right; height: 36px; padding: 0 12px; border-radius: 8px;" value="0"
+                    oninput="hitungGrandTotal()" />
+                  <input type="text" id="bDiscAmt" readonly class="input-control"
+                    style="text-align: right; background: var(--bg-color); border: 1px dashed var(--border-color); height: 36px; padding: 0 12px; border-radius: 8px; color: var(--text-muted);"
+                    value="0,00" />
+                  <button type="button" class="btn"
+                    style="padding: 0; width: 36px; height: 36px; border-radius: 8px; background: var(--primary-light); color: var(--primary); border: none; display: flex; align-items: center; justify-content: center;"
+                    title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 20h9"></path>
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    </svg>
+                  </button>
+                </div>
+
+                <!-- Pajak -->
+                <div style="display: grid; grid-template-columns: 120px 80px 1fr 36px; gap: 12px; align-items: center;">
+                  <div style="text-align: right; color: var(--text-muted); font-weight: 500;">Pajak <span
+                      style="font-size: 11px; opacity: 0.7;">(%)</span></div>
+                  <input type="number" id="bTax" class="input-control"
+                    style="text-align: right; height: 36px; padding: 0 12px; border-radius: 8px; border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.05);"
+                    value="0" oninput="hitungGrandTotal()" />
+                  <input type="text" id="bTaxAmt" readonly class="input-control"
+                    style="text-align: right; background: var(--bg-color); border: 1px dashed var(--border-color); height: 36px; padding: 0 12px; border-radius: 8px; color: var(--text-muted);"
+                    value="0,00" />
+                  <button type="button" class="btn"
+                    style="padding: 0; width: 36px; height: 36px; border-radius: 8px; background: var(--primary-light); color: var(--primary); border: none; display: flex; align-items: center; justify-content: center;"
+                    title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 20h9"></path>
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    </svg>
+                  </button>
+                </div>
+
+                <!-- Biaya Lain -->
+                <div style="display: grid; grid-template-columns: 120px 80px 1fr 36px; gap: 12px; align-items: center;">
+                  <div style="text-align: right; color: var(--text-muted); font-weight: 500;">Biaya Lain</div>
+                  <button type="button" class="btn"
+                    style="padding: 0; height: 36px; border-radius: 8px; background: rgba(245, 158, 11, 0.1); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); display: flex; align-items: center; justify-content: center; width: 100%;"
+                    title="Biaya Lain">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"></path>
+                      <path d="M12 18V6"></path>
+                    </svg>
+                  </button>
+                  <input type="text" readonly class="input-control"
+                    style="text-align: right; background: var(--bg-color); border: 1px dashed var(--border-color); height: 36px; padding: 0 12px; border-radius: 8px; color: var(--text-muted);"
+                    value="0,00" />
+                  <button type="button" class="btn"
+                    style="padding: 0; width: 36px; height: 36px; border-radius: 8px; background: var(--primary-light); color: var(--primary); border: none; display: flex; align-items: center; justify-content: center;"
+                    title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 20h9"></path>
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    </svg>
+                  </button>
+                </div>
+
               </div>
-              <input type="text" id="bTaxAmt" readonly class="input-control" style="text-align: right; background: #f1f5f9; height: 24px; padding: 0 6px;" value="0,00" />
-              <button class="btn-icon" style="background: #c4b5fd; border: 1px solid #a78bfa; color: white; border-radius: 4px; height: 24px; width: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✏️</button>
 
-              <div style="text-align: right;">Biaya Lain :</div>
-              <button class="btn-icon" style="background: #fef08a; border: 1px solid #fde047; border-radius: 4px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #ca8a04;">🪙</button>
-              <input type="text" readonly class="input-control" style="text-align: right; background: #f1f5f9; height: 24px; padding: 0 6px;" value="0,00" />
-              <button class="btn-icon" style="background: #c4b5fd; border: 1px solid #a78bfa; color: white; border-radius: 4px; height: 24px; width: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✏️</button>
+              <!-- Kanan -->
+              <div
+                style="flex: 1; min-width: 320px; display: flex; flex-direction: column; gap: 12px; background: var(--bg-color); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color);">
+
+                <!-- Total Akhir (Highlighted) -->
+                <div
+                  style="display: grid; grid-template-columns: 120px 1fr; gap: 12px; align-items: center; margin-bottom: 8px; padding-bottom: 12px; border-bottom: 2px dashed var(--border-color);">
+                  <div style="text-align: left; color: var(--text-muted); font-weight: 700; font-size: 16px;">Total
+                    Akhir
+                  </div>
+                  <input type="text" id="totalAkhir" readonly class="input-control"
+                    style="text-align: right; background: transparent; border: none; color: var(--primary); font-weight: 800; font-size: 28px; padding: 0; height: auto; box-shadow: none; letter-spacing: -0.5px;"
+                    value="0,00" />
+                </div>
+
+                <!-- DP PO -->
+                <div style="display: grid; grid-template-columns: 120px 1fr 36px; gap: 12px; align-items: center;">
+                  <div style="text-align: left; color: var(--text-muted); font-weight: 500;">DP PO</div>
+                  <input type="text" readonly class="input-control"
+                    style="text-align: right; background: var(--card-bg); height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border-color);"
+                    value="0,00" />
+                  <button type="button" class="btn"
+                    style="padding: 0; width: 36px; height: 36px; border-radius: 8px; background: var(--primary-light); color: var(--primary); border: none; display: flex; align-items: center; justify-content: center;"
+                    title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 20h9"></path>
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    </svg>
+                  </button>
+                </div>
+
+                <!-- Deposit -->
+                <div style="display: grid; grid-template-columns: 120px 1fr 36px; gap: 12px; align-items: center;">
+                  <div style="text-align: left; color: var(--text-muted); font-weight: 500;">Deposit</div>
+                  <input type="text" readonly class="input-control"
+                    style="text-align: right; background: var(--card-bg); height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border-color);"
+                    value="0,00" />
+                  <button type="button" class="btn"
+                    style="padding: 0; width: 36px; height: 36px; border-radius: 8px; background: var(--primary-light); color: var(--primary); border: none; display: flex; align-items: center; justify-content: center;"
+                    title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 20h9"></path>
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    </svg>
+                  </button>
+                </div>
+
+                <!-- Tunai / DP -->
+                <div style="display: grid; grid-template-columns: 120px 1fr 36px; gap: 12px; align-items: center;">
+                  <div style="text-align: left; color: var(--text-muted); font-weight: 500;">Tunai / DP</div>
+                  <input type="text" readonly class="input-control"
+                    style="text-align: right; background: var(--card-bg); height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border-color);"
+                    value="0,00" />
+                  <button type="button" class="btn"
+                    style="padding: 0; width: 36px; height: 36px; border-radius: 8px; background: var(--primary-light); color: var(--primary); border: none; display: flex; align-items: center; justify-content: center;"
+                    title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 20h9"></path>
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    </svg>
+                  </button>
+                </div>
+
+                <!-- Kredit -->
+                <div style="display: grid; grid-template-columns: 120px 1fr 36px; gap: 12px; align-items: center;">
+                  <div style="text-align: left; color: var(--text-muted); font-weight: 500;">Kredit</div>
+                  <input type="text" id="sumKredit" readonly class="input-control"
+                    style="text-align: right; background: transparent; border: none; color: var(--danger); font-weight: 700; font-size: 16px; padding: 0; height: auto; box-shadow: none;"
+                    value="0,00" />
+                  <button type="button" class="btn"
+                    style="padding: 0; width: 36px; height: 36px; border-radius: 8px; background: var(--primary-light); color: var(--primary); border: none; display: flex; align-items: center; justify-content: center;"
+                    title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 20h9"></path>
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    </svg>
+                  </button>
+                </div>
+
+              </div>
             </div>
 
-            <!-- Kanan -->
-            <div style="flex: 1; min-width: 320px; display: grid; grid-template-columns: 80px 1fr 30px; gap: 6px; align-items: center;">
-              
-              <div style="text-align: right;">Total Akhir :</div>
-              <input type="text" id="totalAkhir" readonly class="input-control" style="text-align: right; background: #f1f5f9; height: 24px; padding: 0 6px;" value="0,00" />
-              <div></div>
+            <span id="totalLabel" style="display: none;">Rp 0</span>
+          </div>
 
-              <div style="text-align: right;">DP PO :</div>
-              <input type="text" readonly class="input-control" style="text-align: right; background: #f1f5f9; height: 24px; padding: 0 6px;" value="0,00" />
-              <button class="btn-icon" style="background: #c4b5fd; border: 1px solid #a78bfa; color: white; border-radius: 4px; height: 24px; width: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✏️</button>
-
-              <div style="text-align: right;">Deposit :</div>
-              <input type="text" readonly class="input-control" style="text-align: right; background: #f1f5f9; height: 24px; padding: 0 6px;" value="0,00" />
-              <button class="btn-icon" style="background: #c4b5fd; border: 1px solid #a78bfa; color: white; border-radius: 4px; height: 24px; width: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✏️</button>
-
-              <div style="text-align: right;">Tunai / DP :</div>
-              <input type="text" readonly class="input-control" style="text-align: right; background: #f1f5f9; height: 24px; padding: 0 6px;" value="0,00" />
-              <button class="btn-icon" style="background: #c4b5fd; border: 1px solid #a78bfa; color: white; border-radius: 4px; height: 24px; width: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✏️</button>
-
-              <div style="text-align: right;">Kredit :</div>
-              <input type="text" id="sumKredit" readonly class="input-control" style="text-align: right; background: #f1f5f9; height: 24px; padding: 0 6px;" value="0,00" />
-              <button class="btn-icon" style="background: #c4b5fd; border: 1px solid #a78bfa; color: white; border-radius: 4px; height: 24px; width: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✏️</button>
+          <div class="input-group" style="display: flex">
+            <div style="margin-right: 16px">
+              <label style="margin-bottom: 6px">Tanggal Jatuh Tempo</label>
+              <input type="date" id="bDueDate" class="input-control" />
+            </div>
+            <div>
+              <label style="margin-bottom: 6px">Jatuh Tempo (Hari)</label>
+              <input type="number" id="bDueDays" class="input-control" min="0" />
             </div>
           </div>
-          <div style="display: flex; justify-content: flex-end; margin-top: 16px;">
-             <button type="button" class="btn" style="background: #f1f5f9; border: 1px solid #cbd5e1; color: #0f172a; padding: 6px 16px; border-radius: 4px; display: flex; align-items: center; gap: 8px; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.05);" onclick="switchTab('list')">
-               <span style="color: #ef4444; font-size: 16px; transform: scaleX(-1); display: inline-block;">➔</span> Tutup
-             </button>
-          </div>
-          <select id="bTaxType" style="display: none;"><option value="include">Include</option><option value="exclude" selected>Exclude</option></select>
-          <span id="totalLabel" style="display: none;">Rp 0</span>
-        </div>
 
-        <div class="input-group" style="display: flex">
-          <div style="margin-right: 16px">
-            <label style="margin-bottom: 6px">Tanggal Jatuh Tempo</label>
-            <input type="date" id="bDueDate" class="input-control" />
+          <div class="input-group">
+            <label style="margin-bottom: 6px">Catatan</label>
+            <textarea id="bNotes" class="input-control" rows="2" placeholder="Keterangan..."></textarea>
           </div>
-          <div>
-            <label style="margin-bottom: 6px">Jatuh Tempo (Hari)</label>
-            <input type="number" id="bDueDays" class="input-control" min="0" />
-          </div>
-        </div>
 
-        <div class="input-group">
-          <label style="margin-bottom: 6px">Catatan</label>
-          <textarea id="bNotes" class="input-control" rows="2" placeholder="Keterangan..."></textarea>
-        </div>
-
-        <div style="
+          <div style="
               display: grid;
               grid-template-columns: 1fr 1fr;
               gap: 12px;
               margin-top: 16px;
             ">
-          <button onclick="switchTab('list')" class="btn">← Batal</button>
-          <button onclick="simpanPembelian()" class="btn btn-primary" id="btnSimpan">
-            ✓ Simpan
-          </button>
-        </div>
+            <button onclick="switchTab('list')" class="btn">← Batal</button>
+            <button onclick="simpanPembelian()" class="btn btn-primary" id="btnSimpan">
+              ✓ Simpan
+            </button>
+          </div>
+        </div><!-- END OVERLAY WRAPPER -->
       </div>
 
       <div id="viewPayment" class="view-section" style="display: none; padding-top: 16px">
@@ -336,6 +508,54 @@
       formGrid = null,
       allSuppliers = [];
     let pendingPaymentData = null; // To store data while mismatch modal is open
+    let tarifPpnStandar = 11; // Tarif PPN standar toko (dimuat dari setelan; default 11%)
+
+    function checkRequiredSelection() {
+      const supplierVal = document.querySelector("#supplierCombobox .combobox-value")?.value;
+      const taxTypeVal = document.getElementById("bTaxType").value;
+      const overlay = document.getElementById("mainFormOverlay");
+      if (overlay) {
+        if (supplierVal && taxTypeVal) {
+          overlay.style.display = "none";
+        } else {
+          overlay.style.display = "flex";
+        }
+      }
+    }
+
+    function handleTaxTypeChange() {
+      const taxType = document.getElementById("bTaxType").value;
+      const bTax = document.getElementById("bTax");
+
+      if (taxType === "include") {
+        if (bTax) {
+          bTax.readOnly = true;
+          bTax.value = 0;
+          bTax.style.opacity = "0.5";
+          bTax.style.pointerEvents = "none";
+        }
+        document.body.classList.remove("hide-tax-col");
+      } else if (taxType === "none") {
+        // Tanpa PPN: pajak dikunci 0 & kolom PPN per-baris disembunyikan.
+        if (bTax) {
+          bTax.readOnly = true;
+          bTax.value = 0;
+          bTax.style.opacity = "0.5";
+          bTax.style.pointerEvents = "none";
+        }
+        document.body.classList.add("hide-tax-col");
+      } else if (taxType === "exclude") {
+        if (bTax) {
+          bTax.readOnly = false;
+          bTax.style.opacity = "1";
+          bTax.style.pointerEvents = "auto";
+        }
+        document.body.classList.add("hide-tax-col");
+      }
+
+      checkRequiredSelection();
+      if (typeof hitungGrandTotal === "function") hitungGrandTotal();
+    }
 
     // Setup Global Barcode Scanner
     setupBarcodeScanner(async (scode) => {
@@ -451,6 +671,14 @@
       document.getElementById("bDate").value = today();
       document.getElementById("bDueDays").value = 0;
       updateDueDate();
+
+      // Default Tipe PPN "Include" agar tabel barang langsung bisa diisi (tanpa overlay).
+      const bTaxType = document.getElementById("bTaxType");
+      if (bTaxType) {
+        bTaxType.value = "include";
+        handleTaxTypeChange();
+      }
+
       document.getElementById("bDisc").value = 0;
       document.getElementById("bTax").value = 0;
       document.getElementById("totalLabel").textContent = "Rp 0";
@@ -473,6 +701,7 @@
             `/purchases/items/?supplier_id=${sel.id}`,
           );
           if (formGrid) formGrid.updateDataSource(items);
+          checkRequiredSelection();
         },
       });
 
@@ -480,6 +709,12 @@
         document
           .getElementById("supplierCombobox")
           ._combo.set(existing.supplier_id, existing.supplier?.name || "");
+        // Pulihkan Tipe PPN dari data tersimpan agar buka draft tidak mereset ke default.
+        const elTaxType = document.getElementById("bTaxType");
+        if (elTaxType) {
+          elTaxType.value = existing.is_tax_included ? "include" : "exclude";
+          handleTaxTypeChange();
+        }
         const items = existing.items.map((it) => ({
           id: it.item_id,
           name: it.item?.name,
@@ -494,12 +729,14 @@
           onChange: hitungGrandTotal,
           onDetail: bukaDetailItem,
           getSupplierId: ambilSupplierIdTerpilih,
+          ...konfigPpnGrid(),
         });
       } else {
         formGrid = createPurchaseSummaryGrid("gridTarget", {
           onChange: hitungGrandTotal,
           onDetail: bukaDetailItem,
           getSupplierId: ambilSupplierIdTerpilih,
+          ...konfigPpnGrid(),
         });
       }
     }
@@ -511,6 +748,19 @@
         "#supplierCombobox .combobox-value",
       )?.value;
       return v ? parseInt(v) : null;
+    }
+
+    // Callback PPN untuk grid: tipe transaksi, tarif standar toko, & penulisan ke "Pajak".
+    function konfigPpnGrid() {
+      return {
+        getTipePpn: () => document.getElementById("bTaxType")?.value || "",
+        getTarifStandar: () => tarifPpnStandar,
+        setPajakRingkasan: (persen) => {
+          const bTax = document.getElementById("bTax");
+          if (bTax) bTax.value = persen;
+          if (typeof hitungGrandTotal === "function") hitungGrandTotal();
+        },
+      };
     }
 
     // Simpan seluruh state form ke sessionStorage lalu buka halaman detail item.
@@ -582,38 +832,55 @@
       return new Intl.NumberFormat("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num || 0);
     }
 
+    function applyBulkDiscount() {
+      if (!formGrid) return;
+      const val = parseFloat(document.getElementById("bBulkDisc").value) || 0;
+      const rows = formGrid.getDetailRows();
+      rows.forEach(r => {
+        if (!r.discs) r.discs = [0];
+        r.discs[0] = val;
+      });
+      formGrid.loadRows(rows);
+      hitungGrandTotal();
+    }
+
     function hitungGrandTotal() {
       if (!formGrid) return;
       const items = formGrid.getData();
       // pakai total net per-baris (sudah termasuk diskon bertingkat dari Detail Item)
       let sub = items.reduce((acc, it) => acc + (it.total || 0), 0);
       let totalQty = items.reduce((acc, it) => acc + (it.qty || 0), 0);
-      
+      let sumItemDiscAmt = items.reduce((acc, it) => acc + ((it.discount || 0) * (it.qty || 0)), 0);
+
       const disc = parseFloat(document.getElementById("bDisc").value) || 0;
       const tax = parseFloat(document.getElementById("bTax").value) || 0;
       const taxType = document.getElementById("bTaxType")?.value || "exclude";
-      
+
       let discAmt = (sub * disc) / 100;
       let grand = sub - discAmt;
       let taxAmt = 0;
-      
-      if (taxType === "exclude") {
-          taxAmt = (grand * tax) / 100;
-          grand = grand + taxAmt;
+
+      if (taxType === "none") {
+        taxAmt = 0; // Tanpa PPN: tidak ada pajak sama sekali
+      } else if (taxType === "exclude") {
+        taxAmt = (grand * tax) / 100;
+        grand = grand + taxAmt;
       } else {
-          taxAmt = grand - (grand / (1 + tax / 100));
+        taxAmt = grand - (grand / (1 + tax / 100));
       }
 
       const elQty = document.getElementById("sumQty");
       if (elQty) {
-          elQty.value = formatTotalStr(totalQty);
-          document.getElementById("sumSubTotal").value = formatTotalStr(sub);
-          document.getElementById("bDiscAmt").value = formatTotalStr(discAmt);
-          document.getElementById("bTaxAmt").value = formatTotalStr(taxAmt);
-          document.getElementById("totalAkhir").value = formatTotalStr(grand);
-          document.getElementById("sumKredit").value = formatTotalStr(grand);
+        elQty.value = formatTotalStr(totalQty);
+        document.getElementById("sumSubTotal").value = formatTotalStr(sub);
+        const elBulkDiscAmt = document.getElementById("bBulkDiscAmt");
+        if (elBulkDiscAmt) elBulkDiscAmt.value = formatTotalStr(sumItemDiscAmt);
+        document.getElementById("bDiscAmt").value = formatTotalStr(discAmt);
+        document.getElementById("bTaxAmt").value = formatTotalStr(taxAmt);
+        document.getElementById("totalAkhir").value = formatTotalStr(grand);
+        document.getElementById("sumKredit").value = formatTotalStr(grand);
       }
-      
+
       const elTotalLabel = document.getElementById("totalLabel");
       if (elTotalLabel) elTotalLabel.textContent = fmtRp(grand);
     }
@@ -631,6 +898,7 @@
         taxValue = parseFloat(document.getElementById("bTax").value || 0);
         const payload = {
           date: document.getElementById("bDate").value,
+          due_date: document.getElementById("bDueDate").value || null,
           supplier_id: parseInt(sid),
           discount: parseFloat(document.getElementById("bDisc").value) || 0,
           tax: taxValue,
@@ -650,6 +918,273 @@
         hideLoading();
         showToast(ex.message, "error");
       }
+    }
+
+    // ─── Cetak Barcode dari Pembelian ───────────────────────────────────────
+    // Mengambil semua barang di satu pembelian, lalu membuka modal cetak yang
+    // menampilkan daftar barang dengan kotak jumlah label per barang. Jumlah
+    // default = qty diterima, tapi bisa diubah sebelum cetak; pratinjau ikut
+    // diperbarui. Layout dikunci 3 kolom (sama seperti "3 Lin" di barcode.html).
+    function getActiveBranchId() {
+      const raw = localStorage.getItem("active_branch_id");
+      const parsed = parseInt(raw || "", 10);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+    }
+
+    function blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = String(reader.result || "");
+          const base64 = result.includes(",") ? result.split(",", 2)[1] : "";
+          if (!base64) {
+            reject(new Error("Gagal konversi gambar cetak"));
+            return;
+          }
+          resolve(base64);
+        };
+        reader.onerror = () => reject(new Error("Gagal membaca gambar cetak"));
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    async function cetakBarcode(id) {
+      try {
+        showLoading();
+        const p = await api("GET", `/purchases/${id}`);
+        const items = p.items || [];
+
+        // Susun daftar barang unik; jumlah default = qty diterima (fallback qty).
+        const daftar = [];
+        for (const it of items) {
+          const kode = it.item?.barcode || it.item?.code || "";
+          if (!kode) continue; // barang tanpa barcode/kode dilewati
+          const jumlah = Math.max(1, Math.round(it.qty_received || it.qty || 1));
+          daftar.push({
+            nama: it.item?.name || "-",
+            kategori: it.item?.category?.name || "UMUM",
+            barcode: kode,
+            harga: it.item?.sell_price || 0,
+            qty: jumlah,
+          });
+        }
+
+        hideLoading();
+
+        if (!daftar.length) {
+          return showToast(
+            "Tidak ada barang dengan barcode untuk dicetak",
+            "warning",
+          );
+        }
+
+        bukaModalCetakBarcode(daftar);
+      } catch (ex) {
+        hideLoading();
+        showToast(ex.message, "error");
+      }
+    }
+
+    // Bangun payload stiker dari daftar barang: ulangi tiap barang sebanyak
+    // qty-nya. Layout dikunci 3 kolom (default sama seperti barcode.html).
+    function susunPayloadBarcode(daftar) {
+      const data_produk = [];
+      daftar.forEach((d) => {
+        const jumlah = Math.max(0, Math.round(d.qty || 0));
+        for (let i = 0; i < jumlah; i++) {
+          data_produk.push({
+            nama: d.nama || "-",
+            kategori: d.kategori || "UMUM",
+            barcode: d.barcode || "",
+            harga: d.harga || 0,
+          });
+        }
+      });
+      return {
+        data_produk,
+        jumlah_kolom: 3,
+        jumlah_kolom_sheet: 3,
+        gap_mm: 2,
+        gap_vertical_mm: 0,
+        lebar_mm: 33,
+        tinggi_mm: 15,
+        dpi_printer: 203,
+        font_harga_px: 14,
+        font_nama_px: 12,
+        barcode_scale_pct: 100,
+      };
+    }
+
+    // Render lembar barcode di backend → blob PNG + ukuran kertas (mm).
+    async function mintaLembarBarcode(payload, signal) {
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/sticker/render-sheet", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: "Bearer " + token } : {}),
+        },
+        body: JSON.stringify(payload),
+        signal,
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || "Gagal render stiker");
+      }
+      const widthMm = parseFloat(res.headers.get("X-Sheet-Width-Mm")) || 0;
+      const heightMm = parseFloat(res.headers.get("X-Sheet-Height-Mm")) || 0;
+      const blob = await res.blob();
+      return { blob, widthMm, heightMm };
+    }
+
+    // Modal cetak: daftar barang + kotak jumlah per barang di kiri, pratinjau
+    // di kanan. Ubah jumlah → pratinjau dirender ulang (debounce). Saat cetak,
+    // lembar dirender ulang sesuai jumlah terkini agar selalu sinkron.
+    function bukaModalCetakBarcode(daftar) {
+      let blobUrl = "";
+      let renderTimer = null;
+      let abortCtrl = null;
+      let renderSeq = 0;
+
+      const overlay = document.createElement("div");
+      overlay.style.cssText =
+        "position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,0.55);display:flex;align-items:center;justify-content:center;padding:20px";
+
+      const totalLabel = () =>
+        daftar.reduce((acc, d) => acc + Math.max(0, Math.round(d.qty || 0)), 0);
+
+      const tutup = () => {
+        if (blobUrl) URL.revokeObjectURL(blobUrl);
+        if (abortCtrl) abortCtrl.abort();
+        clearTimeout(renderTimer);
+        overlay.remove();
+      };
+
+      overlay.innerHTML = `
+        <div style="background:var(--card-bg,#fff);border-radius:12px;width:min(900px,94vw);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+          <div style="padding:14px 18px;border-bottom:1px solid var(--border-color,#e2e8f0);display:flex;justify-content:space-between;align-items:center;gap:16px">
+            <strong>🏷️ Cetak Barcode — atur jumlah per barang (3 kolom)</strong>
+            <button class="btn" data-act="batal" style="padding:4px 10px;font-size:13px;background:#e2e8f0;color:#475569;border:none">✕</button>
+          </div>
+          <div style="display:flex;gap:0;flex:1;overflow:hidden;min-height:280px">
+            <div style="flex:0 0 320px;display:flex;flex-direction:column;border-right:1px solid var(--border-color,#e2e8f0);overflow:hidden">
+              <div style="display:grid;grid-template-columns:1fr 70px;gap:8px;padding:10px 14px;background:var(--bg-color,#f8fafc);font-size:12px;font-weight:700;color:var(--text-muted,#64748b)">
+                <div>Barang</div><div style="text-align:center">Jumlah</div>
+              </div>
+              <div id="bcDaftarBody" style="overflow-y:auto"></div>
+            </div>
+            <div style="flex:1;padding:16px;overflow:auto;background:#f1f5f9;text-align:center">
+              <div id="bcPreviewArea"></div>
+            </div>
+          </div>
+          <div style="padding:14px 18px;border-top:1px solid var(--border-color,#e2e8f0);display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <div style="font-size:13px;font-weight:700">Total: <span id="bcTotal">0</span> label</div>
+            <div style="display:flex;gap:8px">
+              <button class="btn" data-act="batal" style="padding:8px 16px">Batal</button>
+              <button class="btn btn-primary" data-act="cetak" style="padding:8px 16px">🚀 Cetak ke Printer</button>
+            </div>
+          </div>
+        </div>`;
+
+      const renderDaftar = () => {
+        overlay.querySelector("#bcDaftarBody").innerHTML = daftar
+          .map(
+            (d, idx) => `
+            <div style="display:grid;grid-template-columns:1fr 70px;gap:8px;padding:8px 14px;border-top:1px solid var(--border-color,#e2e8f0);align-items:center">
+              <div style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${d.nama}">${d.nama}</div>
+              <input type="number" min="0" value="${d.qty}" data-idx="${idx}" class="input-control bc-qty" style="margin:0;height:34px;text-align:center;padding:0 6px" />
+            </div>`,
+          )
+          .join("");
+        overlay.querySelector("#bcTotal").textContent = totalLabel();
+      };
+
+      const schedulePreview = () => {
+        clearTimeout(renderTimer);
+        renderTimer = setTimeout(renderPreview, 150);
+      };
+
+      const renderPreview = async () => {
+        const area = overlay.querySelector("#bcPreviewArea");
+        if (totalLabel() < 1) {
+          area.innerHTML = `<div style="padding:40px;color:#64748b">Atur jumlah minimal 1 untuk melihat pratinjau.</div>`;
+          return;
+        }
+        if (abortCtrl) abortCtrl.abort();
+        abortCtrl = new AbortController();
+        const seq = ++renderSeq;
+        area.innerHTML = `<div style="padding:40px;color:#64748b">Menyiapkan pratinjau...</div>`;
+        try {
+          const { blob } = await mintaLembarBarcode(
+            susunPayloadBarcode(daftar),
+            abortCtrl.signal,
+          );
+          if (seq !== renderSeq) return;
+          if (blobUrl) URL.revokeObjectURL(blobUrl);
+          blobUrl = URL.createObjectURL(blob);
+          area.innerHTML = `<img src="${blobUrl}" alt="Pratinjau barcode" style="background:#fff;max-width:100%;box-shadow:0 1px 4px rgba(0,0,0,0.15)" />`;
+        } catch (e) {
+          if (e.name === "AbortError") return;
+          area.innerHTML = `<div style="padding:40px;color:#ef4444">Pratinjau gagal dibuat.</div>`;
+        }
+      };
+
+      overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) tutup();
+      });
+      overlay
+        .querySelectorAll('[data-act="batal"]')
+        .forEach((b) => b.addEventListener("click", tutup));
+      overlay.querySelector("#bcDaftarBody").addEventListener("input", (e) => {
+        const inp = e.target.closest(".bc-qty");
+        if (!inp) return;
+        const idx = parseInt(inp.dataset.idx, 10);
+        daftar[idx].qty = Math.max(0, parseInt(inp.value, 10) || 0);
+        overlay.querySelector("#bcTotal").textContent = totalLabel();
+        schedulePreview();
+      });
+      overlay
+        .querySelector('[data-act="cetak"]')
+        .addEventListener("click", async () => {
+          if (totalLabel() < 1) {
+            return showToast("Atur jumlah minimal 1 barang", "warning");
+          }
+          try {
+            showLoading();
+            // Render ulang sesuai jumlah terkini agar selalu sinkron.
+            const payload = susunPayloadBarcode(daftar);
+            const { blob, widthMm, heightMm } =
+              await mintaLembarBarcode(payload);
+            const imageBase64 = await blobToBase64(blob);
+            const rowCount = Math.ceil(
+              payload.data_produk.length / payload.jumlah_kolom,
+            );
+            await api("POST", "/print/", {
+              content: JSON.stringify({
+                image_base64: imageBase64,
+                width_mm: widthMm,
+                height_mm: heightMm,
+                row_count: rowCount,
+                row_height_mm: payload.tinggi_mm,
+                gap_vertical_mm: payload.gap_vertical_mm,
+                total_labels: payload.data_produk.length,
+                col_count: payload.jumlah_kolom,
+              }),
+              content_type: "label_image",
+              branch_id: getActiveBranchId(),
+            });
+            hideLoading();
+            tutup();
+            showToast("Job barcode dikirim ke antrean printer", "success");
+          } catch (ex) {
+            hideLoading();
+            showToast("Kesalahan cetak: " + ex.message, "error");
+          }
+        });
+
+      document.body.appendChild(overlay);
+      renderDaftar();
+      renderPreview();
     }
 
     async function openPaymentTab() {
@@ -752,6 +1287,7 @@
               return `<tr>
               <td style="font-family:monospace;font-weight:700;color:var(--primary)">${p.number}</td>
               <td>${fmtDate(p.date)}</td>
+              <td>${fmtDate(p.due_date)}</td>
               <td>${p.supplier?.name || "-"}</td>
               <td>${fmtRp(p.total)}</td>
               <td>${fmtRp(p.paid)}</td>
@@ -762,12 +1298,13 @@
                   ${payBtn}
                   <button class="btn" style="padding:4px 8px;font-size:12px" onclick="showDetail(${p.id})">Detail</button>
                   <button class="btn" style="padding:4px 8px;font-size:12px;background:#e2e8f0;color:#475569;border:none" onclick="exportPurchasePDF(${p.id})">📄 PDF</button>
+                  <button class="btn" style="padding:4px 8px;font-size:12px" onclick="cetakBarcode(${p.id})">Cetak Barcode</button>
                 </div>
               </td>
             </tr>`;
             })
             .join("")
-          : '<tr><td colspan="7" style="text-align:center">Tidak ada data</td></tr>';
+          : '<tr><td colspan="8" style="text-align:center">Tidak ada data</td></tr>';
       } catch (ex) {
         showToast(ex.message, "error");
       }
@@ -1108,6 +1645,14 @@
     }
 
     (async () => {
+      // Muat tarif PPN standar toko (dipakai popup "ubah ke X%"). Default 11 bila gagal.
+      try {
+        const st = await api("GET", "/accounting/pkp-status");
+        if (st && st.tarif_ppn != null)
+          tarifPpnStandar = parseFloat(st.tarif_ppn) || 11;
+      } catch (e) {
+        /* pakai default 11 */
+      }
       await initFilters();
       // Jika kembali dari detail_item.html, pulihkan form pembelian dari draft.
       const kembaliDariDetail = sessionStorage.getItem(

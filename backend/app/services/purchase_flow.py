@@ -37,7 +37,52 @@ def toko_pkp(db: Session) -> bool:
     return bool(getattr(branch, "is_pkp", False)) if branch else False
 
 
-def calculate_purchase_totals(data: schemas.PurchaseCreate, *, received: bool = False) -> dict:
+def stempel_tarif_ppn_baris(db: Session, data: schemas.PurchaseCreate) -> None:
+    """Mode Included (PKP): tetapkan tarif PPN efektif TIAP BARIS sebelum hitung total & simpan.
+    Sumber tarif (meniru sisi jual, sales.py): tarif baris yang dikirim UI → Item.ppn_percent →
+    tarif PPN standar toko (Branch Pusat). Baris yang sudah punya tarif (termasuk 0 eksplisit
+    untuk barang non-PPN) TIDAK ditimpa."""
+    branch = (db.query(models.Branch).get(PUSAT_BRANCH_ID)
+              or db.query(models.Branch).order_by(models.Branch.id).first())
+    tarif_toko = float(getattr(branch, "tarif_ppn", 0) or 0) if branch else 0.0
+    ids = [l.item_id for l in data.items]
+    rows = db.query(models.Item.id, models.Item.ppn_percent).filter(models.Item.id.in_(ids)).all()
+    ppn_map = {rid: rppn for (rid, rppn) in rows}
+    for line in data.items:
+        if line.ppn_percent is not None:
+            continue
+        master = ppn_map.get(line.item_id)
+        line.ppn_percent = float(master) if master is not None else tarif_toko
+
+
+def calculate_purchase_totals(data: schemas.PurchaseCreate, *, received: bool = False,
+                              peel_included: bool = False) -> dict:
+    # Mode Included + PKP (peel_included): harga sudah termasuk PPN → kupas mundur PER-BARIS
+    # (tarif tiap baris boleh beda). Diskon header disebar proporsional. subtotal=NET, tax=PPN
+    # tertanam → PKP bisa memisah PPN Masukan (1-1550). Rumus sejajar hitung_total_penjualan_per_baris.
+    if peel_included:
+        dr = (data.discount or 0) / 100
+        subtotal = discount = tax = total = 0.0
+        for line in data.items:
+            qty = line.qty_received if received and line.qty_received > 0 else line.qty
+            net_price = (line.buy_price * (1 - (line.disc1 / 100))) * (1 - (line.disc2 / 100))
+            g = net_price * qty            # gross baris (incl PPN), sudah net disc1/disc2
+            dg = g * dr
+            tarif = float(line.ppn_percent or 0)
+            if tarif > 0:
+                f = 1 + tarif / 100
+                after = g - dg             # nilai bayar baris (incl PPN) setelah diskon header
+                subtotal += g / f
+                discount += dg / f
+                tax      += after - after / f
+                total    += after
+            else:
+                subtotal += g
+                discount += dg
+                total    += g - dg
+        return {"subtotal": subtotal, "discount": discount, "tax": tax, "total": total}
+
+    # Mode Excluded / non-PKP (perilaku lama, tak berubah).
     subtotal = 0.0
     for line in data.items:
         qty = line.qty_received if received and line.qty_received > 0 else line.qty
@@ -147,6 +192,7 @@ def add_purchase_items(db: Session, purchase: models.Purchase, data: schemas.Pur
             disc2=line.disc2,
             discount=line.buy_price - net_price,
             total=net_price * qty,
+            ppn_percent=line.ppn_percent,  # tarif PPN baris (Included/PKP) → kupas biaya batch & retur
         ))
 
 
@@ -193,6 +239,12 @@ def receive_branch_stock(db: Session, *, purchase: models.Purchase,
         _total_landed = _subtotal - float(purchase.discount or 0) + float(purchase.tax or 0)
     faktor_landed = (_total_landed / _subtotal) if _subtotal > 0 else 1.0
 
+    # Mode PKP + Included: harga sudah termasuk PPN dengan tarif yang BISA beda per-baris →
+    # faktor seragam tak bisa mengupasnya. Kupas PPN mundur PER-BARIS pakai tarif tersimpan
+    # (purchase_item.ppn_percent). Σ biaya batch = subtotal NET = debit GL 1-1400 (invarian aman).
+    included_pkp = bool(pisah_ppn and getattr(purchase, "is_tax_included", False))
+    hd = (float(purchase.discount or 0) / _subtotal) if _subtotal > 0 else 0.0  # fraksi diskon header
+
     for purchase_item in purchase.items:
         item = db.query(models.Item).with_for_update().get(purchase_item.item_id)
         qty_before = get_total_branch_stock(db, target_branch_id, item.id)
@@ -201,11 +253,18 @@ def receive_branch_stock(db: Session, *, purchase: models.Purchase,
             item.stock += purchase_item.qty
 
         adjust_warehouse_stock(db, warehouse.id, item.id, purchase_item.qty)
-        # ── FIFO: catat lapisan persediaan baru pada BIAYA LANDED (net disc1/disc2 ×
-        # faktor diskon-header+pajak) supaya nilai batch = nilai yang masuk neraca ──────
+        # ── FIFO: catat lapisan persediaan baru pada BIAYA LANDED supaya nilai batch = nilai
+        # yang masuk neraca (1-1400) ──────────────────────────────────────────────────────
         _qty = float(purchase_item.qty or 0)
-        net_per_unit = (float(purchase_item.total or 0) / _qty) if _qty > 0 else float(purchase_item.buy_price or 0)
-        unit_cost_landed = net_per_unit * faktor_landed
+        if included_pkp:
+            g = float(purchase_item.total or 0)        # gross baris (incl PPN), net disc1/disc2
+            after = g * (1 - hd)                        # setelah diskon header
+            tarif = float(purchase_item.ppn_percent or 0)
+            inv_line = (after / (1 + tarif / 100)) if tarif > 0 else after  # NET (PPN keluar ke 1-1550)
+            unit_cost_landed = (inv_line / _qty) if _qty > 0 else float(purchase_item.buy_price or 0)
+        else:
+            net_per_unit = (float(purchase_item.total or 0) / _qty) if _qty > 0 else float(purchase_item.buy_price or 0)
+            unit_cost_landed = net_per_unit * faktor_landed
         add_batch(
             db,
             item_id=item.id,
@@ -316,7 +375,18 @@ def create_supplier_purchase(db: Session, *, data: schemas.PurchaseCreate,
     validate_purchase_items(db, data)
     tanggal = data.date if data.date else get_local_date()
     local_datetime = get_local_datetime()
-    totals = calculate_purchase_totals(data, received=True)
+
+    # Mode PKP + Included → kupas PPN tertanam per-baris (PPN Masukan dipisah ke 1-1550).
+    # Tetapkan tarif efektif tiap baris DULU agar total & biaya batch konsisten. Fulfillment
+    # antar-cabang bukan pembelian supplier → tak ada pemisahan PPN.
+    pkp = toko_pkp(db)
+    is_fulfillment = (branch_id == PUSAT_BRANCH_ID and target_branch_id and
+                      target_branch_id != PUSAT_BRANCH_ID)
+    peel_included = bool(pkp and data.is_tax_included and not is_fulfillment)
+    if peel_included:
+        stempel_tarif_ppn_baris(db, data)
+
+    totals = calculate_purchase_totals(data, received=True, peel_included=peel_included)
     status = resolve_purchase_status(data, totals["total"])
 
     purchase = models.Purchase(
@@ -324,6 +394,7 @@ def create_supplier_purchase(db: Session, *, data: schemas.PurchaseCreate,
         branch_id=branch_id,
         created_at=local_datetime,
         date=tanggal,
+        due_date=data.due_date,
         supplier_id=data.supplier_id,
         subtotal=totals["subtotal"],
         discount=totals["discount"],
@@ -347,14 +418,10 @@ def create_supplier_purchase(db: Session, *, data: schemas.PurchaseCreate,
     if status != "draft":
         from .journal_service import create_pusat_fulfillment_journal
 
-        # 🛡️ NEW LOGIC: If Pusat fulfills for another branch, DEFER stock and branch journal
-        is_fulfillment = (branch_id == PUSAT_BRANCH_ID and
-                          target_branch_id and
-                          target_branch_id != PUSAT_BRANCH_ID)
-
         # Mode PKP: pisahkan PPN ke PPN Masukan (1-1550), bukan dilebur ke modal. Hanya untuk
-        # pembelian normal dari supplier (bukan fulfillment antar-cabang).
-        pisah_ppn = (not is_fulfillment) and toko_pkp(db) and float(totals["tax"] or 0) > 0
+        # pembelian normal dari supplier (bukan fulfillment antar-cabang). (is_fulfillment & pkp
+        # sudah dihitung di awal fungsi.)
+        pisah_ppn = (not is_fulfillment) and pkp and float(totals["tax"] or 0) > 0
         purchase.ppn_dipisah = pisah_ppn  # diingat per-faktur → batal/retur memakai mode yang SAMA dgn saat dibeli (aman walau saklar PKP berubah)
 
         if not is_fulfillment:
@@ -438,22 +505,35 @@ def update_draft_purchase(db: Session, *, purchase: models.Purchase,
     validate_purchase_items(db, data)
     tanggal = data.date if data.date else get_local_date()
     local_datetime = get_local_datetime()
-    totals = calculate_purchase_totals(data, received=True)
+
+    # 🛡️ FIX: Preserve target_branch_id if not explicitly provided (prevents losing branch link when finalizing drafts)
+    final_target_branch_id = data.target_branch_id or purchase.target_branch_id
+
+    # Mode PKP + Included → kupas PPN tertanam per-baris (PPN Masukan dipisah ke 1-1550).
+    # Tetapkan tarif efektif tiap baris dulu. Fulfillment antar-cabang → tak ada pemisahan PPN.
+    pkp = toko_pkp(db)
+    is_fulfillment = (purchase.branch_id == PUSAT_BRANCH_ID and final_target_branch_id and
+                      final_target_branch_id != PUSAT_BRANCH_ID)
+    peel_included = bool(pkp and data.is_tax_included and not is_fulfillment)
+    if peel_included:
+        stempel_tarif_ppn_baris(db, data)
+
+    totals = calculate_purchase_totals(data, received=True, peel_included=peel_included)
     status = resolve_purchase_status(data, totals["total"])
 
     purchase.date = tanggal
+    purchase.due_date = data.due_date
     purchase.supplier_id = data.supplier_id
     purchase.subtotal = totals["subtotal"]
     purchase.discount = totals["discount"]
     purchase.tax = totals["tax"]
+    purchase.tax_percent = data.tax_percent or 0
+    purchase.is_tax_included = data.is_tax_included if data.is_tax_included is not None else True
     purchase.total = totals["total"]
     purchase.paid = data.paid or 0
     purchase.status = status
     purchase.notes = data.notes
     purchase.is_branch_request = False
-    
-    # 🛡️ FIX: Preserve target_branch_id if not explicitly provided (prevents losing branch link when finalizing drafts)
-    final_target_branch_id = data.target_branch_id or purchase.target_branch_id
     purchase.target_branch_id = final_target_branch_id
 
     db.query(models.PurchaseItem).filter(models.PurchaseItem.purchase_id == purchase.id).delete()
@@ -463,14 +543,10 @@ def update_draft_purchase(db: Session, *, purchase: models.Purchase,
     if status != "draft":
         from .journal_service import create_pusat_fulfillment_journal
 
-        # 🛡️ NEW LOGIC: If Pusat fulfills for another branch, DEFER stock and branch journal
-        is_fulfillment = (purchase.branch_id == PUSAT_BRANCH_ID and
-                          final_target_branch_id and
-                          final_target_branch_id != PUSAT_BRANCH_ID)
-
         # Mode PKP: pisahkan PPN ke PPN Masukan (1-1550), bukan dilebur ke modal. Hanya untuk
-        # pembelian normal dari supplier (bukan fulfillment antar-cabang).
-        pisah_ppn = (not is_fulfillment) and toko_pkp(db) and float(totals["tax"] or 0) > 0
+        # pembelian normal dari supplier (bukan fulfillment antar-cabang). (is_fulfillment & pkp
+        # sudah dihitung di awal fungsi.)
+        pisah_ppn = (not is_fulfillment) and pkp and float(totals["tax"] or 0) > 0
         purchase.ppn_dipisah = pisah_ppn  # diingat per-faktur → batal/retur memakai mode yang SAMA dgn saat dibeli (aman walau saklar PKP berubah)
 
         if not is_fulfillment:

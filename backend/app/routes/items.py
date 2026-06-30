@@ -61,6 +61,7 @@ def _serialize_item_lite(item: models.Item, current_user: models.User):
         "buy_price": buy if _is_admin_user(current_user) else 0,
         "min_price": min_price,
         "sell_price": float(item.sell_price or 0),
+        "ppn_percent": item.ppn_percent,
         "stock": float(item.stock or 0),
         "min_stock": float(item.min_stock or 0),
         "is_active": bool(item.is_active),

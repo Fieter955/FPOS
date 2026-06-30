@@ -152,16 +152,67 @@
           <h1 style="margin: 0; font-size: 22px">🖨️ Cetak Barcode</h1>
         </div>
 
-        <div class="input-group" style="margin-bottom: 16px">
+        <div style="display: flex; gap: 8px; margin-bottom: 12px">
           <input
             type="text"
             id="itemSearch"
             class="input-control"
             list="itemList"
-            placeholder="Cari barang..."
+            placeholder="Cari barang lalu Enter / klik Tambah..."
             autocomplete="off"
+            style="flex: 1; margin: 0"
           />
           <datalist id="itemList"></datalist>
+          <button
+            class="btn btn-primary"
+            id="btnTambahBarang"
+            onclick="tambahKeDaftar()"
+            style="white-space: nowrap"
+          >
+            + Tambah
+          </button>
+        </div>
+
+        <div class="slider-group" style="padding: 0; overflow: hidden">
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr 70px 36px;
+              gap: 8px;
+              padding: 10px 14px;
+              background: var(--bg-color);
+              font-size: 12px;
+              font-weight: 700;
+              color: var(--text-muted);
+            "
+          >
+            <div>Barang</div>
+            <div style="text-align: center">Qty</div>
+            <div></div>
+          </div>
+          <div id="daftarCetakBody"></div>
+          <div
+            id="daftarCetakEmpty"
+            style="
+              padding: 16px;
+              text-align: center;
+              color: var(--text-muted);
+              font-size: 13px;
+            "
+          >
+            Belum ada barang. Cari lalu klik &quot;+ Tambah&quot;.
+          </div>
+          <div
+            style="
+              padding: 10px 14px;
+              border-top: 1px solid var(--border-color);
+              font-size: 13px;
+              font-weight: 700;
+              text-align: right;
+            "
+          >
+            Total: <span id="totalLabelCount">0</span> label
+          </div>
         </div>
 
         <div class="slider-group">
@@ -286,30 +337,6 @@
           </div>
         </div>
 
-        <div class="input-group">
-          <label style="color: #ef4444; font-weight: bold"
-            >Jumlah Barcode Dicetak</label
-          >
-          <input
-            type="number"
-            id="printQty"
-            class="input-control"
-            value="1"
-            min="1"
-          />
-          <div
-            style="
-              margin-top: 6px;
-              font-size: 11px;
-              color: var(--text-muted);
-              line-height: 1.35;
-            "
-          >
-            Contoh: pilih 3 Lin lalu isi 5, maka tercetak 2 baris dan slot
-            terakhir kosong.
-          </div>
-        </div>
-
         <button
           class="btn btn-primary"
           style="width: 100%; margin-top: auto"
@@ -334,7 +361,7 @@
     <script>
       requireAuth();
       let allItems = [],
-        selectedItem = null,
+        daftarCetak = [], // [{id,name,code,barcode,sell_price,kategori,qty}]
         previewBlobUrl = "",
         previewRenderTimer = null,
         previewAbortController = null,
@@ -369,27 +396,107 @@
         }
       }
 
+      // Tambah barang dari kotak cari ke daftar cetak. Cocokkan by nama/kode/barcode.
+      // Bila sudah ada di daftar → qty +1. Pastikan barcode-nya tergenerate.
+      async function tambahKeDaftar() {
+        const inp = document.getElementById("itemSearch");
+        const keyword = (inp.value || "").trim();
+        if (!keyword) return;
+
+        const item = allItems.find(
+          (i) =>
+            i.name === keyword || i.code === keyword || i.barcode === keyword,
+        );
+        if (!item) {
+          showToast("Barang tidak ditemukan", "warning");
+          return;
+        }
+
+        const adaDiDaftar = daftarCetak.find((d) => d.id === item.id);
+        if (adaDiDaftar) {
+          adaDiDaftar.qty += 1;
+        } else {
+          if (!item.barcode) await generateBarcode(item);
+          daftarCetak.push({
+            id: item.id,
+            name: item.name,
+            code: item.code,
+            barcode: item.barcode || item.code || "",
+            sell_price: item.sell_price || 0,
+            kategori: getKategoriLabel(item),
+            qty: 1,
+          });
+        }
+
+        inp.value = "";
+        inp.focus();
+        renderDaftar();
+        schedulePreviewRender();
+      }
+
+      // Enter di kotak cari = tambah ke daftar (tanpa submit form apa pun).
       document
         .getElementById("itemSearch")
-        .addEventListener("input", function () {
-          selectedItem =
-            allItems.find(
-              (i) =>
-                i.name === this.value ||
-                i.code === this.value ||
-                i.barcode === this.value,
-            ) || null;
-
-          if (!selectedItem) {
-            if (previewAbortController) {
-              previewAbortController.abort();
-            }
-            setPreviewPlaceholder("Pilih barang dulu");
-            return;
+        .addEventListener("keydown", function (e) {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            tambahKeDaftar();
           }
-
-          generateBarcode();
         });
+      // Memilih opsi dari datalist memicu "change" → tambah HANYA bila persis cocok,
+      // agar mengetik sebagian lalu pindah fokus tidak memunculkan toast "tidak ditemukan".
+      document
+        .getElementById("itemSearch")
+        .addEventListener("change", function () {
+          const v = (this.value || "").trim();
+          if (!v) return;
+          const cocok = allItems.find(
+            (i) => i.name === v || i.code === v || i.barcode === v,
+          );
+          if (cocok) tambahKeDaftar();
+        });
+
+      function ubahQty(id, nilai) {
+        const d = daftarCetak.find((x) => x.id === id);
+        if (!d) return;
+        d.qty = Math.max(1, parseInt(nilai, 10) || 1);
+        document.getElementById("totalLabelCount").textContent = totalLabel();
+        schedulePreviewRender();
+      }
+
+      function hapusItem(id) {
+        daftarCetak = daftarCetak.filter((x) => x.id !== id);
+        renderDaftar();
+        schedulePreviewRender();
+      }
+
+      function totalLabel() {
+        return daftarCetak.reduce((acc, d) => acc + (d.qty || 0), 0);
+      }
+
+      function renderDaftar() {
+        const body = document.getElementById("daftarCetakBody");
+        const kosong = document.getElementById("daftarCetakEmpty");
+        document.getElementById("totalLabelCount").textContent = totalLabel();
+        if (!daftarCetak.length) {
+          body.innerHTML = "";
+          if (kosong) kosong.style.display = "";
+          return;
+        }
+        if (kosong) kosong.style.display = "none";
+        body.innerHTML = daftarCetak
+          .map(
+            (d) => `
+            <div style="display:grid; grid-template-columns:1fr 70px 36px; gap:8px; padding:8px 14px; border-top:1px solid var(--border-color); align-items:center">
+              <div style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" title="${d.name}">${d.name}</div>
+              <input type="number" min="1" value="${d.qty}" class="input-control" style="margin:0; height:34px; text-align:center; padding:0 6px"
+                oninput="ubahQty(${d.id}, this.value)" />
+              <button class="btn" title="Hapus" onclick="hapusItem(${d.id})"
+                style="padding:0; width:34px; height:34px; background:var(--danger,#ef4444); color:#fff; border:none; border-radius:8px">✕</button>
+            </div>`,
+          )
+          .join("");
+      }
 
       function updateSliderVars() {
         const valP = document.getElementById("slPrice").value;
@@ -405,7 +512,7 @@
         schedulePreviewRender();
       }
 
-      ["paperW", "paperH", "printQty", "gapX", "gapY"].forEach((id) => {
+      ["paperW", "paperH", "gapX", "gapY"].forEach((id) => {
         document
           .getElementById(id)
           .addEventListener("input", schedulePreviewRender);
@@ -414,19 +521,18 @@
         r.addEventListener("change", schedulePreviewRender);
       });
 
-      async function generateBarcode() {
-        if (!selectedItem) return;
+      async function generateBarcode(item) {
+        if (!item) return;
         try {
           const req = await api("POST", "/barcode/generate", {
-            item_id: selectedItem.id,
+            item_id: item.id,
             barcode_type: "CODE128",
           });
-          selectedItem.barcode = req.barcode_value;
-          const itemIndex = allItems.findIndex((i) => i.id === selectedItem.id);
+          item.barcode = req.barcode_value;
+          const itemIndex = allItems.findIndex((i) => i.id === item.id);
           if (itemIndex >= 0) {
             allItems[itemIndex].barcode = req.barcode_value;
           }
-          schedulePreviewRender();
         } catch (e) {
           showToast("Gagal buat barcode", "error");
         }
@@ -449,10 +555,6 @@
         );
         const w = parseFloat(document.getElementById("paperW").value) || 33;
         const h = parseFloat(document.getElementById("paperH").value) || 15;
-        const totalLabels = Math.max(
-          1,
-          parseInt(document.getElementById("printQty").value, 10) || 1,
-        );
         const gapX = Math.max(
           0,
           parseFloat(document.getElementById("gapX").value) || 0,
@@ -461,18 +563,24 @@
           0,
           parseFloat(document.getElementById("gapY").value) || 0,
         );
+
+        // Susun label: tiap barang di daftar diulang sebanyak qty-nya.
+        const data_produk = [];
+        daftarCetak.forEach((d) => {
+          const jumlah = Math.max(1, parseInt(d.qty, 10) || 1);
+          for (let i = 0; i < jumlah; i++) {
+            data_produk.push({
+              nama: d.name || "-",
+              kategori: d.kategori || "UMUM",
+              barcode: d.barcode || d.code || "",
+              harga: d.sell_price || 0,
+            });
+          }
+        });
+
+        const totalLabels = Math.max(1, data_produk.length);
         const rows = Math.ceil(totalLabels / cols);
         const sheetCols = rows > 1 ? cols : Math.min(cols, totalLabels);
-
-        const data_produk = [];
-        for (let i = 0; i < totalLabels; i++) {
-          data_produk.push({
-            nama: selectedItem?.name || "-",
-            kategori: getKategoriLabel(selectedItem),
-            barcode: selectedItem?.barcode || selectedItem?.code || "",
-            harga: selectedItem?.sell_price || 0,
-          });
-        }
 
         return {
           data_produk,
@@ -562,8 +670,8 @@
 
       async function updatePreviewGrid() {
         const area = document.getElementById("previewArea");
-        if (!selectedItem) {
-          setPreviewPlaceholder("Pilih barang dulu");
+        if (!daftarCetak.length) {
+          setPreviewPlaceholder("Tambah barang dulu");
           return;
         }
 
@@ -581,7 +689,7 @@
             payload,
             previewAbortController.signal,
           );
-          if (renderSeq !== previewRenderSeq || !selectedItem) {
+          if (renderSeq !== previewRenderSeq || !daftarCetak.length) {
             return;
           }
           cleanupPreviewBlob();
@@ -600,8 +708,8 @@
       }
 
       async function printStiker() {
-        if (!selectedItem) {
-          showToast("Pilih barang dulu!", "warning");
+        if (!daftarCetak.length) {
+          showToast("Tambah barang dulu!", "warning");
           return;
         }
 
@@ -635,7 +743,8 @@
           showToast("Kesalahan cetak: " + e.message, "error");
         }
       }
-      setPreviewPlaceholder("Pilih barang dulu");
+      setPreviewPlaceholder("Tambah barang dulu");
+      renderDaftar();
       updateSliderVars();
       loadItems();
     </script>

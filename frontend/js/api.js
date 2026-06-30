@@ -153,7 +153,10 @@ async function cachedApi(path, ttlMs = 300000) {
   } catch {}
   const data = await api("GET", path);
   try {
-    sessionStorage.setItem(key, JSON.stringify({ t: Date.now(), d: data }));
+    // Jangan cache respons kosong (mis. saat 401/redirect) agar tidak meracuni cache 5 menit.
+    if (data !== undefined && data !== null) {
+      sessionStorage.setItem(key, JSON.stringify({ t: Date.now(), d: data }));
+    }
   } catch {}
   return data;
 }
@@ -490,6 +493,8 @@ async function initBranchSwitcher() {
   try {
     // Cabang jarang berubah → cache per-sesi agar tiap pindah halaman tidak fetch ulang.
     const branches = await cachedApi("/branches/");
+    // 401/redirect atau respons tak terduga → hentikan diam-diam tanpa lempar error
+    if (!Array.isArray(branches)) return;
     let activeId = localStorage.getItem("active_branch_id");
 
     if (!activeId && branches.length > 0) {

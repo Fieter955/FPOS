@@ -155,6 +155,7 @@ class ItemCreate(BaseModel):
     buy_price: float = 0
     sell_price: float = 0
     profit_margin: float = 0
+    ppn_percent: Optional[float] = None   # tarif PPN barang (%); None → ikut tarif toko
     stock: float = 0
     min_stock: float = 0
     description: Optional[str] = None
@@ -173,6 +174,7 @@ class ItemUpdate(BaseModel):
     buy_price: Optional[float] = None
     sell_price: Optional[float] = None
     profit_margin: Optional[float] = None
+    ppn_percent: Optional[float] = None   # tarif PPN barang (%); None → ikut tarif toko
     min_stock: Optional[float] = None
     description: Optional[str] = None
     barcode: Optional[str] = None
@@ -197,6 +199,7 @@ class ItemOut(BaseModel):
     min_price: float = 0
     sell_price: float
     profit_margin: float
+    ppn_percent: Optional[float] = None   # tarif PPN barang (%); None → ikut tarif toko
     stock: float
     min_stock: float
     description: Optional[str]
@@ -273,6 +276,7 @@ class SupplierCreate(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     PpnSupplier: float = 0
+    ppn_type: Optional[str] = None  # "included" | "excluded" | None
     credit_limit: float = 0
     due_date: int = 0
     item_ids: Optional[List[int]] = None
@@ -284,11 +288,17 @@ class SupplierUpdate(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     PpnSupplier: Optional[float] = None
+    ppn_type: Optional[str] = None  # "included" | "excluded" | None
     credit_limit: Optional[float] = None
     due_date: Optional[int] = None
     is_active: Optional[bool] = None
     item_ids: Optional[List[int]] = None
     model_config = {"from_attributes": True}
+
+# Request untuk menyamakan Jenis PPN seluruh barang supplier
+class SupplierPpnApply(BaseModel):
+    ppn_type: str            # "included" | "excluded"
+    dry_run: bool = False
 
 class SupplierOut(BaseModel):
     id: int
@@ -298,6 +308,7 @@ class SupplierOut(BaseModel):
     phone: Optional[str]
     email: Optional[str]
     PpnSupplier: Optional[float]
+    ppn_type: Optional[str] = None
     credit_limit: float
     due_date: int = 0
     deposit_balance: float = 0
@@ -318,6 +329,7 @@ class SupplierListOut(BaseModel):
     phone: Optional[str]
     email: Optional[str]
     PpnSupplier: Optional[float]
+    ppn_type: Optional[str] = None
     credit_limit: float
     due_date: int = 0
     deposit_balance: float = 0
@@ -351,10 +363,12 @@ class PurchaseItemCreate(BaseModel):
     sell_price: float = 0
     profit_margin: float = 0
     discount: float = 0
+    ppn_percent: Optional[float] = None   # tarif PPN baris (%); None → ikut tarif barang/toko (Included/PKP)
 
 class PurchaseCreate(BaseModel):
     number: Optional[str] = None
     date: date
+    due_date: Optional[date] = None
     supplier_id: Optional[int] = None
     discount: float = 0
     tax: float = 0
@@ -381,6 +395,7 @@ class PurchaseItemOut(BaseModel):
     disc3: float = 0
     disc4: float = 0
     total: float
+    ppn_percent: Optional[float] = None
     item: Optional[ItemOut] = None
     model_config = {"from_attributes": True}
 
@@ -388,6 +403,7 @@ class PurchaseOut(BaseModel):
     id: int
     number: str
     date: date
+    due_date: Optional[date] = None
     branch_id: Optional[int] = None
     supplier_id: Optional[int] = None
     from_po_id: Optional[int] = None
@@ -515,6 +531,7 @@ class SaleItemCreate(BaseModel):
     qty: float
     sell_price: float
     discount: float = 0
+    ppn_percent: Optional[float] = None   # tarif PPN baris (%); None → ikut tarif barang/toko di server
 
 class SaleCreate(BaseModel):
     number: Optional[str] = None
@@ -537,6 +554,7 @@ class SaleItemOut(BaseModel):
     buy_price: float = 0
     sell_price: float
     discount: float
+    ppn_percent: float = 0
     total: float
     margin_amount: float = 0
     margin_percent: float = 0

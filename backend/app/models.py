@@ -183,6 +183,9 @@ class Item(Base):
     buy_price = Column(Float, default=0)
     sell_price = Column(Float, default=0)
     profit_margin = Column(Float, default=0)
+    # Tarif PPN barang (%) — dipakai untuk PPN Masukan (saat beli) & PPN Keluaran (saat jual).
+    # NULL → ikut tarif PPN toko (Branch.tarif_ppn) supaya data lama tak berubah. 0 = barang non-PPN.
+    ppn_percent = Column(Float, nullable=True)
     stock = Column(Float, default=0)
     min_stock = Column(Float, default=0)
     description = Column(Text)
@@ -279,6 +282,9 @@ class Supplier(Base):
     phone = Column(String(20))
     email = Column(String(100))
     PpnSupplier = Column(Float, default=0)
+    # Jenis PPN default supplier: "included" | "excluded" | None.
+    # Saat diubah, semua barang supplier ikut disamakan (lihat /suppliers/{sid}/apply-ppn-type).
+    ppn_type = Column(String(20), nullable=True)
     credit_limit = Column(Float, default=0)
     due_date = Column(Integer, default=0)
     deposit_balance = Column(Float, default=0)
@@ -316,6 +322,7 @@ class Purchase(Base):
     id = Column(Integer, primary_key=True, index=True)
     number = Column(String(50), unique=True, nullable=False)
     date = Column(Date, nullable=False)
+    due_date = Column(Date, nullable=True)  # tanggal jatuh tempo pembayaran (hutang dagang)
     supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
     subtotal = Column(Float, default=0)
     discount = Column(Float, default=0)
@@ -364,6 +371,9 @@ class PurchaseItem(Base):
     disc3 = Column(Float, default=0)
     disc4 = Column(Float, default=0)
     total = Column(Float, nullable=False)
+    # Tarif PPN per-baris pembelian (%); NULL → ikut tarif barang/toko. Dipakai mode Included
+    # (PKP) untuk mengupas PPN mundur per-barang saat menghitung biaya batch FIFO & retur.
+    ppn_percent = Column(Float, nullable=True)
     purchase = relationship("Purchase", back_populates="items")
     item = relationship("Item", back_populates="purchase_items")
 
@@ -447,6 +457,7 @@ class SaleItem(Base):
     buy_price = Column(Float, default=0)
     sell_price = Column(Float, nullable=False)
     discount = Column(Float, default=0)
+    ppn_percent = Column(Float, default=0)  # tarif PPN baris ini (%) saat dijual → untuk balik PPN per-baris saat retur
     total = Column(Float, nullable=False)
     sale = relationship("Sale", back_populates="items")
     item = relationship("Item", back_populates="sale_items")
