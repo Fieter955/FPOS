@@ -104,7 +104,10 @@ def get_item_sale_history(
     rows = (
         db.query(models.SaleItem)
         .join(models.Sale, models.SaleItem.sale_id == models.Sale.id)
-        .options(joinedload(models.SaleItem.item).joinedload(models.Item.unit))
+        .options(
+            joinedload(models.SaleItem.item).joinedload(models.Item.unit),
+            joinedload(models.SaleItem.sale).joinedload(models.Sale.customer),
+        )
         .filter(models.SaleItem.item_id == item_id)
         .order_by(models.Sale.date.desc(), models.SaleItem.id.desc())
         .limit(20)
@@ -118,6 +121,7 @@ def get_item_sale_history(
         harga_setelah_potongan = harga * (1 - potongan / 100)
         hasil.append({
             "tanggal": si.sale.date.isoformat() if si.sale and si.sale.date else None,
+            "pelanggan": si.sale.customer.name if si.sale and si.sale.customer else "Umum",
             "jumlah": si.qty,
             "satuan": si.item.unit.name if si.item and si.item.unit else "pcs",
             "harga": harga,

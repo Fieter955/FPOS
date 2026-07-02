@@ -1071,6 +1071,14 @@
       background: rgba(0, 0, 0, 0.03);
     }
 
+    /* Baris keranjang yang barangnya SEDANG AKTIF (baru diklik) — penanda warna
+       + garis aksen di kiri, supaya kasir tahu barang mana yang sedang dipilih
+       untuk tombol "Detail Item". */
+    .ipos-table tbody tr.row-active {
+      background: var(--primary-light) !important;
+      box-shadow: inset 3px 0 0 var(--primary);
+    }
+
     .ipos-table .col-code {
       font-family: "Courier New", monospace;
       font-size: 0.82rem;
@@ -1306,6 +1314,104 @@
         max-width: 100%;
       }
     }
+
+    /* --- Popup Detail Barang (histori beli & jual, read-only) --- */
+    .dh-box {
+      max-width: 40rem !important;
+      width: 100%;
+      padding: 0 !important;
+      overflow: hidden !important;
+      border-radius: var(--radius-lg, 1rem) !important;
+      display: flex;
+      flex-direction: column;
+      max-height: 88vh;
+    }
+
+    .dh-hdr {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.7rem 1.2rem;
+      background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 70%, #000));
+      color: #fff;
+      font-weight: 800;
+      font-size: 0.95rem;
+    }
+
+    .dh-tabs {
+      display: flex;
+      gap: 0.5rem;
+      padding: 0.75rem 1.2rem 0;
+    }
+
+    .dh-tab {
+      flex: 1;
+      padding: 0.55rem;
+      border-radius: 0.5rem 0.5rem 0 0;
+      border: 1px solid var(--border-color);
+      border-bottom: none;
+      background: var(--bg-color);
+      color: var(--text-muted);
+      font-weight: 700;
+      font-size: 0.85rem;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .dh-tab.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+
+    .dh-body {
+      flex: 1;
+      overflow: auto;
+      padding: 0 1.2rem;
+      min-height: 12rem;
+    }
+
+    .dh-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .dh-table th {
+      position: sticky;
+      top: 0;
+      background: var(--card-bg);
+      border-bottom: 2px solid var(--border-color);
+      padding: 0.6rem 0.7rem;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--text-muted);
+      text-align: left;
+    }
+
+    .dh-table td {
+      padding: 0.55rem 0.7rem;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 0.9rem;
+      color: var(--text-main);
+    }
+
+    .dh-table th.num,
+    .dh-table td.num {
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .dh-table tbody tr:nth-child(even) {
+      background: rgba(0, 0, 0, 0.02);
+    }
+
+    .dh-foot {
+      padding: 0.75rem 1.2rem;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      justify-content: flex-end;
+    }
   </style>
 </head>
 
@@ -1376,7 +1482,7 @@
     <div class="ipos-footer">
       <div class="ipos-hints">
         <div class="ipos-action-row">
-          <button class="action-btn">Detail Item</button>
+          <button class="action-btn" id="btnDetailItem" onclick="bukaDetailBarang()">Detail Item</button>
           <input class="keterangan-inp" type="text" placeholder="Tambahkan keterangan / catatan...">
         </div>
 
@@ -1583,6 +1689,44 @@
         "></div>
   </div>
 
+  <!-- Modal Detail Barang: histori beli & jual barang aktif (hanya lihat) -->
+  <div class="modal-overlay" id="detailModal" style="display: none; z-index: 9999"
+    onclick="if(event.target===this)closeModals()">
+    <div class="modal-box dh-box">
+      <div class="dh-hdr">
+        <span>📊 Detail Barang — <span id="dhNamaBarang">-</span></span>
+        <button class="btn-x" onclick="closeModals()"
+          style="color:rgba(255,255,255,.7);font-size:1.4rem">×</button>
+      </div>
+      <div class="dh-tabs">
+        <button class="dh-tab active" id="dhTabBeli" onclick="gantiTabHistori('beli')">🛒 Riwayat Harga Beli</button>
+        <button class="dh-tab" id="dhTabJual" onclick="gantiTabHistori('jual')">💰 Riwayat Harga Jual</button>
+      </div>
+      <div class="dh-body">
+        <table class="dh-table">
+          <thead>
+            <tr>
+              <th style="text-align:center">Tanggal</th>
+              <th id="dhColPihak">Supplier</th>
+              <th class="num">Jumlah</th>
+              <th style="text-align:center">Satuan</th>
+              <th class="num">Harga</th>
+              <th class="num">Pot.</th>
+              <th class="num">Harga Stlh Pot.</th>
+            </tr>
+          </thead>
+          <tbody id="dhBody">
+            <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:1.5rem">Memuat…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="dh-foot">
+        <button class="rcpt-btn" style="background:var(--primary);color:#fff;border:none;padding:0.6rem 1.4rem"
+          onclick="closeModals()">Tutup</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/js/api.js"></script>
   <script src="/js/theme.js"></script>
   <script src="/js/components.js"></script>
@@ -1601,6 +1745,7 @@
     let currentFilteredItems = [];
     let kbFocusIndex = -1;
     let activeModal = null;
+    let barangAktif = null; // barang yang sedang disorot (untuk tombol Detail Item & preview)
 
     let payModalMethods = ["cancel", "cash", "transfer", "card"];
     let payModalIdx = 1;
@@ -1688,6 +1833,16 @@
         return;
       }
 
+      // 4b. KONTROL MODAL DETAIL BARANG (histori beli/jual) — Esc menutup,
+      //     tombol lain ditelan agar tak memicu pintasan kasir.
+      if (activeModal === "detail") {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          closeModals();
+        }
+        return;
+      }
+
       // 5. KONTROL LAYAR UTAMA POS
       if (activeModal === null) {
         // B. SHORTCUT TOMBOL BAYAR (F8 / INSERT)
@@ -1726,11 +1881,7 @@
             rows[kbFocusIndex].scrollIntoView({ block: "nearest" });
           }
           const it = currentFilteredItems[kbFocusIndex];
-          if (it) {
-            const ai = document.getElementById("activeItemName");
-            if (ai) ai.textContent = it.name;
-            tampilkanPreviewBarang(it);
-          }
+          if (it) setBarangAktif(it);
           return;
         }
 
@@ -2249,6 +2400,124 @@
       }
     }
 
+    // Tandai satu barang sebagai "barang aktif": dipakai tombol Detail Item
+    // (histori beli/jual) dan preview foto. Dikumpulkan di satu tempat agar konsisten.
+    function setBarangAktif(item) {
+      barangAktif = item || null;
+      const ai = document.getElementById("activeItemName");
+      if (ai) ai.textContent = item ? item.name : "—";
+      tampilkanPreviewBarang(item || null);
+      sorotBarisAktif();
+    }
+
+    // Klik satu baris di keranjang → jadikan barang aktif (tanpa mengubah qty).
+    function pilihBarangDariKeranjang(id) {
+      const item = allItems.find((x) => x.id === id);
+      if (item) setBarangAktif(item);
+    }
+
+    // Sorot baris keranjang yang barangnya sedang aktif. Hanya menandai kelas
+    // (tidak render ulang) → tidak mengganggu input Qty/Pot yang sedang diketik.
+    function sorotBarisAktif() {
+      const body = document.getElementById("cartTableBody");
+      if (!body) return;
+      const rows = body.querySelectorAll("tr");
+      const aktifId = barangAktif ? barangAktif.id : null;
+      cart.forEach((c, i) => {
+        if (rows[i])
+          rows[i].classList.toggle("row-active", aktifId != null && c.id === aktifId);
+      });
+    }
+
+    // ===== Popup Detail Barang: histori beli & jual (hanya lihat) =====
+    // Memakai data yang sama dengan halaman catat-pembelian:
+    //   Beli → /purchases/item-history/ · Jual → /sales/item-history/
+    let dhTab = "beli";
+
+    function bukaDetailBarang() {
+      if (!barangAktif) {
+        showToast(
+          "Pilih barang dulu — klik hasil pencarian atau nama barang di keranjang",
+          "warning",
+        );
+        return;
+      }
+      document.getElementById("dhNamaBarang").textContent = barangAktif.name || "-";
+      dhTab = "beli";
+      document.getElementById("dhTabBeli").classList.add("active");
+      document.getElementById("dhTabJual").classList.remove("active");
+      document.getElementById("detailModal").style.display = "flex";
+      activeModal = "detail";
+      muatHistoriBarang();
+    }
+
+    function gantiTabHistori(tab) {
+      dhTab = tab;
+      document.getElementById("dhTabBeli").classList.toggle("active", tab === "beli");
+      document.getElementById("dhTabJual").classList.toggle("active", tab === "jual");
+      muatHistoriBarang();
+    }
+
+    async function muatHistoriBarang() {
+      const body = document.getElementById("dhBody");
+      if (!barangAktif) return;
+      const isBeli = dhTab === "beli";
+      // Kolom ke-2 = lawan transaksi: Supplier (beli) / Pelanggan (jual).
+      document.getElementById("dhColPihak").textContent = isBeli ? "Supplier" : "Pelanggan";
+      body.innerHTML =
+        '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:1.5rem">Memuat…</td></tr>';
+      const url = isBeli
+        ? `/purchases/item-history/?item_id=${barangAktif.id}`
+        : `/sales/item-history/?item_id=${barangAktif.id}`;
+      try {
+        const data = await api("GET", url);
+        if (!data || !data.length) {
+          body.innerHTML =
+            '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:1.5rem">' +
+            (isBeli
+              ? "Belum ada riwayat harga beli barang ini."
+              : "Belum ada riwayat harga jual barang ini.") +
+            "</td></tr>";
+          return;
+        }
+        // Ini RIWAYAT HARGA, bukan daftar tiap transaksi: buang baris yang harganya
+        // sama dengan transaksi terbaru sebelumnya (bandingkan harga NETO setelah
+        // potongan, dibulatkan) → sisakan hanya saat harga BERUBAH. Data dari server
+        // urut baru→lama, jadi tiap baris tersisa = harga terbaru pada tingkat itu.
+        const perubahan = [];
+        let hargaSebelumnya = null;
+        for (const r of data) {
+          const neto = Math.round(r.harga_setelah_potongan || 0);
+          if (neto !== hargaSebelumnya) {
+            perubahan.push(r);
+            hargaSebelumnya = neto;
+          }
+        }
+        body.innerHTML = perubahan
+          .map((r) => {
+            const tgl = r.tanggal
+              ? new Date(r.tanggal + "T00:00:00").toLocaleDateString("id-ID")
+              : "-";
+            const pihak = isBeli ? r.supplier || "-" : r.pelanggan || "-";
+            return `<tr>
+                <td style="text-align:center">${tgl}</td>
+                <td>${pihak}</td>
+                <td class="num">${fmtQty(r.jumlah)}</td>
+                <td style="text-align:center">${r.satuan || "-"}</td>
+                <td class="num">${fmtRp(r.harga)}</td>
+                <td class="num">${r.potongan || 0}%</td>
+                <td class="num" style="font-weight:700;color:var(--primary)">${fmtRp(Math.round(r.harga_setelah_potongan))}</td>
+              </tr>`;
+          })
+          .join("");
+      } catch (e) {
+        body.innerHTML =
+          '<tr><td colspan="7" style="text-align:center;color:#ef4444;padding:1.5rem">Gagal memuat: ' +
+          e.message +
+          "</td></tr>";
+      }
+    }
+
     // Tambah barang ke keranjang. Dari Enter/klik hasil pencarian
     // (pindahKeQty = true) → kursor langsung pindah ke kolom Qty baris tsb agar
     // kasir bisa mengetik jumlah lalu Enter untuk kembali ke pencarian.
@@ -2257,9 +2526,7 @@
     function promptQty(id, supplierId = null, pindahKeQty = true) {
       const item = allItems.find((i) => i.id === id);
       if (!item) return;
-      const ai = document.getElementById("activeItemName");
-      if (ai) ai.textContent = item.name;
-      tampilkanPreviewBarang(item);
+      setBarangAktif(item);
       const availableQty = getAvailableCartStock(item);
       if (availableQty <= 0) {
         showToast("Stok " + item.name + " habis!", "error");
@@ -2532,7 +2799,7 @@
           const floor = hppFloorBarang(src, c.supplier_id);
           const rugi = floor > 0 && c.price < floor - 0.01; // net di bawah modal?
           return `
-          <tr>
+          <tr style="cursor:pointer" title="Klik baris ini untuk lihat Detail (histori beli/jual) barang" onclick="pilihBarangDariKeranjang(${c.id})">
             <td class="ctr">${i + 1}</td>
             <td class="col-code">${code}</td>
             <td>${c.name}<span style="color:var(--text-muted);font-size:0.72rem"> / ${c.unit || "pcs"}</span></td>
@@ -2569,6 +2836,7 @@
       }
 
       body.innerHTML = barisBarang + barisKosong;
+      sorotBarisAktif();
     }
 
     function changeQty(i, d) {

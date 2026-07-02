@@ -172,7 +172,10 @@ def get_item_purchase_history(
     query = (
         db.query(models.PurchaseItem)
         .join(models.Purchase, models.PurchaseItem.purchase_id == models.Purchase.id)
-        .options(joinedload(models.PurchaseItem.item).joinedload(models.Item.unit))
+        .options(
+            joinedload(models.PurchaseItem.item).joinedload(models.Item.unit),
+            joinedload(models.PurchaseItem.purchase).joinedload(models.Purchase.supplier),
+        )
         .filter(models.PurchaseItem.item_id == item_id)
     )
 
@@ -198,6 +201,7 @@ def get_item_purchase_history(
         )
         hasil.append({
             "tanggal": pi.purchase.date.isoformat() if pi.purchase and pi.purchase.date else None,
+            "supplier": pi.purchase.supplier.name if pi.purchase and pi.purchase.supplier else "-",
             "jumlah": pi.qty,
             "satuan": pi.item.unit.name if pi.item and pi.item.unit else "pcs",
             "harga": harga,
