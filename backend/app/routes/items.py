@@ -6,6 +6,8 @@ from typing import Optional
 import pandas as pd
 from io import BytesIO
 import uuid
+import sys
+from pathlib import Path
 
 from ..database import get_db
 from .. import models, schemas
@@ -19,6 +21,16 @@ from ..services.virtual_units import (
 )
 
 router = APIRouter()
+
+# Folder foto barang = SAMA dengan yang di-serve mount "/uploads" (main.py: ROOT_DIR/uploads).
+# Dihitung ulang di sini (BUKAN import main.py → cegah circular import), mencerminkan logika
+# ROOT_DIR yang sama termasuk mode frozen (.exe). items.py = backend/app/routes → parents[3] = root proyek.
+if getattr(sys, "frozen", False):
+    _ROOT_DIR = Path(sys.executable).parent
+else:
+    _ROOT_DIR = Path(__file__).resolve().parents[3]
+_ITEM_IMG_DIR = _ROOT_DIR / "uploads" / "items"
+MAKS_FOTO_BYTES = 3 * 1024 * 1024  # 3 MB (foto sudah dikecilkan di browser; ini hanya batas aman)
 
 
 def _is_admin_user(user: models.User) -> bool:
@@ -66,6 +78,7 @@ def _serialize_item_lite(item: models.Item, current_user: models.User):
         "min_stock": float(item.min_stock or 0),
         "is_active": bool(item.is_active),
         "is_discountable": bool(item.is_discountable),
+        "image_path": item.image_path,
         "is_virtual_variant": bool(getattr(item, "is_virtual_variant", False)),
         "parent_item_id": item.parent_item_id,
         "prices": [
@@ -435,6 +448,17 @@ def update_item(item_id: int, item: schemas.ItemUpdate, db: Session = Depends(ge
         from .barcode_gen import _generate_barcode_value
         data["barcode"] = _generate_barcode_value(obj.code, "CODE128")
         
+    old_sell_price = obj.sell_price
+    if "sell_price" in data and data["sell_price"] is not None:
+        if abs(data["sell_price"] - (old_sell_price or 0)) > 0.01:
+            db.add(models.ItemPriceChange(
+                item_id=obj.id,
+                change_type="sell_price",
+                old_price=old_sell_price or 0,
+                new_price=data["sell_price"],
+                changed_by=current_user.id
+            ))
+
     for k, v in data.items(): 
         setattr(obj, k, v)
         
@@ -492,7 +516,7 @@ def ubah_harga_beli_supplier(
     item_id: int,
     data: schemas.HargaSupplierUpdate,
     db: Session = Depends(get_db),
-    _=Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),
 ):
     """Set harga beli dan/atau PPN item ini khusus untuk satu supplier (upsert ItemSupplier).
     Hanya field yang dikirim yang di-update — tidak mengubah Item.buy_price global maupun
@@ -504,7 +528,10 @@ def ubah_harga_beli_supplier(
         models.ItemSupplier.item_id == item_id,
         models.ItemSupplier.supplier_id == data.supplier_id,
     ).first()
+    
+    old_buy_price = 0
     if spec:
+        old_buy_price = spec.buy_price or 0
         if data.harga_beli is not None and data.harga_beli > 0:
             spec.buy_price = data.harga_beli
         if data.ppn_type is not None:
@@ -520,6 +547,19 @@ def ubah_harga_beli_supplier(
             ppn_type=(data.ppn_type if data.ppn_type is not None else "included"),
             ppn_percent=(data.ppn_percent if data.ppn_percent is not None else 0),
         ))
+        
+    new_buy_price = spec.buy_price if spec else (data.harga_beli if data.harga_beli and data.harga_beli > 0 else item.buy_price)
+    
+    if abs(new_buy_price - old_buy_price) > 0.01:
+        db.add(models.ItemPriceChange(
+            item_id=item_id,
+            supplier_id=data.supplier_id,
+            change_type="buy_price",
+            old_price=old_buy_price,
+            new_price=new_buy_price,
+            changed_by=current_user.id
+        ))
+
     db.commit()
     return {"message": "Data supplier untuk item diperbarui"}
 
@@ -535,6 +575,55 @@ def delete_item(item_id: int, db: Session = Depends(get_db), _=Depends(get_curre
     obj.is_active = False
     db.commit()
     return {"message": "Item dinonaktifkan"}
+
+
+# ─── FOTO BARANG (disimpan sebagai FILE di uploads/items, BUKAN di DB) ───────────
+@router.post("/{item_id}/image")
+async def upload_item_image(
+    item_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """Simpan / ganti foto barang. Foto sudah dikecilkan ke WebP di browser; di sini hanya
+    validasi ringan + tulis file ke disk. image_path memuat `?v=` (cache-buster) supaya foto
+    baru langsung tampil di semua cabang meski browser meng-cache /uploads selama 7 hari."""
+    obj = db.query(models.Item).get(item_id)
+    if not obj:
+        raise HTTPException(404, "Item tidak ditemukan")
+    if not (file.content_type or "").startswith("image/"):
+        raise HTTPException(400, "File harus berupa gambar")
+    contents = await file.read()
+    if len(contents) > MAKS_FOTO_BYTES:
+        raise HTTPException(400, "Ukuran foto maksimal 3 MB")
+
+    _ITEM_IMG_DIR.mkdir(parents=True, exist_ok=True)
+    # Nama file deterministik (tanpa nama dari user → aman path traversal). Ganti foto = timpa file yg sama.
+    (_ITEM_IMG_DIR / f"item_{item_id}.webp").write_bytes(contents)
+    obj.image_path = f"/uploads/items/item_{item_id}.webp?v={uuid.uuid4().hex[:8]}"
+    db.commit()
+    return {"image_path": obj.image_path}
+
+
+@router.delete("/{item_id}/image")
+def delete_item_image(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """Hapus foto barang (file + kolom image_path)."""
+    obj = db.query(models.Item).get(item_id)
+    if not obj:
+        raise HTTPException(404, "Item tidak ditemukan")
+    try:
+        f = _ITEM_IMG_DIR / f"item_{item_id}.webp"
+        if f.exists():
+            f.unlink()
+    except Exception:
+        pass
+    obj.image_path = None
+    db.commit()
+    return {"message": "Foto dihapus"}
 
 
 # ─── IMPORT EXCEL (TETAP SAMA) ───────────────
@@ -791,3 +880,21 @@ def _import_items_sync(contents: bytes, filename: str, db: Session, current_user
     except Exception as e:
         db.rollback()
         raise HTTPException(500, f"Gagal import: {str(e)}")
+
+@router.get("/{item_id}/price-history", response_model=list[schemas.ItemPriceChangeOut])
+def get_item_price_history(
+    item_id: int,
+    change_type: Optional[str] = None,
+    supplier_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user)
+):
+    query = db.query(models.ItemPriceChange).filter(models.ItemPriceChange.item_id == item_id)
+    if change_type:
+        query = query.filter(models.ItemPriceChange.change_type == change_type)
+    if supplier_id:
+        query = query.filter(models.ItemPriceChange.supplier_id == supplier_id)
+        
+    query = query.order_by(models.ItemPriceChange.changed_at.desc()).limit(50)
+    return query.all()
+

@@ -249,6 +249,8 @@ function createPurchaseGrid(container, config = {}) {
                 <div class="disc-group">
                     <input type="number" class="combobox-input pg-disc" value="${item?.disc1 || 0}" placeholder="0" style="text-align:center" />
                     ${item?.disc2 ? `<input type="number" class="combobox-input pg-disc" value="${item.disc2}" placeholder="0" style="text-align:center" />` : ""}
+                    ${item?.disc3 ? `<input type="number" class="combobox-input pg-disc" value="${item.disc3}" placeholder="0" style="text-align:center" />` : ""}
+                    ${item?.disc4 ? `<input type="number" class="combobox-input pg-disc" value="${item.disc4}" placeholder="0" style="text-align:center" />` : ""}
                     <button class="btn-plus-disc" title="Diskon Bertingkat">+</button>
                 </div>
                 <div class="purchase-grid-netto">Rp 0</div>
@@ -540,6 +542,8 @@ function createPurchaseGrid(container, config = {}) {
             discount: hb - hargaNeto,
             disc1: discs[0] || 0,
             disc2: discs[1] || 0,
+            disc3: discs[2] || 0,
+            disc4: discs[3] || 0,
             sell_price: hj,
             profit_margin: margin,
             total: (showSupplierColumn ? qOrd : qRec) * hargaNeto,
@@ -595,9 +599,10 @@ function createPurchaseSummaryGrid(container, config = {}) {
 
   let currentData = [];
   // Lebar kolom tetap (px) + Nama Barang dilebarkan. Tabel boleh scroll horizontal.
+  // Kolom Diskon 210px agar muat 4 input potongan bertingkat tanpa meluber ke kolom Total.
   const kolom =
-    "40px minmax(260px, 1fr) 130px 70px 110px 120px 170px 150px 90px 120px";
-  const lebarMin = "1300px";
+    "40px minmax(260px, 1fr) 130px 70px 110px 120px 210px 150px 90px 120px";
+  const lebarMin = "1340px";
 
   // Daftar Jenis & Satuan (untuk combo per baris). Dimuat sekali saat init.
   let daftarJenis = [];
@@ -1460,8 +1465,11 @@ async function createOrderManager(containerId, config = {}) {
     if (!itemsGrid) return;
     const items = itemsGrid.getData();
     const subtotal = items.reduce((acc, it) => {
-      let hargaNeto =
-        it.buy_price * (1 - it.disc1 / 100) * (1 - it.disc2 / 100);
+      // Potongan bertingkat (maks 4): tiap potongan memotong harga hasil potongan sebelumnya.
+      let hargaNeto = it.buy_price || 0;
+      [it.disc1, it.disc2, it.disc3, it.disc4].forEach((d) => {
+        hargaNeto = hargaNeto * (1 - (parseFloat(d) || 0) / 100);
+      });
       return acc + it.qty * hargaNeto;
     }, 0);
     const discInput = document.getElementById("om-global-disc");
@@ -1503,6 +1511,8 @@ async function createOrderManager(containerId, config = {}) {
         profit_margin: it.item?.profit_margin,
         disc1: it.disc1,
         disc2: it.disc2,
+        disc3: it.disc3,
+        disc4: it.disc4,
         supplier_id: it.item?.suppliers?.[0]?.id, // Default to first supplier if available
         suppliers: it.item?.suppliers || [],
         supplier_details: it.item?.supplier_details || [],

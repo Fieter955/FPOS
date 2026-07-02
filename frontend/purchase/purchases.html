@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Pembelian - FPOS</title>
   <link rel="stylesheet" href="/css/style.css" />
-  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/components.css?v=potongan4" />
 
   <style>
     input[type="number"]::-webkit-inner-spin-button,
@@ -32,7 +32,7 @@
     /* Hiding the PPN Included column when tax type is exclude */
     body.hide-tax-col .purchase-grid-header,
     body.hide-tax-col .purchase-grid-row {
-      grid-template-columns: 40px minmax(260px, 1fr) 130px 70px 110px 120px 170px 150px 120px !important;
+      grid-template-columns: 40px minmax(260px, 1fr) 130px 70px 110px 120px 210px 150px 120px !important;
     }
 
     body.hide-tax-col .purchase-grid-header>div:nth-child(9),
@@ -495,7 +495,7 @@
 
   <script src="/js/api.js"></script>
   <script src="/js/theme.js"></script>
-  <script src="/js/components.js"></script>
+  <script src="/js/components.js?v=potongan4"></script>
   <script src="/js/print.js"></script>
   <script>
     requireAuth();
@@ -723,6 +723,14 @@
           buy_price: it.buy_price,
           sell_price: it.item?.sell_price || 0,
           profit_margin: it.item?.profit_margin || 0,
+          // Bawa potongan bertingkat (maks 4) agar tidak hilang saat edit pembelian.
+          // Tingkat 1 selalu ada; tingkat 2-4 hanya bila terisi.
+          discs: [
+            it.disc1 || 0,
+            it.disc2 || 0,
+            it.disc3 || 0,
+            it.disc4 || 0,
+          ].filter((v, i) => i === 0 || v),
         }));
         formGrid = createPurchaseSummaryGrid("gridTarget", {
           initialItems: items,
@@ -1360,10 +1368,20 @@
               const hb = i.buy_price || 0;
               const d1 = i.disc1 || 0;
               const d2 = i.disc2 || 0;
-              const discText =
-                d2 > 0 ? `${d1}% + ${d2}%` : d1 > 0 ? `${d1}%` : "-";
+              const d3 = i.disc3 || 0;
+              const d4 = i.disc4 || 0;
+              // Potongan bertingkat: tampilkan yang terisi, dirangkai "a% + b% + ...".
+              const potTerisi = [d1, d2, d3, d4].filter((d) => d > 0);
+              const discText = potTerisi.length
+                ? potTerisi.map((d) => `${d}%`).join(" + ")
+                : "-";
 
-              const hargaNeto = hb * (1 - d1 / 100) * (1 - d2 / 100);
+              const hargaNeto =
+                hb *
+                (1 - d1 / 100) *
+                (1 - d2 / 100) *
+                (1 - d3 / 100) *
+                (1 - d4 / 100);
               const margin =
                 hargaNeto > 0
                   ? (((sellPrice - hargaNeto) / hargaNeto) * 100).toFixed(1)

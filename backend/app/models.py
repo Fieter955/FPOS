@@ -190,6 +190,9 @@ class Item(Base):
     min_stock = Column(Float, default=0)
     description = Column(Text)
     barcode = Column(String(100))
+    # Path relatif foto barang (mis. /uploads/items/item_5.webp?v=...). File foto disimpan di
+    # DISK (folder uploads/items), BUKAN di DB → ipos.db & backup email tetap kecil. NULL = tanpa foto.
+    image_path = Column(String(255), nullable=True)
     parent_item_id = Column(Integer, ForeignKey("items.id"), nullable=True)
     conversion_factor_to_parent = Column(Float, default=1)
     is_virtual_variant = Column(Boolean, default=False)
@@ -429,6 +432,7 @@ class Sale(Base):
     tax = Column(Float, default=0)
     tax_percent = Column(Float, default=0)
     is_tax_included = Column(Boolean, default=True)
+    other_cost = Column(Float, default=0)  # biaya lain (ongkir/admin) ditagihkan ke pelanggan → Pendapatan Lain-lain (4-1500)
     total = Column(Float, default=0)
     paid = Column(Float, default=0)
     change = Column(Float, default=0)
@@ -1187,6 +1191,22 @@ from sqlalchemy import Column, Integer, String, Text, DateTime
 def get_local_datetime():
     WITA = pytz.timezone("Asia/Makassar")
     return datetime.now(WITA)
+
+class ItemPriceChange(Base):
+    """Log histori perubahan harga jual dan harga beli (per supplier)"""
+    __tablename__ = "item_price_changes"
+    id = Column(Integer, primary_key=True, index=True)
+    item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
+    change_type = Column(String(50), nullable=False) # "buy_price" | "sell_price"
+    old_price = Column(Float, nullable=False)
+    new_price = Column(Float, nullable=False)
+    changed_at = Column(DateTime, default=get_local_datetime)
+    changed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    item = relationship("Item")
+    supplier = relationship("Supplier")
+    user = relationship("User")
 
 class PrintJob(Base):
     __tablename__ = "print_jobs"

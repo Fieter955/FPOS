@@ -186,7 +186,16 @@ def get_item_purchase_history(
         harga = pi.buy_price or 0
         disc1 = pi.disc1 or 0
         disc2 = pi.disc2 or 0
-        harga_setelah_potongan = harga * (1 - disc1 / 100) * (1 - disc2 / 100)
+        disc3 = pi.disc3 or 0
+        disc4 = pi.disc4 or 0
+        # Potongan bertingkat: tiap potongan memotong harga hasil potongan sebelumnya.
+        harga_setelah_potongan = (
+            harga
+            * (1 - disc1 / 100)
+            * (1 - disc2 / 100)
+            * (1 - disc3 / 100)
+            * (1 - disc4 / 100)
+        )
         hasil.append({
             "tanggal": pi.purchase.date.isoformat() if pi.purchase and pi.purchase.date else None,
             "jumlah": pi.qty,

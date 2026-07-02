@@ -127,6 +127,7 @@ def run_migrations():
     add_col("items", "parent_item_id", "INTEGER")
     add_col("items", "conversion_factor_to_parent", "REAL DEFAULT 1")
     add_col("items", "is_virtual_variant", "INTEGER DEFAULT 0")
+    add_col("items", "image_path", "TEXT")
     add_col("sales", "created_by", "INTEGER")
     add_col("sales", "change",     "REAL DEFAULT 0")
     add_col("sales", "salesperson_id",  "INTEGER")
@@ -166,6 +167,7 @@ def run_migrations():
     add_col("item_supplier", "ppn_percent", "REAL DEFAULT 0")
     add_col("items", "ppn_percent", "REAL")               # tarif PPN per-barang; NULL → ikut tarif toko (data lama tak berubah)
     add_col("sale_items", "ppn_percent", "REAL DEFAULT 0")  # tarif PPN baris penjualan → untuk balik PPN per-baris saat retur
+    add_col("sales", "other_cost", "REAL DEFAULT 0")  # biaya lain ditagihkan ke pelanggan → Pendapatan Lain-lain (4-1500)
     add_col("suppliers", "ppn_type", "TEXT")
     add_col("branches", "is_pkp", "INTEGER DEFAULT 0")
     add_col("branches", "tarif_ppn", "REAL DEFAULT 11")

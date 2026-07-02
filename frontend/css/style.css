@@ -7,11 +7,15 @@
 
 :root {
   /* Modern Light Mode */
-  --bg-color: #f8fafc;
+  /* Latar halaman dibuat sedikit lebih "abu" dari kartu putih supaya kartu
+     terlihat menonjol (tidak menyatu dengan latar). */
+  --bg-color: #eef2f7;
   --card-bg: #ffffff;
   --text-main: #1e293b;
   --text-muted: #64748b;
-  --border-color: #f1f5f9;
+  /* Garis pemisah/border: slate-300 agar JELAS terlihat di mode terang
+     (nilai lama #f1f5f9 hampir sama dengan latar & kartu → seolah tak ada garis). */
+  --border-color: #cbd5e1;
   --input-bg: #f8fafc;
 
   /* Modern Brand Colors (Vibrant Orange) */

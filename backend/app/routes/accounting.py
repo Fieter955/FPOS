@@ -439,6 +439,7 @@ def get_default_accounts() -> list[tuple[str, str, str, str, str]]:
             ("4-1100", "Penjualan", "revenue", "operating", "credit"),
             ("4-1150", "Diskon Penjualan", "revenue", "operating", "debit"), # BARU
             ("4-1200", "Retur Penjualan", "revenue", "operating", "debit"),
+            ("4-1500", "Pendapatan Biaya Lain (Penjualan)", "revenue", "operating", "credit"), # BARU: biaya lain ditagihkan ke pelanggan di kasir
             ("4-1300", "Pendapatan Lain-lain (Surplus Opname)", "revenue", "non_operating", "credit"),
             ("4-1400", "Pendapatan Lain-lain (Penghapusan Saldo)", "revenue", "non_operating", "credit"),
             ("4-2000", "Diskon Pembelian", "revenue", "non_operating", "credit"), # BARU

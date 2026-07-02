@@ -421,14 +421,18 @@
             </div>
 
             <div class="right-panel">
-              <p class="section-title" style="margin-bottom: 16px">
+              <p class="section-title" id="historyTitle" style="margin-bottom: 8px">
                 History Harga Beli untuk Supplier
               </p>
+              <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+                <button class="btn btn-primary" id="btnTabBeli" style="flex: 1; padding: 6px 12px; font-size: 0.85rem;">Histori Harga Beli</button>
+                <button class="btn btn-ghost" id="btnTabJual" style="flex: 1; padding: 6px 12px; font-size: 0.85rem;">Histori Harga Jual</button>
+              </div>
 
               <div class="table-history-wrapper">
                 <table class="table-history">
                   <thead>
-                    <tr>
+                    <tr id="historyHeader">
                       <th style="text-align: center">Tanggal</th>
                       <th>Jumlah</th>
                       <th style="text-align: center">Satuan</th>
@@ -613,19 +617,71 @@
           '<tr><td colspan="6" style="text-align:center; color:var(--text-muted)">Buka halaman ini lewat tombol "Detail" di daftar barang.</td></tr>';
       }
 
-      // ===== Muat tabel riwayat harga beli =====
+      // ===== Muat tabel riwayat harga (dua tab: Beli & Jual) =====
+      // Kedua tab memakai transaksi NYATA (bukan log perubahan) supaya selalu
+      // terisi & bentuk tabelnya seragam:
+      //   Tab "Beli" -> pembelian barang dari supplier terpilih
+      //                 (/purchases/item-history/).
+      //   Tab "Jual" -> penjualan barang ke pelanggan (/sales/item-history/).
+      let currentTab = "buy_price";
+
+      $("btnTabBeli").addEventListener("click", () => {
+        currentTab = "buy_price";
+        $("btnTabBeli").className = "btn btn-primary";
+        $("btnTabJual").className = "btn btn-ghost";
+        muatRiwayat();
+      });
+
+      $("btnTabJual").addEventListener("click", () => {
+        currentTab = "sell_price";
+        $("btnTabJual").className = "btn btn-primary";
+        $("btnTabBeli").className = "btn btn-ghost";
+        muatRiwayat();
+      });
+
+      // Tampilkan satu baris pesan yang menutup seluruh lebar tabel
+      function tampilPesanRiwayat(teks, warna) {
+        $("historyBody").innerHTML =
+          `<tr><td colspan="6" style="text-align:center; color:${warna || "var(--text-muted)"}">${teks}</td></tr>`;
+      }
+
       async function muatRiwayat() {
         if (!baris || !baris.item_id) {
           showInfoKosong();
           return;
         }
+
+        const isBeli = currentTab === "buy_price";
+        $("historyTitle").textContent = isBeli
+          ? "History Harga Beli untuk Supplier"
+          : "History Harga Jual ke Pelanggan";
+
+        // Header 6 kolom seragam untuk kedua tab
+        $("historyHeader").innerHTML = `
+          <th style="text-align: center">Tanggal</th>
+          <th>Jumlah</th>
+          <th style="text-align: center">Satuan</th>
+          <th>Harga</th>
+          <th>Pot.</th>
+          <th>Harga Stlh Pot.</th>`;
+
+        // Tab Beli difilter per supplier; tab Jual menampilkan semua penjualan.
+        let url;
+        if (isBeli) {
+          url = `/purchases/item-history/?item_id=${baris.item_id}`;
+          if (draft && draft.supplier_id) url += `&supplier_id=${draft.supplier_id}`;
+        } else {
+          url = `/sales/item-history/?item_id=${baris.item_id}`;
+        }
+
         try {
-          let url = `/purchases/item-history/?item_id=${baris.item_id}`;
-          if (draft.supplier_id) url += `&supplier_id=${draft.supplier_id}`;
           const data = await api("GET", url);
           if (!data || data.length === 0) {
-            $("historyBody").innerHTML =
-              '<tr><td colspan="6" style="text-align:center; color:var(--text-muted)">Belum ada riwayat pembelian untuk item ini.</td></tr>';
+            tampilPesanRiwayat(
+              isBeli
+                ? "Belum ada riwayat pembelian untuk barang ini."
+                : "Belum ada riwayat penjualan untuk barang ini.",
+            );
             return;
           }
           $("historyBody").innerHTML = data
@@ -644,8 +700,7 @@
             })
             .join("");
         } catch (e) {
-          $("historyBody").innerHTML =
-            `<tr><td colspan="6" style="text-align:center; color:var(--danger)">Gagal memuat riwayat: ${e.message}</td></tr>`;
+          tampilPesanRiwayat("Gagal memuat riwayat: " + e.message, "var(--danger)");
         }
       }
 

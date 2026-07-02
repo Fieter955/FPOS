@@ -456,6 +456,10 @@
               ensureEmptySatuanRow();
               renderAdvancedGrid();
             } else {
+              // Pastikan daftar grup pelanggan sudah dimuat SEBELUM grid dirender,
+              // agar <select> grup terisi & baris potongan yang tersimpan tidak
+              // hilang saat dibaca ulang (mencegah potongan ter-reset saat simpan).
+              if (!allGroups.length) await loadCustomerGroups();
               initPotonganHargaJualUI();
             }
 
@@ -513,6 +517,8 @@
 
       requireAuth();
       let editItemId = null,
+        fotoBaru = null, // Blob WebP hasil kecilkanGambar, menunggu di-upload saat simpan
+        hapusFotoFlag = false, // true = user minta hapus foto (panggil DELETE /image saat simpan)
         editKatId = null,
         editMerekId = null,
         editSatId = null,
@@ -1313,6 +1319,92 @@
         );
       }
 
+      // ─── FOTO BARANG (input di popUp.html) ───
+      // Kecilkan & kompres gambar di browser (WebP) sebelum upload → foto ~20–60 KB.
+      // Inline di sini (bukan components.js) karena items.html tidak memuat components.js.
+      async function kecilkanGambar(file, maksPx = 800, mutu = 0.8) {
+        try {
+          const bitmap = await createImageBitmap(file);
+          let width = bitmap.width;
+          let height = bitmap.height;
+          const skala = Math.min(1, maksPx / Math.max(width, height));
+          width = Math.max(1, Math.round(width * skala));
+          height = Math.max(1, Math.round(height * skala));
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          canvas.getContext("2d").drawImage(bitmap, 0, 0, width, height);
+          if (bitmap.close) bitmap.close();
+          const blob = await new Promise((resolve) =>
+            canvas.toBlob(resolve, "image/webp", mutu),
+          );
+          return blob || file;
+        } catch (e) {
+          console.warn("kecilkanGambar gagal, pakai file asli:", e);
+          return file;
+        }
+      }
+
+      // Saat file dipilih → kecilkan di browser (WebP), simpan Blob di `fotoBaru`, tampilkan preview.
+      async function onPilihFoto(e) {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        fotoBaru = await kecilkanGambar(file, 800, 0.8);
+        hapusFotoFlag = false;
+        const img = document.getElementById("fFotoPreview");
+        const ph = document.getElementById("fFotoPlaceholder");
+        const btn = document.getElementById("fFotoHapus");
+        if (img) {
+          img.src = URL.createObjectURL(fotoBaru);
+          img.style.display = "block";
+        }
+        if (ph) ph.style.display = "none";
+        if (btn) btn.style.display = "block";
+      }
+
+      // Tombol "Hapus Foto": batalkan foto baru & tandai agar saveItem memanggil DELETE /image.
+      function hapusFotoBarang() {
+        fotoBaru = null;
+        hapusFotoFlag = true;
+        const inp = document.getElementById("fFotoInput");
+        if (inp) inp.value = "";
+        const img = document.getElementById("fFotoPreview");
+        const ph = document.getElementById("fFotoPlaceholder");
+        const btn = document.getElementById("fFotoHapus");
+        if (img) {
+          img.removeAttribute("src");
+          img.style.display = "none";
+        }
+        if (ph) ph.style.display = "";
+        if (btn) btn.style.display = "none";
+      }
+
+      // Selaraskan kotak foto dengan `imagePath` (atau kosong) + reset state upload.
+      function resetFotoUI(imagePath) {
+        fotoBaru = null;
+        hapusFotoFlag = false;
+        const inp = document.getElementById("fFotoInput");
+        if (inp) inp.value = "";
+        const img = document.getElementById("fFotoPreview");
+        const ph = document.getElementById("fFotoPlaceholder");
+        const btn = document.getElementById("fFotoHapus");
+        if (imagePath) {
+          if (img) {
+            img.src = imagePath;
+            img.style.display = "block";
+          }
+          if (ph) ph.style.display = "none";
+          if (btn) btn.style.display = "block";
+        } else {
+          if (img) {
+            img.removeAttribute("src");
+            img.style.display = "none";
+          }
+          if (ph) ph.style.display = "";
+          if (btn) btn.style.display = "none";
+        }
+      }
+
       function openItemModal(item = null, editMode = false) {
         loadComponents(); // pastikan markup modal (popUp) sudah/mulai dimuat
         editItemId = null;
@@ -1321,6 +1413,7 @@
           : "none";
         document.getElementById("mBarangTitle").textContent = "Tambah Barang";
         document.getElementById("fBarang").reset();
+        resetFotoUI(null); // kosongkan foto (default barang baru; ditimpa di bawah bila edit)
         document.getElementById("autoBarcode").checked = true;
         toggleBarcodeUI();
 
@@ -1341,6 +1434,22 @@
         if (advContent) {
           advContent.innerHTML = "";
           advContent.style.display = "none";
+        }
+        // Reset panel Potongan Harga Jual juga. Kalau tidak dikosongkan, grid
+        // (baris grup + Pot.1–4) milik barang SEBELUMNYA tertinggal di DOM, lalu
+        // ikut terbaca saat simpan → potongan barang lain bisa nyangkut ke barang ini.
+        const potonganContent = document.getElementById(
+          "contentPotonganHargaJual",
+        );
+        if (potonganContent) {
+          potonganContent.innerHTML = "";
+          potonganContent.style.display = "none";
+        }
+        const btnPotongan = document.getElementById("btnAdvPotonganHargaJual");
+        if (btnPotongan) {
+          btnPotongan.style.background = "var(--card-bg)";
+          btnPotongan.style.color = "var(--text-main)";
+          btnPotongan.style.borderColor = "var(--border-color)";
         }
 
         const setVal = (id, val) => {
@@ -1379,6 +1488,7 @@
         let detectedType = null;
         if (item) {
           editItemId = item.id;
+          resetFotoUI(item.image_path || null); // tampilkan foto lama (jika ada)
           document.getElementById("mBarangTitle").textContent = "Edit Barang";
           document.getElementById("fKodeItem").value = item.code || "";
           document.getElementById("fNama").value = item.name;
@@ -1654,6 +1764,26 @@
           if (editItemId) saved = await api("PUT", `/items/${editItemId}`, p);
           else saved = await api("POST", "/items/", p);
           editItemId = saved.id;
+
+          // Foto barang: upload / hapus. Disimpan sebagai FILE di server (bukan di DB).
+          // Dilakukan setelah barang tersimpan agar id-nya sudah pasti ada.
+          try {
+            if (fotoBaru) {
+              const fd = new FormData();
+              fd.append("file", fotoBaru, `item_${editItemId}.webp`);
+              await apiForm(`/items/${editItemId}/image`, fd);
+            } else if (hapusFotoFlag) {
+              await api("DELETE", `/items/${editItemId}/image`);
+            }
+            fotoBaru = null;
+            hapusFotoFlag = false;
+          } catch (imgErr) {
+            showToast(
+              "Barang tersimpan, tapi foto gagal diproses: " + imgErr.message,
+              "error",
+            );
+          }
+
           if (currentAdvancedType === "satuan") {
             await saveAllSatuanRows();
           }
@@ -1665,6 +1795,7 @@
             )
           ) {
             editItemId = null;
+            resetFotoUI(null); // clone = barang baru → mulai tanpa foto
             document.getElementById("mBarangTitle").textContent =
               "Tambah Barang (Clone)";
             document.getElementById("fKodeItem").value = "AUTO";
@@ -2559,7 +2690,7 @@
         const v = (n) => (gd && gd[n] ? gd[n] : "");
         return `<tr class="${isEmpty ? "empty-row" : ""}">
                     <td style="text-align:center;color:var(--text-muted);font-size:14px;">${isEmpty ? "*" : "▶"}</td>
-                    <td><select class="input-control group-select" onchange="handlePotonganRowChange(this)">${potonganGroupOptions(gd ? gd.group_id : "")}</select></td>
+                    <td><select class="input-control group-select" data-group-id="${gd ? gd.group_id : ""}" onchange="handlePotonganRowChange(this)">${potonganGroupOptions(gd ? gd.group_id : "")}</select></td>
                     <td class="sep"><input type="number" step="0.01" placeholder="0.00" class="input-control" style="text-align:right" value="${v("disc1")}" oninput="handlePotonganRowChange(this)"></td>
                     <td><input type="number" step="0.01" placeholder="0.00" class="input-control" style="text-align:right" value="${v("disc2")}" oninput="handlePotonganRowChange(this)"></td>
                     <td><input type="number" step="0.01" placeholder="0.00" class="input-control" style="text-align:right" value="${v("disc3")}" oninput="handlePotonganRowChange(this)"></td>
@@ -2580,13 +2711,21 @@
       function readPotonganGrid() {
         const body = document.getElementById("potonganGrupBody");
         if (!body) return; // UI belum dibuka — pertahankan state yang ada
+        // Saat daftar grup belum termuat, <select> tak punya opsi sehingga value-nya
+        // kosong. Pakai data-group-id sebagai cadangan agar potongan yang sudah
+        // tersimpan TIDAK ikut terhapus ketika data barang disimpan ulang.
+        const optionsReady = allGroups.length > 0;
         const next = [];
         body.querySelectorAll("tr").forEach((tr) => {
           const sel = tr.querySelector("select.group-select");
-          if (!sel || !sel.value) return; // baris kosong / belum pilih grup
+          if (!sel) return;
+          const gid = optionsReady
+            ? sel.value
+            : sel.value || sel.dataset.groupId || "";
+          if (!gid) return; // baris kosong / belum pilih grup
           const inp = tr.querySelectorAll('input[type="number"]');
           next.push({
-            group_id: parseInt(sel.value),
+            group_id: parseInt(gid),
             disc1: parseFloat(inp[0]?.value) || 0,
             disc2: parseFloat(inp[1]?.value) || 0,
             disc3: parseFloat(inp[2]?.value) || 0,

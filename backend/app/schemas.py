@@ -204,6 +204,7 @@ class ItemOut(BaseModel):
     min_stock: float
     description: Optional[str]
     barcode: Optional[str]
+    image_path: Optional[str] = None
     is_discountable: bool
     is_active: bool
     category: Optional[CategoryOut] = None
@@ -215,6 +216,17 @@ class ItemOut(BaseModel):
     supplier_details: List[ItemSupplierOut] = []
     model_config = {"from_attributes": True}
 
+
+class ItemPriceChangeOut(BaseModel):
+    id: int
+    item_id: int
+    supplier_id: Optional[int] = None
+    change_type: str
+    old_price: float
+    new_price: float
+    changed_at: datetime
+    changed_by: Optional[int] = None
+    model_config = {"from_attributes": True}
 
 # ─── CustomerGroup ────────────────────────────────────────────────────────────
 class CustomerGroupCreate(BaseModel):
@@ -542,6 +554,7 @@ class SaleCreate(BaseModel):
     tax: float = 0
     tax_percent: float = 0
     is_tax_included: bool = True
+    other_cost: float = 0   # biaya lain ditagihkan ke pelanggan (nambah total) → Pendapatan Lain-lain
     paid: float = 0
     payment_method: str = "cash"
     notes: Optional[str] = None
@@ -571,6 +584,7 @@ class SaleOut(BaseModel):
     tax: float
     tax_percent: float = 0
     is_tax_included: bool = True
+    other_cost: float = 0
     total: float
     paid: float
     change: float

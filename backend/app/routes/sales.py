@@ -23,7 +23,7 @@ from ..services.virtual_units import (
     is_virtual_variant,
 )
 from ..services.inventory_fifo import consume_fifo, record_allocations, restore_allocations
-from .accounting import create_auto_journal  # ✅ Import di atas, sekali saja
+from .accounting import create_auto_journal, pastikan_akun_ada  # ✅ Import di atas, sekali saja
 
 router = APIRouter()
 
@@ -88,6 +88,44 @@ def hitung_total_penjualan_per_baris(baris: list, disc_persen: float, termasuk_p
             diskon   += dg
             total    += g - dg
     return {"subtotal": subtotal, "discount": diskon, "tax": pajak, "total": total}
+
+
+# Mengambil riwayat harga jual sebuah barang dari transaksi penjualan nyata.
+# Dipakai halaman detail_item.html (tab "Histori Harga Jual"). Bentuk hasil
+# sengaja disamakan dengan /purchases/item-history/ agar tabelnya seragam.
+@router.get("/item-history/")
+def get_item_sale_history(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    from sqlalchemy.orm import joinedload
+
+    rows = (
+        db.query(models.SaleItem)
+        .join(models.Sale, models.SaleItem.sale_id == models.Sale.id)
+        .options(joinedload(models.SaleItem.item).joinedload(models.Item.unit))
+        .filter(models.SaleItem.item_id == item_id)
+        .order_by(models.Sale.date.desc(), models.SaleItem.id.desc())
+        .limit(20)
+        .all()
+    )
+
+    hasil = []
+    for si in rows:
+        harga = si.sell_price or 0
+        potongan = si.discount or 0  # persen per baris
+        harga_setelah_potongan = harga * (1 - potongan / 100)
+        hasil.append({
+            "tanggal": si.sale.date.isoformat() if si.sale and si.sale.date else None,
+            "jumlah": si.qty,
+            "satuan": si.item.unit.name if si.item and si.item.unit else "pcs",
+            "harga": harga,
+            "potongan": potongan,
+            "harga_setelah_potongan": round(harga_setelah_potongan, 2),
+        })
+
+    return hasil
 
 
 def _is_admin_user(user: models.User) -> bool:
@@ -267,6 +305,14 @@ def create_sale(
     # tax_percent header (tampilan/struk): satu nilai bila semua baris bertarif sama, else 0
     # (struk menampilkan "Termasuk PPN" tanpa persen saat tarif campur).
     eff_tax_percent = line_rates[0] if (line_rates and len(set(line_rates)) == 1) else 0
+    # ── Biaya Lain ditagihkan ke pelanggan (ongkir/admin) → nambah total & jadi Pendapatan Lain-lain
+    other_cost  = round(float(data.other_cost or 0), 2)
+    if other_cost < 0:
+        raise HTTPException(400, "Biaya lain tidak boleh negatif")
+    total      += other_cost
+    # Pastikan akun Pendapatan Biaya Lain ada SEBELUM stok berubah (mandat jurnal atomic)
+    if other_cost > 0.01:
+        pastikan_akun_ada(db, ["4-1500"])
     change      = max(0, data.paid - total)
     status      = "paid" if data.paid >= total else ("partial" if data.paid > 0 else "unpaid")
 
@@ -300,6 +346,7 @@ def create_sale(
         tax=tax_amount,
         tax_percent=eff_tax_percent,
         is_tax_included=data.is_tax_included if data.is_tax_included is not None else True,
+        other_cost=other_cost,
         total=total,
         paid=data.paid,
         change=change,
@@ -430,6 +477,11 @@ def create_sale(
         jurnal_entries.append({"code": "5-1100", "debit": round(total_hpp, 2), "credit": 0})
         jurnal_entries.append({"code": "1-1400", "debit": 0, "credit": round(total_hpp, 2)})
 
+    # 7. BIAYA LAIN ditagihkan ke pelanggan (Pendapatan Lain-lain → Credit 4-1500)
+    #    Kas/Piutang di atas sudah termasuk biaya lain (total naik) → kaki ini menyeimbangkan.
+    if other_cost > 0.01:
+        jurnal_entries.append({"code": "4-1500", "debit": 0, "credit": round(other_cost, 2)})
+
     # Guard: validasi balance
     total_d = round(sum(e["debit"]  for e in jurnal_entries), 2)
     total_c = round(sum(e["credit"] for e in jurnal_entries), 2)
@@ -558,6 +610,12 @@ def cancel_sale(
     if total_hpp > 0.01:
         jurnal_pembalik.append({"code": "5-1100", "debit": 0,                      "credit": round(total_hpp, 2)})
         jurnal_pembalik.append({"code": "1-1400", "debit": round(total_hpp, 2), "credit": 0})
+
+    # 7. Balik BIAYA LAIN (Debit 4-1500) — kas/piutang yg dibalik di atas sudah termasuk biaya lain
+    _other_cost = float(getattr(obj, "other_cost", 0) or 0)
+    if _other_cost > 0.01:
+        pastikan_akun_ada(db, ["4-1500"])
+        jurnal_pembalik.append({"code": "4-1500", "debit": round(_other_cost, 2), "credit": 0})
 
     create_auto_journal(
         db=db,
@@ -705,7 +763,15 @@ async def print_receipt_api(
                 struk     += lr(left_part, total_str)
 
         struk += f"{garis}\n"
-        struk += lr(f"BRS={brs}  , QTY={format_qty(total_qty)}", format_rp(getattr(sale, 'total', 0)))
+        _oc = float(getattr(sale, 'other_cost', 0) or 0)
+        if _oc > 0:
+            # Rincikan: subtotal barang → biaya lain → total (yang dibayar pelanggan)
+            _sub_barang = float(getattr(sale, 'total', 0) or 0) - _oc
+            struk += lr(f"BRS={brs}  , QTY={format_qty(total_qty)}", format_rp(_sub_barang))
+            struk += lr("Biaya Lain =", format_rp(_oc))
+            struk += lr("TOTAL =", format_rp(getattr(sale, 'total', 0)))
+        else:
+            struk += lr(f"BRS={brs}  , QTY={format_qty(total_qty)}", format_rp(getattr(sale, 'total', 0)))
         # Mode PKP: harga sudah termasuk PPN → tampilkan porsinya (info; tidak menambah total).
         if float(getattr(sale, 'tax', 0) or 0) > 0:
             _tp = float(getattr(sale, 'tax_percent', 0) or 0)

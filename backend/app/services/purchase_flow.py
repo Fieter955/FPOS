@@ -21,6 +21,18 @@ PUSAT_BRANCH_ID = 1
 WITA = pytz.timezone("Asia/Makassar")
 
 
+def harga_neto_bertingkat(line) -> float:
+    """Harga beli neto setelah potongan BERTINGKAT (maks 4): tiap potongan
+    memotong harga yang SUDAH dipotong potongan sebelumnya.
+    Contoh: 1000, disc 10% → 900, disc 5% → 855, dst.
+    Berlaku untuk objek Pydantic (PurchaseCreate item) maupun model PurchaseItem
+    karena keduanya punya atribut disc1..disc4."""
+    neto = line.buy_price or 0
+    for pot in (line.disc1, line.disc2, line.disc3, line.disc4):
+        neto = neto * (1 - (pot or 0) / 100)
+    return neto
+
+
 def get_local_date() -> date:
     return datetime.now(WITA).date()
 
@@ -65,8 +77,8 @@ def calculate_purchase_totals(data: schemas.PurchaseCreate, *, received: bool = 
         subtotal = discount = tax = total = 0.0
         for line in data.items:
             qty = line.qty_received if received and line.qty_received > 0 else line.qty
-            net_price = (line.buy_price * (1 - (line.disc1 / 100))) * (1 - (line.disc2 / 100))
-            g = net_price * qty            # gross baris (incl PPN), sudah net disc1/disc2
+            net_price = harga_neto_bertingkat(line)
+            g = net_price * qty            # gross baris (incl PPN), sudah net disc1..disc4
             dg = g * dr
             tarif = float(line.ppn_percent or 0)
             if tarif > 0:
@@ -86,7 +98,7 @@ def calculate_purchase_totals(data: schemas.PurchaseCreate, *, received: bool = 
     subtotal = 0.0
     for line in data.items:
         qty = line.qty_received if received and line.qty_received > 0 else line.qty
-        net_price = (line.buy_price * (1 - (line.disc1 / 100))) * (1 - (line.disc2 / 100))
+        net_price = harga_neto_bertingkat(line)
         subtotal += net_price * qty
 
     discount = subtotal * ((data.discount or 0) / 100)
@@ -180,7 +192,7 @@ def add_purchase_items(db: Session, purchase: models.Purchase, data: schemas.Pur
                        *, received: bool):
     for line in data.items:
         qty = line.qty_received if received and line.qty_received > 0 else line.qty
-        net_price = (line.buy_price * (1 - (line.disc1 / 100))) * (1 - (line.disc2 / 100))
+        net_price = harga_neto_bertingkat(line)
         db.add(models.PurchaseItem(
             purchase_id=purchase.id,
             item_id=line.item_id,
@@ -190,6 +202,8 @@ def add_purchase_items(db: Session, purchase: models.Purchase, data: schemas.Pur
             buy_price=line.buy_price,
             disc1=line.disc1,
             disc2=line.disc2,
+            disc3=line.disc3,
+            disc4=line.disc4,
             discount=line.buy_price - net_price,
             total=net_price * qty,
             ppn_percent=line.ppn_percent,  # tarif PPN baris (Included/PKP) → kupas biaya batch & retur
@@ -228,7 +242,7 @@ def receive_branch_stock(db: Session, *, purchase: models.Purchase,
 
     # ── Faktor biaya "landed": sebar diskon header + pajak ke biaya per unit, agar Σ biaya
     # batch persis = total yang didebit ke GL Persediaan (1-1400). `subtotal` sudah net
-    # disc1/disc2; bila tak tersedia → faktor 1 (fallback aman). Ini mencegah selisih
+    # potongan bertingkat disc1..disc4; bila tak tersedia → faktor 1 (fallback aman). Ini mencegah selisih
     # GL-vs-batch tumbuh tiap pembelian (lihat Fase 4).
     _subtotal = float(purchase.subtotal or 0)
     if pisah_ppn:
@@ -257,7 +271,7 @@ def receive_branch_stock(db: Session, *, purchase: models.Purchase,
         # yang masuk neraca (1-1400) ──────────────────────────────────────────────────────
         _qty = float(purchase_item.qty or 0)
         if included_pkp:
-            g = float(purchase_item.total or 0)        # gross baris (incl PPN), net disc1/disc2
+            g = float(purchase_item.total or 0)        # gross baris (incl PPN), net disc1..disc4
             after = g * (1 - hd)                        # setelah diskon header
             tarif = float(purchase_item.ppn_percent or 0)
             inv_line = (after / (1 + tarif / 100)) if tarif > 0 else after  # NET (PPN keluar ke 1-1550)
