@@ -6,6 +6,45 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Perakitan (BOM) - FPOS</title>
   <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    /* Modal BOM dibuat full-screen (memenuhi layar) meniru pola #mBarang di item/popUp.html */
+    #mBOM {
+      padding: 0 !important;
+    }
+
+    #mBOM .modal-box {
+      width: 100vw !important;
+      height: 100vh !important;
+      max-width: none !important;
+      max-height: none !important;
+      border-radius: 0 !important;
+      border: none !important;
+      display: flex;
+      flex-direction: column;
+      padding: 24px 32px !important;
+    }
+
+    #mBOM .modal-hdr {
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    /* Isi men-scroll di antara header (tetap) & footer (tetap) */
+    #mBOM .mbom-body {
+      flex: 1;
+      overflow-y: auto;
+      padding-right: 8px;
+    }
+
+    #mBOM .mbom-footer {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      justify-content: center;
+    }
+  </style>
 </head>
 
 <body>
@@ -114,69 +153,115 @@
     </main>
   </div>
 
-  <!-- Modal: BOM -->
+  <!-- Modal: BOM (full-screen) -->
   <div class="modal-overlay" id="mBOM">
     <div class="modal-box wide">
       <div class="modal-hdr">
         <h2 id="mBOMTitle">Buat Formula BOM</h2>
         <button class="btn-x" onclick="closeModal('mBOM')">×</button>
       </div>
-      <input type="hidden" id="bomId" />
-      <div class="row2" style="margin-bottom: 16px">
-        <div class="input-group">
-          <label>Produk Hasil *</label><select id="bomProd" class="input-control">
-            <option value="">-- Pilih Produk --</option>
-          </select>
-        </div>
-        <div class="input-group">
-          <label>Qty Output per Proses *</label><input id="bomQty" type="number" class="input-control" value="1"
-            min="0.01" step="0.01" />
+      <div class="mbom-body">
+        <div style="max-width: 880px; margin: 0 auto">
+          <input type="hidden" id="bomId" />
+          <div class="row2" style="margin-bottom: 16px">
+            <div class="input-group">
+              <label>Produk Hasil *</label>
+              <div style="display: flex; gap: 8px">
+                <select id="bomProd" class="input-control" style="margin: 0" onchange="hitungHppMinimum()">
+                  <option value="">-- Pilih Produk --</option>
+                </select>
+                <button type="button" onclick="bukaBuatBarangBaru()" class="btn" style="
+                      white-space: nowrap;
+                      padding: 10px 14px;
+                      background: var(--primary-light);
+                      color: var(--primary);
+                      border: none;
+                      border-radius: 10px;
+                      font-weight: 700;
+                      font-size: 13px;
+                    ">
+                  ➕ Buat Barang Baru
+                </button>
+              </div>
+              <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px">
+                Pilih barang yang sudah ada, atau buat barang baru lengkap (harga, diskon, level harga/jumlah, dll)
+                tanpa pindah menu.
+              </div>
+            </div>
+            <div class="input-group">
+              <label>Qty Output per Proses *</label><input id="bomQty" type="number" class="input-control" value="1"
+                min="0.01" step="0.01" oninput="hitungHppMinimum()" />
+            </div>
+          </div>
+          <!-- Section komponen + panel harga pokok. Dibungkus agar bisa DIPINDAH utuh
+               ke dalam form "Buat Barang Baru" (lihat bukaBuatBarangBaru /
+               kembalikanSeksiKomponen di script). -->
+          <div id="seksiKomponen">
+          <div style="margin-bottom: 12px">
+            <div style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  margin-bottom: 8px;
+                ">
+              <label style="font-weight: 700; color: var(--text-muted)">🔩 Komponen / Bahan Baku</label>
+              <button onclick="addKomponen()" class="btn" style="
+                    padding: 8px 14px;
+                    background: var(--primary-light);
+                    color: var(--primary);
+                    border: none;
+                    border-radius: 10px;
+                    font-weight: 700;
+                    font-size: 13px;
+                  ">
+                + Tambah Komponen
+              </button>
+            </div>
+            <div style="
+                  display: grid;
+                  grid-template-columns: 3fr 1fr 1fr 36px;
+                  gap: 8px;
+                  margin-bottom: 6px;
+                  font-size: 12px;
+                  font-weight: 600;
+                  color: var(--text-muted);
+                ">
+              <span>Komponen</span><span>Qty Pakai</span><span>Est. Biaya</span><span></span>
+            </div>
+            <div id="komponenRows"></div>
+          </div>
+          <!-- Ringkasan harga pokok minimum dari komponen -->
+          <div id="bomCostPanel" style="
+                background: var(--bg-color);
+                border-radius: 12px;
+                padding: 14px 16px;
+                margin-top: 4px;
+              ">
+            <div style="display: flex; justify-content: space-between; align-items: center">
+              <span style="font-weight: 700; color: var(--text-muted)">💰 Harga Pokok Minimum</span>
+              <span id="bomHppMin" style="font-size: 20px; font-weight: 800; color: var(--primary)">Rp 0</span>
+            </div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px">
+              Total biaya komponen ÷ qty output. Harga jual produk sebaiknya di atas angka ini biar tidak rugi.
+            </div>
+            <div id="bomLossBadge" style="display: none; margin-top: 10px"></div>
+          </div>
+          </div>
         </div>
       </div>
-      <div style="margin-bottom: 12px">
-        <div style="
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              margin-bottom: 8px;
-            ">
-          <label style="font-weight: 700; color: var(--text-muted)">🔩 Komponen / Bahan Baku</label>
-          <button onclick="addKomponen()" class="btn" style="
-                padding: 8px 14px;
-                background: var(--primary-light);
-                color: var(--primary);
-                border: none;
-                border-radius: 10px;
-                font-weight: 700;
-                font-size: 13px;
+      <div class="mbom-footer">
+        <div style="width: 100%; max-width: 880px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+          <button onclick="closeModal('mBOM')" class="btn" style="
+                background: var(--bg-color);
+                border: 1px solid var(--border-color);
+                color: var(--text-main);
               ">
-            + Tambah Komponen
+            Batal
+          </button>
+          <button onclick="saveBOM()" class="btn btn-primary">
+            ✓ Simpan BOM
           </button>
         </div>
-        <div style="
-              display: grid;
-              grid-template-columns: 3fr 1fr 1fr 36px;
-              gap: 8px;
-              margin-bottom: 6px;
-              font-size: 12px;
-              font-weight: 600;
-              color: var(--text-muted);
-            ">
-          <span>Komponen</span><span>Qty Pakai</span><span>Est. Biaya</span><span></span>
-        </div>
-        <div id="komponenRows"></div>
-      </div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
-        <button onclick="closeModal('mBOM')" class="btn" style="
-              background: var(--bg-color);
-              border: 1px solid var(--border-color);
-              color: var(--text-main);
-            ">
-          Batal
-        </button>
-        <button onclick="saveBOM()" class="btn btn-primary">
-          ✓ Simpan BOM
-        </button>
       </div>
     </div>
   </div>
@@ -239,8 +324,18 @@
     </div>
   </div>
 
+  <!-- Kontainer untuk form barang yang dipakai ulang (di-inject loadComponents dari itemForm.js) -->
+  <div id="popUpContainer"></div>
+  <div id="katContainer"></div>
+  <div id="merekContainer"></div>
+  <div id="unitsContainer"></div>
+
   <script src="/js/api.js"></script>
   <script src="/js/theme.js"></script>
+  <script src="/js/kategori.js"></script>
+  <script src="/js/merek.js"></script>
+  <script src="/js/units.js"></script>
+  <script src="/js/item/itemForm.js"></script>
   <script>
     requireAuth();
     let allItems = [],
@@ -252,6 +347,19 @@
       "padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit";
 
     async function init() {
+      // Siapkan form barang yang dipakai ulang (dari itemForm.js): inject markup modal
+      // + muat data pendukung (grup pelanggan, supplier, status PKP) lebih awal, supaya
+      // tombol "Buat Barang Baru" langsung siap saat diklik.
+      loadComponents();
+      loadCustomerGroups();
+      loadSuppliers();
+      loadPkpStatusItem();
+
+      // Ingat lokasi asli section komponen (di modal BOM) agar bisa dikembalikan
+      // setelah dipindah sementara ke dalam form "Buat Barang Baru".
+      const seksiAwal = document.getElementById("seksiKomponen");
+      if (seksiAwal) window._parentSeksiKomponen = seksiAwal.parentNode;
+
       allItems = await api("GET", "/items/?limit=500");
       const sel = document.getElementById("bomProd");
       allItems.forEach((i) =>
@@ -290,9 +398,9 @@
         `
     <div style="display:grid;grid-template-columns:3fr 1fr 1fr 36px;gap:8px;margin-bottom:8px;align-items:center" id="komp${idx}">
       <select class="input-control" style="margin:0;padding:10px 12px;font-size:14px" onchange="setKompPrice(${idx},this)">${opts}</select>
-      <input type="number" value="${qty}" min="0.01" step="0.01" class="input-control" style="margin:0;padding:10px;text-align:center;font-weight:700">
+      <input type="number" value="${qty}" min="0.01" step="0.01" class="input-control" style="margin:0;padding:10px;text-align:center;font-weight:700" oninput="hitungHppMinimum()">
       <input type="number" value="0" min="0" class="input-control kprice" style="margin:0;padding:10px;font-size:14px;color:var(--text-muted)" readonly>
-      <button onclick="document.getElementById('komp${idx}').remove()" style="width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,.15);color:#ef4444;border:none;cursor:pointer;font-size:16px;font-weight:700">✕</button>
+      <button onclick="document.getElementById('komp${idx}').remove();hitungHppMinimum()" style="width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,.15);color:#ef4444;border:none;cursor:pointer;font-size:16px;font-weight:700">✕</button>
     </div>`,
       );
       if (itemId)
@@ -302,7 +410,139 @@
       const opt = sel.options[sel.selectedIndex];
       const el = document.querySelector(`#komp${idx} .kprice`);
       if (el) el.value = opt?.dataset?.price || 0;
+      hitungHppMinimum();
     }
+
+    // Hitung harga pokok minimum produk jadi = total biaya komponen ÷ qty output.
+    // Biaya komponen = kolom "Est. Biaya" (.kprice = harga modal/buy_price komponen).
+    function hitungHppMinimum() {
+      let total = 0;
+      document.querySelectorAll("#komponenRows > div").forEach((row) => {
+        const inps = row.querySelectorAll("input[type=number]");
+        const qty = parseFloat(inps[0]?.value) || 0;
+        const harga = parseFloat(inps[1]?.value) || 0; // .kprice
+        total += qty * harga;
+      });
+      const qtyOut = parseFloat(document.getElementById("bomQty").value) || 1;
+      const hpp = qtyOut > 0 ? total / qtyOut : total;
+      window._bomHppMin = hpp;
+      const elHpp = document.getElementById("bomHppMin");
+      if (elHpp)
+        elHpp.textContent = "Rp " + Math.round(hpp).toLocaleString("id-ID");
+      updateBomLossBadge(hpp);
+      return hpp;
+    }
+
+    // Bandingkan harga jual produk hasil vs harga pokok minimum → tampilkan peringatan.
+    function updateBomLossBadge(hpp) {
+      const badge = document.getElementById("bomLossBadge");
+      if (!badge) return;
+
+      // Mode form "Buat Barang Baru": produk belum ada, jadi bandingkan harga pokok
+      // minimum terhadap Harga Jual yang sedang diketik di form (#fHJual).
+      if (window._komponenDiForm) {
+        if (!hpp) {
+          badge.style.display = "none";
+          return;
+        }
+        const jualForm =
+          parseInt(
+            (document.getElementById("fHJual")?.value || "0").replace(/\D/g, ""),
+          ) || 0;
+        const minStr = Math.round(hpp).toLocaleString("id-ID");
+        badge.style.display = "block";
+        if (jualForm <= 0) {
+          badge.innerHTML = `<div style="background:rgba(245,158,11,.15);color:#d97706;border-radius:10px;padding:10px 12px;font-weight:700;font-size:13px">💡 Harga jual minimal Rp ${minStr}/unit — isi Harga Jual di bawah angka ini biar tidak rugi.</div>`;
+        } else if (jualForm < hpp) {
+          const selisih = Math.round(hpp - jualForm).toLocaleString("id-ID");
+          badge.innerHTML = `<div style="background:rgba(239,68,68,.15);color:#ef4444;border-radius:10px;padding:10px 12px;font-weight:700;font-size:13px">⚠️ RUGI Rp ${selisih}/unit — Harga Jual di bawah harga pokok. Minimal Rp ${minStr}/unit.</div>`;
+        } else {
+          const untung = Math.round(jualForm - hpp).toLocaleString("id-ID");
+          badge.innerHTML = `<div style="background:rgba(34,197,94,.15);color:#16a34a;border-radius:10px;padding:10px 12px;font-weight:700;font-size:13px">✓ Aman — untung kotor Rp ${untung}/unit (harga jual minimal Rp ${minStr}).</div>`;
+        }
+        return;
+      }
+
+      const prodId = parseInt(document.getElementById("bomProd").value);
+      const prod = allItems.find((x) => x.id === prodId);
+      if (!prod || !hpp) {
+        badge.style.display = "none";
+        return;
+      }
+      const jual = prod.sell_price || 0;
+      if (jual <= 0) {
+        badge.style.display = "none";
+        return;
+      }
+      badge.style.display = "block";
+      if (jual < hpp) {
+        const selisih = Math.round(hpp - jual).toLocaleString("id-ID");
+        const jualStr = Math.round(jual).toLocaleString("id-ID");
+        badge.innerHTML = `<div style="background:rgba(239,68,68,.15);color:#ef4444;border-radius:10px;padding:10px 12px;font-weight:700;font-size:13px">⚠️ RUGI Rp ${selisih}/unit — harga jual "${prod.name}" (Rp ${jualStr}) di bawah harga pokok. Sebaiknya naikkan harga jual.</div>`;
+      } else {
+        const untung = Math.round(jual - hpp).toLocaleString("id-ID");
+        badge.innerHTML = `<div style="background:rgba(34,197,94,.15);color:#16a34a;border-radius:10px;padding:10px 12px;font-weight:700;font-size:13px">✓ Aman — untung kotor Rp ${untung}/unit dari harga pokok komponen</div>`;
+      }
+    }
+
+    // Buka form barang ASLI (dari itemForm.js) untuk membuat produk jadi baru,
+    // dengan harga modal pra-terisi dari harga pokok minimum komponen.
+    function bukaBuatBarangBaru() {
+      if (!document.getElementById("fBarang")) {
+        // markup form belum sempat ter-inject; picu & minta ulangi sebentar
+        loadComponents();
+        showToast("Menyiapkan form barang, coba lagi sebentar…", "info");
+        return;
+      }
+      window.hppFloorBaru = hitungHppMinimum() || 0;
+      openItemModal(null, false);
+
+      // Pindahkan section "Komponen / Bahan Baku" + panel harga pokok ke dalam form,
+      // di atas "Harga Modal terhadap PPN", supaya user tahu harga jual minimum.
+      const slot = document.getElementById("slotKomponenBaru");
+      const seksi = document.getElementById("seksiKomponen");
+      if (slot && seksi) {
+        slot.appendChild(seksi);
+        window._komponenDiForm = true;
+        const jual = document.getElementById("fHJual");
+        if (jual) jual.addEventListener("input", hitungHppMinimum);
+        hitungHppMinimum();
+      }
+    }
+
+    // Kembalikan section komponen dari form barang ke modal BOM (dipanggil saat form ditutup).
+    function kembalikanSeksiKomponen() {
+      if (!window._komponenDiForm) return;
+      const seksi = document.getElementById("seksiKomponen");
+      if (seksi && window._parentSeksiKomponen)
+        window._parentSeksiKomponen.appendChild(seksi);
+      window._komponenDiForm = false;
+      const jual = document.getElementById("fHJual");
+      if (jual) jual.removeEventListener("input", hitungHppMinimum);
+      hitungHppMinimum();
+    }
+
+    // Dipanggil itemForm.js setelah barang baru berhasil disimpan (lihat saveItem).
+    window.onItemCreated = function (item) {
+      allItems.push(item);
+      const sel = document.getElementById("bomProd");
+      const opt = document.createElement("option");
+      opt.value = item.id;
+      opt.textContent = `${item.name} (${item.code || ""})`;
+      sel.appendChild(opt);
+      sel.value = item.id;
+      window.hppFloorBaru = 0; // reset supaya tidak bocor ke pembuatan berikutnya
+      hitungHppMinimum();
+      showToast(`Barang "${item.name}" dibuat & dipilih sebagai produk hasil ✓`);
+    };
+
+    // Saat form barang ditutup (Batal / × / setelah simpan), kembalikan section komponen
+    // ke modal BOM. closeModal global dari api.js — aman di-override seperti openModal.
+    const _origCM = closeModal;
+    window.closeModal = function (id) {
+      if (id === "mBarang") kembalikanSeksiKomponen();
+      _origCM(id);
+    };
 
     const _origOM = openModal;
     window.openModal = function (id) {
@@ -315,6 +555,8 @@
         kompIdx = 0;
         addKomponen();
         addKomponen();
+        window.hppFloorBaru = 0;
+        hitungHppMinimum();
       }
       if (id === "mOrder") {
         // populate BOM dropdown
@@ -395,16 +637,19 @@
         document.getElementById("tblBOM").innerHTML = allBOMs.length
           ? allBOMs
             .map((b) => {
-              const biaya =
-                (b.materials || []).reduce(
-                  (a, l) => a + l.qty_needed * (l.current_stock || 0),
-                  0,
-                );
+              // Estimasi biaya = total harga modal (buy_price) komponen untuk 1x proses rakit.
+              const biaya = (b.materials || []).reduce((a, l) => {
+                const it = allItems.find((x) => x.id === l.material_id);
+                return a + (l.qty_needed || 0) * (it ? it.buy_price || 0 : 0);
+              }, 0);
+              const biayaStr = biaya
+                ? "Rp " + Math.round(biaya).toLocaleString("id-ID")
+                : "-";
               return `<tr>
         <td><b style="font-size:16px">${b.product_name || "-"}</b><div style="font-size:12px;color:var(--text-muted)">${b.product_code || ""}</div></td>
         <td style="font-size:18px;font-weight:800">${b.qty_produced} <span style="font-size:13px;color:var(--text-muted)">pcs</span></td>
         <td>${(b.materials || []).length} komponen</td>
-        <td style="font-weight:700;color:var(--primary)">-</td>
+        <td style="font-weight:700;color:var(--primary)">${biayaStr}</td>
         <td style="white-space:nowrap">
           <button class="bsm bv" onclick="detailBOM(${b.id})">Detail</button>
           <button class="bsm be" onclick="editBOM(${b.id})">Edit</button>
@@ -456,6 +701,7 @@
       document.getElementById("komponenRows").innerHTML = "";
       kompIdx = 0;
       (b.materials || []).forEach((l) => addKomponen(l.material_id, l.qty_needed));
+      hitungHppMinimum();
       _origOM("mBOM");
     }
 
