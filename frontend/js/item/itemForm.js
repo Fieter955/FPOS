@@ -8,47 +8,97 @@
         { url: "/item/units.html", id: "unitsContainer" },
       ];
 
-      let componentsLoaded = false;
+      // Memoized: fetch markup modal/tab HANYA sekali. Kembalikan Promise agar pemanggil
+      // (mis. "Buat Barang Baru") bisa `await` sampai form benar-benar siap, lalu buka
+      // otomatis — tanpa perlu klik dua kali.
+      let componentsPromise = null;
       function loadComponents() {
-        if (componentsLoaded) return;
-        componentsLoaded = true;
-        components.forEach((c) => {
-          fetch(c.url)
-            .then((r) => r.text())
-            .then((html) => {
-              document.getElementById(c.id).innerHTML = html;
-              // Setelah markup modal ada di DOM: pasang listener pencarian supplier &
-              // isi dropdown grup diskon (jika data grup sudah lebih dulu termuat).
-              if (c.id === "popUpContainer") {
-                setupSupSearch();
-                populateDiscountGroupSelect();
-                // Modal baru saja masuk DOM: isi fKat/fMerek/fSat yang belum
-                // sempat terisi saat refreshSelects() awal (pakai cache, tanpa request baru).
-                refreshSelects();
-              }
-            });
-        });
+        if (componentsPromise) return componentsPromise;
+        componentsPromise = Promise.all(
+          components.map((c) =>
+            fetch(c.url)
+              .then((r) => r.text())
+              .then((html) => {
+                document.getElementById(c.id).innerHTML = html;
+                // Setelah markup modal ada di DOM: pasang listener pencarian supplier &
+                // isi dropdown grup diskon (jika data grup sudah lebih dulu termuat).
+                if (c.id === "popUpContainer") {
+                  setupSupSearch();
+                  populateDiscountGroupSelect();
+                  // Modal baru saja masuk DOM: isi fKat/fMerek/fSat yang belum
+                  // sempat terisi saat refreshSelects() awal (pakai cache, tanpa request baru).
+                  refreshSelects();
+                }
+              }),
+          ),
+        );
+        return componentsPromise;
       }
 
       let currentAdvancedType = null;
       let currentPotonganType = null;
+
+      // Cache markup tabel harga lanjutan (Satuan/Level Harga/Level Jumlah/Potongan).
+      // Template ini STATIS — cukup diunduh dari server sekali per sesi, lalu dipakai ulang
+      // dari memori. Sebelumnya tiap klik mengunduh ulang (pakai cache-buster ?_t=), jadi
+      // terasa "loading" tiap kali. Sekarang klik ke-2 dst langsung instan.
+      const advTemplateCache = {};
+      // Cache markup tabel yang SUDAH di-ekstrak (siap tempel) → DOMParser cukup sekali per tipe.
+      const advHtmlCache = {};
+
+      // Hangatkan cache di latar belakang (saat idle) supaya klik tab PERTAMA pun instan.
+      // Fire-and-forget & aman diulang (yang sudah ada dilewati).
+      function prefetchAdvancedTemplates() {
+        ["satuan", "levelHarga", "levelJumlah", "potonganHargaJual"].forEach(
+          (type) => {
+            if (advTemplateCache[type] != null) return;
+            fetch(`/item/${type}.html`)
+              .then((r) => (r.ok ? r.text() : null))
+              .then((t) => {
+                if (t != null) advTemplateCache[type] = t;
+              })
+              .catch(() => {});
+          },
+        );
+      }
+
+      // Warnai tombol tab harga lanjutan secara SINKRON (instan saat diklik), tanpa
+      // menunggu tabel selesai dirender. type=null → tak ada yang aktif (semua abu).
+      function setAdvBtnActive(type, isPotongan) {
+        const typeMap = {
+          levelHarga: "advharga",
+          levelJumlah: "advjumlah",
+          satuan: "advsatuan",
+        };
+        document.querySelectorAll(".adv-btn").forEach((b) => {
+          const btnId = b.id.toLowerCase();
+          const isPotBtn = btnId.includes("potonganhargajual");
+          // Hanya sentuh tombol di kelompok yang sama (potongan vs level/satuan).
+          if (isPotongan !== isPotBtn) return;
+          let isCurrent = false;
+          if (type)
+            isCurrent = isPotongan
+              ? true // hanya ada satu tombol potongan
+              : btnId.includes(typeMap[type] || type.toLowerCase());
+          b.style.background = isCurrent ? "var(--primary)" : "var(--card-bg)";
+          b.style.color = isCurrent ? "#fff" : "var(--text-main)";
+          b.style.borderColor = isCurrent
+            ? "var(--primary)"
+            : "var(--border-color)";
+        });
+      }
+
       async function loadAdvancedContent(type) {
-        console.log("loadAdvancedContent called with type:", type);
         const isPotongan = type === "potonganHargaJual";
         const targetContainer = document.getElementById(
           isPotongan ? "contentPotonganHargaJual" : "advancedContent",
         );
-        const buttons = document.querySelectorAll(".adv-btn");
+        if (!targetContainer) return;
         const relevantState = isPotongan
           ? currentPotonganType
           : currentAdvancedType;
 
-        if (!targetContainer) {
-          console.error("Target container not found for type:", type);
-          return;
-        }
-
-        // Jika tombol sudah disabled, jangan lakukan apa-apa
+        // Jika tombol sumber sudah disabled, jangan lakukan apa-apa.
         const sourceBtn = document.getElementById(
           isPotongan
             ? "btnAdvPotonganHargaJual"
@@ -61,105 +111,78 @@
         );
         if (sourceBtn && sourceBtn.classList.contains("disabled")) return;
 
-        // Toggle: Jika mengklik tipe yang sama, maka tutup.
+        // Toggle: klik tipe yang sama → tutup panel & kembalikan tombol ke abu.
         if (relevantState === type) {
           targetContainer.style.display = "none";
           if (isPotongan) currentPotonganType = null;
           else currentAdvancedType = null;
-
-          buttons.forEach((b) => {
-            const btnId = b.id.toLowerCase();
-            const isTargetBtn = btnId.includes(type.toLowerCase());
-            if (isTargetBtn && !b.classList.contains("disabled")) {
-              b.style.background = "var(--card-bg)";
-              b.style.color = "var(--text-main)";
-              b.style.borderColor = "var(--border-color)";
-            }
-          });
+          setAdvBtnActive(null, isPotongan);
           return;
         }
 
+        // 1) FEEDBACK INSTAN: set state + warnai tombol jadi oranye LEBIH DULU,
+        //    sebelum kerja berat (parse + render tabel).
+        if (isPotongan) currentPotonganType = type;
+        else currentAdvancedType = type;
+        setAdvBtnActive(type, isPotongan);
+
+        // 2) Beri browser 1 frame untuk MENGGAMBAR tombol oranye dulu, baru render
+        //    tabel. Tanpa jeda ini semuanya jalan sekaligus (memblokir layar), jadi
+        //    tombol baru berubah warna setelah tabel selesai → terasa nge-lag.
+        await new Promise((r) =>
+          requestAnimationFrame(() => requestAnimationFrame(r)),
+        );
+
         try {
-          const url = `/item/${type}.html?_t=${Date.now()}`;
-          console.log("Fetching content from:", url);
-          const res = await fetch(url);
-          if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
-          const text = await res.text();
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(text, "text/html");
-          const tableWrap = doc.querySelector(".tbl-wrap");
-          const styleTags = doc.querySelectorAll("style");
-
-          if (tableWrap) {
-            let contentHtml = `<div class="advanced-container">${tableWrap.outerHTML}</div>`;
-            styleTags.forEach((style) => (contentHtml += style.outerHTML));
-
-            targetContainer.innerHTML = contentHtml;
-            targetContainer.style.display = "block";
-
-            if (isPotongan) currentPotonganType = type;
-            else currentAdvancedType = type;
-
-            if (!isPotongan) {
-              ensureEmptySatuanRow();
-              renderAdvancedGrid();
-            } else {
-              // Pastikan daftar grup pelanggan sudah dimuat SEBELUM grid dirender,
-              // agar <select> grup terisi & baris potongan yang tersimpan tidak
-              // hilang saat dibaca ulang (mencegah potongan ter-reset saat simpan).
-              if (!allGroups.length) await loadCustomerGroups();
-              initPotonganHargaJualUI();
+          // Markup tabel di-parse & di-ekstrak SEKALI per tipe lalu di-cache. <style>
+          // template disuntik ke <head> sekali saja (hindari re-parse CSS tiap klik).
+          let contentHtml = advHtmlCache[type];
+          if (contentHtml == null) {
+            let text = advTemplateCache[type];
+            if (text == null) {
+              const res = await fetch(`/item/${type}.html`);
+              if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+              text = await res.text();
+              advTemplateCache[type] = text;
             }
-
-            // Update style tombol
-            buttons.forEach((b) => {
-              const btnId = b.id.toLowerCase();
-              let isCurrentType = false;
-
-              if (isPotongan) {
-                isCurrentType = btnId.includes("potonganhargajual");
-              } else {
-                // Map type to button ID keyword
-                const typeMap = {
-                  levelHarga: "advharga",
-                  levelJumlah: "advjumlah",
-                  satuan: "advsatuan",
-                };
-                const keyword = typeMap[type] || type.toLowerCase();
-                isCurrentType = btnId.includes(keyword);
-              }
-
-              if (isPotongan) {
-                if (btnId.includes("potonganhargajual")) {
-                  b.style.background = isCurrentType
-                    ? "var(--primary)"
-                    : "var(--card-bg)";
-                  b.style.color = isCurrentType ? "#fff" : "var(--text-main)";
-                  b.style.borderColor = isCurrentType
-                    ? "var(--primary)"
-                    : "var(--border-color)";
-                }
-              } else {
-                if (!btnId.includes("potonganhargajual")) {
-                  b.style.background = isCurrentType
-                    ? "var(--primary)"
-                    : "var(--card-bg)";
-                  b.style.color = isCurrentType ? "#fff" : "var(--text-main)";
-                  b.style.borderColor = isCurrentType
-                    ? "var(--primary)"
-                    : "var(--border-color)";
-                }
+            const doc = new DOMParser().parseFromString(text, "text/html");
+            const tableWrap = doc.querySelector(".tbl-wrap");
+            if (!tableWrap)
+              throw new Error(
+                "Elemen .tbl-wrap tidak ditemukan di " + type + ".html",
+              );
+            doc.querySelectorAll("style").forEach((style, i) => {
+              const sid = `advStyle-${type}-${i}`;
+              if (!document.getElementById(sid)) {
+                const s = document.createElement("style");
+                s.id = sid;
+                s.textContent = style.textContent;
+                document.head.appendChild(s);
               }
             });
-            console.log("Content loaded successfully for:", type);
+            contentHtml = `<div class="advanced-container">${tableWrap.outerHTML}</div>`;
+            advHtmlCache[type] = contentHtml;
+          }
+
+          targetContainer.innerHTML = contentHtml;
+          targetContainer.style.display = "block";
+
+          if (!isPotongan) {
+            ensureEmptySatuanRow();
+            renderAdvancedGrid();
           } else {
-            throw new Error(
-              "Elemen .tbl-wrap tidak ditemukan di " + type + ".html",
-            );
+            // Pastikan daftar grup pelanggan sudah dimuat SEBELUM grid dirender, agar
+            // <select> grup terisi & baris potongan tersimpan tidak hilang saat dibaca ulang.
+            if (!allGroups.length) await loadCustomerGroups();
+            initPotonganHargaJualUI();
           }
         } catch (e) {
           console.error("loadAdvancedContent Error:", e);
           showToast("Gagal memuat: " + e.message, "error");
+          // Batalkan state & tombol bila gagal agar tetap konsisten.
+          if (isPotongan) currentPotonganType = null;
+          else currentAdvancedType = null;
+          setAdvBtnActive(null, isPotongan);
         }
       }
 
@@ -1287,6 +1310,11 @@
 
         updateDiscountPreview();
         openModal("mBarang");
+        // Form terbuka → besar kemungkinan user membuka tab harga lanjutan. Hangatkan
+        // cache template-nya saat idle supaya klik tab pertama pun langsung muncul.
+        if (window.requestIdleCallback)
+          requestIdleCallback(prefetchAdvancedTemplates);
+        else setTimeout(prefetchAdvancedTemplates, 300);
         setTimeout(() => document.getElementById("fNama").focus(), 100);
       }
 
@@ -2456,5 +2484,8 @@
           loadCustomerGroups();
           loadSuppliers();
           loadPkpStatusItem();
+          // Hangatkan template tabel harga lanjutan dari SEKARANG (bukan pas diklik),
+          // jadi saat user buka tab harga lanjutan sudah tersedia di memori (0 fetch).
+          prefetchAdvancedTemplates();
         });
       }

@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Perakitan (BOM) - FPOS</title>
   <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/advanced_settings.css" />
   <style>
     /* Modal BOM dibuat full-screen (memenuhi layar) meniru pola #mBarang di item/popUp.html */
     #mBOM {
@@ -205,7 +206,7 @@
                   margin-bottom: 8px;
                 ">
               <label style="font-weight: 700; color: var(--text-muted)">🔩 Komponen / Bahan Baku</label>
-              <button onclick="addKomponen()" class="btn" style="
+              <button type="button" onclick="addKomponen()" class="btn" style="
                     padding: 8px 14px;
                     background: var(--primary-light);
                     color: var(--primary);
@@ -354,6 +355,13 @@
       loadCustomerGroups();
       loadSuppliers();
       loadPkpStatusItem();
+      // Siapkan template tabel harga lanjutan dari awal (saat idle) supaya begitu user
+      // membuka "Pengaturan Harga Lanjutan" langsung muncul tanpa nunggu unduh.
+      if (typeof prefetchAdvancedTemplates === "function") {
+        (window.requestIdleCallback || ((cb) => setTimeout(cb, 300)))(
+          prefetchAdvancedTemplates,
+        );
+      }
 
       // Ingat lokasi asli section komponen (di modal BOM) agar bisa dikembalikan
       // setelah dipindah sementara ke dalam form "Buat Barang Baru".
@@ -362,11 +370,13 @@
 
       allItems = await api("GET", "/items/?limit=500");
       const sel = document.getElementById("bomProd");
-      allItems.forEach((i) =>
-        sel.insertAdjacentHTML(
-          "beforeend",
-          `<option value="${i.id}">${i.name} (${i.code || ""})</option>`,
-        ),
+      // Rangkai semua <option> jadi satu string lalu set sekali (hindari ratusan
+      // penyisipan DOM satu per satu yang bikin halaman berat saat item banyak).
+      sel.insertAdjacentHTML(
+        "beforeend",
+        allItems
+          .map((i) => `<option value="${i.id}">${i.name} (${i.code || ""})</option>`)
+          .join(""),
       );
       document.getElementById("orderDate").value = today();
       loadBOM();
@@ -400,7 +410,7 @@
       <select class="input-control" style="margin:0;padding:10px 12px;font-size:14px" onchange="setKompPrice(${idx},this)">${opts}</select>
       <input type="number" value="${qty}" min="0.01" step="0.01" class="input-control" style="margin:0;padding:10px;text-align:center;font-weight:700" oninput="hitungHppMinimum()">
       <input type="number" value="0" min="0" class="input-control kprice" style="margin:0;padding:10px;font-size:14px;color:var(--text-muted)" readonly>
-      <button onclick="document.getElementById('komp${idx}').remove();hitungHppMinimum()" style="width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,.15);color:#ef4444;border:none;cursor:pointer;font-size:16px;font-weight:700">✕</button>
+      <button type="button" onclick="document.getElementById('komp${idx}').remove();hitungHppMinimum()" style="width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,.15);color:#ef4444;border:none;cursor:pointer;font-size:16px;font-weight:700">✕</button>
     </div>`,
       );
       if (itemId)
@@ -487,12 +497,13 @@
 
     // Buka form barang ASLI (dari itemForm.js) untuk membuat produk jadi baru,
     // dengan harga modal pra-terisi dari harga pokok minimum komponen.
-    function bukaBuatBarangBaru() {
+    async function bukaBuatBarangBaru() {
+      // Markup form barang (popUp.html) di-inject async. Kalau belum siap saat diklik,
+      // tunggu sebentar lalu buka OTOMATIS — tidak perlu klik dua kali.
       if (!document.getElementById("fBarang")) {
-        // markup form belum sempat ter-inject; picu & minta ulangi sebentar
-        loadComponents();
-        showToast("Menyiapkan form barang, coba lagi sebentar…", "info");
-        return;
+        showLoading("Menyiapkan form barang…");
+        await loadComponents();
+        hideLoading();
       }
       window.hppFloorBaru = hitungHppMinimum() || 0;
       openItemModal(null, false);
