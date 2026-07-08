@@ -515,7 +515,7 @@
       flex: 1;
       text-align: right;
       font-size: clamp(1.6rem, 5vw, 2.5rem);
-      font-weight: 900;
+      font-weight: 400;
       color: var(--primary);
       padding: 0.35rem 0.8rem;
       background: linear-gradient(135deg, #10b981, #059669);
@@ -826,13 +826,13 @@
 
     .ipos-total-banner .lbl {
       font-size: clamp(1.5rem, 4.2vw, 3rem);
-      font-weight: 900;
+      font-weight: 400;
       letter-spacing: 0.06em;
     }
 
     .ipos-total-banner .val {
       font-size: clamp(1.9rem, 6.8vw, 4rem);
-      font-weight: 900;
+      font-weight: 400;
       text-align: right;
       overflow-wrap: anywhere;
       line-height: 1.05;
@@ -842,7 +842,7 @@
       font-size: 0.55em;
       opacity: 0.85;
       margin-right: 0.4em;
-      font-weight: 700;
+      font-weight: 400;
     }
 
     /* --- Info bar: Pelanggan (Stiker Card) + Meta --- */
@@ -1039,7 +1039,7 @@
     /* Baris kosong pengisi: menjaga garis kolom tetap tampak sebelum ada barang.
        Tingginya disamakan dengan baris barang agar kisi tampak seragam. */
     .ipos-table tbody tr.ipos-filler-row td {
-      height: 1.5rem;
+      height: 2.8rem;
       color: var(--text-muted);
     }
 
@@ -1136,7 +1136,7 @@
       border-radius: var(--radius);
       background: var(--card-bg);
       flex-shrink: 0;
-      min-height: 16rem;
+      min-height: 10rem;
       /* Menambah tinggi footer */
     }
 
@@ -1483,11 +1483,17 @@
       <div class="ipos-hints">
         <div class="ipos-action-row">
           <button class="action-btn" id="btnDetailItem" onclick="bukaDetailBarang()">Detail Item</button>
+          <button class="action-btn" id="btnHold" onclick="holdTransaction()"
+            style="color: #eab308; border-color: rgba(234, 179, 8, 0.3); background: rgba(234, 179, 8, 0.1);">⏸️
+            Pending</button>
+          <button class="action-btn" id="btnRecall" onclick="showPendingModal()"
+            style="color: #3b82f6; border-color: rgba(59, 130, 246, 0.3); background: rgba(59, 130, 246, 0.1);">📂
+            Daftar Pending (<span id="pendingCount">0</span>)</button>
           <input class="keterangan-inp" type="text" placeholder="Tambahkan keterangan / catatan...">
         </div>
 
         <div>
-          Pintasan: <b>F8</b> Bayar · <b>Esc</b> Batal · <b>↑↓</b> Pilih hasil
+          Pintasan: <b>End</b> Bayar · <b>Esc</b> Batal · <b>↑↓</b> Pilih hasil
           · <b>Enter</b> Tambah
         </div>
         <div>
@@ -1552,7 +1558,7 @@
         </div>
 
         <button class="bayar-btn" style="margin-top: 0.5rem" onclick="openPayModal()">
-          ✓ BAYAR (F8)
+          ✓ BAYAR (AND)
         </button>
       </div>
     </div>
@@ -1581,29 +1587,29 @@
         <!-- Baris 1: Tunai | Deposit -->
         <div class="mpy-row">
           <label class="mpy-lbl">Tunai :</label>
-          <input type="number" id="payInpTunai" class="mpy-inp mpy-inp-num" value="0" oninput="hitungTotalBayar()" />
+          <input type="text" inputmode="numeric" id="payInpTunai" class="mpy-inp mpy-inp-num" value="0" oninput="formatBiayaLain(this); hitungTotalBayar()" />
           <span class="mpy-sep"></span>
-          <label class="mpy-lbl">Deposit :</label>
-          <input type="number" id="payInpDeposit" class="mpy-inp mpy-inp-num" value="0" oninput="hitungTotalBayar()" />
+          <label class="mpy-lbl">Saldo Pelanggan :</label>
+          <input type="text" inputmode="numeric" id="payInpDeposit" class="mpy-inp mpy-inp-num" value="0" oninput="formatBiayaLain(this); hitungTotalBayar()" />
         </div>
 
         <!-- Baris 2: Kredit | Pel. / Jt. -->
         <div class="mpy-row">
           <label class="mpy-lbl">Kredit :</label>
-          <input type="number" id="payInpKredit" class="mpy-inp mpy-inp-num" value="0" oninput="hitungTotalBayar()" />
+          <input type="text" inputmode="numeric" id="payInpKredit" class="mpy-inp mpy-inp-num" value="0" oninput="formatBiayaLain(this); hitungTotalBayar()" />
           <span class="mpy-sep"></span>
           <label class="mpy-lbl mpy-lbl-sm">Pel. :</label>
           <select id="payKreditPel" class="mpy-inp mpy-inp-sel">
             <option value="">UMUM/CASH</option>
           </select>
-          <label class="mpy-lbl mpy-lbl-sm">Jt. :</label>
-          <input type="number" id="payKreditJt" class="mpy-inp mpy-inp-mini" value="10" />
+          <label class="mpy-lbl mpy-lbl-sm" style="display: none;">Jt. :</label>
+          <input type="number" id="payKreditJt" class="mpy-inp mpy-inp-mini" value="10" style="display: none;" />
         </div>
 
         <!-- Baris 3: Kartu Debit | Bank + Ref -->
         <div class="mpy-row">
           <label class="mpy-lbl">Kartu Debit :</label>
-          <input type="number" id="payInpDebit" class="mpy-inp mpy-inp-num" value="0" oninput="hitungTotalBayar()" />
+          <input type="text" inputmode="numeric" id="payInpDebit" class="mpy-inp mpy-inp-num" value="0" oninput="formatBiayaLain(this); hitungTotalBayar()" />
           <span class="mpy-sep"></span>
           <label class="mpy-lbl mpy-lbl-sm">Bank :</label>
           <select id="payBankDebit" class="mpy-inp mpy-inp-sel-sm">
@@ -1615,8 +1621,8 @@
         <!-- Baris 4: Kartu Kredit | Bank + Ref -->
         <div class="mpy-row">
           <label class="mpy-lbl">Kartu Kredit :</label>
-          <input type="number" id="payInpKartuKredit" class="mpy-inp mpy-inp-num" value="0"
-            oninput="hitungTotalBayar()" />
+          <input type="text" inputmode="numeric" id="payInpKartuKredit" class="mpy-inp mpy-inp-num" value="0"
+            oninput="formatBiayaLain(this); hitungTotalBayar()" />
           <span class="mpy-sep"></span>
           <label class="mpy-lbl mpy-lbl-sm">Bank :</label>
           <select id="payBankKartuKredit" class="mpy-inp mpy-inp-sel-sm">
@@ -1628,7 +1634,7 @@
         <!-- Baris 5: E-Money | Prod. + Ref -->
         <div class="mpy-row">
           <label class="mpy-lbl">E-Money :</label>
-          <input type="number" id="payInpEmoney" class="mpy-inp mpy-inp-num" value="0" oninput="hitungTotalBayar()" />
+          <input type="text" inputmode="numeric" id="payInpEmoney" class="mpy-inp mpy-inp-num" value="0" oninput="formatBiayaLain(this); hitungTotalBayar()" />
           <span class="mpy-sep"></span>
           <label class="mpy-lbl mpy-lbl-sm">Prod. :</label>
           <select id="payProdEmoney" class="mpy-inp mpy-inp-sel-sm">
@@ -1695,8 +1701,7 @@
     <div class="modal-box dh-box">
       <div class="dh-hdr">
         <span>📊 Detail Barang — <span id="dhNamaBarang">-</span></span>
-        <button class="btn-x" onclick="closeModals()"
-          style="color:rgba(255,255,255,.7);font-size:1.4rem">×</button>
+        <button class="btn-x" onclick="closeModals()" style="color:rgba(255,255,255,.7);font-size:1.4rem">×</button>
       </div>
       <div class="dh-tabs">
         <button class="dh-tab active" id="dhTabBeli" onclick="gantiTabHistori('beli')">🛒 Riwayat Harga Beli</button>
@@ -1716,7 +1721,44 @@
             </tr>
           </thead>
           <tbody id="dhBody">
-            <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:1.5rem">Memuat…</td></tr>
+            <tr>
+              <td colspan="7" style="text-align:center;color:var(--text-muted);padding:1.5rem">Memuat…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="dh-foot">
+        <button class="rcpt-btn" style="background:var(--primary);color:#fff;border:none;padding:0.6rem 1.4rem"
+          onclick="closeModals()">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Daftar Pending -->
+  <div class="modal-overlay" id="pendingModal" style="display: none; z-index: 9999"
+    onclick="if(event.target===this)closeModals()">
+    <div class="modal-box dh-box" style="max-width: 900px !important; width: 95vw; height: 85vh;">
+      <div class="dh-hdr">
+        <span>📂 Daftar Transaksi Pending</span>
+        <button class="btn-x" onclick="closeModals()" style="color:rgba(255,255,255,.7);font-size:1.4rem">×</button>
+      </div>
+      <div class="dh-body" style="padding-top: 1rem;">
+        <table class="dh-table">
+          <thead>
+            <tr>
+              <th style="text-align:center">Waktu</th>
+              <th>Pelanggan</th>
+              <th>Keterangan</th>
+              <th class="num">Item</th>
+              <th class="num">Total</th>
+              <th style="text-align:center">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="pendingBody">
+            <tr>
+              <td colspan="6" style="text-align:center;color:var(--text-muted);padding:1.5rem">Tidak ada transaksi
+                pending.</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -2125,6 +2167,11 @@
         filterItems();
         renderCart(); // tampilkan baris kosong "Belum ada barang" saat load
         recalc(); // inisialisasi banner TOTAL & ringkasan ke Rp 0
+        updatePendingCount(); // inisialisasi badge jumlah pending
+
+        window.addEventListener("resize", () => {
+          renderCart();
+        });
 
         // Setup Global Barcode Scanner
         setupBarcodeScanner((scode) => {
@@ -2634,6 +2681,11 @@
       document.getElementById("payInpKartuKredit").value = 0;
       document.getElementById("payInpEmoney").value = 0;
 
+      // Format initial values
+      ["payInpTunai", "payInpDeposit", "payInpKredit", "payInpDebit", "payInpKartuKredit", "payInpEmoney"].forEach(id => {
+        formatBiayaLain(document.getElementById(id));
+      });
+
       // Hitung summary
       hitungTotalBayar();
 
@@ -2648,14 +2700,19 @@
       }, 50);
     }
 
+    // Helper untuk mengambil nilai angka murni dari input yang diformat
+    function getRawPay(id) {
+      return parseFloat((document.getElementById(id).value || "").replace(/[^\d]/g, "")) || 0;
+    }
+
     // Menghitung total bayar dari semua metode & kembali
     function hitungTotalBayar() {
-      const tunai = parseFloat(document.getElementById("payInpTunai").value) || 0;
-      const deposit = parseFloat(document.getElementById("payInpDeposit").value) || 0;
-      const kredit = parseFloat(document.getElementById("payInpKredit").value) || 0;
-      const debit = parseFloat(document.getElementById("payInpDebit").value) || 0;
-      const kartuKredit = parseFloat(document.getElementById("payInpKartuKredit").value) || 0;
-      const emoney = parseFloat(document.getElementById("payInpEmoney").value) || 0;
+      const tunai = getRawPay("payInpTunai");
+      const deposit = getRawPay("payInpDeposit");
+      const kredit = getRawPay("payInpKredit");
+      const debit = getRawPay("payInpDebit");
+      const kartuKredit = getRawPay("payInpKartuKredit");
+      const emoney = getRawPay("payInpEmoney");
 
       const totalBayar = tunai + deposit + kredit + debit + kartuKredit + emoney;
       const total =
@@ -2672,12 +2729,12 @@
     // Tentukan metode bayar utama berdasarkan input terbesar
     function tentukanMetodeBayar() {
       const methods = [
-        { key: "cash", val: parseFloat(document.getElementById("payInpTunai").value) || 0 },
-        { key: "deposit", val: parseFloat(document.getElementById("payInpDeposit").value) || 0 },
-        { key: "credit", val: parseFloat(document.getElementById("payInpKredit").value) || 0 },
-        { key: "card", val: parseFloat(document.getElementById("payInpDebit").value) || 0 },
-        { key: "card", val: parseFloat(document.getElementById("payInpKartuKredit").value) || 0 },
-        { key: "transfer", val: parseFloat(document.getElementById("payInpEmoney").value) || 0 },
+        { key: "cash", val: getRawPay("payInpTunai") },
+        { key: "deposit", val: getRawPay("payInpDeposit") },
+        { key: "credit", val: getRawPay("payInpKredit") },
+        { key: "card", val: getRawPay("payInpDebit") },
+        { key: "card", val: getRawPay("payInpKartuKredit") },
+        { key: "transfer", val: getRawPay("payInpEmoney") },
       ];
       // Pilih metode dengan nilai terbesar
       let best = methods[0];
@@ -2788,8 +2845,24 @@
       document.getElementById("cartCount").textContent = fmtQty(totalQty);
       const body = document.getElementById("cartTableBody");
 
-      // Jumlah baris minimal supaya kisi/garis tabel tetap terlihat penuh.
-      const BARIS_MINIMAL = 12;
+      // Hitung baris minimal dinamis agar memenuhi sisa tinggi layar tanpa scroll
+      let BARIS_MINIMAL = 6;
+      const wrap = document.querySelector(".ipos-table-wrap");
+      const thead = document.querySelector(".ipos-table thead");
+      if (wrap && thead) {
+        // Tinggi 1 baris kira-kira 45px (2.8rem)
+        const avail = wrap.clientHeight - thead.clientHeight;
+        const fit = Math.ceil(avail / 45); // Dibulatkan ke atas agar sisa ruang tertutup
+        if (fit > BARIS_MINIMAL) BARIS_MINIMAL = fit;
+
+        // Sembunyikan scrollbar jika yang ditambahkan hanya baris kosong (filler),
+        // agar baris terakhir yang terpotong tidak menyebabkan scroll.
+        if (cart.length < fit) {
+          wrap.style.overflowY = "hidden";
+        } else {
+          wrap.style.overflowY = "auto";
+        }
+      }
 
       const barisBarang = cart
         .map((c, i) => {
@@ -2866,6 +2939,129 @@
       recalc();
       document.getElementById("searchInp").focus();
     }
+
+    // ===== FITUR PENDING TRANSAKSI =====
+    function getPendingList() {
+      try {
+        return JSON.parse(localStorage.getItem("ipos_pending_sales") || "[]");
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function savePendingList(list) {
+      localStorage.setItem("ipos_pending_sales", JSON.stringify(list));
+      updatePendingCount();
+    }
+
+    function updatePendingCount() {
+      const list = getPendingList();
+      const el = document.getElementById("pendingCount");
+      if (el) el.textContent = list.length;
+    }
+
+    function holdTransaction() {
+      if (cart.length === 0) return showToast("Keranjang kosong!", "warning");
+
+      const list = getPendingList();
+      const custSel = document.getElementById("custSel");
+      const groupSel = document.getElementById("groupSel");
+      const ketEl = document.querySelector(".keterangan-inp");
+      const oc = document.getElementById("othercost");
+
+      const custName = custSel.options[custSel.selectedIndex]?.text || "Umum";
+      const totalAmount = cart.reduce((s, c) => s + c.price * c.qty, 0) + getBiayaLain();
+
+      const pendingData = {
+        id: Date.now(),
+        date: new Date().toLocaleString("id-ID", { timeZone: "Asia/Makassar", hour12: false }),
+        cart: JSON.parse(JSON.stringify(cart)), // copy
+        custId: custSel.value,
+        groupId: groupSel ? groupSel.value : "",
+        otherCost: oc ? oc.value : "",
+        keterangan: ketEl ? ketEl.value : "",
+        custName: custName,
+        totalItems: cart.reduce((s, c) => s + c.qty, 0),
+        totalAmount: totalAmount
+      };
+
+      list.push(pendingData);
+      savePendingList(list);
+
+      clearCart();
+      if (ketEl) ketEl.value = "";
+      showToast("Transaksi berhasil di-hold (pending).", "success");
+    }
+
+    function showPendingModal() {
+      const list = getPendingList();
+      const body = document.getElementById("pendingBody");
+
+      if (list.length === 0) {
+        body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:1.5rem">Tidak ada transaksi pending.</td></tr>';
+      } else {
+        body.innerHTML = list.map(p => `
+          <tr>
+            <td style="text-align:center; font-size: 0.85rem;">${p.date}</td>
+            <td>${p.custName}</td>
+            <td>${p.keterangan || "-"}</td>
+            <td class="num">${fmtQty(p.totalItems)}</td>
+            <td class="num" style="font-weight:700;color:var(--primary)">${fmtRp(p.totalAmount)}</td>
+            <td style="text-align:center; display:flex; justify-content:center; gap:0.4rem;">
+              <button onclick="recallTransaction(${p.id})" style="background:var(--primary);color:#fff;border:none;padding:0.4rem 0.7rem;border-radius:0.4rem;cursor:pointer;font-size:0.8rem;">Buka</button>
+              <button onclick="deletePendingTransaction(${p.id})" style="background:#ef4444;color:#fff;border:none;padding:0.4rem 0.7rem;border-radius:0.4rem;cursor:pointer;font-size:0.8rem;">Hapus</button>
+            </td>
+          </tr>
+        `).join("");
+      }
+
+      document.getElementById("pendingModal").style.display = "flex";
+      activeModal = "pending";
+    }
+
+    function recallTransaction(id) {
+      if (cart.length > 0) {
+        if (!confirm("Keranjang saat ini tidak kosong! Jika dilanjutkan, keranjang saat ini akan tertimpa. Lanjutkan?")) return;
+      }
+
+      const list = getPendingList();
+      const pIndex = list.findIndex(x => x.id === id);
+      if (pIndex === -1) return;
+
+      const p = list[pIndex];
+      cart = p.cart;
+
+      const custSel = document.getElementById("custSel");
+      if (custSel && p.custId) {
+        custSel.value = p.custId;
+        handleCustomerChange();
+      }
+
+      const oc = document.getElementById("othercost");
+      if (oc) {
+        oc.value = p.otherCost;
+        formatBiayaLain(oc);
+      }
+
+      const ketEl = document.querySelector(".keterangan-inp");
+      if (ketEl) ketEl.value = p.keterangan || "";
+
+      list.splice(pIndex, 1);
+      savePendingList(list);
+
+      renderCart();
+      recalc();
+      closeModals();
+      showToast("Transaksi berhasil dibuka kembali.", "success");
+    }
+
+    function deletePendingTransaction(id) {
+      if (!confirm("Hapus transaksi pending ini?")) return;
+      const list = getPendingList();
+      const newList = list.filter(x => x.id !== id);
+      savePendingList(newList);
+      showPendingModal(); // refresh
+    }
     // Biaya Lain ditagihkan ke pelanggan (ongkir/admin) → nambah total yang dibayar.
     // Ambil angka saja (buang pemisah ribuan / karakter non-digit).
     function getBiayaLain() {
@@ -2906,8 +3102,8 @@
       setTxt(
         "sumDiscPct",
         "(" +
-          (gross > 0 ? ((discTotal / gross) * 100).toFixed(2) : "0.00") +
-          "%)",
+        (gross > 0 ? ((discTotal / gross) * 100).toFixed(2) : "0.00") +
+        "%)",
       );
       // Mode PKP: harga sudah termasuk PPN → tampilkan porsi PPN (info), total TIDAK berubah.
       // PPN dihitung PER BARIS pakai tarif barang (c.ppn_percent), fallback tarif toko.

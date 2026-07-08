@@ -13,6 +13,9 @@ from pydantic import BaseModel
 from ..database import get_db
 from ..auth import get_current_user, write_audit
 from .. import models
+from ..services.virtual_units import get_required_stock_qty, is_virtual_variant
+from ..services.inventory_fifo import consume_fifo, add_batch, EPS
+from .warehouse import get_warehouse_stock, adjust_warehouse_stock
 
 router = APIRouter()
 
@@ -198,6 +201,139 @@ def delete_bom(bom_id: int, db: Session = Depends(get_db),
     return {"message": "BOM dinonaktifkan"}
 
 
+# ─── Eksekusi Perakitan (dipakai bersama create_order & complete_order) ────────
+
+def _stock_item_terkunci(db: Session, item: models.Item) -> models.Item:
+    """Kembalikan item STOK NYATA (induk untuk varian virtual) yang dikunci
+    (with_for_update) supaya aman dipotong/ditambah stoknya."""
+    if is_virtual_variant(item):
+        parent = db.query(models.Item).with_for_update().get(item.parent_item_id)
+        if not parent:
+            raise HTTPException(400, f"Barang induk untuk {item.name} tidak ditemukan.")
+        return parent
+    return db.query(models.Item).with_for_update().get(item.id)
+
+
+def _eksekusi_perakitan(db: Session, assembly: models.Assembly, bom: models.BillOfMaterial,
+                        qty_planned: float, current_user: models.User) -> float:
+    """Jalankan perakitan: konsumsi bahan baku & produksi barang jadi.
+
+    Bila cabang punya gudang default → jalur FIFO: bahan dikonsumsi lewat lapisan
+    (StockBatch) sehingga HPP-nya nyata, lalu barang jadi dibuatkan SATU lapisan baru
+    seharga total biaya bahan / qty hasil. Stok diperbarui di WarehouseStock DAN
+    Item.stock global (sama seperti alur jual/beli). Tidak ada jurnal GL: transformasi
+    ini net-nol dalam satu akun Persediaan (1-1400); nilai lapisan yang keluar dari
+    bahan = nilai lapisan yang masuk ke barang jadi, jadi neraca & value-drift terjaga.
+
+    Bila cabang TIDAK punya gudang default → perilaku lama (hanya Item.stock global,
+    tanpa lapisan) untuk kompatibilitas mundur.
+
+    Kembalikan qty hasil (qty_produced) dan set assembly.status = 'done'.
+    """
+    nama_produk = bom.product.name if bom.product else "produk"
+
+    gudang = db.query(models.Warehouse).filter(
+        models.Warehouse.branch_id == current_user.active_branch_id,
+        models.Warehouse.is_default == True,
+    ).first()
+
+    qty_result = bom.qty_produced * qty_planned
+
+    # ── Jalur FIFO (ada gudang default) ──────────────────────────────────────
+    if gudang:
+        # 1) Cek kecukupan stok SEMUA bahan dulu (belum ada mutasi) → atomic.
+        rencana = []  # (material, stock_item, needed_dasar)
+        shortages = []
+        for line in bom.materials:
+            material = db.query(models.Item).get(line.material_id)
+            if not material:
+                continue
+            stock_item = _stock_item_terkunci(db, material)
+            needed = get_required_stock_qty(material, line.qty_needed * qty_planned)
+            tersedia = get_warehouse_stock(db, gudang.id, stock_item.id)
+            if tersedia < needed - EPS:
+                shortages.append(f"{material.name}: butuh {needed}, tersedia {tersedia}")
+            rencana.append((material, stock_item, needed))
+        if shortages:
+            raise HTTPException(400, "Stok bahan tidak cukup:\n" + "\n".join(shortages))
+
+        # 2) Konsumsi bahan via FIFO + kumpulkan biaya modal nyata.
+        total_biaya = 0.0
+        for material, stock_item, needed in rencana:
+            allocs = consume_fifo(db, item_id=stock_item.id, warehouse_id=gudang.id, qty=needed)
+            total_biaya += sum(q * c for (_b, q, c) in allocs)
+            adjust_warehouse_stock(db, gudang.id, stock_item.id, -needed)
+            before = float(stock_item.stock or 0)
+            stock_item.stock = before - needed
+            db.add(models.StockMovement(
+                date=assembly.date, item_id=stock_item.id,
+                branch_id=current_user.active_branch_id,
+                type="out", qty=needed,
+                qty_before=before, qty_after=stock_item.stock,
+                reference=assembly.number, notes=f"Bahan perakitan {nama_produk}",
+            ))
+
+        # 3) Produksi barang jadi: satu lapisan baru seharga biaya bahan / qty hasil.
+        product = db.query(models.Item).get(bom.product_id)
+        if product and qty_result > 0:
+            prod_stock = _stock_item_terkunci(db, product)
+            unit_cost = (total_biaya / qty_result) if qty_result else 0.0
+            add_batch(db, item_id=prod_stock.id, warehouse_id=gudang.id,
+                      qty=qty_result, unit_cost=unit_cost, received_date=assembly.date)
+            adjust_warehouse_stock(db, gudang.id, prod_stock.id, qty_result)
+            before = float(prod_stock.stock or 0)
+            prod_stock.stock = before + qty_result
+            prod_stock.buy_price = unit_cost  # segarkan harga modal legacy + lantai POS
+            db.add(models.StockMovement(
+                date=assembly.date, item_id=prod_stock.id,
+                branch_id=current_user.active_branch_id,
+                type="in", qty=qty_result,
+                qty_before=before, qty_after=prod_stock.stock,
+                reference=assembly.number, notes="Hasil perakitan",
+            ))
+
+    # ── Jalur lama (tanpa gudang default): hanya Item.stock global ───────────
+    else:
+        shortages = []
+        for line in bom.materials:
+            needed = line.qty_needed * qty_planned
+            available = line.material.stock if line.material else 0
+            if available < needed:
+                shortages.append(f"{line.material.name}: butuh {needed}, tersedia {available}")
+        if shortages:
+            raise HTTPException(400, "Stok bahan tidak cukup:\n" + "\n".join(shortages))
+
+        for line in bom.materials:
+            needed = line.qty_needed * qty_planned
+            material = db.query(models.Item).get(line.material_id)
+            if material:
+                before = material.stock
+                material.stock -= needed
+                db.add(models.StockMovement(
+                    date=assembly.date, item_id=material.id,
+                    branch_id=current_user.active_branch_id,
+                    type="out", qty=needed,
+                    qty_before=before, qty_after=material.stock,
+                    reference=assembly.number, notes=f"Bahan perakitan {nama_produk}",
+                ))
+
+        product = db.query(models.Item).get(bom.product_id)
+        if product:
+            before = product.stock
+            product.stock += qty_result
+            db.add(models.StockMovement(
+                date=assembly.date, item_id=product.id,
+                branch_id=current_user.active_branch_id,
+                type="in", qty=qty_result,
+                qty_before=before, qty_after=product.stock,
+                reference=assembly.number, notes="Hasil perakitan",
+            ))
+
+    assembly.qty_produced = qty_result
+    assembly.status = "done"
+    return qty_result
+
+
 # ─── Assembly Order ───────────────────────────────────────────────────────────
 
 @router.get("/orders")
@@ -236,20 +372,6 @@ def create_assembly_order(data: dict, db: Session = Depends(get_db),
     if not bom: raise HTTPException(404, "BOM tidak ditemukan")
     if qty_planned <= 0: raise HTTPException(400, "Qty harus lebih dari 0")
 
-    # Cek kecukupan stok bahan
-    shortages = []
-    for line in bom.materials:
-        needed = line.qty_needed * qty_planned
-        available = line.material.stock if line.material else 0
-        if available < needed:
-            shortages.append(
-                f"{line.material.name}: butuh {needed}, tersedia {available}"
-            )
-
-    if shortages:
-        raise HTTPException(400,
-            f"Stok bahan tidak cukup:\n" + "\n".join(shortages))
-
     number = next_assembly_number(db)
     assembly = models.Assembly(
         number=number,
@@ -263,37 +385,8 @@ def create_assembly_order(data: dict, db: Session = Depends(get_db),
     )
     db.add(assembly); db.flush()
 
-    # Langsung eksekusi: kurangi bahan baku, tambah produk jadi
-    for line in bom.materials:
-        needed = line.qty_needed * qty_planned
-        material = db.query(models.Item).get(line.material_id)
-        if material:
-            before = material.stock
-            material.stock -= needed
-            db.add(models.StockMovement(
-                date=assembly_date, item_id=material.id,
-                branch_id=current_user.active_branch_id,
-                type="out", qty=needed,
-                qty_before=before, qty_after=material.stock,
-                reference=number, notes=f"Bahan perakitan {bom.product.name}"
-            ))
-
-    # Tambah stok produk jadi
-    qty_result = bom.qty_produced * qty_planned
-    product = db.query(models.Item).get(bom.product_id)
-    if product:
-        before = product.stock
-        product.stock += qty_result
-        db.add(models.StockMovement(
-            date=assembly_date, item_id=product.id,
-            branch_id=current_user.active_branch_id,
-            type="in", qty=qty_result,
-            qty_before=before, qty_after=product.stock,
-            reference=number, notes=f"Hasil perakitan"
-        ))
-
-    assembly.qty_produced = qty_result
-    assembly.status = "done"
+    # Eksekusi: cek stok, konsumsi bahan via FIFO, produksi barang jadi (set status 'done').
+    qty_result = _eksekusi_perakitan(db, assembly, bom, qty_planned, current_user)
 
     db.commit()
     write_audit(db, current_user.id, "CREATE", "assemblies", assembly.id,
@@ -353,50 +446,8 @@ def complete_assembly_order(order_id: int, db: Session = Depends(get_db),
 
     qty_planned = assembly.qty_planned
 
-    # Cek kecukupan stok bahan
-    shortages = []
-    for line in bom.materials:
-        needed = line.qty_needed * qty_planned
-        available = line.material.stock if line.material else 0
-        if available < needed:
-            shortages.append(
-                f"{line.material.name}: butuh {needed}, tersedia {available}"
-            )
-    if shortages:
-        raise HTTPException(400,
-            f"Stok bahan tidak cukup:\n" + "\n".join(shortages))
-
-    # Kurangi bahan baku
-    for line in bom.materials:
-        needed = line.qty_needed * qty_planned
-        material = db.query(models.Item).get(line.material_id)
-        if material:
-            before = material.stock
-            material.stock -= needed
-            db.add(models.StockMovement(
-                date=assembly.date, item_id=material.id,
-                branch_id=current_user.active_branch_id,
-                type="out", qty=needed,
-                qty_before=before, qty_after=material.stock,
-                reference=assembly.number, notes=f"Bahan perakitan {bom.product.name}"
-            ))
-
-    # Tambah stok produk jadi
-    qty_result = bom.qty_produced * qty_planned
-    product = db.query(models.Item).get(bom.product_id)
-    if product:
-        before = product.stock
-        product.stock += qty_result
-        db.add(models.StockMovement(
-            date=assembly.date, item_id=product.id,
-            branch_id=current_user.active_branch_id,
-            type="in", qty=qty_result,
-            qty_before=before, qty_after=product.stock,
-            reference=assembly.number, notes=f"Hasil perakitan"
-        ))
-
-    assembly.qty_produced = qty_result
-    assembly.status = "done"
+    # Eksekusi: cek stok, konsumsi bahan via FIFO, produksi barang jadi (set status 'done').
+    qty_result = _eksekusi_perakitan(db, assembly, bom, qty_planned, current_user)
 
     db.commit()
     write_audit(db, current_user.id, "UPDATE", "assemblies", assembly.id,

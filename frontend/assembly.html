@@ -519,6 +519,35 @@
         if (jual) jual.addEventListener("input", hitungHppMinimum);
         hitungHppMinimum();
       }
+
+      // Disable fields khusus di modal ini saat dibuka dari perakitan (BOM)
+      const fSupplierContext = document.getElementById('fSupplierContext');
+      if (fSupplierContext) {
+        fSupplierContext.disabled = true;
+        const btnAddSupplier = fSupplierContext.nextElementSibling;
+        if (btnAddSupplier && btnAddSupplier.tagName === 'BUTTON') {
+          btnAddSupplier.disabled = true;
+          btnAddSupplier.style.opacity = '0.5';
+          btnAddSupplier.style.cursor = 'not-allowed';
+        }
+      }
+
+      // Barang rakitan WAJIB non-PPN (PPN sudah dihitung di tiap barang komponen).
+      // Set ke "Tanpa PPN" + 0 lalu di-lock, supaya barang jadi tersimpan ppn_percent = 0.
+      const fPpn = document.getElementById('fPpn');
+      if (fPpn) { fPpn.value = 'none'; fPpn.disabled = true; }
+
+      const fPpnPercent = document.getElementById('fPpnPercent');
+      if (fPpnPercent) { fPpnPercent.value = 0; fPpnPercent.disabled = true; }
+
+      // Sinkronkan tampilan (sembunyikan kolom % + perbarui hint) bila helper tersedia.
+      if (typeof togglePpnPercent === 'function') togglePpnPercent();
+
+      const btnAdvSatuan = document.getElementById('btnAdvSatuan');
+      if (btnAdvSatuan) {
+        btnAdvSatuan.disabled = true;
+        btnAdvSatuan.classList.add('disabled');
+      }
     }
 
     // Kembalikan section komponen dari form barang ke modal BOM (dipanggil saat form ditutup).
