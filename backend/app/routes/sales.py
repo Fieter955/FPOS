@@ -445,6 +445,7 @@ def create_sale(
 
     # ── Customer Point ────────────────────────────────────────────────────────
     # ✅ FIX: Dipisah dari blok AUTO JOURNAL agar jurnal tidak bergantung pada customer
+    cust = None
     if data.customer_id:
         cust = db.query(models.Customer).with_for_update().get(data.customer_id)
         if cust:
@@ -455,9 +456,48 @@ def create_sale(
     # ✅ FIX: Di luar blok customer, selalu jalan untuk semua transaksi
     jurnal_entries = []
 
-    # 1. KAS — senilai yang benar-benar dibayar saat ini
-    if sale.paid > 0:
-        jurnal_entries.append({"code": "1-1100", "debit": float(sale.paid), "credit": 0})
+    # Pastikan akun yang dipakai jurnal pembayaran benar-benar ada SEBELUM mutasi apa pun
+    # (mandat atomic-journal: stok/deposit tak boleh berpindah tanpa jurnal pendamping).
+    pastikan_akun_ada(db, ["1-1100", "1-1200", "1-1250", "2-1300", "1-1300"])
+
+    # 1. TENDER BAYAR — rute tiap metode ke akunnya sendiri
+    #    cash→Kas, debit/credit_card→Bank, emoney→E-Money, deposit→potong Saldo Pelanggan (2-1300)
+    METODE_KE_AKUN = {"cash": "1-1100", "debit": "1-1200", "credit_card": "1-1200", "emoney": "1-1250"}
+    if data.payments:
+        total_tender = 0.0
+        for p in data.payments:
+            jml = float(p.jumlah or 0)
+            if jml <= 0:
+                continue
+            total_tender += jml
+            if p.metode == "deposit":
+                if not cust:
+                    raise HTTPException(400, "Bayar pakai Saldo Pelanggan butuh pelanggan dipilih")
+                if jml > (cust.deposit_balance or 0) + 0.01:
+                    raise HTTPException(400, "Saldo pelanggan tidak cukup")
+                cust.deposit_balance -= jml
+                jurnal_entries.append({"code": "2-1300", "debit": round(jml, 2), "credit": 0})
+            else:
+                kode = METODE_KE_AKUN.get(p.metode)
+                if not kode:
+                    raise HTTPException(400, f"Metode bayar tidak dikenal: {p.metode}")
+                jurnal_entries.append({"code": kode, "debit": round(jml, 2), "credit": 0})
+        # Jaga invarian: Σ tender = paid (cegah jurnal imbalance diam-diam)
+        if abs(total_tender - sale.paid) > 0.05:
+            raise HTTPException(400, f"Rincian pembayaran ({total_tender:.2f}) tidak sama dengan total dibayar ({sale.paid:.2f})")
+    # Fallback (pemanggil lama tanpa rincian `payments`): logika lama deposit-vs-Kas
+    elif sale.paid > 0:
+        if data.payment_method == "deposit" and cust:
+            deduct = min(sale.paid, cust.deposit_balance or 0)
+            cust.deposit_balance -= deduct
+            if deduct > 0:
+                jurnal_entries.append({"code": "2-1300", "debit": float(deduct), "credit": 0})
+            
+            sisa_cash = sale.paid - deduct
+            if sisa_cash > 0:
+                jurnal_entries.append({"code": "1-1100", "debit": float(sisa_cash), "credit": 0})
+        else:
+            jurnal_entries.append({"code": "1-1100", "debit": float(sale.paid), "credit": 0})
 
     # 2. PIUTANG — sisa tagihan belum lunas (partial / unpaid)
     piutang = total - sale.paid

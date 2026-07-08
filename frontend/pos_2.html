@@ -18,10 +18,24 @@
   <style>
     * {
       -webkit-tap-highlight-color: transparent;
+      font-family: 'Tahoma', sans-serif !important;
+    }
+
+    /* Kembalikan font monospace khusus untuk Struk/Receipt */
+    #rcptBox,
+    #rcptBox * {
+      font-family: 'Courier New', Courier, monospace !important;
     }
 
     body {
       overflow: hidden;
+    }
+
+    input,
+    select,
+    button,
+    textarea {
+      font-family: 'Tahoma', sans-serif !important;
     }
 
     .pos-layout {
@@ -473,6 +487,11 @@
     }
 
     /* --- Modal Pembayaran (Multi-Split Payment) --- */
+    .mpy-box,
+    .mpy-box * {
+      font-family: 'Tahoma', sans-serif !important;
+    }
+
     .mpy-box {
       max-width: 42rem !important;
       padding: 0 !important;
@@ -484,12 +503,13 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0.6rem 1.2rem;
-      background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 70%, #000));
-      color: #fff;
+      padding: 0.8rem 1.2rem 0.4rem;
+      background: transparent;
+      color: var(--text-main);
       font-weight: 800;
-      font-size: 0.95rem;
+      font-size: 1.1rem;
       letter-spacing: 0.02em;
+      border-bottom: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
     }
 
     /* --- Total Banner: label kiri, angka besar kanan di kotak kuning/hijau --- */
@@ -516,10 +536,9 @@
       text-align: right;
       font-size: clamp(1.6rem, 5vw, 2.5rem);
       font-weight: 400;
-      color: var(--primary);
+      color: #000;
       padding: 0.35rem 0.8rem;
-      background: linear-gradient(135deg, #10b981, #059669);
-      color: #fff;
+      background: linear-gradient(135deg, #ffe600, #ffc800);
       border-radius: 0.5rem;
       line-height: 1.15;
       overflow-wrap: anywhere;
@@ -547,7 +566,7 @@
 
     .mpy-lbl {
       font-size: 0.8rem;
-      font-weight: 700;
+      font-weight: 400;
       color: var(--text-muted);
       white-space: nowrap;
       min-width: 6rem;
@@ -576,7 +595,7 @@
       background: var(--bg-color);
       color: var(--text-main);
       font-size: 0.85rem;
-      font-weight: 700;
+      font-weight: 400;
       font-family: inherit;
       outline: none;
       transition: border-color 0.15s;
@@ -639,12 +658,12 @@
     }
 
     .mpy-sum-kembali {
-      background: linear-gradient(135deg, #eab308, #ca8a04);
+      background: linear-gradient(135deg, #f4a460, #ed8b2f);
     }
 
     .mpy-sum-lbl {
       font-size: 0.95rem;
-      font-weight: 800;
+      font-weight: 400;
       color: #fff;
       white-space: nowrap;
     }
@@ -653,9 +672,16 @@
       flex: 1;
       text-align: right;
       font-size: 1.35rem;
-      font-weight: 900;
+      font-weight: 400;
       color: #fff;
       line-height: 1.1;
+    }
+
+    [data-theme="dark"] .mpy-sum-bayar .mpy-sum-lbl,
+    [data-theme="dark"] .mpy-sum-bayar .mpy-sum-val,
+    [data-theme="dark"] .mpy-sum-kembali .mpy-sum-lbl,
+    [data-theme="dark"] .mpy-sum-kembali .mpy-sum-val {
+      color: #000;
     }
 
     /* --- Tombol aksi: 3 kolom sejajar --- */
@@ -670,7 +696,7 @@
       padding: 0.6rem 0.4rem;
       border-radius: 0.5rem;
       font-size: 0.82rem;
-      font-weight: 800;
+      font-weight: 400;
       cursor: pointer;
       font-family: inherit;
       border: 2px solid transparent;
@@ -678,36 +704,31 @@
       text-align: center;
     }
 
-    .mpy-btn-cetak {
-      background: var(--primary);
-      color: #fff;
-      border-color: var(--primary);
-    }
-
-    .mpy-btn-cetak:hover {
-      filter: brightness(1.12);
-    }
-
-    .mpy-btn-simpan {
-      background: rgba(16, 185, 129, 0.15);
-      color: #10b981;
-      border-color: #10b981;
-    }
-
-    .mpy-btn-simpan:hover {
-      background: #10b981;
-      color: #fff;
-    }
-
+    .mpy-btn-cetak,
+    .mpy-btn-simpan,
     .mpy-btn-batal {
-      background: rgba(239, 68, 68, 0.1);
-      color: #ef4444;
-      border-color: #ef4444;
+      background: transparent;
+      color: white;
+      border-color: white;
     }
 
+    .mpy-btn-cetak:hover,
+    .mpy-btn-simpan:hover,
     .mpy-btn-batal:hover {
-      background: #ef4444;
+      background: rgba(0, 0, 0, 0.05);
+    }
+
+    [data-theme="dark"] .mpy-btn-cetak,
+    [data-theme="dark"] .mpy-btn-simpan,
+    [data-theme="dark"] .mpy-btn-batal {
       color: #fff;
+      border-color: #fff;
+    }
+
+    [data-theme="dark"] .mpy-btn-cetak:hover,
+    [data-theme="dark"] .mpy-btn-simpan:hover,
+    [data-theme="dark"] .mpy-btn-batal:hover {
+      background: rgba(255, 255, 255, 0.1);
     }
 
     .mpy-act-btn.kb-focus {
@@ -930,6 +951,7 @@
     .ipos-search .search-inp {
       padding: 0.6rem 1.1rem;
       font-size: 1rem;
+      font-weight: 400;
     }
 
     .search-results {
@@ -972,7 +994,7 @@
     }
 
     .search-result .sr-name {
-      font-weight: 700;
+      font-weight: 400;
       color: var(--text-main);
     }
 
@@ -1572,7 +1594,7 @@
       <!-- Header Bar -->
       <div class="mpy-hdr">
         <span>💳 Pembayaran</span>
-        <button class="btn-x" onclick="closeModals()" style="color:rgba(255,255,255,.7);font-size:1.4rem">×</button>
+        <button class="btn-x" onclick="closeModals()" style="color:var(--text-muted);font-size:1.4rem">×</button>
       </div>
 
       <!-- Banner TOTAL — sesuai gambar: label kiri, angka besar kanan bg kuning/hijau -->
@@ -1587,19 +1609,22 @@
         <!-- Baris 1: Tunai | Deposit -->
         <div class="mpy-row">
           <label class="mpy-lbl">Tunai :</label>
-          <input type="text" inputmode="numeric" id="payInpTunai" class="mpy-inp mpy-inp-num" value="0" oninput="formatBiayaLain(this); hitungTotalBayar()" />
+          <input type="text" inputmode="numeric" id="payInpTunai" class="mpy-inp mpy-inp-num" value="0"
+            oninput="formatBiayaLain(this); hitungTotalBayar()" />
           <span class="mpy-sep"></span>
-          <label class="mpy-lbl">Saldo Pelanggan :</label>
-          <input type="text" inputmode="numeric" id="payInpDeposit" class="mpy-inp mpy-inp-num" value="0" oninput="formatBiayaLain(this); hitungTotalBayar()" />
+          <label class="mpy-lbl" id="lblSaldoPelanggan">Saldo Pelanggan :</label>
+          <input type="text" inputmode="numeric" id="payInpDeposit" class="mpy-inp mpy-inp-num" style="flex: 1" value="0"
+            oninput="formatBiayaLain(this); hitungTotalBayar()" />
         </div>
 
         <!-- Baris 2: Kredit | Pel. / Jt. -->
         <div class="mpy-row">
           <label class="mpy-lbl">Kredit :</label>
-          <input type="text" inputmode="numeric" id="payInpKredit" class="mpy-inp mpy-inp-num" value="0" oninput="formatBiayaLain(this); hitungTotalBayar()" />
+          <input type="text" inputmode="numeric" id="payInpKredit" class="mpy-inp mpy-inp-num" value="0"
+            oninput="formatBiayaLain(this); hitungTotalBayar()" />
           <span class="mpy-sep"></span>
           <label class="mpy-lbl mpy-lbl-sm">Pel. :</label>
-          <select id="payKreditPel" class="mpy-inp mpy-inp-sel">
+          <select id="payKreditPel" class="mpy-inp mpy-inp-sel" onchange="syncCustomerToMain()">
             <option value="">UMUM/CASH</option>
           </select>
           <label class="mpy-lbl mpy-lbl-sm" style="display: none;">Jt. :</label>
@@ -1609,7 +1634,8 @@
         <!-- Baris 3: Kartu Debit | Bank + Ref -->
         <div class="mpy-row">
           <label class="mpy-lbl">Kartu Debit :</label>
-          <input type="text" inputmode="numeric" id="payInpDebit" class="mpy-inp mpy-inp-num" value="0" oninput="formatBiayaLain(this); hitungTotalBayar()" />
+          <input type="text" inputmode="numeric" id="payInpDebit" class="mpy-inp mpy-inp-num" value="0"
+            oninput="formatBiayaLain(this); hitungTotalBayar()" />
           <span class="mpy-sep"></span>
           <label class="mpy-lbl mpy-lbl-sm">Bank :</label>
           <select id="payBankDebit" class="mpy-inp mpy-inp-sel-sm">
@@ -1634,7 +1660,8 @@
         <!-- Baris 5: E-Money | Prod. + Ref -->
         <div class="mpy-row">
           <label class="mpy-lbl">E-Money :</label>
-          <input type="text" inputmode="numeric" id="payInpEmoney" class="mpy-inp mpy-inp-num" value="0" oninput="formatBiayaLain(this); hitungTotalBayar()" />
+          <input type="text" inputmode="numeric" id="payInpEmoney" class="mpy-inp mpy-inp-num" value="0"
+            oninput="formatBiayaLain(this); hitungTotalBayar()" />
           <span class="mpy-sep"></span>
           <label class="mpy-lbl mpy-lbl-sm">Prod. :</label>
           <select id="payProdEmoney" class="mpy-inp mpy-inp-sel-sm">
@@ -2147,6 +2174,7 @@
         // Bar kategori dihapus (grid kartu tidak ada lagi). Isi strip meta.
         muatMetaBar();
         const s = document.getElementById("custSel");
+        const payKreditPel = document.getElementById("payKreditPel");
         custs.forEach((c) => {
           const o = document.createElement("option");
           o.value = c.id;
@@ -2155,6 +2183,13 @@
             ? `${c.name} [${c.group.name}]`
             : c.name;
           s.appendChild(o);
+
+          if (payKreditPel) {
+            const o2 = document.createElement("option");
+            o2.value = c.id;
+            o2.textContent = c.name;
+            payKreditPel.appendChild(o2);
+          }
         });
         const groupSelect = document.getElementById("groupSel");
         groups.forEach((g) => {
@@ -2782,9 +2817,35 @@
       document.getElementById("searchInp").focus();
     }
 
+    function syncCustomerToMain() {
+      const custSel = document.getElementById("custSel");
+      const payKreditPel = document.getElementById("payKreditPel");
+      if (custSel && payKreditPel) {
+        custSel.value = payKreditPel.value;
+        handleCustomerChange();
+      }
+    }
+
     function handleCustomerChange() {
       const custId = document.getElementById("custSel").value;
+
+      // Sync ke modal pembayaran
+      const payKreditPel = document.getElementById("payKreditPel");
+      if (payKreditPel && payKreditPel.value !== custId) {
+        payKreditPel.value = custId;
+      }
+
       const selectedCust = allCusts.find((c) => String(c.id) === String(custId));
+
+      const lblSaldo = document.getElementById("lblSaldoPelanggan");
+      if (lblSaldo) {
+        if (selectedCust && selectedCust.deposit_balance > 0) {
+          lblSaldo.textContent = `Saldo (${fmtRp(selectedCust.deposit_balance)}) :`;
+        } else {
+          lblSaldo.textContent = `Saldo Pelanggan :`;
+        }
+      }
+
       document.getElementById("groupSel").value =
         selectedCust?.group_id || selectedCust?.group?.id || "";
       // Tampilkan nama pelanggan terpilih (merah) di baris Stiker Card.
@@ -3142,17 +3203,55 @@
     // =======================================================================
     // API TRANSAKSI
     // =======================================================================
-    async function prosesBayar() {
+    async function prosesBayar(autoPrint = false) {
       const total =
         cart.reduce((s, c) => s + c.price * c.qty, 0) + getBiayaLain();
-      const paid = parseFloat(document.getElementById("paidInp").value) || 0;
-      if (payMethod === "cash" && paid < total)
+
+      // Baca semua tender langsung dari input modal bayar (bayar campur)
+      const tunai = getRawPay("payInpTunai");
+      const deposit = getRawPay("payInpDeposit");
+      const kredit = getRawPay("payInpKredit"); // porsi jual tempo → jadi piutang
+      const debit = getRawPay("payInpDebit");
+      const kartuKredit = getRawPay("payInpKartuKredit");
+      const emoney = getRawPay("payInpEmoney");
+
+      const diterimaSekarang = tunai + deposit + debit + kartuKredit + emoney; // di luar kredit
+      const totalBayar = diterimaSekarang + kredit;
+      const custId = document.getElementById("custSel").value;
+      const selectedCust = allCusts.find((c) => String(c.id) === String(custId));
+
+      // ── Validasi ──
+      if (totalBayar + 0.01 < total)
         return showToast("Uang kurang!", "error");
+      if (kredit > 0.01 && !custId)
+        return showToast("Pilih pelanggan dulu untuk jual kredit", "error");
+      const kembali = Math.max(0, totalBayar - total); // kembalian hanya keluar dari tunai
+      if (kembali > tunai + 0.01)
+        return showToast("Pembayaran non-tunai melebihi tagihan, kurangi dulu", "error");
+      if (deposit > 0) {
+        const maxDep = selectedCust ? (selectedCust.deposit_balance || 0) : 0;
+        if (deposit > maxDep + 0.01)
+          return showToast("Saldo Pelanggan tidak mencukupi!", "error");
+      }
+
+      // Kas bersih setelah kembalian; sisa tagihan yang belum dibayar (kredit) → piutang di server
+      const cashApplied = Math.max(0, tunai - kembali);
+      const paid = Math.round((total - kredit) * 100) / 100; // bagian tagihan yang lunas sekarang
+
+      // Rincian tender diterima (hanya yang > 0). Σ jumlah = paid (invarian dijaga server)
+      const payments = [
+        { metode: "cash", jumlah: cashApplied },
+        { metode: "deposit", jumlah: deposit },
+        { metode: "debit", jumlah: debit },
+        { metode: "credit_card", jumlah: kartuKredit },
+        { metode: "emoney", jumlah: emoney },
+      ].filter((p) => p.jumlah > 0);
+
       try {
         if (typeof showLoading === "function") showLoading("Memproses...");
         const sale = await api("POST", "/sales/", {
           date: today(), // Menggunakan tanggal WITA
-          customer_id: document.getElementById("custSel").value || null,
+          customer_id: custId || null,
           discount: 0,
           // Mode PKP: kirim tarif PPN; harga jual dianggap SUDAH termasuk PPN (dikupas di server).
           tax: PKP.is_pkp && PKP.tarif > 0 ? PKP.tarif : 0,
@@ -3161,6 +3260,7 @@
           other_cost: getBiayaLain(), // biaya lain ditagihkan ke pelanggan
           paid: paid,
           payment_method: payMethod,
+          payments: payments, // rincian bayar campur → tiap metode ke akunnya sendiri
           items: cart.map((c) => ({
             item_id: c.id,
             qty: c.qty,
@@ -3170,6 +3270,12 @@
           })),
         });
         if (typeof hideLoading === "function") hideLoading();
+
+        // Segarkan saldo deposit lokal agar label "Saldo (Rp …)" langsung akurat tanpa reload
+        if (deposit > 0 && selectedCust) {
+          selectedCust.deposit_balance = (selectedCust.deposit_balance || 0) - deposit;
+          if (typeof handleCustomerChange === "function") handleCustomerChange();
+        }
 
         applyLocalStockConsumption(cart);
         clearCart();

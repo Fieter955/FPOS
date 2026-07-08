@@ -545,6 +545,13 @@ class SaleItemCreate(BaseModel):
     discount: float = 0
     ppn_percent: Optional[float] = None   # tarif PPN baris (%); None → ikut tarif barang/toko di server
 
+class SplitBayar(BaseModel):
+    """Satu baris tender pembayaran (bayar campur di kasir).
+    metode: cash | deposit | debit | credit_card | emoney
+    """
+    metode: str
+    jumlah: float
+
 class SaleCreate(BaseModel):
     number: Optional[str] = None
     date: date
@@ -557,6 +564,7 @@ class SaleCreate(BaseModel):
     other_cost: float = 0   # biaya lain ditagihkan ke pelanggan (nambah total) → Pendapatan Lain-lain
     paid: float = 0
     payment_method: str = "cash"
+    payments: Optional[List[SplitBayar]] = None   # rincian tender bayar campur; None → pakai logika lama (payment_method + paid)
     notes: Optional[str] = None
     items: List[SaleItemCreate]
 
