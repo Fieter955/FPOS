@@ -1483,17 +1483,14 @@
       <table class="ipos-table">
         <thead>
           <tr>
-            <th>No</th>
-            <th>Kode Item</th>
-            <th>Nama Barang</th>
-            <th class="ctr">Qty</th>
-            <th class="num">Harga/Pcs</th>
-            <th class="num">Pot 1</th>
-            <th class="num">Pot 2</th>
-            <th class="num">Pot 3</th>
-            <th class="num">Pot 4</th>
-            <th class="num">Jumlah</th>
-            <th class="ctr"></th>
+            <th class="ctr" style="width: 40px;">No</th>
+            <th style="width: 120px;">Kode Item</th>
+            <th style="width: 100%;">Nama Barang</th>
+            <th class="ctr" style="width: 140px; min-width: 140px;">Qty</th>
+            <th class="num" style="width: 160px; min-width: 160px;">Harga/Pcs</th>
+            <th class="num" style="width: 110px; min-width: 110px;">Potongan</th>
+            <th class="num" style="width: 170px; min-width: 170px;">Jumlah</th>
+            <th class="ctr" style="width: 50px; min-width: 50px;"></th>
           </tr>
         </thead>
         <tbody id="cartTableBody"></tbody>
@@ -1512,6 +1509,7 @@
             style="color: #3b82f6; border-color: rgba(59, 130, 246, 0.3); background: rgba(59, 130, 246, 0.1);">📂
             Daftar Pending (<span id="pendingCount">0</span>)</button>
           <input class="keterangan-inp" type="text" placeholder="Tambahkan keterangan / catatan...">
+          <button class="action-btn" id="btnDetailDisc" onclick="bukaDetailPotongan()">Detail Potongan</button>
         </div>
 
         <div>
@@ -1613,8 +1611,8 @@
             oninput="formatBiayaLain(this); hitungTotalBayar()" />
           <span class="mpy-sep"></span>
           <label class="mpy-lbl" id="lblSaldoPelanggan">Saldo Pelanggan :</label>
-          <input type="text" inputmode="numeric" id="payInpDeposit" class="mpy-inp mpy-inp-num" style="flex: 1" value="0"
-            oninput="formatBiayaLain(this); hitungTotalBayar()" />
+          <input type="text" inputmode="numeric" id="payInpDeposit" class="mpy-inp mpy-inp-num" style="flex: 1"
+            value="0" oninput="formatBiayaLain(this); hitungTotalBayar()" />
         </div>
 
         <!-- Baris 2: Kredit | Pel. / Jt. -->
@@ -1757,6 +1755,56 @@
       <div class="dh-foot">
         <button class="rcpt-btn" style="background:var(--primary);color:#fff;border:none;padding:0.6rem 1.4rem"
           onclick="closeModals()">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Detail Potongan -->
+  <div class="modal-overlay" id="detailPotonganModal" style="display: none; z-index: 9999"
+    onclick="if(event.target===this)closeModals()">
+    <div class="modal-box dh-box" style="max-width: 800px !important; width: 90vw; min-height: 65vh; display: flex; flex-direction: column;">
+      <div class="dh-hdr" style="padding: 1.5rem;">
+        <span style="font-size: 1.25rem;">✂️ Detail Potongan — <span id="dpNamaBarang">-</span></span>
+        <button class="btn-x" onclick="closeModals()" style="color:rgba(255,255,255,.7);font-size:1.8rem">×</button>
+      </div>
+      <div class="dh-body" style="padding: 1.5rem; flex: 1; display: flex; flex-direction: column; justify-content: center;">
+        <table class="dh-table" style="width: 100%; height: 100%;">
+          <thead>
+            <tr>
+              <th style="text-align:left; width: 50%; font-size: 1.1rem; padding: 1rem;">Jenis Potongan</th>
+              <th style="text-align:right; font-size: 1.1rem; padding: 1rem;">Nilai (%)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-weight: 500; font-size: 1.1rem; padding: 1.25rem 1rem;">Potongan Pertama</td>
+              <td style="padding: 1.25rem 1rem;"><input type="number" id="dpPot1" class="cost-inp" step="0.01" min="0"
+                  max="100" style="width: 100%; text-align: right; padding: 0.75rem; font-size: 1.2rem; border-radius: 8px;" /></td>
+            </tr>
+            <tr>
+              <td style="font-weight: 500; font-size: 1.1rem; padding: 1.25rem 1rem;">Potongan Kedua</td>
+              <td style="padding: 1.25rem 1rem;"><input type="number" id="dpPot2" class="cost-inp" step="0.01" min="0"
+                  max="100" style="width: 100%; text-align: right; padding: 0.75rem; font-size: 1.2rem; border-radius: 8px;" /></td>
+            </tr>
+            <tr>
+              <td style="font-weight: 500; font-size: 1.1rem; padding: 1.25rem 1rem;">Potongan Ketiga</td>
+              <td style="padding: 1.25rem 1rem;"><input type="number" id="dpPot3" class="cost-inp" step="0.01" min="0"
+                  max="100" style="width: 100%; text-align: right; padding: 0.75rem; font-size: 1.2rem; border-radius: 8px;" /></td>
+            </tr>
+            <tr>
+              <td style="font-weight: 500; font-size: 1.1rem; padding: 1.25rem 1rem;">Potongan Keempat</td>
+              <td style="padding: 1.25rem 1rem;"><input type="number" id="dpPot4" class="cost-inp" step="0.01" min="0"
+                  max="100" style="width: 100%; text-align: right; padding: 0.75rem; font-size: 1.2rem; border-radius: 8px;" /></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="dh-foot" style="display: flex; gap: 0.75rem; justify-content: flex-end; padding: 1.25rem 1.5rem;">
+        <button class="rcpt-btn"
+          style="background:transparent;color:var(--text-main);border:1px solid var(--border-color);padding:0.75rem 1.8rem; font-size: 1.1rem;"
+          onclick="closeModals()">Batal</button>
+        <button class="rcpt-btn" style="background:var(--primary);color:#fff;border:none;padding:0.75rem 1.8rem; font-size: 1.1rem;"
+          onclick="simpanDetailPotongan()">Simpan</button>
       </div>
     </div>
   </div>
@@ -2511,6 +2559,60 @@
       });
     }
 
+    // ===== Popup Detail Potongan =====
+    let dpCartIndex = -1;
+
+    function bukaDetailPotongan() {
+      if (!barangAktif) {
+        showToast("Pilih barang dulu — klik hasil pencarian atau nama barang di keranjang", "warning");
+        return;
+      }
+
+      dpCartIndex = cart.findIndex(c => c.id === barangAktif.id);
+      if (dpCartIndex === -1) {
+        showToast("Barang belum ada di keranjang.", "warning");
+        return;
+      }
+
+      const c = cart[dpCartIndex];
+      document.getElementById("dpNamaBarang").textContent = c.name;
+      document.getElementById("dpPot1").value = c.disc1 || 0;
+      document.getElementById("dpPot2").value = c.disc2 || 0;
+      document.getElementById("dpPot3").value = c.disc3 || 0;
+      document.getElementById("dpPot4").value = c.disc4 || 0;
+
+      document.getElementById("detailPotonganModal").style.display = "flex";
+      activeModal = "detailPotongan";
+    }
+
+    function simpanDetailPotongan() {
+      if (dpCartIndex === -1 || !cart[dpCartIndex]) return;
+      const c = cart[dpCartIndex];
+
+      let p1 = parseFloat(document.getElementById("dpPot1").value) || 0;
+      let p2 = parseFloat(document.getElementById("dpPot2").value) || 0;
+      let p3 = parseFloat(document.getElementById("dpPot3").value) || 0;
+      let p4 = parseFloat(document.getElementById("dpPot4").value) || 0;
+
+      if (p1 > 100) p1 = 100;
+      if (p2 > 100) p2 = 100;
+      if (p3 > 100) p3 = 100;
+      if (p4 > 100) p4 = 100;
+
+      c.disc1 = p1;
+      c.disc2 = p2;
+      c.disc3 = p3;
+      c.disc4 = p4;
+      c.pot_manual = true;
+
+      hitungBarisKeranjang(c);
+      renderCart();
+      recalc();
+      warnRugi();
+      closeModals();
+      showToast("Detail potongan diperbarui.", "success");
+    }
+
     // ===== Popup Detail Barang: histori beli & jual (hanya lihat) =====
     // Memakai data yang sama dengan halaman catat-pembelian:
     //   Beli → /purchases/item-history/ · Jual → /sales/item-history/
@@ -2864,7 +2966,7 @@
 
     // Baris kosong pengisi (mempertahankan garis kolom walau barang belum ada).
     // WAJIB 11 sel — sama persis dengan jumlah kolom header
-    // (No · Kode · Nama · Qty · Harga/Pcs · Pot 1 · Pot 2 · Pot 3 · Pot 4 · Jumlah · Aksi)
+    // (No · Kode · Nama · Qty · Harga/Pcs · Potongan · Jumlah · Aksi)
     // agar garis vertikal antar-kolom tetap lurus & sejajar dengan header.
     // Sel Nama Barang bisa memuat pesan bantuan.
     function bikinBarisKosong(pesan = "") {
@@ -2872,8 +2974,8 @@
             <td class="ctr"></td><td></td>
             <td>${pesan ? `<span class="empty-hint">${pesan}</span>` : ""}</td>
             <td class="ctr"></td><td class="num"></td>
-            <td class="num"></td><td class="num"></td><td class="num"></td>
-            <td class="num"></td><td class="num"></td><td class="ctr"></td>
+            <td class="num"></td>
+            <td class="num"></td><td class="ctr"></td>
           </tr>`;
     }
 
@@ -2932,6 +3034,13 @@
           const gross = c.harga_dasar ?? c.price; // Harga/Pcs (sebelum Pot 1–4)
           const floor = hppFloorBarang(src, c.supplier_id);
           const rugi = floor > 0 && c.price < floor - 0.01; // net di bawah modal?
+          
+          let effPct = 0;
+          if (gross > 0 && c.price < gross) {
+            effPct = ((gross - c.price) / gross) * 100;
+          }
+          let potDisplay = parseFloat(effPct.toFixed(2)) + '%';
+
           return `
           <tr style="cursor:pointer" title="Klik baris ini untuk lihat Detail (histori beli/jual) barang" onclick="pilihBarangDariKeranjang(${c.id})">
             <td class="ctr">${i + 1}</td>
@@ -2946,10 +3055,7 @@
               </div>
             </td>
             <td class="num">${fmtRp(gross)}</td>
-            <td class="num">${potInput(i, 1, c.disc1)}</td>
-            <td class="num">${potInput(i, 2, c.disc2)}</td>
-            <td class="num">${potInput(i, 3, c.disc3)}</td>
-            <td class="num">${potInput(i, 4, c.disc4)}</td>
+            <td class="num" title="Klik untuk edit potongan" style="color: var(--primary); font-weight: 500;" onclick="event.stopPropagation(); pilihBarangDariKeranjang(${c.id}); bukaDetailPotongan();">${potDisplay}</td>
             <td class="num col-sub"${rugi ? ' style="color:#ef4444" title="Harga di bawah modal"' : ""}>${fmtRp(c.price * c.qty)}</td>
             <td class="ctr"><button class="ci-del" onclick="removeCart(${i})">✕</button></td>
           </tr>`;

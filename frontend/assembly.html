@@ -1,77 +1,83 @@
 <!doctype html>
 <html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Perakitan - FPOS</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/advanced_settings.css" />
+    <style>
+      /* Modal BOM dibuat full-screen (memenuhi layar) meniru pola #mBarang di item/popUp.html */
+      #mBOM {
+        padding: 0 !important;
+      }
 
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Perakitan (BOM) - FPOS</title>
-  <link rel="stylesheet" href="/css/style.css" />
-  <link rel="stylesheet" href="/css/advanced_settings.css" />
-  <style>
-    /* Modal BOM dibuat full-screen (memenuhi layar) meniru pola #mBarang di item/popUp.html */
-    #mBOM {
-      padding: 0 !important;
-    }
+      #mBOM .modal-box {
+        width: 100vw !important;
+        height: 100vh !important;
+        max-width: none !important;
+        max-height: none !important;
+        border-radius: 0 !important;
+        border: none !important;
+        display: flex;
+        flex-direction: column;
+        padding: 24px 32px !important;
+      }
 
-    #mBOM .modal-box {
-      width: 100vw !important;
-      height: 100vh !important;
-      max-width: none !important;
-      max-height: none !important;
-      border-radius: 0 !important;
-      border: none !important;
-      display: flex;
-      flex-direction: column;
-      padding: 24px 32px !important;
-    }
+      #mBOM .modal-hdr {
+        margin-bottom: 20px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--border-color);
+      }
 
-    #mBOM .modal-hdr {
-      margin-bottom: 20px;
-      padding-bottom: 16px;
-      border-bottom: 1px solid var(--border-color);
-    }
+      /* Isi men-scroll di antara header (tetap) & footer (tetap) */
+      #mBOM .mbom-body {
+        flex: 1;
+        overflow-y: auto;
+        padding-right: 8px;
+      }
 
-    /* Isi men-scroll di antara header (tetap) & footer (tetap) */
-    #mBOM .mbom-body {
-      flex: 1;
-      overflow-y: auto;
-      padding-right: 8px;
-    }
+      #mBOM .mbom-footer {
+        margin-top: 20px;
+        padding-top: 16px;
+        border-top: 1px solid var(--border-color);
+        display: flex;
+        justify-content: center;
+      }
+    </style>
+  </head>
 
-    #mBOM .mbom-footer {
-      margin-top: 20px;
-      padding-top: 16px;
-      border-top: 1px solid var(--border-color);
-      display: flex;
-      justify-content: center;
-    }
-  </style>
-</head>
-
-<body>
-  <div class="app-container">
-    <main class="main-content">
-      <button class="btn" style="
+  <body>
+    <div class="app-container">
+      <main class="main-content">
+        <button
+          class="btn"
+          style="
             background: transparent;
             color: var(--text-muted);
             padding: 0;
             margin-bottom: 16px;
-          " onclick="location.href = '/dashboard'">
-        ← Kembali
-      </button>
-      <div class="pg-header">
-        <div>
-          <h1>🔧 Perakitan (BOM)</h1>
-          <p>
-            Buat formula bahan baku menjadi produk jadi, lalu proses
-            perakitan.
-          </p>
+          "
+          onclick="location.href = '/dashboard'"
+        >
+          ← Kembali
+        </button>
+        <div class="pg-header">
+          <div>
+            <h1>🔧 Perakitan</h1>
+            <p>
+              Buat formula bahan baku menjadi produk jadi, lalu proses
+              perakitan.
+            </p>
+          </div>
         </div>
-      </div>
 
-      <!-- Tab -->
-      <div style="display: flex; gap: 8px; margin-bottom: 20px">
-        <button id="tbBOM" onclick="switchTab('bom')" style="
+        <!-- Tab -->
+        <div style="display: flex; gap: 8px; margin-bottom: 20px">
+          <button
+            id="tbBOM"
+            onclick="switchTab('bom')"
+            style="
               padding: 8px 20px;
               border-radius: 100px;
               border: 2px solid var(--primary);
@@ -80,10 +86,14 @@
               font-weight: 700;
               cursor: pointer;
               font-family: inherit;
-            ">
-          📋 Formula (BOM)
-        </button>
-        <button id="tbOrder" onclick="switchTab('order')" style="
+            "
+          >
+            📋 Formula
+          </button>
+          <button
+            id="tbOrder"
+            onclick="switchTab('order')"
+            style="
               padding: 8px 20px;
               border-radius: 100px;
               border: 2px solid var(--border-color);
@@ -92,86 +102,116 @@
               font-weight: 700;
               cursor: pointer;
               font-family: inherit;
-            ">
-          ⚙️ Order Perakitan
-        </button>
-      </div>
+            "
+          >
+            ⚙️ Daftar Proses Perakitan
+          </button>
+          <button
+            id="tbOrder"
+            onclick="switchTab('order')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            ⚙️ Daftar Proses Jadi
+          </button>
+        </div>
 
-      <!-- Panel BOM -->
-      <div id="pnlBOM">
-        <div style="
+        <!-- Panel BOM -->
+        <div id="pnlBOM">
+          <div
+            style="
               display: flex;
               justify-content: flex-end;
               margin-bottom: 14px;
-            ">
-          <button class="btn btn-primary" onclick="openModal('mBOM')">
-            ➕ Buat Formula BOM
-          </button>
+            "
+          >
+            <button class="btn btn-primary" onclick="openModal('mBOM')">
+              ➕ Buat Formula
+            </button>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Produk Hasil</th>
+                  <th>Default Jumlah Perakitan</th>
+                  <th>Jumlah Komponen</th>
+                  <th>Estimasi Biaya</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="tblBOM"></tbody>
+            </table>
+          </div>
         </div>
-        <div class="tbl-wrap">
-          <table class="tbl">
-            <thead>
-              <tr>
-                <th>Produk Hasil</th>
-                <th>Output per Proses</th>
-                <th>Jumlah Komponen</th>
-                <th>Estimasi Biaya</th>
-                <th>Aksi</th>
-              </tr>
-            </thead>
-            <tbody id="tblBOM"></tbody>
-          </table>
-        </div>
-      </div>
 
-      <!-- Panel Order -->
-      <div id="pnlOrder" style="display: none">
-        <div style="
+        <!-- Panel Order -->
+        <div id="pnlOrder" style="display: none">
+          <div
+            style="
               display: flex;
               justify-content: flex-end;
               margin-bottom: 14px;
-            ">
-          <button class="btn btn-primary" onclick="openModal('mOrder')">
-            ➕ Buat Order Perakitan
-          </button>
+            "
+          >
+            <button class="btn btn-primary" onclick="openModal('mOrder')">
+              ➕ Buat Order Perakitan
+            </button>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>No. Order</th>
+                  <th>Produk</th>
+                  <th>Qty Target</th>
+                  <th>Tanggal</th>
+                  <th>Status</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="tblOrder"></tbody>
+            </table>
+          </div>
         </div>
-        <div class="tbl-wrap">
-          <table class="tbl">
-            <thead>
-              <tr>
-                <th>No. Order</th>
-                <th>Produk</th>
-                <th>Qty Target</th>
-                <th>Tanggal</th>
-                <th>Status</th>
-                <th>Aksi</th>
-              </tr>
-            </thead>
-            <tbody id="tblOrder"></tbody>
-          </table>
-        </div>
-      </div>
-    </main>
-  </div>
+      </main>
+    </div>
 
-  <!-- Modal: BOM (full-screen) -->
-  <div class="modal-overlay" id="mBOM">
-    <div class="modal-box wide">
-      <div class="modal-hdr">
-        <h2 id="mBOMTitle">Buat Formula BOM</h2>
-        <button class="btn-x" onclick="closeModal('mBOM')">×</button>
-      </div>
-      <div class="mbom-body">
-        <div style="max-width: 880px; margin: 0 auto">
-          <input type="hidden" id="bomId" />
-          <div class="row2" style="margin-bottom: 16px">
-            <div class="input-group">
-              <label>Produk Hasil *</label>
-              <div style="display: flex; gap: 8px">
-                <select id="bomProd" class="input-control" style="margin: 0" onchange="hitungHppMinimum()">
-                  <option value="">-- Pilih Produk --</option>
-                </select>
-                <button type="button" onclick="bukaBuatBarangBaru()" class="btn" style="
+    <!-- Modal: BOM (full-screen) -->
+    <div class="modal-overlay" id="mBOM">
+      <div class="modal-box wide">
+        <div class="modal-hdr">
+          <h2 id="mBOMTitle">Buat Formula BOM</h2>
+          <button class="btn-x" onclick="closeModal('mBOM')">×</button>
+        </div>
+        <div class="mbom-body">
+          <div style="max-width: 880px; margin: 0 auto">
+            <input type="hidden" id="bomId" />
+            <div class="row2" style="margin-bottom: 16px">
+              <div class="input-group">
+                <label>Produk Hasil *</label>
+                <div style="display: flex; gap: 8px">
+                  <select
+                    id="bomProd"
+                    class="input-control"
+                    style="margin: 0"
+                    onchange="hitungHppMinimum()"
+                  >
+                    <option value="">-- Pilih Produk --</option>
+                  </select>
+                  <button
+                    type="button"
+                    onclick="bukaBuatBarangBaru()"
+                    class="btn"
+                    style="
                       white-space: nowrap;
                       padding: 10px 14px;
                       background: var(--primary-light);
@@ -180,512 +220,612 @@
                       border-radius: 10px;
                       font-weight: 700;
                       font-size: 13px;
-                    ">
-                  ➕ Buat Barang Baru
-                </button>
+                    "
+                  >
+                    ➕ Buat Barang Baru
+                  </button>
+                </div>
+                <div
+                  style="
+                    font-size: 12px;
+                    color: var(--text-muted);
+                    margin-top: 6px;
+                  "
+                >
+                  Pilih barang yang sudah ada, atau buat barang baru lengkap
+                  (harga, diskon, level harga/jumlah, dll) tanpa pindah menu.
+                </div>
               </div>
-              <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px">
-                Pilih barang yang sudah ada, atau buat barang baru lengkap (harga, diskon, level harga/jumlah, dll)
-                tanpa pindah menu.
+              <div class="input-group">
+                <label>Default Jumlah Perakitan *</label
+                ><input
+                  id="bomQty"
+                  type="number"
+                  class="input-control"
+                  value="1"
+                  min="0.01"
+                  step="0.01"
+                  oninput="hitungHppMinimum()"
+                />
               </div>
             </div>
-            <div class="input-group">
-              <label>Qty Output per Proses *</label><input id="bomQty" type="number" class="input-control" value="1"
-                min="0.01" step="0.01" oninput="hitungHppMinimum()" />
-            </div>
-          </div>
-          <!-- Section komponen + panel harga pokok. Dibungkus agar bisa DIPINDAH utuh
+            <!-- Section komponen + panel harga pokok. Dibungkus agar bisa DIPINDAH utuh
                ke dalam form "Buat Barang Baru" (lihat bukaBuatBarangBaru /
                kembalikanSeksiKomponen di script). -->
-          <div id="seksiKomponen">
-          <div style="margin-bottom: 12px">
-            <div style="
-                  display: flex;
-                  justify-content: space-between;
-                  align-items: center;
-                  margin-bottom: 8px;
-                ">
-              <label style="font-weight: 700; color: var(--text-muted)">🔩 Komponen / Bahan Baku</label>
-              <button type="button" onclick="addKomponen()" class="btn" style="
-                    padding: 8px 14px;
-                    background: var(--primary-light);
-                    color: var(--primary);
-                    border: none;
-                    border-radius: 10px;
-                    font-weight: 700;
-                    font-size: 13px;
-                  ">
-                + Tambah Komponen
-              </button>
+            <div id="seksiKomponen">
+              <div style="margin-bottom: 12px">
+                <div
+                  style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 8px;
+                  "
+                >
+                  <label style="font-weight: 700; color: var(--text-muted)"
+                    >🔩 Komponen / Bahan Baku</label
+                  >
+                  <button
+                    type="button"
+                    onclick="addKomponen()"
+                    class="btn"
+                    style="
+                      padding: 8px 14px;
+                      background: var(--primary-light);
+                      color: var(--primary);
+                      border: none;
+                      border-radius: 10px;
+                      font-weight: 700;
+                      font-size: 13px;
+                    "
+                  >
+                    + Tambah Komponen
+                  </button>
+                </div>
+                <div
+                  style="
+                    display: grid;
+                    grid-template-columns: 3fr 1fr 1fr 36px;
+                    gap: 8px;
+                    margin-bottom: 6px;
+                    font-size: 12px;
+                    font-weight: 600;
+                    color: var(--text-muted);
+                  "
+                >
+                  <span>Komponen</span><span>Qty Pakai</span
+                  ><span>Est. Biaya</span><span></span>
+                </div>
+                <div id="komponenRows"></div>
+              </div>
+              <!-- Ringkasan harga pokok minimum dari komponen -->
+              <div
+                id="bomCostPanel"
+                style="
+                  background: var(--bg-color);
+                  border-radius: 12px;
+                  padding: 14px 16px;
+                  margin-top: 4px;
+                "
+              >
+                <div
+                  style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                  "
+                >
+                  <span style="font-weight: 700; color: var(--text-muted)"
+                    >💰 Harga Pokok Minimum</span
+                  >
+                  <span
+                    id="bomHppMin"
+                    style="
+                      font-size: 20px;
+                      font-weight: 800;
+                      color: var(--primary);
+                    "
+                    >Rp 0</span
+                  >
+                </div>
+                <div
+                  style="
+                    font-size: 12px;
+                    color: var(--text-muted);
+                    margin-top: 4px;
+                  "
+                >
+                  Total biaya komponen ÷ qty output. Harga jual produk sebaiknya
+                  di atas angka ini biar tidak rugi.
+                </div>
+                <div
+                  id="bomLossBadge"
+                  style="display: none; margin-top: 10px"
+                ></div>
+              </div>
             </div>
-            <div style="
-                  display: grid;
-                  grid-template-columns: 3fr 1fr 1fr 36px;
-                  gap: 8px;
-                  margin-bottom: 6px;
-                  font-size: 12px;
-                  font-weight: 600;
-                  color: var(--text-muted);
-                ">
-              <span>Komponen</span><span>Qty Pakai</span><span>Est. Biaya</span><span></span>
-            </div>
-            <div id="komponenRows"></div>
-          </div>
-          <!-- Ringkasan harga pokok minimum dari komponen -->
-          <div id="bomCostPanel" style="
-                background: var(--bg-color);
-                border-radius: 12px;
-                padding: 14px 16px;
-                margin-top: 4px;
-              ">
-            <div style="display: flex; justify-content: space-between; align-items: center">
-              <span style="font-weight: 700; color: var(--text-muted)">💰 Harga Pokok Minimum</span>
-              <span id="bomHppMin" style="font-size: 20px; font-weight: 800; color: var(--primary)">Rp 0</span>
-            </div>
-            <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px">
-              Total biaya komponen ÷ qty output. Harga jual produk sebaiknya di atas angka ini biar tidak rugi.
-            </div>
-            <div id="bomLossBadge" style="display: none; margin-top: 10px"></div>
-          </div>
           </div>
         </div>
-      </div>
-      <div class="mbom-footer">
-        <div style="width: 100%; max-width: 880px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
-          <button onclick="closeModal('mBOM')" class="btn" style="
+        <div class="mbom-footer">
+          <div
+            style="
+              width: 100%;
+              max-width: 880px;
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 12px;
+            "
+          >
+            <button
+              onclick="closeModal('mBOM')"
+              class="btn"
+              style="
                 background: var(--bg-color);
                 border: 1px solid var(--border-color);
                 color: var(--text-main);
-              ">
-            Batal
-          </button>
-          <button onclick="saveBOM()" class="btn btn-primary">
-            ✓ Simpan BOM
-          </button>
+              "
+            >
+              Batal
+            </button>
+            <button onclick="saveBOM()" class="btn btn-primary">
+              ✓ Simpan BOM
+            </button>
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- Modal: Detail BOM -->
-  <div class="modal-overlay" id="mBOMDetail">
-    <div class="modal-box wide">
-      <div class="modal-hdr">
-        <h2 id="mBOMDetailTitle">Detail Formula</h2>
-        <button class="btn-x" onclick="closeModal('mBOMDetail')">×</button>
+    <!-- Modal: Detail BOM -->
+    <div class="modal-overlay" id="mBOMDetail">
+      <div class="modal-box wide">
+        <div class="modal-hdr">
+          <h2 id="mBOMDetailTitle">Detail Formula</h2>
+          <button class="btn-x" onclick="closeModal('mBOMDetail')">×</button>
+        </div>
+        <div id="mBOMDetailBody"></div>
       </div>
-      <div id="mBOMDetailBody"></div>
     </div>
-  </div>
 
-  <!-- Modal: Order Perakitan -->
-  <div class="modal-overlay" id="mOrder">
-    <div class="modal-box">
-      <div class="modal-hdr">
-        <h2>⚙️ Buat Order Perakitan</h2>
-        <button class="btn-x" onclick="closeModal('mOrder')">×</button>
-      </div>
-      <div class="input-group">
-        <label>Pilih Formula (BOM) *</label><select id="orderBOM" class="input-control">
-          <option value="">-- Pilih BOM --</option>
-        </select>
-      </div>
-      <div id="orderBOMInfo" style="
+    <!-- Modal: Order Perakitan -->
+    <div class="modal-overlay" id="mOrder">
+      <div class="modal-box">
+        <div class="modal-hdr">
+          <h2>⚙️ Buat Order Perakitan</h2>
+          <button class="btn-x" onclick="closeModal('mOrder')">×</button>
+        </div>
+        <div class="input-group">
+          <label>Pilih Formula (BOM) *</label
+          ><select id="orderBOM" class="input-control">
+            <option value="">-- Pilih BOM --</option>
+          </select>
+        </div>
+        <div
+          id="orderBOMInfo"
+          style="
             background: var(--bg-color);
             border-radius: 10px;
             padding: 12px;
             margin-bottom: 14px;
             font-size: 14px;
             display: none;
-          "></div>
-      <div class="row2" style="margin-bottom: 16px">
-        <div class="input-group">
-          <label>Qty yang Akan Dirakit *</label><input id="orderQty" type="number" class="input-control" value="1"
-            min="1" />
+          "
+        ></div>
+        <div class="row2" style="margin-bottom: 16px">
+          <div class="input-group">
+            <label>Default Jumlah Perakitan *</label
+            ><input
+              id="orderQty"
+              type="number"
+              class="input-control"
+              value="1"
+              min="1"
+            />
+          </div>
+          <div class="input-group">
+            <label>Tanggal</label
+            ><input id="orderDate" type="date" class="input-control" />
+          </div>
         </div>
         <div class="input-group">
-          <label>Tanggal</label><input id="orderDate" type="date" class="input-control" />
+          <label>Catatan</label
+          ><textarea id="orderNote" class="input-control" rows="2"></textarea>
         </div>
-      </div>
-      <div class="input-group">
-        <label>Catatan</label><textarea id="orderNote" class="input-control" rows="2"></textarea>
-      </div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
-        <button onclick="closeModal('mOrder')" class="btn" style="
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+          <button
+            onclick="closeModal('mOrder')"
+            class="btn"
+            style="
               background: var(--bg-color);
               border: 1px solid var(--border-color);
               color: var(--text-main);
-            ">
-          Batal
-        </button>
-        <button onclick="saveOrder()" class="btn btn-primary">
-          ✓ Buat Order
-        </button>
+            "
+          >
+            Batal
+          </button>
+          <button onclick="saveOrder()" class="btn btn-primary">
+            ✓ Buat Order
+          </button>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- Kontainer untuk form barang yang dipakai ulang (di-inject loadComponents dari itemForm.js) -->
-  <div id="popUpContainer"></div>
-  <div id="katContainer"></div>
-  <div id="merekContainer"></div>
-  <div id="unitsContainer"></div>
+    <!-- Kontainer untuk form barang yang dipakai ulang (di-inject loadComponents dari itemForm.js) -->
+    <div id="popUpContainer"></div>
+    <div id="katContainer"></div>
+    <div id="merekContainer"></div>
+    <div id="unitsContainer"></div>
 
-  <script src="/js/api.js"></script>
-  <script src="/js/theme.js"></script>
-  <script src="/js/kategori.js"></script>
-  <script src="/js/merek.js"></script>
-  <script src="/js/units.js"></script>
-  <script src="/js/item/itemForm.js"></script>
-  <script>
-    requireAuth();
-    let allItems = [],
-      kompIdx = 0,
-      allBOMs = [];
-    const ON =
-      "padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit";
-    const OFF =
-      "padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit";
+    <script src="/js/api.js"></script>
+    <script src="/js/theme.js"></script>
+    <script src="/js/kategori.js"></script>
+    <script src="/js/merek.js"></script>
+    <script src="/js/units.js"></script>
+    <script src="/js/item/itemForm.js"></script>
+    <script>
+      requireAuth();
+      let allItems = [],
+        kompIdx = 0,
+        allBOMs = [];
+      const ON =
+        "padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit";
+      const OFF =
+        "padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit";
 
-    async function init() {
-      // Siapkan form barang yang dipakai ulang (dari itemForm.js): inject markup modal
-      // + muat data pendukung (grup pelanggan, supplier, status PKP) lebih awal, supaya
-      // tombol "Buat Barang Baru" langsung siap saat diklik.
-      loadComponents();
-      loadCustomerGroups();
-      loadSuppliers();
-      loadPkpStatusItem();
-      // Siapkan template tabel harga lanjutan dari awal (saat idle) supaya begitu user
-      // membuka "Pengaturan Harga Lanjutan" langsung muncul tanpa nunggu unduh.
-      if (typeof prefetchAdvancedTemplates === "function") {
-        (window.requestIdleCallback || ((cb) => setTimeout(cb, 300)))(
-          prefetchAdvancedTemplates,
+      async function init() {
+        // Siapkan form barang yang dipakai ulang (dari itemForm.js): inject markup modal
+        // + muat data pendukung (grup pelanggan, supplier, status PKP) lebih awal, supaya
+        // tombol "Buat Barang Baru" langsung siap saat diklik.
+        loadComponents();
+        loadCustomerGroups();
+        loadSuppliers();
+        loadPkpStatusItem();
+        // Siapkan template tabel harga lanjutan dari awal (saat idle) supaya begitu user
+        // membuka "Pengaturan Harga Lanjutan" langsung muncul tanpa nunggu unduh.
+        if (typeof prefetchAdvancedTemplates === "function") {
+          (window.requestIdleCallback || ((cb) => setTimeout(cb, 300)))(
+            prefetchAdvancedTemplates,
+          );
+        }
+
+        // Ingat lokasi asli section komponen (di modal BOM) agar bisa dikembalikan
+        // setelah dipindah sementara ke dalam form "Buat Barang Baru".
+        const seksiAwal = document.getElementById("seksiKomponen");
+        if (seksiAwal) window._parentSeksiKomponen = seksiAwal.parentNode;
+
+        allItems = await api("GET", "/items/?limit=500");
+        const sel = document.getElementById("bomProd");
+        // Rangkai semua <option> jadi satu string lalu set sekali (hindari ratusan
+        // penyisipan DOM satu per satu yang bikin halaman berat saat item banyak).
+        sel.insertAdjacentHTML(
+          "beforeend",
+          allItems
+            .map(
+              (i) =>
+                `<option value="${i.id}">${i.name} (${i.code || ""})</option>`,
+            )
+            .join(""),
         );
+        document.getElementById("orderDate").value = today();
+        loadBOM();
       }
 
-      // Ingat lokasi asli section komponen (di modal BOM) agar bisa dikembalikan
-      // setelah dipindah sementara ke dalam form "Buat Barang Baru".
-      const seksiAwal = document.getElementById("seksiKomponen");
-      if (seksiAwal) window._parentSeksiKomponen = seksiAwal.parentNode;
+      function switchTab(t) {
+        document.getElementById("pnlBOM").style.display =
+          t === "bom" ? "block" : "none";
+        document.getElementById("pnlOrder").style.display =
+          t === "order" ? "block" : "none";
+        document.getElementById("tbBOM").style.cssText = t === "bom" ? ON : OFF;
+        document.getElementById("tbOrder").style.cssText =
+          t === "order" ? ON : OFF;
+        if (t === "order") loadOrders();
+      }
 
-      allItems = await api("GET", "/items/?limit=500");
-      const sel = document.getElementById("bomProd");
-      // Rangkai semua <option> jadi satu string lalu set sekali (hindari ratusan
-      // penyisipan DOM satu per satu yang bikin halaman berat saat item banyak).
-      sel.insertAdjacentHTML(
-        "beforeend",
-        allItems
-          .map((i) => `<option value="${i.id}">${i.name} (${i.code || ""})</option>`)
-          .join(""),
-      );
-      document.getElementById("orderDate").value = today();
-      loadBOM();
-    }
-
-    function switchTab(t) {
-      document.getElementById("pnlBOM").style.display =
-        t === "bom" ? "block" : "none";
-      document.getElementById("pnlOrder").style.display =
-        t === "order" ? "block" : "none";
-      document.getElementById("tbBOM").style.cssText = t === "bom" ? ON : OFF;
-      document.getElementById("tbOrder").style.cssText =
-        t === "order" ? ON : OFF;
-      if (t === "order") loadOrders();
-    }
-
-    function addKomponen(itemId = "", qty = 1) {
-      const idx = kompIdx++;
-      const opts =
-        '<option value="">-- Pilih Komponen --</option>' +
-        allItems
-          .map(
-            (i) =>
-              `<option value="${i.id}" data-price="${i.buy_price}" ${i.id == itemId ? "selected" : ""}>${i.name}</option>`,
-          )
-          .join("");
-      document.getElementById("komponenRows").insertAdjacentHTML(
-        "beforeend",
-        `
+      function addKomponen(itemId = "", qty = 1) {
+        const idx = kompIdx++;
+        const opts =
+          '<option value="">-- Pilih Komponen --</option>' +
+          allItems
+            .map(
+              (i) =>
+                `<option value="${i.id}" data-price="${i.buy_price}" ${i.id == itemId ? "selected" : ""}>${i.name}</option>`,
+            )
+            .join("");
+        document.getElementById("komponenRows").insertAdjacentHTML(
+          "beforeend",
+          `
     <div style="display:grid;grid-template-columns:3fr 1fr 1fr 36px;gap:8px;margin-bottom:8px;align-items:center" id="komp${idx}">
       <select class="input-control" style="margin:0;padding:10px 12px;font-size:14px" onchange="setKompPrice(${idx},this)">${opts}</select>
       <input type="number" value="${qty}" min="0.01" step="0.01" class="input-control" style="margin:0;padding:10px;text-align:center;font-weight:700" oninput="hitungHppMinimum()">
       <input type="number" value="0" min="0" class="input-control kprice" style="margin:0;padding:10px;font-size:14px;color:var(--text-muted)" readonly>
       <button type="button" onclick="document.getElementById('komp${idx}').remove();hitungHppMinimum()" style="width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,.15);color:#ef4444;border:none;cursor:pointer;font-size:16px;font-weight:700">✕</button>
     </div>`,
-      );
-      if (itemId)
-        setKompPrice(idx, document.querySelector(`#komp${idx} select`));
-    }
-    function setKompPrice(idx, sel) {
-      const opt = sel.options[sel.selectedIndex];
-      const el = document.querySelector(`#komp${idx} .kprice`);
-      if (el) el.value = opt?.dataset?.price || 0;
-      hitungHppMinimum();
-    }
+        );
+        if (itemId)
+          setKompPrice(idx, document.querySelector(`#komp${idx} select`));
+      }
+      function setKompPrice(idx, sel) {
+        const opt = sel.options[sel.selectedIndex];
+        const el = document.querySelector(`#komp${idx} .kprice`);
+        if (el) el.value = opt?.dataset?.price || 0;
+        hitungHppMinimum();
+      }
 
-    // Hitung harga pokok minimum produk jadi = total biaya komponen ÷ qty output.
-    // Biaya komponen = kolom "Est. Biaya" (.kprice = harga modal/buy_price komponen).
-    function hitungHppMinimum() {
-      let total = 0;
-      document.querySelectorAll("#komponenRows > div").forEach((row) => {
-        const inps = row.querySelectorAll("input[type=number]");
-        const qty = parseFloat(inps[0]?.value) || 0;
-        const harga = parseFloat(inps[1]?.value) || 0; // .kprice
-        total += qty * harga;
-      });
-      const qtyOut = parseFloat(document.getElementById("bomQty").value) || 1;
-      const hpp = qtyOut > 0 ? total / qtyOut : total;
-      window._bomHppMin = hpp;
-      const elHpp = document.getElementById("bomHppMin");
-      if (elHpp)
-        elHpp.textContent = "Rp " + Math.round(hpp).toLocaleString("id-ID");
-      updateBomLossBadge(hpp);
-      return hpp;
-    }
+      // Hitung harga pokok minimum produk jadi = total biaya komponen ÷ qty output.
+      // Biaya komponen = kolom "Est. Biaya" (.kprice = harga modal/buy_price komponen).
+      function hitungHppMinimum() {
+        let total = 0;
+        document.querySelectorAll("#komponenRows > div").forEach((row) => {
+          const inps = row.querySelectorAll("input[type=number]");
+          const qty = parseFloat(inps[0]?.value) || 0;
+          const harga = parseFloat(inps[1]?.value) || 0; // .kprice
+          total += qty * harga;
+        });
+        const qtyOut = parseFloat(document.getElementById("bomQty").value) || 1;
+        const hpp = qtyOut > 0 ? total / qtyOut : total;
+        window._bomHppMin = hpp;
+        const elHpp = document.getElementById("bomHppMin");
+        if (elHpp)
+          elHpp.textContent = "Rp " + Math.round(hpp).toLocaleString("id-ID");
+        updateBomLossBadge(hpp);
+        return hpp;
+      }
 
-    // Bandingkan harga jual produk hasil vs harga pokok minimum → tampilkan peringatan.
-    function updateBomLossBadge(hpp) {
-      const badge = document.getElementById("bomLossBadge");
-      if (!badge) return;
+      // Bandingkan harga jual produk hasil vs harga pokok minimum → tampilkan peringatan.
+      function updateBomLossBadge(hpp) {
+        const badge = document.getElementById("bomLossBadge");
+        if (!badge) return;
 
-      // Mode form "Buat Barang Baru": produk belum ada, jadi bandingkan harga pokok
-      // minimum terhadap Harga Jual yang sedang diketik di form (#fHJual).
-      if (window._komponenDiForm) {
-        if (!hpp) {
+        // Mode form "Buat Barang Baru": produk belum ada, jadi bandingkan harga pokok
+        // minimum terhadap Harga Jual yang sedang diketik di form (#fHJual).
+        if (window._komponenDiForm) {
+          if (!hpp) {
+            badge.style.display = "none";
+            return;
+          }
+          const jualForm =
+            parseInt(
+              (document.getElementById("fHJual")?.value || "0").replace(
+                /\D/g,
+                "",
+              ),
+            ) || 0;
+          const minStr = Math.round(hpp).toLocaleString("id-ID");
+          badge.style.display = "block";
+          if (jualForm <= 0) {
+            badge.innerHTML = `<div style="background:rgba(245,158,11,.15);color:#d97706;border-radius:10px;padding:10px 12px;font-weight:700;font-size:13px">💡 Harga jual minimal Rp ${minStr}/unit — isi Harga Jual di bawah angka ini biar tidak rugi.</div>`;
+          } else if (jualForm < hpp) {
+            const selisih = Math.round(hpp - jualForm).toLocaleString("id-ID");
+            badge.innerHTML = `<div style="background:rgba(239,68,68,.15);color:#ef4444;border-radius:10px;padding:10px 12px;font-weight:700;font-size:13px">⚠️ RUGI Rp ${selisih}/unit — Harga Jual di bawah harga pokok. Minimal Rp ${minStr}/unit.</div>`;
+          } else {
+            const untung = Math.round(jualForm - hpp).toLocaleString("id-ID");
+            badge.innerHTML = `<div style="background:rgba(34,197,94,.15);color:#16a34a;border-radius:10px;padding:10px 12px;font-weight:700;font-size:13px">✓ Aman — untung kotor Rp ${untung}/unit (harga jual minimal Rp ${minStr}).</div>`;
+          }
+          return;
+        }
+
+        const prodId = parseInt(document.getElementById("bomProd").value);
+        const prod = allItems.find((x) => x.id === prodId);
+        if (!prod || !hpp) {
           badge.style.display = "none";
           return;
         }
-        const jualForm =
-          parseInt(
-            (document.getElementById("fHJual")?.value || "0").replace(/\D/g, ""),
-          ) || 0;
-        const minStr = Math.round(hpp).toLocaleString("id-ID");
+        const jual = prod.sell_price || 0;
+        if (jual <= 0) {
+          badge.style.display = "none";
+          return;
+        }
         badge.style.display = "block";
-        if (jualForm <= 0) {
-          badge.innerHTML = `<div style="background:rgba(245,158,11,.15);color:#d97706;border-radius:10px;padding:10px 12px;font-weight:700;font-size:13px">💡 Harga jual minimal Rp ${minStr}/unit — isi Harga Jual di bawah angka ini biar tidak rugi.</div>`;
-        } else if (jualForm < hpp) {
-          const selisih = Math.round(hpp - jualForm).toLocaleString("id-ID");
-          badge.innerHTML = `<div style="background:rgba(239,68,68,.15);color:#ef4444;border-radius:10px;padding:10px 12px;font-weight:700;font-size:13px">⚠️ RUGI Rp ${selisih}/unit — Harga Jual di bawah harga pokok. Minimal Rp ${minStr}/unit.</div>`;
+        if (jual < hpp) {
+          const selisih = Math.round(hpp - jual).toLocaleString("id-ID");
+          const jualStr = Math.round(jual).toLocaleString("id-ID");
+          badge.innerHTML = `<div style="background:rgba(239,68,68,.15);color:#ef4444;border-radius:10px;padding:10px 12px;font-weight:700;font-size:13px">⚠️ RUGI Rp ${selisih}/unit — harga jual "${prod.name}" (Rp ${jualStr}) di bawah harga pokok. Sebaiknya naikkan harga jual.</div>`;
         } else {
-          const untung = Math.round(jualForm - hpp).toLocaleString("id-ID");
-          badge.innerHTML = `<div style="background:rgba(34,197,94,.15);color:#16a34a;border-radius:10px;padding:10px 12px;font-weight:700;font-size:13px">✓ Aman — untung kotor Rp ${untung}/unit (harga jual minimal Rp ${minStr}).</div>`;
+          const untung = Math.round(jual - hpp).toLocaleString("id-ID");
+          badge.innerHTML = `<div style="background:rgba(34,197,94,.15);color:#16a34a;border-radius:10px;padding:10px 12px;font-weight:700;font-size:13px">✓ Aman — untung kotor Rp ${untung}/unit dari harga pokok komponen</div>`;
         }
-        return;
       }
 
-      const prodId = parseInt(document.getElementById("bomProd").value);
-      const prod = allItems.find((x) => x.id === prodId);
-      if (!prod || !hpp) {
-        badge.style.display = "none";
-        return;
-      }
-      const jual = prod.sell_price || 0;
-      if (jual <= 0) {
-        badge.style.display = "none";
-        return;
-      }
-      badge.style.display = "block";
-      if (jual < hpp) {
-        const selisih = Math.round(hpp - jual).toLocaleString("id-ID");
-        const jualStr = Math.round(jual).toLocaleString("id-ID");
-        badge.innerHTML = `<div style="background:rgba(239,68,68,.15);color:#ef4444;border-radius:10px;padding:10px 12px;font-weight:700;font-size:13px">⚠️ RUGI Rp ${selisih}/unit — harga jual "${prod.name}" (Rp ${jualStr}) di bawah harga pokok. Sebaiknya naikkan harga jual.</div>`;
-      } else {
-        const untung = Math.round(jual - hpp).toLocaleString("id-ID");
-        badge.innerHTML = `<div style="background:rgba(34,197,94,.15);color:#16a34a;border-radius:10px;padding:10px 12px;font-weight:700;font-size:13px">✓ Aman — untung kotor Rp ${untung}/unit dari harga pokok komponen</div>`;
-      }
-    }
+      // Buka form barang ASLI (dari itemForm.js) untuk membuat produk jadi baru,
+      // dengan harga modal pra-terisi dari harga pokok minimum komponen.
+      async function bukaBuatBarangBaru() {
+        // Markup form barang (popUp.html) di-inject async. Kalau belum siap saat diklik,
+        // tunggu sebentar lalu buka OTOMATIS — tidak perlu klik dua kali.
+        if (!document.getElementById("fBarang")) {
+          showLoading("Menyiapkan form barang…");
+          await loadComponents();
+          hideLoading();
+        }
+        window.hppFloorBaru = hitungHppMinimum() || 0;
+        openItemModal(null, false);
 
-    // Buka form barang ASLI (dari itemForm.js) untuk membuat produk jadi baru,
-    // dengan harga modal pra-terisi dari harga pokok minimum komponen.
-    async function bukaBuatBarangBaru() {
-      // Markup form barang (popUp.html) di-inject async. Kalau belum siap saat diklik,
-      // tunggu sebentar lalu buka OTOMATIS — tidak perlu klik dua kali.
-      if (!document.getElementById("fBarang")) {
-        showLoading("Menyiapkan form barang…");
-        await loadComponents();
-        hideLoading();
-      }
-      window.hppFloorBaru = hitungHppMinimum() || 0;
-      openItemModal(null, false);
+        // Pindahkan section "Komponen / Bahan Baku" + panel harga pokok ke dalam form,
+        // di atas "Harga Modal terhadap PPN", supaya user tahu harga jual minimum.
+        const slot = document.getElementById("slotKomponenBaru");
+        const seksi = document.getElementById("seksiKomponen");
+        if (slot && seksi) {
+          slot.appendChild(seksi);
+          window._komponenDiForm = true;
+          const jual = document.getElementById("fHJual");
+          if (jual) jual.addEventListener("input", hitungHppMinimum);
+          hitungHppMinimum();
+        }
 
-      // Pindahkan section "Komponen / Bahan Baku" + panel harga pokok ke dalam form,
-      // di atas "Harga Modal terhadap PPN", supaya user tahu harga jual minimum.
-      const slot = document.getElementById("slotKomponenBaru");
-      const seksi = document.getElementById("seksiKomponen");
-      if (slot && seksi) {
-        slot.appendChild(seksi);
-        window._komponenDiForm = true;
+        // Disable fields khusus di modal ini saat dibuka dari perakitan (BOM)
+        const fSupplierContext = document.getElementById("fSupplierContext");
+        if (fSupplierContext) {
+          fSupplierContext.disabled = true;
+          const btnAddSupplier = fSupplierContext.nextElementSibling;
+          if (btnAddSupplier && btnAddSupplier.tagName === "BUTTON") {
+            btnAddSupplier.disabled = true;
+            btnAddSupplier.style.opacity = "0.5";
+            btnAddSupplier.style.cursor = "not-allowed";
+          }
+        }
+
+        // Barang rakitan WAJIB non-PPN (PPN sudah dihitung di tiap barang komponen).
+        // Set ke "Tanpa PPN" + 0 lalu di-lock, supaya barang jadi tersimpan ppn_percent = 0.
+        const fPpn = document.getElementById("fPpn");
+        if (fPpn) {
+          fPpn.value = "none";
+          fPpn.disabled = true;
+        }
+
+        const fPpnPercent = document.getElementById("fPpnPercent");
+        if (fPpnPercent) {
+          fPpnPercent.value = 0;
+          fPpnPercent.disabled = true;
+        }
+
+        // Sinkronkan tampilan (sembunyikan kolom % + perbarui hint) bila helper tersedia.
+        if (typeof togglePpnPercent === "function") togglePpnPercent();
+
+        const btnAdvSatuan = document.getElementById("btnAdvSatuan");
+        if (btnAdvSatuan) {
+          btnAdvSatuan.disabled = true;
+          btnAdvSatuan.classList.add("disabled");
+        }
+      }
+
+      // Kembalikan section komponen dari form barang ke modal BOM (dipanggil saat form ditutup).
+      function kembalikanSeksiKomponen() {
+        if (!window._komponenDiForm) return;
+        const seksi = document.getElementById("seksiKomponen");
+        if (seksi && window._parentSeksiKomponen)
+          window._parentSeksiKomponen.appendChild(seksi);
+        window._komponenDiForm = false;
         const jual = document.getElementById("fHJual");
-        if (jual) jual.addEventListener("input", hitungHppMinimum);
+        if (jual) jual.removeEventListener("input", hitungHppMinimum);
         hitungHppMinimum();
       }
 
-      // Disable fields khusus di modal ini saat dibuka dari perakitan (BOM)
-      const fSupplierContext = document.getElementById('fSupplierContext');
-      if (fSupplierContext) {
-        fSupplierContext.disabled = true;
-        const btnAddSupplier = fSupplierContext.nextElementSibling;
-        if (btnAddSupplier && btnAddSupplier.tagName === 'BUTTON') {
-          btnAddSupplier.disabled = true;
-          btnAddSupplier.style.opacity = '0.5';
-          btnAddSupplier.style.cursor = 'not-allowed';
+      // Dipanggil itemForm.js setelah barang baru berhasil disimpan (lihat saveItem).
+      window.onItemCreated = function (item) {
+        allItems.push(item);
+        const sel = document.getElementById("bomProd");
+        const opt = document.createElement("option");
+        opt.value = item.id;
+        opt.textContent = `${item.name} (${item.code || ""})`;
+        sel.appendChild(opt);
+        sel.value = item.id;
+        window.hppFloorBaru = 0; // reset supaya tidak bocor ke pembuatan berikutnya
+        hitungHppMinimum();
+        showToast(
+          `Barang "${item.name}" dibuat & dipilih sebagai produk hasil ✓`,
+        );
+      };
+
+      // Saat form barang ditutup (Batal / × / setelah simpan), kembalikan section komponen
+      // ke modal BOM. closeModal global dari api.js — aman di-override seperti openModal.
+      const _origCM = closeModal;
+      window.closeModal = function (id) {
+        if (id === "mBarang") kembalikanSeksiKomponen();
+        _origCM(id);
+      };
+
+      const _origOM = openModal;
+      window.openModal = function (id) {
+        if (id === "mBOM") {
+          document.getElementById("bomId").value = "";
+          document.getElementById("mBOMTitle").textContent = "Buat Formula BOM";
+          document.getElementById("bomProd").value = "";
+          document.getElementById("bomQty").value = 1;
+          document.getElementById("komponenRows").innerHTML = "";
+          kompIdx = 0;
+          addKomponen();
+          addKomponen();
+          window.hppFloorBaru = 0;
+          hitungHppMinimum();
+        }
+        if (id === "mOrder") {
+          // populate BOM dropdown
+          const sel = document.getElementById("orderBOM");
+          sel.innerHTML =
+            '<option value="">-- Pilih BOM --</option>' +
+            allBOMs
+              .map(
+                (b) =>
+                  `<option value="${b.id}">${b.product_name} (output: ${b.qty_produced})</option>`,
+              )
+              .join("");
+          sel.onchange = function () {
+            const bom = allBOMs.find((b) => b.id == this.value);
+            const el = document.getElementById("orderBOMInfo");
+            if (bom) {
+              el.style.display = "block";
+              el.innerHTML = `Menghasilkan: <b>${bom.qty_produced} pcs ${bom.product_name}</b><br>Komponen: ${(bom.materials || []).map((l) => `${l.qty_needed} ${l.material_name}`).join(", ")}`;
+            } else el.style.display = "none";
+          };
+          document.getElementById("orderQty").value = 1;
+          document.getElementById("orderDate").value = today();
+          document.getElementById("orderNote").value = "";
+        }
+        _origOM(id);
+      };
+
+      async function saveBOM() {
+        const product_id = parseInt(document.getElementById("bomProd").value);
+        if (!product_id) {
+          showToast("Pilih produk hasil dulu", "error");
+          return;
+        }
+        const materials = [];
+        document.querySelectorAll("#komponenRows > div").forEach((row) => {
+          const sel = row.querySelector("select");
+          const inps = row.querySelectorAll("input[type=number]");
+          if (sel.value)
+            materials.push({
+              material_id: parseInt(sel.value),
+              qty_needed: parseFloat(inps[0]?.value) || 1,
+            });
+        });
+        if (!materials.length) {
+          showToast("Tambahkan minimal 1 komponen", "error");
+          return;
+        }
+        const id = document.getElementById("bomId").value;
+        try {
+          showLoading();
+          if (id)
+            await api("PUT", `/assembly/bom/${id}`, {
+              product_id,
+              qty_produced:
+                parseFloat(document.getElementById("bomQty").value) || 1,
+              materials,
+            });
+          else
+            await api("POST", "/assembly/bom", {
+              product_id,
+              qty_produced:
+                parseFloat(document.getElementById("bomQty").value) || 1,
+              materials,
+            });
+          hideLoading();
+          showToast("BOM disimpan ✓");
+          closeModal("mBOM");
+          loadBOM();
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
         }
       }
 
-      // Barang rakitan WAJIB non-PPN (PPN sudah dihitung di tiap barang komponen).
-      // Set ke "Tanpa PPN" + 0 lalu di-lock, supaya barang jadi tersimpan ppn_percent = 0.
-      const fPpn = document.getElementById('fPpn');
-      if (fPpn) { fPpn.value = 'none'; fPpn.disabled = true; }
-
-      const fPpnPercent = document.getElementById('fPpnPercent');
-      if (fPpnPercent) { fPpnPercent.value = 0; fPpnPercent.disabled = true; }
-
-      // Sinkronkan tampilan (sembunyikan kolom % + perbarui hint) bila helper tersedia.
-      if (typeof togglePpnPercent === 'function') togglePpnPercent();
-
-      const btnAdvSatuan = document.getElementById('btnAdvSatuan');
-      if (btnAdvSatuan) {
-        btnAdvSatuan.disabled = true;
-        btnAdvSatuan.classList.add('disabled');
-      }
-    }
-
-    // Kembalikan section komponen dari form barang ke modal BOM (dipanggil saat form ditutup).
-    function kembalikanSeksiKomponen() {
-      if (!window._komponenDiForm) return;
-      const seksi = document.getElementById("seksiKomponen");
-      if (seksi && window._parentSeksiKomponen)
-        window._parentSeksiKomponen.appendChild(seksi);
-      window._komponenDiForm = false;
-      const jual = document.getElementById("fHJual");
-      if (jual) jual.removeEventListener("input", hitungHppMinimum);
-      hitungHppMinimum();
-    }
-
-    // Dipanggil itemForm.js setelah barang baru berhasil disimpan (lihat saveItem).
-    window.onItemCreated = function (item) {
-      allItems.push(item);
-      const sel = document.getElementById("bomProd");
-      const opt = document.createElement("option");
-      opt.value = item.id;
-      opt.textContent = `${item.name} (${item.code || ""})`;
-      sel.appendChild(opt);
-      sel.value = item.id;
-      window.hppFloorBaru = 0; // reset supaya tidak bocor ke pembuatan berikutnya
-      hitungHppMinimum();
-      showToast(`Barang "${item.name}" dibuat & dipilih sebagai produk hasil ✓`);
-    };
-
-    // Saat form barang ditutup (Batal / × / setelah simpan), kembalikan section komponen
-    // ke modal BOM. closeModal global dari api.js — aman di-override seperti openModal.
-    const _origCM = closeModal;
-    window.closeModal = function (id) {
-      if (id === "mBarang") kembalikanSeksiKomponen();
-      _origCM(id);
-    };
-
-    const _origOM = openModal;
-    window.openModal = function (id) {
-      if (id === "mBOM") {
-        document.getElementById("bomId").value = "";
-        document.getElementById("mBOMTitle").textContent = "Buat Formula BOM";
-        document.getElementById("bomProd").value = "";
-        document.getElementById("bomQty").value = 1;
-        document.getElementById("komponenRows").innerHTML = "";
-        kompIdx = 0;
-        addKomponen();
-        addKomponen();
-        window.hppFloorBaru = 0;
-        hitungHppMinimum();
-      }
-      if (id === "mOrder") {
-        // populate BOM dropdown
-        const sel = document.getElementById("orderBOM");
-        sel.innerHTML =
-          '<option value="">-- Pilih BOM --</option>' +
-          allBOMs
-            .map(
-              (b) =>
-                `<option value="${b.id}">${b.product_name} (output: ${b.qty_produced})</option>`,
-            )
-            .join("");
-        sel.onchange = function () {
-          const bom = allBOMs.find((b) => b.id == this.value);
-          const el = document.getElementById("orderBOMInfo");
-          if (bom) {
-            el.style.display = "block";
-            el.innerHTML = `Menghasilkan: <b>${bom.qty_produced} pcs ${bom.product_name}</b><br>Komponen: ${(bom.materials || []).map((l) => `${l.qty_needed} ${l.material_name}`).join(", ")}`;
-          } else el.style.display = "none";
-        };
-        document.getElementById("orderQty").value = 1;
-        document.getElementById("orderDate").value = today();
-        document.getElementById("orderNote").value = "";
-      }
-      _origOM(id);
-    };
-
-    async function saveBOM() {
-      const product_id = parseInt(document.getElementById("bomProd").value);
-      if (!product_id) {
-        showToast("Pilih produk hasil dulu", "error");
-        return;
-      }
-      const materials = [];
-      document.querySelectorAll("#komponenRows > div").forEach((row) => {
-        const sel = row.querySelector("select");
-        const inps = row.querySelectorAll("input[type=number]");
-        if (sel.value)
-          materials.push({
-            material_id: parseInt(sel.value),
-            qty_needed: parseFloat(inps[0]?.value) || 1,
-          });
-      });
-      if (!materials.length) {
-        showToast("Tambahkan minimal 1 komponen", "error");
-        return;
-      }
-      const id = document.getElementById("bomId").value;
-      try {
-        showLoading();
-        if (id)
-          await api("PUT", `/assembly/bom/${id}`, {
-            product_id,
-            qty_produced:
-              parseFloat(document.getElementById("bomQty").value) || 1,
-            materials,
-          });
-        else
-          await api("POST", "/assembly/bom", {
-            product_id,
-            qty_produced:
-              parseFloat(document.getElementById("bomQty").value) || 1,
-            materials,
-          });
-        hideLoading();
-        showToast("BOM disimpan ✓");
-        closeModal("mBOM");
-        loadBOM();
-      } catch (ex) {
-        hideLoading();
-        showToast(ex.message, "error");
-      }
-    }
-
-    async function loadBOM() {
-      try {
-        allBOMs = await api("GET", "/assembly/bom?limit=100");
-        document.getElementById("tblBOM").innerHTML = allBOMs.length
-          ? allBOMs
-            .map((b) => {
-              // Estimasi biaya = total harga modal (buy_price) komponen untuk 1x proses rakit.
-              const biaya = (b.materials || []).reduce((a, l) => {
-                const it = allItems.find((x) => x.id === l.material_id);
-                return a + (l.qty_needed || 0) * (it ? it.buy_price || 0 : 0);
-              }, 0);
-              const biayaStr = biaya
-                ? "Rp " + Math.round(biaya).toLocaleString("id-ID")
-                : "-";
-              return `<tr>
+      async function loadBOM() {
+        try {
+          allBOMs = await api("GET", "/assembly/bom?limit=100");
+          document.getElementById("tblBOM").innerHTML = allBOMs.length
+            ? allBOMs
+                .map((b) => {
+                  // Estimasi biaya = total harga modal (buy_price) komponen untuk 1x proses rakit.
+                  const biaya = (b.materials || []).reduce((a, l) => {
+                    const it = allItems.find((x) => x.id === l.material_id);
+                    return (
+                      a + (l.qty_needed || 0) * (it ? it.buy_price || 0 : 0)
+                    );
+                  }, 0);
+                  const biayaStr = biaya
+                    ? "Rp " + Math.round(biaya).toLocaleString("id-ID")
+                    : "-";
+                  return `<tr>
         <td><b style="font-size:16px">${b.product_name || "-"}</b><div style="font-size:12px;color:var(--text-muted)">${b.product_code || ""}</div></td>
         <td style="font-size:18px;font-weight:800">${b.qty_produced} <span style="font-size:13px;color:var(--text-muted)">pcs</span></td>
         <td>${(b.materials || []).length} komponen</td>
@@ -695,107 +835,110 @@
           <button class="bsm be" onclick="editBOM(${b.id})">Edit</button>
           <button class="bsm bd" onclick="hapusBOM(${b.id})">Hapus</button>
         </td></tr>`;
-            })
-            .join("")
-          : '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada formula BOM</td></tr>';
-      } catch (ex) {
-        showToast(ex.message, "error");
+                })
+                .join("")
+            : '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada formula BOM</td></tr>';
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
       }
-    }
 
-    async function detailBOM(id) {
-      const b =
-        allBOMs.find((x) => x.id === id) ||
-        (await api("GET", `/assembly/bom/${id}`));
-      document.getElementById("mBOMDetailTitle").textContent =
-        `Formula: ${b.product_name || "-"}`;
-      document.getElementById("mBOMDetailBody").innerHTML = `
+      async function detailBOM(id) {
+        const b =
+          allBOMs.find((x) => x.id === id) ||
+          (await api("GET", `/assembly/bom/${id}`));
+        document.getElementById("mBOMDetailTitle").textContent =
+          `Formula: ${b.product_name || "-"}`;
+        document.getElementById("mBOMDetailBody").innerHTML = `
     <div style="background:var(--primary-light);border-radius:12px;padding:16px;margin-bottom:16px;font-size:15px">
       Menghasilkan <b style="font-size:20px;color:var(--primary)">${b.qty_produced} pcs ${b.product_name}</b>
     </div>
     <table class="tbl"><thead><tr><th>Komponen</th><th style="text-align:right">Qty Dipakai</th><th>Satuan</th><th style="text-align:right">Stok Tersedia</th></tr></thead>
     <tbody>${(b.materials || [])
-          .map(
-            (l) => `<tr>
+      .map(
+        (l) => `<tr>
       <td><b>${l.material_name || "-"}</b></td>
       <td style="text-align:right;font-weight:800">${l.qty_needed}</td>
       <td style="color:var(--text-muted)">${l.unit || "pcs"}</td>
       <td style="text-align:right">${l.current_stock}</td>
     </tr>`,
-          )
-          .join("")}</tbody></table>
+      )
+      .join("")}</tbody></table>
     <div style="margin-top:16px;display:flex;gap:10px">
       <button onclick="closeModal('mBOMDetail');openModal('mOrder')" class="btn btn-primary">⚙️ Buat Order Pakai BOM Ini</button>
     </div>`;
-      _origOM("mBOMDetail");
-    }
-
-    async function editBOM(id) {
-      const b =
-        allBOMs.find((x) => x.id === id) ||
-        (await api("GET", `/assembly/bom/${id}`));
-      document.getElementById("bomId").value = b.id;
-      document.getElementById("mBOMTitle").textContent = "Edit Formula BOM";
-      document.getElementById("bomProd").value = b.product_id;
-      document.getElementById("bomQty").value = b.qty_produced;
-      document.getElementById("komponenRows").innerHTML = "";
-      kompIdx = 0;
-      (b.materials || []).forEach((l) => addKomponen(l.material_id, l.qty_needed));
-      hitungHppMinimum();
-      _origOM("mBOM");
-    }
-
-    async function hapusBOM(id) {
-      if (!(await showConfirm("Hapus formula BOM ini?"))) return;
-      try {
-        await api("DELETE", `/assembly/bom/${id}`);
-        showToast("Dihapus");
-        loadBOM();
-      } catch (ex) {
-        showToast(ex.message, "error");
+        _origOM("mBOMDetail");
       }
-    }
 
-    async function saveOrder() {
-      const bom_id = parseInt(document.getElementById("orderBOM").value);
-      if (!bom_id) {
-        showToast("Pilih BOM dulu", "error");
-        return;
+      async function editBOM(id) {
+        const b =
+          allBOMs.find((x) => x.id === id) ||
+          (await api("GET", `/assembly/bom/${id}`));
+        document.getElementById("bomId").value = b.id;
+        document.getElementById("mBOMTitle").textContent = "Edit Formula BOM";
+        document.getElementById("bomProd").value = b.product_id;
+        document.getElementById("bomQty").value = b.qty_produced;
+        document.getElementById("komponenRows").innerHTML = "";
+        kompIdx = 0;
+        (b.materials || []).forEach((l) =>
+          addKomponen(l.material_id, l.qty_needed),
+        );
+        hitungHppMinimum();
+        _origOM("mBOM");
       }
-      const qty_planned = parseFloat(document.getElementById("orderQty").value) || 1;
-      try {
-        showLoading("Membuat order...");
-        await api("POST", "/assembly/orders", {
-          bom_id,
-          qty_planned,
-          date: document.getElementById("orderDate").value,
-          notes: document.getElementById("orderNote").value || null,
-        });
-        hideLoading();
-        showToast("Order perakitan dibuat ✓");
-        closeModal("mOrder");
-        switchTab("order");
-      } catch (ex) {
-        hideLoading();
-        showToast(ex.message, "error");
-      }
-    }
 
-    async function loadOrders() {
-      try {
-        const d = await api("GET", "/assembly/orders?limit=100");
-        const stBadge = (s) =>
-          ({
-            pending: '<span class="bo">⏳ Menunggu</span>',
-            in_progress: '<span class="bl">⚙️ Proses</span>',
-            completed:
-              '<span style="background:rgba(99,102,241,.15);color:#818cf8;padding:4px 12px;border-radius:8px;font-size:13px;font-weight:700">✓ Selesai</span>',
-            cancelled: '<span class="bg">✗ Batal</span>',
-          })[s] || s;
-        document.getElementById("tblOrder").innerHTML = d.length
-          ? d
-            .map(
-              (o) => `<tr>
+      async function hapusBOM(id) {
+        if (!(await showConfirm("Hapus formula BOM ini?"))) return;
+        try {
+          await api("DELETE", `/assembly/bom/${id}`);
+          showToast("Dihapus");
+          loadBOM();
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function saveOrder() {
+        const bom_id = parseInt(document.getElementById("orderBOM").value);
+        if (!bom_id) {
+          showToast("Pilih BOM dulu", "error");
+          return;
+        }
+        const qty_planned =
+          parseFloat(document.getElementById("orderQty").value) || 1;
+        try {
+          showLoading("Membuat order...");
+          await api("POST", "/assembly/orders", {
+            bom_id,
+            qty_planned,
+            date: document.getElementById("orderDate").value,
+            notes: document.getElementById("orderNote").value || null,
+          });
+          hideLoading();
+          showToast("Order perakitan dibuat ✓");
+          closeModal("mOrder");
+          switchTab("order");
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function loadOrders() {
+        try {
+          const d = await api("GET", "/assembly/orders?limit=100");
+          const stBadge = (s) =>
+            ({
+              pending: '<span class="bo">⏳ Menunggu</span>',
+              in_progress: '<span class="bl">⚙️ Proses</span>',
+              completed:
+                '<span style="background:rgba(99,102,241,.15);color:#818cf8;padding:4px 12px;border-radius:8px;font-size:13px;font-weight:700">✓ Selesai</span>',
+              cancelled: '<span class="bg">✗ Batal</span>',
+            })[s] || s;
+          document.getElementById("tblOrder").innerHTML = d.length
+            ? d
+                .map(
+                  (o) => `<tr>
       <td style="font-family:monospace;font-size:13px;color:var(--primary)">${o.number || "-"}</td>
       <td><b>${o.product_name || "-"}</b></td>
       <td style="font-size:18px;font-weight:800">${o.qty_planned}</td>
@@ -806,54 +949,53 @@
         ${o.status === "in_progress" ? `<button class="bsm" style="background:rgba(99,102,241,.15);color:#818cf8" onclick="completeOrder(${o.id})">✓ Selesai</button>` : ""}
         ${o.status !== "completed" ? `<button class="bsm bd" onclick="cancelOrder(${o.id})">Batal</button>` : ""}
       </td></tr>`,
-            )
-            .join("")
-          : '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada order perakitan</td></tr>';
-      } catch (ex) {
-        showToast(ex.message, "error");
+                )
+                .join("")
+            : '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada order perakitan</td></tr>';
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
       }
-    }
 
-    async function startOrder(id) {
-      try {
-        await api("PUT", `/assembly/orders/${id}`, { status: "in_progress" });
-        showToast("Order dimulai ⚙️");
-        loadOrders();
-      } catch (ex) {
-        showToast(ex.message, "error");
+      async function startOrder(id) {
+        try {
+          await api("PUT", `/assembly/orders/${id}`, { status: "in_progress" });
+          showToast("Order dimulai ⚙️");
+          loadOrders();
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
       }
-    }
-    async function completeOrder(id) {
-      if (
-        !(await showConfirm(
-          "Tandai perakitan selesai? Stok produk akan ditambah, stok bahan dikurangi.",
-        ))
-      )
-        return;
-      try {
-        showLoading();
-        await api("POST", `/assembly/orders/${id}/complete`);
-        hideLoading();
-        showToast("Perakitan selesai ✓");
-        loadOrders();
-      } catch (ex) {
-        hideLoading();
-        showToast(ex.message, "error");
+      async function completeOrder(id) {
+        if (
+          !(await showConfirm(
+            "Tandai perakitan selesai? Stok produk akan ditambah, stok bahan dikurangi.",
+          ))
+        )
+          return;
+        try {
+          showLoading();
+          await api("POST", `/assembly/orders/${id}/complete`);
+          hideLoading();
+          showToast("Perakitan selesai ✓");
+          loadOrders();
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
       }
-    }
-    async function cancelOrder(id) {
-      if (!(await showConfirm("Batalkan order perakitan ini?"))) return;
-      try {
-        await api("PUT", `/assembly/orders/${id}`, { status: "cancelled" });
-        showToast("Order dibatalkan");
-        loadOrders();
-      } catch (ex) {
-        showToast(ex.message, "error");
+      async function cancelOrder(id) {
+        if (!(await showConfirm("Batalkan order perakitan ini?"))) return;
+        try {
+          await api("PUT", `/assembly/orders/${id}`, { status: "cancelled" });
+          showToast("Order dibatalkan");
+          loadOrders();
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
       }
-    }
 
-    init();
-  </script>
-</body>
-
+      init();
+    </script>
+  </body>
 </html>
