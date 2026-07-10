@@ -58,12 +58,13 @@ def hitung_total_penjualan(gross_subtotal: float, disc_persen: float, tarif_pers
     return {"subtotal": subtotal, "discount": diskon, "tax": pajak, "total": total}
 
 
-def hitung_total_penjualan_per_baris(baris: list, disc_persen: float, termasuk_ppn: bool) -> dict:
+def hitung_total_penjualan_per_baris(baris: list, disc_nominal: float, termasuk_ppn: bool) -> dict:
     """Versi PER-BARIS dari hitung_total_penjualan: tiap baris boleh punya tarif PPN sendiri
     (mis. barang kena PPN 11% dicampur barang non-PPN 0%). `baris` = list of {"gross","tarif"} di
-    mana gross = sell_price*(1-disc/100)*qty. Diskon header (disc_persen) disebar proporsional.
+    mana gross = sell_price*(1-disc/100)*qty. Diskon header (disc_nominal) disebar proporsional.
     Hasil identik dengan hitung_total_penjualan bila semua baris bertarif sama (nol regresi)."""
-    disc_ratio = (disc_persen or 0) / 100
+    total_gross = sum(float(b.get("gross") or 0) for b in baris)
+    disc_ratio = (disc_nominal / total_gross) if total_gross > 0 else 0
     subtotal = diskon = pajak = total = 0.0
     for b in baris:
         g = float(b.get("gross") or 0)

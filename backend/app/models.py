@@ -902,6 +902,7 @@ class BillOfMaterial(Base):
     id = Column(Integer, primary_key=True, index=True)
     product_id = Column(Integer, ForeignKey("items.id"), nullable=False)  # produk jadi
     qty_produced = Column(Float, default=1)  # berapa unit dihasilkan sekali rakit
+    operational_cost = Column(Float, default=0)  # biaya operasional tambahan per proses rakit
     notes = Column(Text)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

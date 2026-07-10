@@ -213,20 +213,22 @@
         lastPpnStatus = "included";
 
       function formatInputRibuan(input) {
-        let val = input.value.replace(/[^0-9]/g, "");
-        if (val === "") {
-          input.value = "0";
-          return;
+        if (typeof formatDesimal === "function") {
+          formatDesimal(input);
+        } else {
+          let val = input.value.replace(/[^0-9]/g, "");
+          input.value = val === "" ? "0" : parseInt(val).toLocaleString("id-ID");
         }
-        input.value = parseInt(val).toLocaleString("id-ID");
       }
 
       function toRibuan(num) {
+        if (typeof toDesimal === "function") return toDesimal(num);
         if (!num) return "0";
         return parseInt(num).toLocaleString("id-ID");
       }
 
       function toAngka(str) {
+        if (typeof parseDesimal === "function") return parseDesimal(str);
         if (!str) return 0;
         return parseFloat(str.toString().replace(/\./g, "")) || 0;
       }
@@ -344,7 +346,10 @@
       function switchTab(t) {
         loadComponents(); // pastikan markup tab (kat/merek/satuan) sudah/mulai dimuat
         curTab = t;
-        ["pnlBrg", "pnlKat", "pnlMerek", "pnlSat"].forEach(
+        const panels = ["pnlBrg", "pnlKat", "pnlMerek", "pnlSat"];
+        // Guard: jika elemen panel tidak ada (mis. assembly.html), skip seluruh logika tab
+        if (panels.some((id) => !document.getElementById(id))) return;
+        panels.forEach(
           (id) => (document.getElementById(id).style.display = "none"),
         );
         const map = {
@@ -356,6 +361,7 @@
         document.getElementById(map[t]).style.display = "block";
         ["tbBarang", "tbKat", "tbMerek", "tbSat"].forEach((id) => {
           const el = document.getElementById(id);
+          if (!el) return;
           const active =
             id ===
             "tb" + { brg: "Barang", kat: "Kat", merek: "Merek", sat: "Sat" }[t];
@@ -1128,13 +1134,13 @@
           if (el) el.value = val;
         };
         setVal("fKodeItem", "");
-        setVal("fHBeli", "0");
-        setVal("fMargin", "0");
-        setVal("fHJual", "0");
-        setVal("fHJualDiskon", "0");
-        setVal("fStokMin", "0");
+        setVal("fHBeli", "0,00");
+        setVal("fMargin", "0,00");
+        setVal("fHJual", "0,00");
+        setVal("fHJualDiskon", "0,00");
+        setVal("fStokMin", "0,00");
         setVal("fPpn", "included");
-        setVal("fPpnPercent", PKP_ITEM.tarif > 0 ? PKP_ITEM.tarif : 11);
+        setVal("fPpnPercent", toDesimal(PKP_ITEM.tarif > 0 ? PKP_ITEM.tarif : 11));
         lastPpnStatus = "included";
         togglePpnPercent();
         updatePpnModeHint();
@@ -1841,7 +1847,7 @@
 
         satuanRows = [baseRow];
         syncGroupPricesFromMain();
-        if (editItemId) {
+        if (editItemId && !window._editFromBOM) {
           try {
             const data = await api(
               "GET",
@@ -1945,7 +1951,7 @@
             let cols = `<td style="text-align:center; color:var(--primary); font-size:10px;">${isBase ? "▶" : isDraft ? "*" : "•"}</td><td><select class="input-control" onchange="updateAdvancedRowField(${idx}, 'child_unit_id', this.value)"><option value="">-- Pilih --</option>${unitOptions}</select></td><td><input class="input-control" value="${isBase ? "Dasar" : "Konversi"}" disabled></td><td class="sep"><input type="number" step="0.0001" class="input-control" value="${row.conversion_factor || ""}" ${isBase ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'conversion_factor', this.value)" style="text-align:right;"></td><td class="sep"><input type="text" class="input-control" value="${toRibuan(row.buy_price_auto)}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'buy_price_auto', this.value)" style="text-align:right;"></td>`;
 
             if (currentAdvancedType === "satuan") {
-              cols += `<td><input type="number" step="0.01" class="input-control" value="${row.margin_percent || ""}" onchange="updateAdvancedRowField(${idx}, 'margin_percent', this.value)" style="text-align:right;"></td><td><input type="text" class="input-control" value="${toRibuan(row.sell_price)}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'sell_price', this.value, 'sell')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
+              cols += `<td><input type="text" inputmode="numeric" class="input-control" value="${toDesimal(row.margin_percent)}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'margin_percent', this.value)" style="text-align:right;"></td><td><input type="text" class="input-control" value="${toRibuan(row.sell_price)}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'sell_price', this.value, 'sell')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
             } else if (currentAdvancedType === "levelHarga") {
               allGroups.forEach((group, gIdx) => {
                 let groupPrice = row.group_prices[group.id];
@@ -1966,7 +1972,7 @@
                 const displayMargin =
                   groupPrice > 0 ? groupMargin.toFixed(2) : "";
 
-                cols += `<td><input type="number" step="0.01" class="input-control" value="${displayMargin}" onchange="updateAdvancedRowField(${idx}, 'group_margin', this.value, '${group.id}')" style="text-align:right;"></td><td class="sep"><input type="text" class="input-control" value="${displayPrice}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'group_price', this.value, '${group.id}')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
+                cols += `<td><input type="text" inputmode="numeric" class="input-control" value="${toDesimal(displayMargin)}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'group_margin', this.value, '${group.id}')" style="text-align:right;"></td><td class="sep"><input type="text" class="input-control" value="${displayPrice}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'group_price', this.value, '${group.id}')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
               });
             } else if (currentAdvancedType === "levelJumlah") {
               for (let i = 0; i < 4; i++) {
@@ -1998,8 +2004,8 @@
                 const sampaiVal = tier.sampai_qty || "";
 
                 cols += `<td style="text-align:center; font-weight:600; color:var(--text-muted); font-size:12px; border-left:1px solid var(--border-color)">${dariQty}</td>
-                         <td><input type="number" class="input-control" value="${sampaiVal}" onchange="updateAdvancedRowField(${idx}, 'tier_sampai', this.value, ${i})" style="text-align:right;" placeholder="∞"></td>
-                         <td><input type="number" step="0.01" class="input-control" value="${marginVal}" onchange="updateAdvancedRowField(${idx}, 'tier_margin', this.value, ${i})" style="text-align:right;" placeholder="% Mg"></td>
+                         <td><input type="text" inputmode="numeric" class="input-control" value="${sampaiVal ? toDesimal(sampaiVal) : ""}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'tier_sampai', this.value, ${i})" style="text-align:right;" placeholder="∞"></td>
+                         <td><input type="text" inputmode="numeric" class="input-control" value="${marginVal ? toDesimal(marginVal) : ""}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'tier_margin', this.value, ${i})" style="text-align:right;" placeholder="% Mg"></td>
                          <td class="${i < 3 ? "sep" : ""}"><input type="text" class="input-control" value="${priceVal}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'tier_price', this.value, ${i})" style="text-align:right; font-weight:700; color:var(--primary)" placeholder="Harga"></td>`;
               }
             }
@@ -2389,10 +2395,10 @@
         return `<tr class="${isEmpty ? "empty-row" : ""}">
                     <td style="text-align:center;color:var(--text-muted);font-size:14px;">${isEmpty ? "*" : "▶"}</td>
                     <td><select class="input-control group-select" data-group-id="${gd ? gd.group_id : ""}" onchange="handlePotonganRowChange(this)">${potonganGroupOptions(gd ? gd.group_id : "")}</select></td>
-                    <td class="sep"><input type="number" step="0.01" placeholder="0.00" class="input-control" style="text-align:right" value="${v("disc1")}" oninput="handlePotonganRowChange(this)"></td>
-                    <td><input type="number" step="0.01" placeholder="0.00" class="input-control" style="text-align:right" value="${v("disc2")}" oninput="handlePotonganRowChange(this)"></td>
-                    <td><input type="number" step="0.01" placeholder="0.00" class="input-control" style="text-align:right" value="${v("disc3")}" oninput="handlePotonganRowChange(this)"></td>
-                    <td><input type="number" step="0.01" placeholder="0.00" class="input-control" style="text-align:right" value="${v("disc4")}" oninput="handlePotonganRowChange(this)"></td>
+                    <td class="sep"><input type="text" inputmode="numeric" placeholder="0,00" class="input-control" style="text-align:right" value="${v("disc1") ? toDesimal(v("disc1")) : ""}" oninput="formatInputRibuan(this); handlePotonganRowChange(this)"></td>
+                    <td><input type="text" inputmode="numeric" placeholder="0,00" class="input-control" style="text-align:right" value="${v("disc2") ? toDesimal(v("disc2")) : ""}" oninput="formatInputRibuan(this); handlePotonganRowChange(this)"></td>
+                    <td><input type="text" inputmode="numeric" placeholder="0,00" class="input-control" style="text-align:right" value="${v("disc3") ? toDesimal(v("disc3")) : ""}" oninput="formatInputRibuan(this); handlePotonganRowChange(this)"></td>
+                    <td><input type="text" inputmode="numeric" placeholder="0,00" class="input-control" style="text-align:right" value="${v("disc4") ? toDesimal(v("disc4")) : ""}" oninput="formatInputRibuan(this); handlePotonganRowChange(this)"></td>
                   </tr>`;
       }
 

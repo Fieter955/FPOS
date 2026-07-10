@@ -305,8 +305,8 @@
           <div class="input-group" id="ppnPercentGroup" style="grid-area: ppn_pct">
             <label>Tarif PPN (%)</label>
             <div style="display: flex; align-items: center; gap: 8px">
-              <input id="fPpnPercent" type="number" step="0.1" class="input-control" value="11"
-                style="text-align: center" oninput="onPpnPercentInput()" />
+              <input id="fPpnPercent" type="text" inputmode="numeric" class="input-control" value="11,00"
+                style="text-align: center" oninput="formatInputRibuan(this); onPpnPercentInput()" />
               <span style="font-weight: 700; color: var(--text-muted)">%</span>
             </div>
           </div>
@@ -332,18 +332,18 @@
 
           <div class="input-group" style="grid-area: modal">
             <label>Harga Modal (Beli)</label>
-            <input id="fHBeli" type="text" inputmode="numeric" class="input-control" value="0" oninput="
+            <input id="fHBeli" type="text" inputmode="numeric" class="input-control" value="0,00" oninput="
                 formatInputRibuan(this);
                 onBuyPriceInput();
               " />
           </div>
           <div class="input-group" style="grid-area: margin">
             <label>Margin (%)</label>
-            <input id="fMargin" type="number" step="0.01" class="input-control" value="0" oninput="onMarginInput()" />
+            <input id="fMargin" type="text" inputmode="numeric" class="input-control" value="0,00" oninput="formatInputRibuan(this); onMarginInput()" />
           </div>
           <div class="input-group" style="grid-area: jual">
             <label style="color: var(--primary); font-weight: bold">Harga Jual</label>
-            <input id="fHJual" type="text" inputmode="numeric" class="input-control" value="0" required oninput="
+            <input id="fHJual" type="text" inputmode="numeric" class="input-control" value="0,00" required oninput="
                 formatInputRibuan(this);
                 onSellPriceInput();
                 updateDiscountPreview();
@@ -391,7 +391,7 @@
           <div style="display: flex; flex-direction: column; gap: 8px">
             <div style="display: flex; align-items: center; gap: 10px">
               <input id="fHJualDiskon" type="text" inputmode="numeric" class="input-control"
-                style="flex: 1; max-width: 200px; margin: 0" value="0" oninput="
+                style="flex: 1; max-width: 200px; margin: 0" value="0,00" oninput="
                   formatInputRibuan(this);
                   updateDiscountPreview();
                 " />
@@ -412,9 +412,9 @@
                   <option value="">Pilih Grup (Set Harga)</option>
                 </select>
                 <div style="display: flex; align-items: center; gap: 4px; flex: 1">
-                  <input id="fGroupPercentInput" type="number" step="0.01" class="input-control"
-                    style="width: 65px; text-align: center; margin: 0" placeholder="%"
-                    oninput="onGroupPercentInput()" />
+                  <input id="fGroupPercentInput" type="text" inputmode="numeric" class="input-control"
+                    style="width: 65px; text-align: center; margin: 0" placeholder="0,00"
+                    oninput="formatInputRibuan(this); onGroupPercentInput()" />
                   <span style="font-weight: bold; font-size: 0.9em">%</span>
                 </div>
                 <span style="font-weight: 900; color: #f59e0b; font-size: 1.2em">➜</span>
@@ -434,7 +434,7 @@
                       font-weight: bold;
                       text-align: right;
                       margin: 0;
-                    " placeholder="Harga Final" oninput="
+                    " placeholder="0,00" oninput="
                       formatInputRibuan(this);
                       onGroupPriceInput();
                     " />
@@ -546,7 +546,7 @@
       <div class="row2" style="margin-bottom: 16px">
         <div class="input-group">
           <label>Peringatan Stok Menipis</label>
-          <input id="fStokMin" type="text" inputmode="numeric" class="input-control" value="0"
+          <input id="fStokMin" type="text" inputmode="numeric" class="input-control" value="0,00"
             oninput="formatInputRibuan(this)" />
         </div>
         <div class="input-group">

@@ -259,6 +259,56 @@ function fmtRp(n) {
   return "Rp " + Math.round(n).toLocaleString("id-ID");
 }
 
+function formatDesimal(el) {
+  if (!el) return;
+  const start = el.selectionStart;
+  const oldLen = el.value.length;
+
+  let parts = el.value.split(',');
+  let integerPart = parts[0].replace(/[^0-9-]/g, "");
+  let angka = parseInt(integerPart) || 0;
+  
+  // Format bagian bulat dengan pemisah ribuan
+  let formattedInteger = integerPart ? new Intl.NumberFormat("id-ID").format(angka) : "0";
+  
+  // Format bagian desimal (jika ada koma)
+  if (parts.length > 1) {
+    let decimalPart = parts[1].replace(/[^0-9]/g, "").substring(0, 2);
+    el.value = formattedInteger + "," + decimalPart;
+  } else {
+    el.value = formattedInteger;
+  }
+
+  if (document.activeElement === el && el.value) {
+    const newLen = el.value.length;
+    let newPos = start + (newLen - oldLen);
+    if (newPos < 0) newPos = 0;
+    try { el.setSelectionRange(newPos, newPos); } catch (e) {}
+  }
+}
+
+function parseDesimal(str) {
+  if (typeof str === "number") return str;
+  if (!str) return 0;
+  let parts = str.toString().split(',');
+  let integerPart = parts[0].replace(/[^0-9-]/g, "");
+  if (!integerPart) integerPart = "0";
+  let decimalPart = parts.length > 1 ? parts[1].replace(/[^0-9]/g, "").substring(0, 2) : "00";
+  let floatStr = integerPart + "." + decimalPart;
+  return parseFloat(floatStr) || 0;
+}
+
+function toDesimal(num) {
+  if (num === null || num === undefined || num === "") return "0,00";
+  let floatNum = parseFloat(num);
+  if (isNaN(floatNum)) return "0,00";
+  
+  let parts = floatNum.toFixed(2).split('.');
+  let integerPart = parseInt(parts[0]) || 0;
+  let formattedInteger = new Intl.NumberFormat("id-ID").format(integerPart);
+  return formattedInteger + "," + parts[1];
+}
+
 function fmtDate(d) {
   if (!d) return "-";
   try {

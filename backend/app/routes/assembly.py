@@ -40,6 +40,7 @@ class BOMLineIn(BaseModel):
 class BOMCreate(BaseModel):
     product_id: int
     qty_produced: float = 1.0
+    operational_cost: float = 0.0
     notes: Optional[str] = None
     materials: List[BOMLineIn]
 
@@ -55,6 +56,7 @@ def get_boms(db: Session = Depends(get_db), _=Depends(get_current_user)):
         "product_name": b.product.name if b.product else "-",
         "product_code": b.product.code if b.product else "-",
         "qty_produced": b.qty_produced,
+        "operational_cost": b.operational_cost or 0,
         "notes": b.notes,
         "materials": [{
             "material_id": l.material_id,
@@ -74,7 +76,9 @@ def get_bom(bom_id: int, db: Session = Depends(get_db), _=Depends(get_current_us
     return {
         "id": b.id, "product_id": b.product_id,
         "product_name": b.product.name if b.product else "-",
-        "qty_produced": b.qty_produced, "notes": b.notes,
+        "qty_produced": b.qty_produced,
+        "operational_cost": b.operational_cost or 0,
+        "notes": b.notes,
         "materials": [{
             "id": l.id, "material_id": l.material_id,
             "material_name": l.material.name if l.material else "-",
@@ -106,6 +110,7 @@ def create_bom(data: BOMCreate, db: Session = Depends(get_db),
     bom = models.BillOfMaterial(
         product_id=data.product_id,
         qty_produced=data.qty_produced,
+        operational_cost=data.operational_cost,
         notes=data.notes
     )
     db.add(bom); db.flush()
@@ -134,6 +139,7 @@ def create_bom(data: BOMCreate, db: Session = Depends(get_db),
 class BOMUpdate(BaseModel):
     product_id: Optional[int] = None
     qty_produced: Optional[float] = None
+    operational_cost: Optional[float] = None
     notes: Optional[str] = None
     materials: Optional[List[BOMLineIn]] = None
 
@@ -160,6 +166,8 @@ def update_bom(bom_id: int, data: BOMUpdate, db: Session = Depends(get_db),
 
     if data.qty_produced is not None:
         bom.qty_produced = data.qty_produced
+    if data.operational_cost is not None:
+        bom.operational_cost = data.operational_cost
     if data.notes is not None:
         bom.notes = data.notes
 
@@ -273,11 +281,12 @@ def _eksekusi_perakitan(db: Session, assembly: models.Assembly, bom: models.Bill
                 reference=assembly.number, notes=f"Bahan perakitan {nama_produk}",
             ))
 
-        # 3) Produksi barang jadi: satu lapisan baru seharga biaya bahan / qty hasil.
+        # 3) Produksi barang jadi: satu lapisan baru seharga (biaya bahan + biaya operasional) / qty hasil.
         product = db.query(models.Item).get(bom.product_id)
         if product and qty_result > 0:
             prod_stock = _stock_item_terkunci(db, product)
-            unit_cost = (total_biaya / qty_result) if qty_result else 0.0
+            biaya_operasional = float(bom.operational_cost or 0)
+            unit_cost = ((total_biaya + biaya_operasional) / qty_result) if qty_result else 0.0
             add_batch(db, item_id=prod_stock.id, warehouse_id=gudang.id,
                       qty=qty_result, unit_cost=unit_cost, received_date=assembly.date)
             adjust_warehouse_stock(db, gudang.id, prod_stock.id, qty_result)
