@@ -102,7 +102,7 @@
 
       async function init() {
         // --- CEK ROLE ---
-        if (user.role !== "admin") {
+        if (!(await can("purchase.transaction", "update"))) {
           alert(
             "Akses Ditolak: Hanya Admin yang bisa memproses/mengedit draft.",
           );

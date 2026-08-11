@@ -16,6 +16,7 @@ import textwrap
 from ..database import get_db
 from .. import models, schemas
 from ..auth import get_current_user, get_query, write_audit
+from ..permissions import has_permission
 from ..services.virtual_units import (
     get_effective_buy_price,
     get_effective_stock_from_source,
@@ -133,11 +134,7 @@ def get_item_sale_history(
     return hasil
 
 
-def _is_admin_user(user: models.User) -> bool:
-    return (user.role or "") == "admin"
-
-
-def _sale_out_for_user(sale: models.Sale, current_user: models.User):
+def _sale_out_for_user(sale: models.Sale, current_user: models.User, db: Session):
     data = schemas.SaleOut.model_validate(sale).model_dump()
     for line in data.get("items") or []:
         qty = float(line.get("qty") or 0)
@@ -151,7 +148,7 @@ def _sale_out_for_user(sale: models.Sale, current_user: models.User):
             else (100 if margin_amount > 0 else 0)
         )
 
-    if not _is_admin_user(current_user):
+    if not has_permission(db, current_user, "sales.cost_price", "view"):
         for line in data.get("items") or []:
             line["buy_price"] = 0
             line["margin_amount"] = 0
@@ -239,7 +236,7 @@ def get_sales(
     if customer_id: q = q.filter(models.Sale.customer_id == customer_id)
     if status:     q = q.filter(models.Sale.status == status)
     sales = q.order_by(models.Sale.id.desc()).offset(skip).limit(limit).all()
-    return [_sale_out_for_user(sale, current_user) for sale in sales]
+    return [_sale_out_for_user(sale, current_user, db) for sale in sales]
 
 
 @router.get("/{sid}", response_model=schemas.SaleOut)
@@ -251,7 +248,7 @@ def get_sale(
     obj = get_query(db, models.Sale, current_user).filter(models.Sale.id == sid).first()
     if not obj:
         raise HTTPException(404, "Penjualan tidak ditemukan")
-    return _sale_out_for_user(obj, current_user)
+    return _sale_out_for_user(obj, current_user, db)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -545,7 +542,7 @@ def create_sale(
 
     db.commit()
     db.refresh(sale)
-    return _sale_out_for_user(sale, current_user)
+    return _sale_out_for_user(sale, current_user, db)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

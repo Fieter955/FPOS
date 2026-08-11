@@ -44,6 +44,12 @@ from app.database import Base, engine, SessionLocal
 from app.auth import get_password_hash, verify_password
 from app.config import settings
 from app import models
+from app.permissions import (
+    has_permission,
+    request_permission,
+    seed_roles_and_permissions,
+    user_from_bearer,
+)
 from app.routes import (
     auth, items, customers, suppliers, purchases, sales,
     inventory, reports, accounting, consignment,
@@ -91,6 +97,12 @@ def seed_admin():
         db.close()
 
 seed_admin()
+
+with SessionLocal() as _permission_seed_db:
+    try:
+        seed_roles_and_permissions(_permission_seed_db)
+    except Exception as _permission_seed_error:
+        print(f"⚠ Gagal menyiapkan hak akses: {_permission_seed_error}")
 
 # ─── Safe Migration ───────────────────────────────────────────────────────────
 def run_migrations():
@@ -269,6 +281,16 @@ def run_migrations():
     conn.close()
 
 run_migrations()
+
+# Migrasi histori perakitan lama bersifat idempotent dan tidak mem-posting stok.
+with SessionLocal() as _assembly_migration_db:
+    try:
+        _assembly_migrated = assembly.migrate_legacy_assemblies(_assembly_migration_db)
+        if _assembly_migrated:
+            print(f"  Migration: {_assembly_migrated} histori perakitan dipindahkan")
+    except Exception as _assembly_migration_error:
+        _assembly_migration_db.rollback()
+        print(f"  Migration perakitan dilewati: {_assembly_migration_error}")
 
 
 # ─── Seed Batch Pembukaan FIFO (idempotent) ────────────────────────────────────
@@ -487,6 +509,48 @@ app.add_middleware(
 # 🗜️ Kompresi GZip — pangkas ukuran transfer JSON/JS/CSS/HTML (sangat membantu via Tailscale).
 # minimum_size=1024 agar respons kecil tidak ikut dikompres (overhead tak sepadan).
 app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+
+@app.middleware("http")
+async def enforce_role_permissions(request: Request, call_next):
+    """Gerbang RBAC untuk seluruh API bisnis.
+
+    Endpoint publik dan antrean agen printer dikecualikan oleh
+    ``request_permission``. Dependency auth lama tetap berjalan sebagai lapisan
+    kedua dan memakai flag ini untuk menggantikan pemeriksaan admin hard-coded.
+    """
+    request.state.permission_authorized = False
+    required = request_permission(request.url.path, request.method)
+    if not required:
+        return await call_next(request)
+
+    db = SessionLocal()
+    try:
+        user = user_from_bearer(request, db)
+        if not user:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Token tidak valid atau sudah expired"},
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        permission_key, action = required
+        if not has_permission(db, user, permission_key, action):
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "detail": (
+                        "Akses ditolak: Anda tidak memiliki izin "
+                        f"{action} untuk {permission_key}"
+                    )
+                },
+            )
+        request.state.permission_authorized = True
+        request.state.permission_key = permission_key
+        request.state.permission_action = action
+    finally:
+        db.close()
+
+    return await call_next(request)
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(items.router, prefix="/api/items", tags=["Items"])

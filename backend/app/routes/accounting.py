@@ -515,9 +515,6 @@ def seed_default_accounts(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    if "admin" not in (current_user.role or ""):
-        raise HTTPException(403, "Hanya admin")
-
     created = ensure_default_accounts(db)
     db.commit()
     if created == 0:
@@ -1702,8 +1699,6 @@ def set_pkp_status(
     """Nyalakan/matikan mode PKP. Saat ON, PPN pada pembelian BARU dipisah ke PPN Masukan
     (1-1550) dan kasir memungut PPN penjualan (harga termasuk PPN). Pembelian/penjualan lama
     tidak berubah. Hanya admin."""
-    if "admin" not in (current_user.role or ""):
-        raise HTTPException(403, "Hanya admin yang boleh mengubah status PKP.")
     branch = _toko_pusat(db)
     if not branch:
         raise HTTPException(400, "Sistem belum memiliki cabang.")

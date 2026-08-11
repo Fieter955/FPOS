@@ -8,6 +8,7 @@ import pytz # 👈 TAMBAHAN IMPORT
 from ..database import get_db
 from .. import models, schemas, auth as auth_utils
 from ..config import settings
+from ..permissions import effective_grants, grant_payload, has_permission, has_role
 
 router = APIRouter()
 
@@ -107,10 +108,23 @@ def get_users(db: Session = Depends(get_db), _=Depends(auth_utils.require_admin)
 def get_me(current_user: models.User = Depends(auth_utils.get_current_user)):
     return current_user
 
+@router.get("/permissions/me")
+def get_my_permissions(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth_utils.get_current_user),
+):
+    return {
+        "is_admin": has_role(current_user, "admin"),
+        "grants": grant_payload(effective_grants(db, current_user)),
+    }
+
 @router.put("/users/{uid}/password")
 def change_password(uid: int, data: dict, db: Session = Depends(get_db),
                     current_user: models.User = Depends(auth_utils.get_current_user)):
-    if current_user.role != "admin" and current_user.id != uid:
+    can_manage_users = has_permission(
+        db, current_user, "settings.user_management", "access"
+    )
+    if not can_manage_users and current_user.id != uid:
         raise HTTPException(403, "Tidak diizinkan")
     user = db.query(models.User).get(uid)
     if not user: raise HTTPException(404, "User tidak ditemukan")

@@ -12,6 +12,7 @@ from pathlib import Path
 from ..database import get_db
 from .. import models, schemas
 from ..auth import get_current_user
+from ..permissions import has_permission
 from ..services.virtual_units import (
     get_conversion_factor,
     get_effective_buy_price,
@@ -33,23 +34,19 @@ _ITEM_IMG_DIR = _ROOT_DIR / "uploads" / "items"
 MAKS_FOTO_BYTES = 3 * 1024 * 1024  # 3 MB (foto sudah dikecilkan di browser; ini hanya batas aman)
 
 
-def _is_admin_user(user: models.User) -> bool:
-    return (user.role or "") == "admin"
-
-
-def _serialize_item_for_user(item: models.Item, current_user: models.User):
+def _serialize_item_for_user(item: models.Item, current_user: models.User, db: Session):
     data = schemas.ItemOut.model_validate(item).model_dump()
     # Lantai harga modal (HPP) untuk penjaga anti-rugi diskon grup di POS.
     # Dikirim ke semua role agar harga grup konsisten antara admin & kasir,
     # tanpa pernah menampilkan harga modal di UI mana pun.
     _fifo_min = getattr(item, "_fifo_min_price", None)
     data["min_price"] = float(_fifo_min if _fifo_min is not None else (item.buy_price or 0))
-    if not _is_admin_user(current_user):
+    if not has_permission(db, current_user, "master.show_cost_item", "view"):
         data["buy_price"] = 0
     return data
 
 
-def _serialize_item_lite(item: models.Item, current_user: models.User):
+def _serialize_item_lite(item: models.Item, current_user: models.User, db: Session):
     """Serialisasi RINGAN untuk daftar/tabel barang. TANPA suppliers, supplier_details,
     group_discounts, dan brand — field-field itu hanya dipakai POS & menu pembelian (yang
     memanggil tanpa lite). Dengan begitu eager-load + hidrasi ORM jauh lebih ringan
@@ -70,7 +67,7 @@ def _serialize_item_lite(item: models.Item, current_user: models.User):
         "unit": {
             "id": unit.id, "name": unit.name, "abbreviation": unit.abbreviation,
         } if unit else None,
-        "buy_price": buy if _is_admin_user(current_user) else 0,
+        "buy_price": buy if has_permission(db, current_user, "master.show_cost_item", "view") else 0,
         "min_price": min_price,
         "sell_price": float(item.sell_price or 0),
         "ppn_percent": item.ppn_percent,
@@ -310,8 +307,8 @@ def get_items(
     items = q.offset(skip).limit(limit).all()
     items = _apply_virtual_item_metrics(items, db, current_user)
     if lite:
-        return [_serialize_item_lite(item, current_user) for item in items]
-    return [_serialize_item_for_user(item, current_user) for item in items]
+        return [_serialize_item_lite(item, current_user, db) for item in items]
+    return [_serialize_item_for_user(item, current_user, db) for item in items]
 
 @router.get("/{item_id}", response_model=schemas.ItemOut)
 def get_item(item_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
@@ -327,7 +324,7 @@ def get_item(item_id: int, db: Session = Depends(get_db), current_user: models.U
     ).filter(models.Item.id == item_id).first()
     if not obj: raise HTTPException(404, "Item tidak ditemukan")
     obj = _apply_virtual_item_metrics([obj], db, current_user)[0]
-    return _serialize_item_for_user(obj, current_user)
+    return _serialize_item_for_user(obj, current_user, db)
 
 @router.post("/", response_model=schemas.ItemOut)
 def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):

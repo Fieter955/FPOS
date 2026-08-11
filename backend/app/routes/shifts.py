@@ -6,6 +6,7 @@ from typing import Optional
 from ..database import get_db
 from .. import models
 from ..auth import get_current_user, write_audit, get_query # 👈 TAMBAHAN get_query
+from ..permissions import has_role
 
 router = APIRouter()
 import pytz
@@ -62,7 +63,7 @@ def close_shift(shift_id: int, data: dict, db: Session = Depends(get_db),
     
     if not shift: raise HTTPException(404, "Shift tidak ditemukan")
     if shift.status == "closed": raise HTTPException(400, "Shift sudah ditutup")
-    if shift.user_id != current_user.id and current_user.role != "admin":
+    if shift.user_id != current_user.id and not has_role(current_user, "admin"):
         raise HTTPException(403, "Bukan shift Anda")
 
     # Hitung total cash dari penjualan selama shift ini
@@ -101,7 +102,7 @@ def get_shifts(skip: int = 0, limit: int = 50,
     # 👇 UBAH: Filter list shift berdasarkan cabang yang aktif
     q = get_query(db, models.Shift, current_user)
     
-    if current_user.role != "admin":
+    if not has_role(current_user, "admin"):
         q = q.filter(models.Shift.user_id == current_user.id)
         
     shifts = q.order_by(models.Shift.id.desc()).offset(skip).limit(limit).all()

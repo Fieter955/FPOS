@@ -23,6 +23,7 @@ function getToken() {
 
 function setToken(t) {
   localStorage.setItem("ipos_token", t);
+  sessionStorage.removeItem("fpos_effective_permissions");
 }
 
 function clearToken() {
@@ -30,6 +31,7 @@ function clearToken() {
   localStorage.removeItem("ipos_user");
   // Bersihkan juga sesi cabang saat logout
   localStorage.removeItem("active_branch_id");
+  sessionStorage.removeItem("fpos_effective_permissions");
 }
 
 function getUser() {
@@ -73,6 +75,9 @@ async function api(method, path, body = null) {
     clearToken();
     window.location.href = "/";
     return;
+  }
+  if (r.status === 403) {
+    sessionStorage.removeItem(PERMISSION_CACHE_KEY);
   }
 
   let d;
@@ -170,6 +175,132 @@ function invalidateCache(path) {
 function requireAuth() {
   if (!getToken()) window.location.href = "/";
 }
+
+// ==============================================================================
+// Hak akses berbasis role
+// ==============================================================================
+const PERMISSION_CACHE_KEY = "fpos_effective_permissions";
+
+function getPermissionState() {
+  try {
+    return JSON.parse(sessionStorage.getItem(PERMISSION_CACHE_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+async function loadMyPermissions(force = false) {
+  if (!getToken()) return { is_admin: false, grants: {} };
+  const cached = getPermissionState();
+  if (!force && cached) return cached;
+  const state = await api("GET", "/auth/permissions/me");
+  try {
+    sessionStorage.setItem(PERMISSION_CACHE_KEY, JSON.stringify(state));
+  } catch {}
+  return state;
+}
+
+function hasPermission(permissionKey, action = "view", state = null) {
+  const permissions = state || getPermissionState();
+  if (!permissions) return false;
+  if (permissions.is_admin) return true;
+  return (permissions.grants?.[permissionKey] || []).includes(action);
+}
+
+async function can(permissionKey, action = "view") {
+  const state = await loadMyPermissions();
+  return hasPermission(permissionKey, action, state);
+}
+
+function renderAccessDenied(message = "Anda tidak memiliki hak akses untuk membuka modul ini.") {
+  if (document.getElementById("permissionDeniedOverlay")) return;
+  const overlay = document.createElement("div");
+  overlay.id = "permissionDeniedOverlay";
+  overlay.style.cssText =
+    "position:fixed;inset:0;z-index:99999999;background:var(--bg-color,#eef2f7);display:flex;align-items:center;justify-content:center;padding:24px;";
+  overlay.innerHTML = `
+    <div style="width:min(480px,100%);background:var(--card-bg,#fff);border:1px solid var(--border-color,#cbd5e1);border-radius:24px;padding:32px;text-align:center;box-shadow:0 20px 50px rgba(15,23,42,.16)">
+      <div style="width:64px;height:64px;border-radius:18px;background:rgba(239,68,68,.12);color:#ef4444;display:grid;place-items:center;margin:0 auto 18px;font-size:30px">🔒</div>
+      <h2 style="margin-bottom:8px">Akses Ditolak</h2>
+      <p style="margin:0 0 22px">${message}</p>
+      <button class="btn btn-primary" onclick="location.href='/dashboard'">Kembali ke Dashboard</button>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function requirePagePermission(permissionKey, action = "view") {
+  try {
+    const allowed = await can(permissionKey, action);
+    if (!allowed) renderAccessDenied();
+    return allowed;
+  } catch (error) {
+    if (error?.message) renderAccessDenied(error.message);
+    return false;
+  }
+}
+
+function applyPermissionVisibility(root = document) {
+  const state = getPermissionState();
+  if (!state) return;
+  root.querySelectorAll("[data-permission]").forEach((element) => {
+    const key = element.dataset.permission;
+    const action = element.dataset.permissionAction || "view";
+    element.style.display = hasPermission(key, action, state) ? "" : "none";
+  });
+}
+
+const PAGE_PERMISSIONS = {
+  "/pos": ["sales.cashier", "view"],
+  "/pos_2": ["sales.cashier", "view"],
+  "/sales": ["sales.transaction", "view"],
+  "/shifts": ["sales.cashier", "view"],
+  "/returns": ["sales.return", "view"],
+  "/delivery": ["sales.transaction", "view"],
+  "/trade_in": ["sales.trade_in", "view"],
+  "/po": ["purchase.order", "view"],
+  "/setor": ["accounting.cash_in", "view"],
+  "/setoran": ["accounting.cash_in", "view"],
+  "/item/items": ["master.item", "view"],
+  "/item/dashboard": ["master.item", "view"],
+  "/item/kategori": ["master.type", "view"],
+  "/item/merek": ["master.brand", "view"],
+  "/item/satuan": ["master.unit", "view"],
+  "/item/units": ["master.unit", "view"],
+  "/purchases": ["purchase.transaction", "view"],
+  "/purchase/purchases": ["purchase.transaction", "view"],
+  "/purchase/catat-pembelian": ["purchase.transaction", "create"],
+  "/catat-pembelian": ["purchase.transaction", "create"],
+  "/purchase/detail_item": ["purchase.transaction", "view"],
+  "/detail_item": ["purchase.transaction", "view"],
+  "/inventory": ["inventory.item_in", "view"],
+  "/warehouse": ["inventory.transfer", "view"],
+  "/assembly": ["assembly.transaction", "view"],
+  "/unit_conversion": ["master.unit", "view"],
+  "/konsinyasi": ["inventory.item_in", "view"],
+  "/reports": ["report.sales", "view"],
+  "/accounting": ["accounting.journal", "view"],
+  "/customers": ["master.customer", "view"],
+  "/supplier/dashboard": ["master.supplier", "view"],
+  "/supplier/tambahSuplier": ["master.supplier", "create"],
+  "/discounts": ["master.discount_period", "view"],
+  "/branches": ["master.warehouse", "view"],
+  "/users": ["settings.user_management", "access"],
+  "/barcode": ["master.barcode", "view"],
+  "/settings": ["settings.general", "access"],
+};
+
+document.addEventListener("DOMContentLoaded", async () => {
+  if (!getToken()) return;
+  try {
+    await loadMyPermissions();
+    applyPermissionVisibility();
+    const path = location.pathname.replace(/\.html$/, "").replace(/\/$/, "") || "/";
+    const required = PAGE_PERMISSIONS[path];
+    if (required) await requirePagePermission(required[0], required[1]);
+  } catch {
+    // Handler 401 global pada api() akan mengarahkan kembali ke halaman login.
+  }
+});
 
 // Debounce: tunda eksekusi `fn` sampai `ms` ms berlalu tanpa panggilan baru.
 // Dipakai untuk input pencarian agar tidak memicu request/render tiap ketukan huruf.

@@ -1,7 +1,7 @@
 from datetime import datetime
 
 import pytz
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Table, Text, Date, Index
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Table, Text, Date, Index, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
@@ -15,7 +15,7 @@ class User(Base):
     email = Column(String(100), unique=True, nullable=True)
     full_name = Column(String(100))
     hashed_password = Column(String(255), nullable=False)
-    role = Column(String(20), default="kasir")
+    role = Column(String(255), default="kasir")
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
@@ -59,6 +59,29 @@ class Role(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(50), unique=True, nullable=False)
     description = Column(Text)
+    permissions = relationship(
+        "RolePermission",
+        back_populates="role",
+        cascade="all, delete-orphan",
+    )
+
+
+class RolePermission(Base):
+    __tablename__ = "role_permissions"
+    __table_args__ = (
+        UniqueConstraint(
+            "role_id",
+            "permission_key",
+            "action",
+            name="uq_role_permission_action",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    role_id = Column(Integer, ForeignKey("roles.id", ondelete="CASCADE"), nullable=False, index=True)
+    permission_key = Column(String(100), nullable=False, index=True)
+    action = Column(String(30), nullable=False)
+    role = relationship("Role", back_populates="permissions")
 
     # ─── Data Cabang ─────────────────────────────────────────────────────────────
 class Branch(Base):
@@ -941,6 +964,220 @@ class Assembly(Base):
 
     bom = relationship("BillOfMaterial", back_populates="assemblies")
     creator = relationship("User")
+
+
+# Alur perakitan baru dipisah menjadi tiga dokumen. Tabel ``assemblies`` di atas
+# tetap dipertahankan agar instalasi lama dapat dimigrasikan tanpa mem-posting
+# ulang mutasi stok yang sudah pernah terjadi.
+class AssemblyCustomerOrder(Base):
+    """Pesanan perakitan pelanggan; belum mengubah persediaan."""
+    __tablename__ = "assembly_customer_orders"
+    __table_args__ = (
+        Index("ix_assembly_orders_branch_date", "branch_id", "date"),
+        Index("ix_assembly_orders_customer_id", "customer_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    number = Column(String(50), unique=True, nullable=False)
+    date = Column(Date, nullable=False)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
+    status = Column(String(30), default="open", nullable=False)
+    notes = Column(Text)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+
+    branch = relationship("Branch")
+    customer = relationship("Customer")
+    creator = relationship("User")
+    lines = relationship(
+        "AssemblyCustomerOrderLine", back_populates="order",
+        cascade="all, delete-orphan",
+    )
+    processes = relationship("AssemblyProcess", back_populates="order")
+
+
+class AssemblyCustomerOrderLine(Base):
+    __tablename__ = "assembly_customer_order_lines"
+    __table_args__ = (
+        Index("ix_assembly_order_lines_order_id", "order_id"),
+        Index("ix_assembly_order_lines_bom_id", "bom_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer, ForeignKey("assembly_customer_orders.id"), nullable=False)
+    bom_id = Column(Integer, ForeignKey("bill_of_materials.id"), nullable=False)
+    product_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    qty_ordered = Column(Float, nullable=False)
+    qty_processed = Column(Float, default=0, nullable=False)
+
+    order = relationship("AssemblyCustomerOrder", back_populates="lines")
+    bom = relationship("BillOfMaterial")
+    product = relationship("Item")
+    process_lines = relationship("AssemblyProcessLine", back_populates="order_line")
+
+
+class AssemblyProcess(Base):
+    """Dokumen proses: bahan dipotong saat dokumen ini diposting."""
+    __tablename__ = "assembly_processes"
+    __table_args__ = (
+        Index("ix_assembly_processes_branch_date", "branch_id", "date"),
+        Index("ix_assembly_processes_order_id", "order_id"),
+        Index("ix_assembly_processes_warehouse_id", "warehouse_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    number = Column(String(50), unique=True, nullable=False)
+    date = Column(Date, nullable=False)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
+    order_id = Column(Integer, ForeignKey("assembly_customer_orders.id"), nullable=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=True)
+    status = Column(String(30), default="in_progress", nullable=False)
+    notes = Column(Text)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+    legacy_assembly_id = Column(Integer, unique=True, nullable=True)
+    is_legacy = Column(Boolean, default=False, nullable=False)
+
+    branch = relationship("Branch")
+    order = relationship("AssemblyCustomerOrder", back_populates="processes")
+    customer = relationship("Customer")
+    warehouse = relationship("Warehouse")
+    creator = relationship("User", foreign_keys=[created_by])
+    lines = relationship(
+        "AssemblyProcessLine", back_populates="process",
+        cascade="all, delete-orphan",
+    )
+    results = relationship("AssemblyResult", back_populates="process")
+
+
+class AssemblyProcessLine(Base):
+    """Target produk dan snapshot biaya/formula pada saat mulai proses."""
+    __tablename__ = "assembly_process_lines"
+    __table_args__ = (
+        Index("ix_assembly_process_lines_process_id", "process_id"),
+        Index("ix_assembly_process_lines_product_id", "product_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    process_id = Column(Integer, ForeignKey("assembly_processes.id"), nullable=False)
+    order_line_id = Column(Integer, ForeignKey("assembly_customer_order_lines.id"), nullable=True)
+    bom_id = Column(Integer, ForeignKey("bill_of_materials.id"), nullable=True)
+    product_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    product_stock_item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    qty_target = Column(Float, nullable=False)
+    qty_completed = Column(Float, default=0, nullable=False)
+    formula_output_qty = Column(Float, nullable=False)
+    material_cost_total = Column(Float, default=0, nullable=False)
+    operational_cost_total = Column(Float, default=0, nullable=False)
+    allocated_cost = Column(Float, default=0, nullable=False)
+
+    process = relationship("AssemblyProcess", back_populates="lines")
+    order_line = relationship("AssemblyCustomerOrderLine", back_populates="process_lines")
+    bom = relationship("BillOfMaterial")
+    product = relationship("Item", foreign_keys=[product_id])
+    product_stock_item = relationship("Item", foreign_keys=[product_stock_item_id])
+    materials = relationship(
+        "AssemblyProcessMaterial", back_populates="process_line",
+        cascade="all, delete-orphan",
+    )
+    result_lines = relationship("AssemblyResultLine", back_populates="process_line")
+
+
+class AssemblyProcessMaterial(Base):
+    """Snapshot satu bahan dalam satu baris proses."""
+    __tablename__ = "assembly_process_materials"
+    __table_args__ = (Index("ix_assembly_process_materials_line_id", "process_line_id"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    process_line_id = Column(Integer, ForeignKey("assembly_process_lines.id"), nullable=False)
+    material_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    stock_item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    qty_required = Column(Float, nullable=False)
+    total_cost = Column(Float, default=0, nullable=False)
+
+    process_line = relationship("AssemblyProcessLine", back_populates="materials")
+    material = relationship("Item", foreign_keys=[material_id])
+    stock_item = relationship("Item", foreign_keys=[stock_item_id])
+    allocations = relationship(
+        "AssemblyMaterialBatchAllocation", back_populates="material_line",
+        cascade="all, delete-orphan",
+    )
+
+
+class AssemblyMaterialBatchAllocation(Base):
+    """Lapisan FIFO bahan yang dikonsumsi, untuk costing dan reversal."""
+    __tablename__ = "assembly_material_batch_allocations"
+    __table_args__ = (Index("ix_assembly_material_alloc_line_id", "material_line_id"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    material_line_id = Column(Integer, ForeignKey("assembly_process_materials.id"), nullable=False)
+    batch_id = Column(Integer, ForeignKey("stock_batches.id"), nullable=True)
+    qty = Column(Float, nullable=False)
+    unit_cost = Column(Float, default=0, nullable=False)
+
+    material_line = relationship("AssemblyProcessMaterial", back_populates="allocations")
+    batch = relationship("StockBatch")
+
+
+class AssemblyResult(Base):
+    """Satu posting hasil jadi; satu proses dapat mempunyai banyak hasil parsial."""
+    __tablename__ = "assembly_results"
+    __table_args__ = (
+        Index("ix_assembly_results_process_id", "process_id"),
+        Index("ix_assembly_results_branch_date", "branch_id", "date"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    number = Column(String(50), unique=True, nullable=False)
+    process_id = Column(Integer, ForeignKey("assembly_processes.id"), nullable=False)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=True)
+    date = Column(Date, nullable=False)
+    status = Column(String(20), default="posted", nullable=False)
+    closes_process = Column(Boolean, default=False, nullable=False)
+    notes = Column(Text)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reversed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    reversed_at = Column(DateTime(timezone=True), nullable=True)
+    is_legacy = Column(Boolean, default=False, nullable=False)
+
+    process = relationship("AssemblyProcess", back_populates="results")
+    branch = relationship("Branch")
+    warehouse = relationship("Warehouse")
+    creator = relationship("User", foreign_keys=[created_by])
+    reverser = relationship("User", foreign_keys=[reversed_by])
+    lines = relationship(
+        "AssemblyResultLine", back_populates="result",
+        cascade="all, delete-orphan",
+    )
+
+
+class AssemblyResultLine(Base):
+    __tablename__ = "assembly_result_lines"
+    __table_args__ = (Index("ix_assembly_result_lines_result_id", "result_id"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    result_id = Column(Integer, ForeignKey("assembly_results.id"), nullable=False)
+    process_line_id = Column(Integer, ForeignKey("assembly_process_lines.id"), nullable=False)
+    product_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    stock_item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    qty_finished = Column(Float, nullable=False)
+    stock_qty_finished = Column(Float, nullable=False)
+    unit_cost = Column(Float, default=0, nullable=False)
+    allocated_cost = Column(Float, default=0, nullable=False)
+    batch_id = Column(Integer, ForeignKey("stock_batches.id"), nullable=True)
+
+    result = relationship("AssemblyResult", back_populates="lines")
+    process_line = relationship("AssemblyProcessLine", back_populates="result_lines")
+    product = relationship("Item", foreign_keys=[product_id])
+    stock_item = relationship("Item", foreign_keys=[stock_item_id])
+    batch = relationship("StockBatch")
 
 
 # ─── Notifikasi WA/Telegram ────────────────────────────────────────────────────

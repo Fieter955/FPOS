@@ -13,6 +13,7 @@ from typing import Optional
 from pydantic import BaseModel
 from ..database import get_db
 from ..auth import get_current_user
+from ..permissions import has_permission
 from .. import models
 from ..ai_engine import get_engine, build_business_context, build_anomaly_context
 
@@ -274,7 +275,7 @@ def detect_anomaly(
     Deteksi pola mencurigakan dalam transaksi.
     Menganalisis: diskon berlebihan, transaksi ganjil, pola kasir mencurigakan, dll.
     """
-    if current_user.role not in ["admin"]:
+    if not has_permission(db, current_user, "report.financial", "view"):
         raise HTTPException(403, "Fitur ini hanya untuk admin/pemilik toko")
 
     try:

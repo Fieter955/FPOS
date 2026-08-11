@@ -18,24 +18,10 @@
   <style>
     * {
       -webkit-tap-highlight-color: transparent;
-      font-family: 'Tahoma', sans-serif !important;
-    }
-
-    /* Kembalikan font monospace khusus untuk Struk/Receipt */
-    #rcptBox,
-    #rcptBox * {
-      font-family: 'Courier New', Courier, monospace !important;
     }
 
     body {
       overflow: hidden;
-    }
-
-    input,
-    select,
-    button,
-    textarea {
-      font-family: 'Tahoma', sans-serif !important;
     }
 
     .pos-layout {
@@ -181,13 +167,13 @@
     }
 
     .search-inp {
-      width: 50%;
-      padding: 0.45rem 0.9rem;
+      width: 100%;
+      padding: 12px 18px;
       border-radius: 100px;
       border: 2px solid var(--border-color);
       background: var(--bg-color);
       color: var(--text-main);
-      font-size: 0.95rem;
+      font-size: 16px;
       outline: none;
       font-family: inherit;
       box-sizing: border-box;
@@ -318,17 +304,23 @@
     }
 
     #btnPayCancel.kb-focus,
-    #btnRcptTutup.kb-focus {
+    #btnRcptTutup.kb-focus,
+    #btnQtyBatal.kb-focus {
       outline-color: #ef4444 !important;
       background: #ef4444 !important;
       border-color: #ef4444 !important;
       color: #fff !important;
     }
 
+    #qtyInp.kb-focus {
+      outline: 3px solid var(--primary);
+      outline-offset: 2px;
+    }
+
     .rcpt-btn {
-      padding: 0.7rem;
-      border-radius: 0.55rem;
-      font-size: 0.85rem;
+      padding: 11px;
+      border-radius: 9px;
+      font-size: 13px;
       font-weight: 700;
       cursor: pointer;
       transition: 0.2s;
@@ -378,16 +370,16 @@
     .qty-ctrl {
       display: flex;
       align-items: center;
-      gap: 0.3rem;
+      gap: 5px;
       flex-shrink: 0;
     }
 
     .qty-btn {
-      width: 1.5rem;
-      height: 1.5rem;
-      border-radius: 0.4rem;
+      width: 26px;
+      height: 26px;
+      border-radius: 7px;
       border: none;
-      font-size: 0.9rem;
+      font-size: 14px;
       font-weight: 700;
       cursor: pointer;
       display: flex;
@@ -400,25 +392,6 @@
     .qty-btn:hover {
       background: var(--primary);
       color: #fff;
-    }
-
-    /* Input Qty di dalam baris keranjang (ketik jumlah langsung, lalu Enter). */
-    .qty-cell-inp {
-      width: 2.6rem;
-      text-align: center;
-      font-weight: 700;
-      font-size: 0.85rem;
-      padding: 0.2rem 0.15rem;
-      border: 1px solid var(--border-color);
-      border-radius: 0.4rem;
-      background: var(--input-bg);
-      color: var(--text-main);
-    }
-
-    .qty-cell-inp:focus {
-      outline: 2px solid var(--primary);
-      outline-offset: 1px;
-      border-color: var(--primary);
     }
 
     .ci-sub {
@@ -434,10 +407,10 @@
       background: rgba(239, 68, 68, 0.15);
       color: #ef4444;
       border: none;
-      border-radius: 0.3rem;
-      width: 1.25rem;
-      height: 1.25rem;
-      font-size: 0.72rem;
+      border-radius: 5px;
+      width: 20px;
+      height: 20px;
+      font-size: 12px;
       cursor: pointer;
       flex-shrink: 0;
       display: flex;
@@ -462,17 +435,17 @@
     .pay-btns {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 0.4rem;
-      margin-bottom: 0.5rem;
+      gap: 6px;
+      margin-bottom: 8px;
     }
 
     .pay-btn {
-      padding: 0.55rem 0.25rem;
-      border-radius: 0.55rem;
+      padding: 9px 4px;
+      border-radius: 9px;
       border: 2px solid var(--border-color);
       background: transparent;
       color: var(--text-muted);
-      font-size: 0.8rem;
+      font-size: 12px;
       font-weight: 700;
       cursor: pointer;
       font-family: inherit;
@@ -486,305 +459,15 @@
       color: #fff;
     }
 
-    /* --- Modal Pembayaran (Multi-Split Payment) --- */
-    .mpy-box,
-    .mpy-box * {
-      font-family: 'Tahoma', sans-serif !important;
-    }
-
-    .mpy-box {
-      max-width: 42rem !important;
-      padding: 0 !important;
-      overflow: hidden !important;
-      border-radius: var(--radius-lg, 1rem) !important;
-    }
-
-    .mpy-hdr {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0.8rem 1.2rem 0.4rem;
-      background: transparent;
-      color: var(--text-main);
-      font-weight: 800;
-      font-size: 1.1rem;
-      letter-spacing: 0.02em;
-      border-bottom: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
-    }
-
-    /* --- Total Banner: label kiri, angka besar kanan di kotak kuning/hijau --- */
-    .mpy-total-banner {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      padding: 0.6rem 1.2rem;
-      background: linear-gradient(135deg,
-          color-mix(in srgb, var(--primary) 20%, var(--card-bg)),
-          color-mix(in srgb, var(--primary) 8%, var(--card-bg)));
-      border-bottom: 1px solid var(--border-color);
-    }
-
-    .mpy-total-lbl {
-      font-size: 1.1rem;
-      font-weight: 800;
-      color: var(--text-main);
-      white-space: nowrap;
-    }
-
-    .mpy-total-val {
-      flex: 1;
-      text-align: right;
-      font-size: clamp(1.6rem, 5vw, 2.5rem);
-      font-weight: 400;
-      color: #000;
-      padding: 0.35rem 0.8rem;
-      background: linear-gradient(135deg, #ffe600, #ffc800);
-      border-radius: 0.5rem;
-      line-height: 1.15;
-      overflow-wrap: anywhere;
-    }
-
-    /* --- Body: baris-baris form --- */
-    .mpy-body {
-      padding: 0.75rem 1.2rem 0.5rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.45rem;
-    }
-
-    .mpy-row {
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-      padding: 0.25rem 0;
-      border-bottom: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
-    }
-
-    .mpy-row:last-child {
-      border-bottom: none;
-    }
-
-    .mpy-lbl {
-      font-size: 0.8rem;
-      font-weight: 400;
-      color: var(--text-muted);
-      white-space: nowrap;
-      min-width: 6rem;
-      text-align: right;
-      flex-shrink: 0;
-    }
-
-    .mpy-lbl-sm {
-      min-width: auto;
-      margin-left: 0.2rem;
-    }
-
-    .mpy-sep {
-      width: 1px;
-      height: 1.5rem;
-      background: var(--border-color);
-      flex-shrink: 0;
-      margin: 0 0.25rem;
-    }
-
-    /* --- Input shared style --- */
-    .mpy-inp {
-      padding: 0.35rem 0.5rem;
-      border-radius: 0.4rem;
-      border: 1.5px solid var(--border-color);
-      background: var(--bg-color);
-      color: var(--text-main);
-      font-size: 0.85rem;
-      font-weight: 400;
-      font-family: inherit;
-      outline: none;
-      transition: border-color 0.15s;
-      box-sizing: border-box;
-    }
-
-    .mpy-inp:focus {
-      border-color: var(--primary);
-      box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 20%, transparent);
-    }
-
-    .mpy-inp-num {
-      width: 7rem;
-      text-align: right;
-      flex-shrink: 0;
-    }
-
-    .mpy-inp-sel {
-      flex: 1;
-      min-width: 0;
-      cursor: pointer;
-    }
-
-    .mpy-inp-sel-sm {
-      width: 5rem;
-      flex-shrink: 0;
-      cursor: pointer;
-    }
-
-    .mpy-inp-ref {
-      flex: 1;
-      min-width: 0;
-      text-align: left;
-    }
-
-    .mpy-inp-mini {
-      width: 3.5rem;
-      text-align: center;
-      flex-shrink: 0;
-    }
-
-    /* --- Summary bars: Total Bayar (hijau) & Kembali (kuning/biru) --- */
-    .mpy-summary {
-      padding: 0.5rem 1.2rem 0.6rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.4rem;
-    }
-
-    .mpy-sum-row {
-      display: flex;
-      align-items: center;
-      gap: 0.8rem;
-      padding: 0.5rem 0.8rem;
-      border-radius: 0.5rem;
-    }
-
-    .mpy-sum-bayar {
-      background: linear-gradient(135deg, #10b981, #059669);
-    }
-
-    .mpy-sum-kembali {
-      background: linear-gradient(135deg, #f4a460, #ed8b2f);
-    }
-
-    .mpy-sum-lbl {
-      font-size: 0.95rem;
-      font-weight: 400;
-      color: #fff;
-      white-space: nowrap;
-    }
-
-    .mpy-sum-val {
-      flex: 1;
-      text-align: right;
-      font-size: 1.35rem;
-      font-weight: 400;
-      color: #fff;
-      line-height: 1.1;
-    }
-
-    [data-theme="dark"] .mpy-sum-bayar .mpy-sum-lbl,
-    [data-theme="dark"] .mpy-sum-bayar .mpy-sum-val,
-    [data-theme="dark"] .mpy-sum-kembali .mpy-sum-lbl,
-    [data-theme="dark"] .mpy-sum-kembali .mpy-sum-val {
-      color: #000;
-    }
-
-    /* --- Tombol aksi: 3 kolom sejajar --- */
-    .mpy-actions {
-      display: flex;
-      gap: 0.5rem;
-      padding: 0 1.2rem 0.6rem;
-    }
-
-    .mpy-act-btn {
-      flex: 1;
-      padding: 0.6rem 0.4rem;
-      border-radius: 0.5rem;
-      font-size: 0.82rem;
-      font-weight: 400;
-      cursor: pointer;
-      font-family: inherit;
-      border: 2px solid transparent;
-      transition: all 0.15s;
-      text-align: center;
-    }
-
-    .mpy-btn-cetak,
-    .mpy-btn-simpan,
-    .mpy-btn-batal {
-      background: transparent;
-      color: white;
-      border-color: white;
-    }
-
-    .mpy-btn-cetak:hover,
-    .mpy-btn-simpan:hover,
-    .mpy-btn-batal:hover {
-      background: rgba(0, 0, 0, 0.05);
-    }
-
-    [data-theme="dark"] .mpy-btn-cetak,
-    [data-theme="dark"] .mpy-btn-simpan,
-    [data-theme="dark"] .mpy-btn-batal {
-      color: #fff;
-      border-color: #fff;
-    }
-
-    [data-theme="dark"] .mpy-btn-cetak:hover,
-    [data-theme="dark"] .mpy-btn-simpan:hover,
-    [data-theme="dark"] .mpy-btn-batal:hover {
-      background: rgba(255, 255, 255, 0.1);
-    }
-
-    .mpy-act-btn.kb-focus {
-      outline: 3px solid var(--primary);
-      outline-offset: 2px;
-      transform: scale(1.03);
-    }
-
-    /* --- Shortcut info bar di bawah --- */
-    .mpy-shortcut {
-      display: flex;
-      justify-content: center;
-      gap: 1.5rem;
-      padding: 0.45rem 1.2rem;
-      font-size: 0.7rem;
-      font-weight: 600;
-      color: var(--text-muted);
-      background: color-mix(in srgb, var(--border-color) 30%, transparent);
-      border-top: 1px solid var(--border-color);
-    }
-
-    @media (max-width: 560px) {
-      .mpy-box {
-        max-width: 100% !important;
-      }
-
-      .mpy-row {
-        flex-wrap: wrap;
-      }
-
-      .mpy-sep {
-        display: none;
-      }
-
-      .mpy-lbl {
-        min-width: 5rem;
-      }
-
-      .mpy-inp-num {
-        width: 5.5rem;
-      }
-
-      .mpy-actions {
-        flex-direction: column;
-      }
-    }
-
     .bayar-btn {
       width: 100%;
-      height: 2.5rem;
-      font-size: 1rem;
+      height: 48px;
+      font-size: 16px;
       font-weight: 700;
       background: var(--primary);
       color: #fff;
       border: none;
-      border-radius: 0.7rem;
+      border-radius: 12px;
       cursor: pointer;
       font-family: inherit;
     }
@@ -792,933 +475,295 @@
     .bayar-btn:active {
       transform: scale(0.97);
     }
-
-    /* =====================================================================
-         LAYAR KASIR KLASIK (gaya iPos) — spasi DINAMIS (rem/clamp, BUKAN px)
-         supaya pas di monitor kecil maupun besar, dan RAPAT agar banyak
-         barang muat. Semua jarak diatur dari satu tempat lewat variabel
-         --sp-* di .ipos-screen (tinggal ubah di sini untuk lebih rapat/longgar).
-         Style lama (.pos-*, .item-*, .cart-*) tetap ada untuk dipakai-ulang
-         sebagiannya (.qty-btn, .ci-del, .bayar-btn) atau jadi tak-terpakai.
-         ===================================================================== */
-    .ipos-screen {
-      /* Skala jarak: ikut ukuran layar (vw/vh) tapi dibatasi min–max (rem).
-         Nilai diperbesar (kira-kira 2×) supaya tiap bagian punya ruang napas,
-         tidak mepet ke pinggir/pojok, dan antar-komponen terlihat terpisah. */
-      --sp-x: clamp(0.9rem, 1.6vw, 1.6rem);
-      /* padding kiri-kanan seksi */
-      --sp-y: clamp(0.55rem, 1vh, 0.9rem);
-      /* padding atas-bawah seksi */
-      --cell-x: clamp(0.6rem, 1vw, 1rem);
-      /* padding sel tabel (X) */
-      --cell-y: clamp(0.45rem, 0.85vh, 0.7rem);
-      /* padding sel tabel (Y) — lebih lega */
-      --gap: clamp(0.5rem, 1vw, 0.95rem);
-      /* jarak antar elemen */
-      --radius: 0.7rem;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      height: 100dvh;
-      overflow: hidden;
-      box-sizing: border-box;
-      background: var(--bg-color);
-      /* Beri jarak di semua tepi + antar-seksi supaya tiap bagian (banner,
-         info, pencarian, tabel, footer) tampak sebagai kartu terpisah dan
-         tidak menempel ke pinggir/pojok layar. */
-      padding: var(--sp-y) var(--sp-x);
-      gap: var(--sp-y);
-    }
-
-    /* --- Banner TOTAL --- */
-    .ipos-total-banner {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--sp-x);
-      /* Padding atas-bawah diperbesar → banner lebih tinggi, tulisan TOTAL
-         terlihat lebih ke tengah & turun ke bawah. */
-      padding: clamp(1rem, 3vh, 2.4rem) clamp(1.4rem, 3vw, 2.8rem);
-      background: linear-gradient(180deg, #1e3a5f, #14253d);
-      color: #fff;
-      flex-shrink: 0;
-      border-radius: var(--radius);
-    }
-
-    .ipos-total-banner .lbl {
-      font-size: clamp(1.5rem, 4.2vw, 3rem);
-      font-weight: 400;
-      letter-spacing: 0.06em;
-    }
-
-    .ipos-total-banner .val {
-      font-size: clamp(1.9rem, 6.8vw, 4rem);
-      font-weight: 400;
-      text-align: right;
-      overflow-wrap: anywhere;
-      line-height: 1.05;
-    }
-
-    .ipos-total-banner .val .rp {
-      font-size: 0.55em;
-      opacity: 0.85;
-      margin-right: 0.4em;
-      font-weight: 400;
-    }
-
-    /* --- Info bar: Pelanggan (Stiker Card) + Meta --- */
-    .ipos-infobar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--gap) var(--sp-x);
-      padding: var(--sp-y) var(--sp-x);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius);
-      background: var(--card-bg);
-      flex-shrink: 0;
-      flex-wrap: wrap;
-    }
-
-    .ipos-cust {
-      display: flex;
-      align-items: center;
-      gap: var(--sp-y) var(--gap);
-      flex-wrap: wrap;
-      min-width: 0;
-    }
-
-    .ipos-cust label {
-      font-size: 0.9rem;
-      font-weight: 700;
-      color: var(--text-muted);
-    }
-
-    .ipos-cust select {
-      margin: 0;
-      padding: 0.4rem 0.65rem;
-      font-size: 0.9rem;
-      width: auto;
-    }
-
-    #custNameDisplay {
-      font-weight: 800;
-      color: #ef4444;
-      font-size: 0.95rem;
-    }
-
-    .ipos-meta {
-      display: flex;
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius);
-      overflow: hidden;
-      flex-shrink: 0;
-    }
-
-    .ipos-meta .cell {
-      padding: 0.3rem 0.95rem;
-      text-align: center;
-      border-left: 1px solid var(--border-color);
-    }
-
-    .ipos-meta .cell:first-child {
-      border-left: none;
-    }
-
-    .ipos-meta .cell .k {
-      color: var(--text-muted);
-      font-size: 0.68rem;
-      text-transform: uppercase;
-      letter-spacing: 0.03em;
-    }
-
-    .ipos-meta .cell .v {
-      font-weight: 800;
-      color: var(--primary);
-      font-size: 0.9rem;
-    }
-
-    /* --- Search + dropdown hasil pencarian --- */
-    .ipos-search {
-      position: relative;
-      padding: var(--sp-y) var(--sp-x);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius);
-      background: var(--card-bg);
-      flex-shrink: 0;
-    }
-
-    .ipos-search .search-inp {
-      padding: 0.6rem 1.1rem;
-      font-size: 1rem;
-      font-weight: 400;
-    }
-
-    .search-results {
-      position: absolute;
-      left: var(--sp-x);
-      width: 48.5%;
-      top: calc(100% - 2px);
-      max-height: 45vh;
-      overflow-y: auto;
-      background: var(--card-bg);
-      border: 2px solid var(--primary);
-      border-top: none;
-      border-radius: 0 0 0.75rem 0.75rem;
-      z-index: 600;
-      box-shadow: 0 0.75rem 1.875rem rgba(0, 0, 0, 0.25);
-      display: none;
-    }
-
-    .search-results.show {
-      display: block;
-    }
-
-    .search-result {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--sp-x);
-      padding: 0.4rem 0.7rem;
-      cursor: pointer;
-      border-bottom: 1px solid var(--border-color);
-    }
-
-    .search-result:last-child {
-      border-bottom: none;
-    }
-
-    .search-result.kb-focus,
-    .search-result:hover {
-      background: rgba(16, 185, 129, 0.12);
-    }
-
-    .search-result .sr-name {
-      font-weight: 400;
-      color: var(--text-main);
-    }
-
-    .search-result .sr-meta {
-      font-size: 0.72rem;
-      color: var(--text-muted);
-      margin-top: 0.1rem;
-    }
-
-    .search-result .sr-price {
-      font-weight: 800;
-      color: var(--primary);
-      white-space: nowrap;
-    }
-
-    /* --- Tabel transaksi --- */
-    /* Dibingkai & diberi jarak dari pinggir layar supaya terlihat sebagai
-       satu komponen tersendiri (tidak menyatu dengan search/footer). */
-    .ipos-table-wrap {
-      flex: 1;
-      overflow: auto;
-      background: var(--card-bg);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius);
-    }
-
-    .ipos-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.95rem;
-    }
-
-    .ipos-table thead th {
-      position: sticky;
-      top: 0;
-      z-index: 1;
-      background: var(--card-bg);
-      border-bottom: 2px solid var(--border-color);
-      padding: var(--cell-y) var(--cell-x);
-      font-size: 0.8rem;
-      text-transform: uppercase;
-      letter-spacing: 0.03em;
-      color: var(--text-muted);
-      text-align: left;
-      white-space: nowrap;
-    }
-
-    /* Garis pemisah antar-kolom (grid) — tampak jelas walau tabel masih kosong. */
-    .ipos-table th,
-    .ipos-table td {
-      border-right: 1px solid var(--border-color);
-    }
-
-    .ipos-table th:last-child,
-    .ipos-table td:last-child {
-      border-right: none;
-    }
-
-    /* Selang-seling warna baris agar batas tiap baris makin terlihat. */
-    .ipos-table tbody tr:nth-child(even) {
-      background: rgba(0, 0, 0, 0.025);
-    }
-
-    /* Baris kosong pengisi: menjaga garis kolom tetap tampak sebelum ada barang.
-       Tingginya disamakan dengan baris barang agar kisi tampak seragam. */
-    .ipos-table tbody tr.ipos-filler-row td {
-      height: 2.8rem;
-      color: var(--text-muted);
-    }
-
-    .ipos-table .empty-hint {
-      color: var(--text-muted);
-      font-style: italic;
-    }
-
-    .ipos-table th.num,
-    .ipos-table td.num {
-      text-align: right;
-      white-space: nowrap;
-    }
-
-    .ipos-table th.ctr,
-    .ipos-table td.ctr {
-      text-align: center;
-      white-space: nowrap;
-    }
-
-    .ipos-table tbody td {
-      padding: var(--cell-y) var(--cell-x);
-      border-bottom: 1px solid var(--border-color);
-      color: var(--text-main);
-      vertical-align: middle;
-    }
-
-    .ipos-table tbody tr:hover {
-      background: rgba(0, 0, 0, 0.03);
-    }
-
-    /* Baris keranjang yang barangnya SEDANG AKTIF (baru diklik) — penanda warna
-       + garis aksen di kiri, supaya kasir tahu barang mana yang sedang dipilih
-       untuk tombol "Detail Item". */
-    .ipos-table tbody tr.row-active {
-      background: var(--primary-light) !important;
-      box-shadow: inset 3px 0 0 var(--primary);
-    }
-
-    .ipos-table .col-code {
-      font-family: "Courier New", monospace;
-      font-size: 0.82rem;
-      color: var(--text-muted);
-      white-space: nowrap;
-    }
-
-    .ipos-table .col-sub {
-      font-weight: 800;
-      color: var(--primary);
-    }
-
-    /* Input Pot 1–4 (potongan %) di dalam sel tabel keranjang — kompak, rata kanan. */
-    .ipos-table .pot-inp {
-      width: 3.4rem;
-      max-width: 100%;
-      text-align: right;
-      font-size: 0.9rem;
-      font-weight: 700;
-      font-family: inherit;
-      color: var(--text-main);
-      background: var(--bg-color);
-      border: 1px solid var(--border-color);
-      border-radius: 0.35rem;
-      padding: 0.2rem 0.35rem;
-      box-sizing: border-box;
-      -moz-appearance: textfield;
-    }
-
-    .ipos-table .pot-inp::-webkit-outer-spin-button,
-    .ipos-table .pot-inp::-webkit-inner-spin-button {
-      -webkit-appearance: none;
-      margin: 0;
-    }
-
-    .ipos-table .pot-inp:focus {
-      outline: none;
-      border-color: var(--primary);
-      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
-    }
-
-    .ipos-empty-row td {
-      text-align: center;
-      color: var(--text-muted);
-      padding: 2.5rem 0.625rem;
-    }
-
-    /* --- Footer: pintasan/barang aktif + ringkasan --- */
-    .ipos-footer {
-      display: flex;
-      gap: var(--sp-x);
-      align-items: stretch;
-      padding: 0.3rem var(--sp-x);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius);
-      background: var(--card-bg);
-      flex-shrink: 0;
-      min-height: 0;
-    }
-
-    .ipos-hints {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-start;
-      gap: 0.4rem;
-      font-size: 0.88rem;
-      color: var(--text-muted);
-    }
-
-    .ipos-hints .active-item {
-      font-weight: 800;
-      color: var(--text-main);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      max-width: 100%;
-      display: inline-block;
-      vertical-align: bottom;
-    }
-
-    .ipos-summary {
-      width: clamp(15rem, 28vw, 22rem);
-      max-width: 50vw;
-      flex-shrink: 0;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-
-    .ipos-preview-box {
-      width: clamp(12rem, 20vw, 18rem);
-      flex-shrink: 0;
-      background: rgba(0, 0, 0, 0.02);
-      border: 2px dashed var(--border-color);
-      border-radius: var(--radius);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--text-muted);
-      overflow: hidden;
-      position: relative;
-      transition: all 0.3s ease;
-    }
-
-    [data-theme="dark"] .ipos-preview-box {
-      background: rgba(255, 255, 255, 0.02);
-    }
-
-    .ipos-preview-box .preview-placeholder {
-      text-align: center;
-      font-size: 0.85rem;
-      font-weight: 700;
-      opacity: 0.6;
-    }
-
-    .ipos-preview-box img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      position: absolute;
-      top: 0;
-      left: 0;
-    }
-
-    .ipos-action-row {
-      display: flex;
-      gap: 0.6rem;
-      align-items: center;
-      margin-bottom: 0.4rem;
-    }
-
-    .action-btn {
-      padding: 0.45rem 0.8rem;
-      background: rgba(16, 185, 129, 0.1);
-      color: var(--primary);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-      border-radius: 0.4rem;
-      font-weight: 700;
-      font-size: 0.85rem;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      white-space: nowrap;
-    }
-
-    .action-btn:hover {
-      background: var(--primary);
-      color: #fff;
-    }
-
-    .keterangan-inp {
-      width: 30%;
-      padding: 0.45rem 0.8rem;
-      background: var(--bg-color);
-      border: 1px dashed var(--border-color);
-      border-radius: 0.4rem;
-      color: var(--text-main);
-      font-size: 0.85rem;
-      font-family: inherit;
-      transition: all 0.2s ease;
-    }
-
-    .keterangan-inp:focus {
-      outline: none;
-      border-style: solid;
-      border-color: var(--primary);
-      background: transparent;
-      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
-    }
-
-    .ipos-summary-table {
-      border: 2px solid var(--border-color);
-      border-radius: var(--radius);
-      overflow: hidden;
-    }
-
-    .ipos-summary-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: var(--sp-x);
-      margin-bottom: 0;
-      padding: 0.3rem 0.7rem;
-      font-size: 0.95rem;
-    }
-
-    .ipos-summary-row:not(:last-of-type) {
-      border-bottom: 2px solid var(--border-color);
-    }
-
-    .ipos-summary-row .k {
-      color: var(--text-muted);
-    }
-
-    .ipos-summary-row .v {
-      font-weight: 700;
-      min-width: 6rem;
-      text-align: right;
-      overflow-wrap: anywhere;
-    }
-
-    /* Baris TOTAL (Kembali) — penekanan, dipakai lewat class .grand */
-    .ipos-summary-row.grand {
-      font-size: 1.45rem;
-      font-weight: 900;
-      border-top: 2px solid var(--border-color);
-      padding-top: 0.55rem;
-    }
-
-    .ipos-summary-row.grand .k {
-      color: var(--text-main);
-    }
-
-    .cost-inp {
-      width: 45%;
-      min-width: 0;
-      text-align: right;
-      font-family: inherit;
-      font-size: 0.95rem;
-      font-weight: 700;
-      color: var(--text-main);
-      background: var(--bg-color);
-      border: 1px solid var(--border-color);
-      border-radius: 0.4rem;
-      padding: 0.3rem 0.5rem;
-      transition: all 0.2s ease;
-    }
-
-    .cost-inp:focus {
-      outline: none;
-      border-color: var(--primary);
-      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
-    }
-
-    @media (max-width: 760px) {
-      .ipos-footer {
-        flex-direction: column;
-      }
-
-      .ipos-summary {
-        width: 100%;
-        max-width: 100%;
-      }
-    }
-
-    /* --- Popup Detail Barang (histori beli & jual, read-only) --- */
-    .dh-box {
-      max-width: 40rem !important;
-      width: 100%;
-      padding: 0 !important;
-      overflow: hidden !important;
-      border-radius: var(--radius-lg, 1rem) !important;
-      display: flex;
-      flex-direction: column;
-      max-height: 88vh;
-    }
-
-    .dh-hdr {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0.7rem 1.2rem;
-      background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 70%, #000));
-      color: #fff;
-      font-weight: 800;
-      font-size: 0.95rem;
-    }
-
-    .dh-tabs {
-      display: flex;
-      gap: 0.5rem;
-      padding: 0.75rem 1.2rem 0;
-    }
-
-    .dh-tab {
-      flex: 1;
-      padding: 0.55rem;
-      border-radius: 0.5rem 0.5rem 0 0;
-      border: 1px solid var(--border-color);
-      border-bottom: none;
-      background: var(--bg-color);
-      color: var(--text-muted);
-      font-weight: 700;
-      font-size: 0.85rem;
-      cursor: pointer;
-      font-family: inherit;
-    }
-
-    .dh-tab.active {
-      background: var(--primary);
-      border-color: var(--primary);
-      color: #fff;
-    }
-
-    .dh-body {
-      flex: 1;
-      overflow: auto;
-      padding: 0 1.2rem;
-      min-height: 12rem;
-    }
-
-    .dh-table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-
-    .dh-table th {
-      position: sticky;
-      top: 0;
-      background: var(--card-bg);
-      border-bottom: 2px solid var(--border-color);
-      padding: 0.6rem 0.7rem;
-      font-size: 0.72rem;
-      text-transform: uppercase;
-      letter-spacing: 0.03em;
-      color: var(--text-muted);
-      text-align: left;
-    }
-
-    .dh-table td {
-      padding: 0.55rem 0.7rem;
-      border-bottom: 1px solid var(--border-color);
-      font-size: 0.9rem;
-      color: var(--text-main);
-    }
-
-    .dh-table th.num,
-    .dh-table td.num {
-      text-align: right;
-      white-space: nowrap;
-    }
-
-    .dh-table tbody tr:nth-child(even) {
-      background: rgba(0, 0, 0, 0.02);
-    }
-
-    .dh-foot {
-      padding: 0.75rem 1.2rem;
-      border-top: 1px solid var(--border-color);
-      display: flex;
-      justify-content: flex-end;
-    }
   </style>
 </head>
 
 <body>
-  <div class="ipos-screen">
-    <!-- Banner TOTAL -->
-    <div class="ipos-total-banner">
-      <div class="lbl">TOTAL :</div>
-      <div class="val" id="bannerTotalEl"><span class="rp">Rp.</span>0</div>
-    </div>
+  <!-- FAB Keranjang Mobile -->
+  <button class="cart-fab" id="cartFab" onclick="toggleCartPanel()">
+    🛒
+    <span class="badge" id="cartFabBadge">0</span>
+  </button>
 
-    <!-- Info bar: Stiker Card / Pelanggan + Meta (data nyata) -->
-    <div class="ipos-infobar">
-      <div class="ipos-cust">
-        <button class="btn" style="
-              padding: 0.3rem 0.6rem;
-              background: rgba(255, 255, 255, 0.1);
-              color: var(--text-main);
-              border: 1px solid var(--border-color);
-              font-size: 0.8rem;
-              font-weight: bold;
-            " onclick="location.href = '/dashboard'">
-          ← Kembali
-        </button>
-        <label>Stiker Card / Pelanggan:</label>
-        <select id="custSel" class="input-control" onchange="handleCustomerChange()">
-          <option value="">👤 Pelanggan Umum</option>
-        </select>
-        <select id="groupSel" class="input-control" onchange="handleDiscountGroupChange()" style="display: none;">
-          <option value="">Grup Diskon: Umum</option>
-        </select>
-        <span id="custNameDisplay"></span>
-      </div>
-      <div class="ipos-meta" id="metaBar"></div>
-    </div>
-
-    <!-- Search + dropdown hasil pencarian (muncul hanya saat mengetik) -->
-    <div class="ipos-search">
-      <input type="text" id="searchInp" class="search-inp"
-        placeholder="🔍 Scan / ketik kode atau nama barang…  (Tekan F8/Insert untuk Bayar)" autofocus autocomplete="off"
-        oninput="filterItems()" />
-      <div class="search-results" id="searchResults"></div>
-    </div>
-
-    <!-- Tabel transaksi (keranjang) -->
-    <div class="ipos-table-wrap">
-      <table class="ipos-table">
-        <thead>
-          <tr>
-            <th class="ctr" style="width: 40px;">No</th>
-            <th style="width: 120px;">Kode Item</th>
-            <th style="width: 100%;">Nama Barang</th>
-            <th class="ctr" style="width: 140px; min-width: 140px;">Qty</th>
-            <th class="num" style="width: 160px; min-width: 160px;">Harga</th>
-            <th class="num" style="width: 110px; min-width: 110px;">Potongan</th>
-            <th class="num" style="width: 170px; min-width: 170px;">Jumlah</th>
-            <th class="ctr" style="width: 50px; min-width: 50px;"></th>
-          </tr>
-        </thead>
-        <tbody id="cartTableBody"></tbody>
-      </table>
-    </div>
-
-    <!-- Footer: pintasan + barang aktif (kiri) & ringkasan (kanan) -->
-    <div class="ipos-footer">
-      <div class="ipos-hints">
-        <div class="ipos-action-row">
-          <button class="action-btn" id="btnDetailItem" onclick="bukaDetailBarang()">Detail Item</button>
-          <button class="action-btn" id="btnHold" onclick="holdTransaction()"
-            style="color: #eab308; border-color: rgba(234, 179, 8, 0.3); background: rgba(234, 179, 8, 0.1);">⏸️
-            Pending</button>
-          <button class="action-btn" id="btnRecall" onclick="showPendingModal()"
-            style="color: #3b82f6; border-color: rgba(59, 130, 246, 0.3); background: rgba(59, 130, 246, 0.1);">📂
-            Daftar Pending (<span id="pendingCount">0</span>)</button>
-          <input class="keterangan-inp" type="text" placeholder="Tambahkan keterangan / catatan...">
-          <button class="action-btn" id="btnDetailDisc" onclick="bukaDetailPotongan()">Detail Potongan</button>
+  <div class="pos-layout">
+    <div class="pos-left">
+      <div class="search-bar">
+        <div style="
+              display: flex;
+              gap: 8px;
+              align-items: center;
+              margin-bottom: 8px;
+            ">
+          <button class="btn" style="
+                padding: 10px 14px;
+                background: rgba(255, 255, 255, 0.1);
+                color: var(--text-main);
+                border: 1px solid var(--border-color);
+                flex-shrink: 0;
+                font-size: 13px;
+                font-weight: bold;
+              " onclick="location.href = '/dashboard'">
+            ← Kembali
+          </button>
+          <input type="text" id="searchInp" class="search-inp"
+            placeholder="🔍 Cari barang... (Tekan F8/Insert untuk Bayar)" autofocus autocomplete="off"
+            oninput="filterItems()" />
         </div>
-
-        <div>
-          Pintasan: <b>End</b> Bayar · <b>Esc</b> Batal · <b>↑↓</b> Pilih hasil
-          · <b>Enter</b> Tambah
-        </div>
-        <div>
-          Barang aktif:
-          <span class="active-item" id="activeItemName">—</span>
-        </div>
-        <div>
-          🛒
-          <span id="cartCount" style="
-                background: var(--primary-light);
-                color: var(--primary);
-                padding: 0.05rem 0.5rem;
-                border-radius: 99rem;
-                font-size: 0.72rem;
-                font-weight: 700;
-              ">0</span>
-          item
-          <button onclick="clearCart()" style="
-                margin-left: 0.6rem;
-                font-size: 0.72rem;
-                color: var(--text-muted);
-                background: none;
-                border: none;
-                cursor: pointer;
-                text-decoration: underline;
-              ">
-            Kosongkan
+        <div class="cat-scroll" id="catBar">
+          <button class="cat-btn active" onclick="setCat('')" id="cat_all">
+            Semua
           </button>
         </div>
       </div>
-      <div class="ipos-preview-box" id="itemPreviewBox">
-        <div class="preview-placeholder">
-          <span style="font-size: 2.2rem; margin-bottom: 0.3rem; display: block;">🖼️</span>
-          <span>Preview Barang</span>
-        </div>
-        <img id="itemPreviewImg" alt="Preview Barang" decoding="async" style="display: none"
-          onerror="this.style.display='none'; var p=this.parentElement.querySelector('.preview-placeholder'); if(p)p.style.display='';" />
-      </div>
-      <div class="ipos-summary">
-        <div class="ipos-summary-table">
-          <div class="ipos-summary-row">
-            <span class="k">Sub Total</span><span class="v" id="subTotal">0</span>
-          </div>
-          <div class="ipos-summary-row">
-            <span class="k" style="display: flex; align-items: center; gap: 4px;">
-              Potongan
-              <input type="number" id="invoiceDiscPct"
-                style="width: 45px; font-size: 0.85rem; padding: 0.1rem; text-align: center; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-color); color: var(--text-main);"
-                placeholder="0" oninput="calcInvoiceDiscPct(this)" /> %
-            </span>
-            <input type="text" id="invoiceDiscAmt" class="cost-inp" placeholder="0,00" value="0,00"
-              onfocus="this.select()" inputmode="numeric" autocomplete="off"
-              oninput="formatBiayaLain(this); calcInvoiceDiscAmt(this)" />
-          </div>
-          <div class="ipos-summary-row">
-            <span class="k">Jumlah</span><span class="v" id="sumGross">Rp 0</span>
-          </div>
-          <div class="ipos-summary-row">
-            <span class="k">Biaya Lain</span><input type="text" id="othercost" class="cost-inp" placeholder="0,00"
-              value="0,00" onfocus="this.select()" inputmode="numeric" autocomplete="off"
-              oninput="formatBiayaLain(this); recalc()" />
-          </div>
-          <div class="ipos-summary-row" id="ppnRow" style="display: none">
-            <span class="k" id="ppnLabel">Termasuk PPN</span><span class="v" id="ppnEl">Rp 0</span>
-          </div>
-          <input type="hidden" id="discPct" value="0" />
-          <input type="hidden" id="taxPct" value="0" />
-          <input type="hidden" id="paidInp" value="0" />
-        </div>
 
-        <button class="bayar-btn" style="margin-top: 0.5rem" onclick="openPayModal()">
-          ✓ BAYAR (AND)
+      <div class="item-grid-wrap" id="scrollWrap">
+        <div class="item-grid" id="itemGrid"></div>
+        <div id="emptyItems" style="
+              display: none;
+              text-align: center;
+              padding: 60px 20px;
+              color: var(--text-muted);
+            ">
+          <div style="font-size: 48px; margin-bottom: 12px">📦</div>
+          <p>Tidak ada barang</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="pos-right" id="cartPanel">
+      <div class="cart-header">
+        <div style="font-size: 16px; font-weight: 800">
+          🛒 Tagihan &nbsp;<span id="cartCount" style="
+                background: var(--primary-light);
+                color: var(--primary);
+                padding: 2px 10px;
+                border-radius: 99px;
+                font-size: 13px;
+              ">0</span>
+        </div>
+        <button onclick="clearCart()" style="
+              font-size: 12px;
+              color: var(--text-muted);
+              background: none;
+              border: none;
+              cursor: pointer;
+            ">
+          Kosongkan
         </button>
+      </div>
+
+      <div style="
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border-color);
+            display: grid;
+            gap: 8px;
+          ">
+        <select id="custSel" class="input-control" style="margin: 0; padding: 9px 12px; font-size: 13px"
+          onchange="handleCustomerChange()">
+          <option value="">👤 Pelanggan Umum</option>
+        </select>
+        <select id="groupSel" class="input-control" style="margin: 0; padding: 9px 12px; font-size: 13px"
+          onchange="handleDiscountGroupChange()">
+          <option value="">Grup Diskon: Umum</option>
+        </select>
+      </div>
+
+      <div class="cart-items" id="cartList">
+        <div style="
+              padding: 32px;
+              text-align: center;
+              color: var(--text-muted);
+              font-size: 14px;
+            ">
+          Belum ada barang
+        </div>
+      </div>
+
+      <!-- Footer Desktop -->
+      <div class="cart-footer">
+        <div class="ttl-row">
+          <span style="color: var(--text-muted)">Subtotal</span><span id="subtotalEl">Rp 0</span>
+        </div>
+        <div class="ttl-row" id="ppnRow" style="display: none">
+          <span style="color: var(--text-muted)" id="ppnLabel">Termasuk PPN</span><span id="ppnEl">Rp 0</span>
+        </div>
+        <div class="ttl-row" style="
+              font-size: clamp(1.25rem, 6vw, 1.75rem);
+              font-weight: 900;
+              border-top: 2px solid var(--border-color);
+              padding-top: 0.5rem;
+              margin-bottom: 0.625rem;
+            ">
+          <span>TOTAL</span><span id="totalEl"
+            style="color: var(--primary); min-width: 0; text-align: right; overflow-wrap: anywhere">Rp 0</span>
+        </div>
+        <input type="hidden" id="discPct" value="0" />
+        <input type="hidden" id="taxPct" value="0" />
+        <input type="hidden" id="paidInp" value="0" />
+
+        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px">
+          <button onclick="clearCart()" style="
+                padding: 12px;
+                border-radius: 10px;
+                border: 2px solid var(--border-color);
+                background: transparent;
+                color: var(--text-muted);
+                font-size: 14px;
+                font-weight: 700;
+                cursor: pointer;
+              ">
+            ✕
+          </button>
+          <button class="bayar-btn" onclick="openPayModal()">
+            ✓ BAYAR (F8)
+          </button>
+        </div>
+      </div>
+
+      <!-- Footer Mobile: Tombol Kembali & Bayar -->
+      <div class="mobile-cart-actions">
+        <button class="btn-back" onclick="closeCartPanel()">← Kembali</button>
+        <button class="btn-pay" onclick="handleMobilePay()">💳 Bayar</button>
       </div>
     </div>
   </div>
 
+  <!-- Modal Qty -->
+  <div class="modal-overlay" id="modalQty" style="display: none; z-index: 9999">
+    <div class="modal-box" style="max-width: 320px; text-align: center">
+      <h3 id="qtyItemName" style="margin-top: 0; margin-bottom: 15px; color: var(--text-main)">
+        Nama Barang
+      </h3>
+      <label style="color: var(--text-muted)">Masukkan Jumlah (Qty):</label>
 
+      <input type="number" id="qtyInp" class="input-control kb-focus" value="1" min="1" style="
+            font-size: 2rem;
+            font-weight: 900;
+            text-align: center;
+            margin: 0.9375rem 0;
+            padding: 0.9375rem;
+            border-radius: 0.9375rem;
+            color: var(--primary);
+          " />
+      <div id="priceSelectorBox" style="
+            display: none;
+            margin-bottom: 15px;
+            background: rgba(0, 0, 0, 0.05);
+            padding: 10px;
+            border-radius: 10px;
+            text-align: left;
+          ">
+        <div style="
+              font-size: 12px;
+              color: var(--text-muted);
+              margin-bottom: 8px;
+              text-align: center;
+              font-weight: bold;
+            ">
+          Pilih Harga Jual:
+        </div>
+        <div style="display: flex; justify-content: center; gap: 20px">
+          <label style="
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                font-weight: bold;
+                color: var(--primary);
+              ">
+            <input type="radio" name="rdoPrice" id="rdoNormal" value="normal" checked />
+            Normal (<span id="lblNormal">0</span>)
+          </label>
+          <label style="
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                font-weight: bold;
+                color: #f59e0b;
+              ">
+            <input type="radio" name="rdoPrice" id="rdoDiskon" value="diskon" />
+            Diskon (<span id="lblDiskon">0</span>)
+          </label>
+        </div>
+      </div>
+
+      <div style="
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 15px;
+          ">
+        <button id="btnQtyBatal" class="rcpt-btn" style="
+              flex: 1;
+              background: transparent;
+              color: #ef4444;
+              border: 2px solid #ef4444;
+            " onclick="closeModals()">
+          ✕ Batal
+        </button>
+        <button id="btnQtySimpan" class="rcpt-btn" style="flex: 1; background: #10b981; color: white; border: none"
+          onclick="confirmQty()">
+          ✓ Simpan
+        </button>
+      </div>
+
+      <div style="
+            font-size: 12px;
+            color: gray;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 10px;
+            border-radius: 8px;
+          ">
+        ( ↓ ) Pindah Menu &nbsp; | &nbsp; ( → ) Geser
+      </div>
+    </div>
+  </div>
 
   <!-- Modal Pembayaran -->
   <div class="modal-overlay" id="modalPay" style="display: none; z-index: 9999">
-    <div class="modal-box mpy-box">
-      <!-- Header Bar -->
-      <div class="mpy-hdr">
-        <span>💳 Pembayaran</span>
-        <button class="btn-x" onclick="closeModals()" style="color:var(--text-muted);font-size:1.4rem">×</button>
+    <div class="modal-box" style="max-width: 26.25rem">
+      <h2 style="margin-top: 0; text-align: center">💳 Pembayaran</h2>
+      <div style="
+            font-size: clamp(1.875rem, 10vw, 3rem);
+            font-weight: 900;
+            color: var(--primary);
+            margin: 0.9375rem 0;
+            text-align: center;
+            overflow-wrap: anywhere;
+          " id="payTotalDisplay">
+        Rp 0
       </div>
 
-      <!-- Banner TOTAL — sesuai gambar: label kiri, angka besar kanan bg kuning/hijau -->
-      <div class="mpy-total-banner">
-        <span class="mpy-total-lbl">Total :</span>
-        <div class="mpy-total-val" id="payTotalDisplay">Rp 0</div>
-      </div>
+      <label style="color: var(--text-muted); font-size: 0.8125rem">Uang Diterima dari Pelanggan:</label>
+      <input type="number" id="payInpModal" class="input-control" value="0" style="
+            font-size: 1.5rem;
+            font-weight: bold;
+            text-align: right;
+            margin-bottom: 0.9375rem;
+            padding: 0.75rem;
+          " />
 
-      <!-- Form Pembayaran — baris demi baris mirip tabel -->
-      <div class="mpy-body">
-
-        <!-- Baris 1: Tunai | Deposit -->
-        <div class="mpy-row">
-          <label class="mpy-lbl">Tunai :</label>
-          <input type="text" inputmode="numeric" id="payInpTunai" class="mpy-inp mpy-inp-num" value="0"
-            oninput="formatBiayaLain(this); hitungTotalBayar()" />
-          <span class="mpy-sep"></span>
-          <label class="mpy-lbl" id="lblSaldoPelanggan">Saldo Pelanggan :</label>
-          <input type="text" inputmode="numeric" id="payInpDeposit" class="mpy-inp mpy-inp-num" style="flex: 1"
-            value="0" oninput="formatBiayaLain(this); hitungTotalBayar()" />
-        </div>
-
-        <!-- Baris 2: Kredit | Pel. / Jt. -->
-        <div class="mpy-row">
-          <label class="mpy-lbl">Kredit :</label>
-          <input type="text" inputmode="numeric" id="payInpKredit" class="mpy-inp mpy-inp-num" value="0"
-            oninput="formatBiayaLain(this); hitungTotalBayar()" />
-          <span class="mpy-sep"></span>
-          <label class="mpy-lbl mpy-lbl-sm">Pel. :</label>
-          <select id="payKreditPel" class="mpy-inp mpy-inp-sel" onchange="syncCustomerToMain()">
-            <option value="">UMUM/CASH</option>
-          </select>
-          <label class="mpy-lbl mpy-lbl-sm" style="display: none;">Jt. :</label>
-          <input type="number" id="payKreditJt" class="mpy-inp mpy-inp-mini" value="10" style="display: none;" />
-        </div>
-
-        <!-- Baris 3: Kartu Debit | Bank + Ref -->
-        <div class="mpy-row">
-          <label class="mpy-lbl">Kartu Debit :</label>
-          <input type="text" inputmode="numeric" id="payInpDebit" class="mpy-inp mpy-inp-num" value="0"
-            oninput="formatBiayaLain(this); hitungTotalBayar()" />
-          <span class="mpy-sep"></span>
-          <label class="mpy-lbl mpy-lbl-sm">Bank :</label>
-          <select id="payBankDebit" class="mpy-inp mpy-inp-sel-sm">
-            <option value="">—</option>
-          </select>
-          <input type="text" id="payRefDebit" class="mpy-inp mpy-inp-ref" placeholder="No. Ref" />
-        </div>
-
-        <!-- Baris 4: Kartu Kredit | Bank + Ref -->
-        <div class="mpy-row">
-          <label class="mpy-lbl">Kartu Kredit :</label>
-          <input type="text" inputmode="numeric" id="payInpKartuKredit" class="mpy-inp mpy-inp-num" value="0"
-            oninput="formatBiayaLain(this); hitungTotalBayar()" />
-          <span class="mpy-sep"></span>
-          <label class="mpy-lbl mpy-lbl-sm">Bank :</label>
-          <select id="payBankKartuKredit" class="mpy-inp mpy-inp-sel-sm">
-            <option value="">—</option>
-          </select>
-          <input type="text" id="payRefKartuKredit" class="mpy-inp mpy-inp-ref" placeholder="No. Ref" />
-        </div>
-
-        <!-- Baris 5: E-Money | Prod. + Ref -->
-        <div class="mpy-row">
-          <label class="mpy-lbl">E-Money :</label>
-          <input type="text" inputmode="numeric" id="payInpEmoney" class="mpy-inp mpy-inp-num" value="0"
-            oninput="formatBiayaLain(this); hitungTotalBayar()" />
-          <span class="mpy-sep"></span>
-          <label class="mpy-lbl mpy-lbl-sm">Prod. :</label>
-          <select id="payProdEmoney" class="mpy-inp mpy-inp-sel-sm">
-            <option value="">—</option>
-          </select>
-          <input type="text" id="payRefEmoney" class="mpy-inp mpy-inp-ref" placeholder="No. Ref" />
-        </div>
-
-      </div>
-
-      <!-- Summary: Total Bayar & Kembali — mirip bar hijau/kuning di gambar -->
-      <div class="mpy-summary">
-        <div class="mpy-sum-row mpy-sum-bayar">
-          <span class="mpy-sum-lbl">Total Bayar :</span>
-          <div class="mpy-sum-val" id="payTotalBayarDisplay">Rp 0</div>
-        </div>
-        <div class="mpy-sum-row mpy-sum-kembali">
-          <span class="mpy-sum-lbl">Kembali :</span>
-          <div class="mpy-sum-val" id="payKembaliDisplay">Rp 0</div>
-        </div>
-      </div>
-
-      <!-- Tombol Aksi — 3 kolom sejajar seperti gambar -->
-      <div class="mpy-actions">
-        <button class="mpy-act-btn mpy-btn-cetak" id="btnPaySimpanCetak" onclick="simpanDanCetak()">
-          🖨️ Simpan + Cetak
+      <label style="
+            color: var(--text-muted);
+            font-size: 13px;
+            margin-bottom: 5px;
+            display: block;
+          ">Pilih Metode (Kiri/Kanan):</label>
+      <div class="pay-btns" id="payModalBtns" style="grid-template-columns: repeat(4, 1fr)">
+        <button class="pay-btn" id="btnPayCancel" style="color: #ef4444; border-color: #ef4444" onclick="closeModals()">
+          ✕ Batal
         </button>
-        <button class="mpy-act-btn mpy-btn-simpan" id="btnPaySimpan" onclick="simpanPembayaran()">
-          💾 Simpan
+        <button class="pay-btn" id="btnPayCash" onclick="setPayMethodAndConfirm('cash')">
+          💵 Cash
         </button>
-        <button class="mpy-act-btn mpy-btn-batal" id="btnPayCancel" onclick="closeModals()">
-          ↩ Batal
+        <button class="pay-btn" id="btnPayTrans" onclick="setPayMethodAndConfirm('transfer')">
+          🏦 Trf
+        </button>
+        <button class="pay-btn" id="btnPayCard" onclick="setPayMethodAndConfirm('card')">
+          💳 Kartu
         </button>
       </div>
-
-      <!-- Shortcut info -->
-      <div class="mpy-shortcut">
-        <span>[Page-Up / Page-Down] : Berpindah</span>
-        <span>[Enter] : Validasi</span>
-      </div>
-
-      <input type="hidden" id="payInpModal" value="0" />
     </div>
   </div>
 
@@ -1728,148 +773,13 @@
           background: #fff;
           color: #222;
           width: 100%;
-          max-width: 22.5rem;
-          border-radius: 1.25rem;
-          padding: 1.5rem;
+          max-width: 360px;
+          border-radius: 20px;
+          padding: 24px;
           font-family: &quot;Courier New&quot;, monospace;
           max-height: 90vh;
           overflow-y: auto;
         "></div>
-  </div>
-
-  <!-- Modal Detail Barang: histori beli & jual barang aktif (hanya lihat) -->
-  <div class="modal-overlay" id="detailModal" style="display: none; z-index: 9999"
-    onclick="if(event.target===this)closeModals()">
-    <div class="modal-box dh-box">
-      <div class="dh-hdr">
-        <span>📊 Detail Barang — <span id="dhNamaBarang">-</span></span>
-        <button class="btn-x" onclick="closeModals()" style="color:rgba(255,255,255,.7);font-size:1.4rem">×</button>
-      </div>
-      <div class="dh-tabs">
-        <button class="dh-tab active" id="dhTabBeli" onclick="gantiTabHistori('beli')">🛒 Riwayat Harga Beli</button>
-        <button class="dh-tab" id="dhTabJual" onclick="gantiTabHistori('jual')">💰 Riwayat Harga Jual</button>
-      </div>
-      <div class="dh-body">
-        <table class="dh-table">
-          <thead>
-            <tr>
-              <th style="text-align:center">Tanggal</th>
-              <th id="dhColPihak">Supplier</th>
-              <th class="num">Jumlah</th>
-              <th style="text-align:center">Satuan</th>
-              <th class="num">Harga</th>
-              <th class="num">Pot.</th>
-              <th class="num">Harga Stlh Pot.</th>
-            </tr>
-          </thead>
-          <tbody id="dhBody">
-            <tr>
-              <td colspan="7" style="text-align:center;color:var(--text-muted);padding:1.5rem">Memuat…</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="dh-foot">
-        <button class="rcpt-btn" style="background:var(--primary);color:#fff;border:none;padding:0.6rem 1.4rem"
-          onclick="closeModals()">Tutup</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal Detail Potongan -->
-  <div class="modal-overlay" id="detailPotonganModal" style="display: none; z-index: 9999"
-    onclick="if(event.target===this)closeModals()">
-    <div class="modal-box dh-box"
-      style="max-width: 800px !important; width: 90vw; min-height: 65vh; display: flex; flex-direction: column;">
-      <div class="dh-hdr" style="padding: 1.5rem;">
-        <span style="font-size: 1.25rem;">✂️ Detail Potongan — <span id="dpNamaBarang">-</span></span>
-        <button class="btn-x" onclick="closeModals()" style="color:rgba(255,255,255,.7);font-size:1.8rem">×</button>
-      </div>
-      <div class="dh-body"
-        style="padding: 1.5rem; flex: 1; display: flex; flex-direction: column; justify-content: center;">
-        <table class="dh-table" style="width: 100%; height: 100%;">
-          <thead>
-            <tr>
-              <th style="text-align:left; width: 50%; font-size: 1.1rem; padding: 1rem;">Jenis Potongan</th>
-              <th style="text-align:right; font-size: 1.1rem; padding: 1rem;">Nilai (%)</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td style="font-weight: 500; font-size: 1.1rem; padding: 1.25rem 1rem;">Potongan Pertama</td>
-              <td style="padding: 1.25rem 1rem;"><input type="number" id="dpPot1" class="cost-inp" step="0.01" min="0"
-                  max="100"
-                  style="width: 100%; text-align: right; padding: 0.75rem; font-size: 1.2rem; border-radius: 8px;" />
-              </td>
-            </tr>
-            <tr>
-              <td style="font-weight: 500; font-size: 1.1rem; padding: 1.25rem 1rem;">Potongan Kedua</td>
-              <td style="padding: 1.25rem 1rem;"><input type="number" id="dpPot2" class="cost-inp" step="0.01" min="0"
-                  max="100"
-                  style="width: 100%; text-align: right; padding: 0.75rem; font-size: 1.2rem; border-radius: 8px;" />
-              </td>
-            </tr>
-            <tr>
-              <td style="font-weight: 500; font-size: 1.1rem; padding: 1.25rem 1rem;">Potongan Ketiga</td>
-              <td style="padding: 1.25rem 1rem;"><input type="number" id="dpPot3" class="cost-inp" step="0.01" min="0"
-                  max="100"
-                  style="width: 100%; text-align: right; padding: 0.75rem; font-size: 1.2rem; border-radius: 8px;" />
-              </td>
-            </tr>
-            <tr>
-              <td style="font-weight: 500; font-size: 1.1rem; padding: 1.25rem 1rem;">Potongan Keempat</td>
-              <td style="padding: 1.25rem 1rem;"><input type="number" id="dpPot4" class="cost-inp" step="0.01" min="0"
-                  max="100"
-                  style="width: 100%; text-align: right; padding: 0.75rem; font-size: 1.2rem; border-radius: 8px;" />
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="dh-foot" style="display: flex; gap: 0.75rem; justify-content: flex-end; padding: 1.25rem 1.5rem;">
-        <button class="rcpt-btn"
-          style="background:transparent;color:var(--text-main);border:1px solid var(--border-color);padding:0.75rem 1.8rem; font-size: 1.1rem;"
-          onclick="closeModals()">Batal</button>
-        <button class="rcpt-btn"
-          style="background:var(--primary);color:#fff;border:none;padding:0.75rem 1.8rem; font-size: 1.1rem;"
-          onclick="simpanDetailPotongan()">Simpan</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal Daftar Pending -->
-  <div class="modal-overlay" id="pendingModal" style="display: none; z-index: 9999"
-    onclick="if(event.target===this)closeModals()">
-    <div class="modal-box dh-box" style="max-width: 900px !important; width: 95vw; height: 85vh;">
-      <div class="dh-hdr">
-        <span>📂 Daftar Transaksi Pending</span>
-        <button class="btn-x" onclick="closeModals()" style="color:rgba(255,255,255,.7);font-size:1.4rem">×</button>
-      </div>
-      <div class="dh-body" style="padding-top: 1rem;">
-        <table class="dh-table">
-          <thead>
-            <tr>
-              <th style="text-align:center">Waktu</th>
-              <th>Pelanggan</th>
-              <th>Keterangan</th>
-              <th class="num">Item</th>
-              <th class="num">Total</th>
-              <th style="text-align:center">Aksi</th>
-            </tr>
-          </thead>
-          <tbody id="pendingBody">
-            <tr>
-              <td colspan="6" style="text-align:center;color:var(--text-muted);padding:1.5rem">Tidak ada transaksi
-                pending.</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="dh-foot">
-        <button class="rcpt-btn" style="background:var(--primary);color:#fff;border:none;padding:0.6rem 1.4rem"
-          onclick="closeModals()">Tutup</button>
-      </div>
-    </div>
   </div>
 
   <script src="/js/api.js"></script>
@@ -1890,7 +800,9 @@
     let currentFilteredItems = [];
     let kbFocusIndex = -1;
     let activeModal = null;
-    let barangAktif = null; // barang yang sedang disorot (untuk tombol Detail Item & preview)
+    let pendingItemId = null,
+      pendingSupplierId = null; // 🚚 Supplier ID dari barcode khusus
+    let qtyIdx = 0;
 
     let payModalMethods = ["cancel", "cash", "transfer", "card"];
     let payModalIdx = 1;
@@ -1900,30 +812,36 @@
     // 📡 MASTER CONTROLLER: SENSOR KEYBOARD & SCANNER (PENGATUR LALU LINTAS)
     // =======================================================================
     document.addEventListener("keydown", function (e) {
-      // 0. SAAT MENGETIK DI INPUT POTONGAN (Pot 1–4) KERANJANG: biarkan keyboard
-      //    bekerja normal (angka, panah naik/turun nilai). Enter → commit + fokus
-      //    balik ke pencarian. Jangan jalankan pintasan kasir (F8/panah/Enter).
-      if (e.target && e.target.classList && e.target.classList.contains("pot-inp")) {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          e.target.blur(); // memicu onchange (commit) → hitung ulang baris
-          document.getElementById("searchInp").focus();
+      // 1. KONTROL MODAL QTY (JUMLAH BARANG)
+      if (activeModal === "qty") {
+        if (e.key === "Escape") {
+          closeModals();
+          return;
         }
-        return;
-      }
-
-      // 1. SAAT MENGETIK DI INPUT QTY KERANJANG: biarkan keyboard bekerja normal
-      //    (angka). Enter → commit (blur memicu onchange→setQty) lalu fokus balik
-      //    ke pencarian barang untuk item berikutnya.
-      if (
-        e.target &&
-        e.target.classList &&
-        e.target.classList.contains("qty-cell-inp")
-      ) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          changeQtyIdx(1);
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          changeQtyIdx(0);
+          return;
+        }
+        if (e.key === "ArrowRight" && qtyIdx > 0) {
+          e.preventDefault();
+          changeQtyIdx(2);
+          return;
+        }
+        if (e.key === "ArrowLeft" && qtyIdx > 0) {
+          e.preventDefault();
+          changeQtyIdx(1);
+          return;
+        }
         if (e.key === "Enter") {
           e.preventDefault();
-          e.target.blur(); // memicu onchange → setQty (commit + hitung ulang)
-          document.getElementById("searchInp").focus();
+          if (qtyIdx === 1) closeModals();
+          else confirmQty();
         }
         return;
       }
@@ -1978,16 +896,6 @@
         return;
       }
 
-      // 4b. KONTROL MODAL DETAIL BARANG (histori beli/jual) — Esc menutup,
-      //     tombol lain ditelan agar tak memicu pintasan kasir.
-      if (activeModal === "detail") {
-        if (e.key === "Escape") {
-          e.preventDefault();
-          closeModals();
-        }
-        return;
-      }
-
       // 5. KONTROL LAYAR UTAMA POS
       if (activeModal === null) {
         // B. SHORTCUT TOMBOL BAYAR (F8 / INSERT)
@@ -1997,36 +905,40 @@
           return;
         }
 
-        // C. NAVIGASI PANAH DI DROPDOWN HASIL PENCARIAN (↑/↓)
-        if (["ArrowDown", "ArrowUp"].includes(e.key)) {
-          const box = document.getElementById("searchResults");
-          // Hanya aktif saat dropdown hasil terbuka; selain itu biarkan default.
-          if (
-            !box.classList.contains("show") ||
-            currentFilteredItems.length === 0
-          )
-            return;
+        // C. NAVIGASI PANAH (KIRI, KANAN, ATAS, BAWAH)
+        if (
+          ["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"].includes(e.key)
+        ) {
           e.preventDefault();
+          if (currentFilteredItems.length === 0) return;
 
-          if (kbFocusIndex === -1) {
-            kbFocusIndex =
-              e.key === "ArrowDown" ? 0 : currentFilteredItems.length - 1;
-          } else {
-            if (e.key === "ArrowDown") kbFocusIndex++;
-            if (e.key === "ArrowUp") kbFocusIndex--;
+          const grid = document.getElementById("itemGrid");
+          const cols = window
+            .getComputedStyle(grid)
+            .getPropertyValue("grid-template-columns")
+            .split(" ").length;
+
+          if (kbFocusIndex === -1) kbFocusIndex = 0;
+          else {
+            if (e.key === "ArrowRight") kbFocusIndex++;
+            if (e.key === "ArrowLeft") kbFocusIndex--;
+            if (e.key === "ArrowDown") kbFocusIndex += cols;
+            if (e.key === "ArrowUp") kbFocusIndex -= cols;
           }
+
           if (kbFocusIndex < 0) kbFocusIndex = 0;
           if (kbFocusIndex >= currentFilteredItems.length)
             kbFocusIndex = currentFilteredItems.length - 1;
 
-          const rows = box.querySelectorAll(".search-result");
-          rows.forEach((r) => r.classList.remove("kb-focus"));
-          if (rows[kbFocusIndex]) {
-            rows[kbFocusIndex].classList.add("kb-focus");
-            rows[kbFocusIndex].scrollIntoView({ block: "nearest" });
+          const cards = document.querySelectorAll("#itemGrid .item-card");
+          cards.forEach((c) => c.classList.remove("kb-focus"));
+          if (cards[kbFocusIndex]) {
+            cards[kbFocusIndex].classList.add("kb-focus");
+            cards[kbFocusIndex].scrollIntoView({
+              block: "nearest",
+              behavior: "smooth",
+            });
           }
-          const it = currentFilteredItems[kbFocusIndex];
-          if (it) setBarangAktif(it);
           return;
         }
 
@@ -2037,8 +949,6 @@
             .getElementById("searchInp")
             .value.trim()
             .toLowerCase();
-          // Tanpa ketikan → jangan tambah barang acak (dropdown tidak terbuka).
-          if (!q) return;
 
           // CEK 1: Apakah input manual cocok 100% dengan kode/barcode?
           const ex = allItems.find(
@@ -2085,14 +995,6 @@
         }).format(n || 0);
       };
     }
-    window.fmtRpKoma = function (n) {
-      return new Intl.NumberFormat("id-ID", {
-        style: "currency",
-        currency: "IDR",
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      }).format(n || 0);
-    };
 
     // Fungsi Mengambil Tanggal WITA (Sesuai Request Sebelumnya)
     function today() {
@@ -2109,7 +1011,6 @@
 
     function fmtQty(val) {
       const num = roundQty(val);
-      if (num === 0) return "0,00";
       return Number.isInteger(num)
         ? String(num)
         : String(num).replace(/\.?0+$/, "");
@@ -2197,47 +1098,6 @@
     // Status PKP toko: bila ON, harga jual dianggap SUDAH termasuk PPN (tarif dari setelan).
     var PKP = { is_pkp: false, tarif: 0 };
 
-    // Isi strip meta dengan DATA NYATA saja: Tanggal (WITA), Kasir (nama login),
-    // dan Shift aktif bila ada. Kolom tanpa data tidak ditampilkan.
-    async function muatMetaBar() {
-      const meta = document.getElementById("metaBar");
-      if (!meta) return;
-      const u = (typeof getUser === "function" && getUser()) || {};
-      const kasir = u.full_name || u.username || "Kasir";
-      const tgl = new Date().toLocaleDateString("id-ID", {
-        timeZone: "Asia/Makassar",
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      });
-      const cells = [
-        { k: "Tanggal", v: tgl },
-        { k: "Kasir", v: kasir },
-      ];
-      // Shift aktif (opsional) — abaikan diam-diam bila tak ada / tak ada akses.
-      try {
-        const sh = await api("GET", "/shifts/current");
-        if (sh && sh.id) {
-          const jam = sh.opened_at
-            ? new Date(sh.opened_at).toLocaleTimeString("id-ID", {
-              timeZone: "Asia/Makassar",
-              hour: "2-digit",
-              minute: "2-digit",
-            })
-            : "";
-          cells.push({ k: "Shift", v: jam ? "Buka " + jam : "Aktif" });
-        }
-      } catch (e) {
-        /* abaikan */
-      }
-      meta.innerHTML = cells
-        .map(
-          (c) =>
-            `<div class="cell"><div class="k">${c.k}</div><div class="v">${c.v}</div></div>`,
-        )
-        .join("");
-    }
-
     async function init() {
       try {
         const [items, cats, custs, groups] = await Promise.all([
@@ -2256,10 +1116,16 @@
         } catch (e) {
           /* abaikan bila tak ada akses */
         }
-        // Bar kategori dihapus (grid kartu tidak ada lagi). Isi strip meta.
-        muatMetaBar();
+        const bar = document.getElementById("catBar");
+        cats.forEach((c) => {
+          const b = document.createElement("button");
+          b.className = "cat-btn";
+          b.textContent = c.name;
+          b.id = "cat_" + c.id;
+          b.onclick = () => setCat(c.id);
+          bar.appendChild(b);
+        });
         const s = document.getElementById("custSel");
-        const payKreditPel = document.getElementById("payKreditPel");
         custs.forEach((c) => {
           const o = document.createElement("option");
           o.value = c.id;
@@ -2268,13 +1134,6 @@
             ? `${c.name} [${c.group.name}]`
             : c.name;
           s.appendChild(o);
-
-          if (payKreditPel) {
-            const o2 = document.createElement("option");
-            o2.value = c.id;
-            o2.textContent = c.name;
-            payKreditPel.appendChild(o2);
-          }
         });
         const groupSelect = document.getElementById("groupSel");
         groups.forEach((g) => {
@@ -2285,13 +1144,6 @@
           groupSelect.appendChild(o);
         });
         filterItems();
-        renderCart(); // tampilkan baris kosong "Belum ada barang" saat load
-        recalc(); // inisialisasi banner TOTAL & ringkasan ke Rp 0
-        updatePendingCount(); // inisialisasi badge jumlah pending
-
-        window.addEventListener("resize", () => {
-          renderCart();
-        });
 
         // Setup Global Barcode Scanner
         setupBarcodeScanner((scode) => {
@@ -2319,7 +1171,7 @@
           });
 
           if (matchedItem) {
-            promptQty(matchedItem.id, matchedSupplierId, false);
+            promptQty(matchedItem.id, matchedSupplierId);
             document.getElementById("searchInp").value = "";
             filterItems();
           } else {
@@ -2331,7 +1183,18 @@
       }
     }
 
-    // (setCat dihapus — bar kategori tidak ada lagi; activeCat tetap "" agar filter aman.)
+    function setCat(id) {
+      activeCat = id;
+      document
+        .querySelectorAll(".cat-btn")
+        .forEach((b) =>
+          b.classList.toggle(
+            "active",
+            b.id === "cat_" + id || (id === "" && b.id === "cat_all"),
+          ),
+        );
+      filterItems();
+    }
 
     function filterItems() {
       const q = document
@@ -2362,38 +1225,33 @@
       debouncedRenderItems(currentFilteredItems);
     }
 
-    // Render hasil pencarian sebagai DROPDOWN (bukan grid permanen). Hanya tampil
-    // saat ada ketikan; kosong → tersembunyi (tak ada "daftar yang langsung muncul").
-    function renderSearchResults(items) {
-      const box = document.getElementById("searchResults");
-      const q = document.getElementById("searchInp").value.trim();
-      if (!q) {
-        box.classList.remove("show");
-        box.innerHTML = "";
-        return;
-      }
-      if (!items.length) {
-        box.innerHTML =
-          '<div class="search-result" style="cursor:default;justify-content:center;color:var(--text-muted)">Tidak ada barang cocok</div>';
-        box.classList.add("show");
-        return;
-      }
-      box.innerHTML = items
+    function renderItems(items) {
+      const g = document.getElementById("itemGrid");
+      document.getElementById("emptyItems").style.display = items.length
+        ? "none"
+        : "block";
+      g.innerHTML = items
         .map(
           (i, idx) => `
-            <div class="search-result ${idx === kbFocusIndex ? "kb-focus" : ""}" onclick="promptQty(${i.id})">
-              <div style="min-width:0">
-                <div class="sr-name">${i.name}${i.is_virtual_variant ? " | virtual" : ""}</div>
-                <div class="sr-meta">${i.code || i.barcode || "-"} · ${i.unit?.abbreviation || i.unit?.name || "pcs"} · ${i.stock <= 0 ? "Habis" : "Stok " + fmtQty(i.stock)}</div>
+            <div class="item-card ${idx === kbFocusIndex ? "kb-focus" : ""}" onclick="promptQty(${i.id})">
+              <div class="item-name">${i.name}</div>
+              <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">
+                ${i.unit?.abbreviation || i.unit?.name || "pcs"}${i.is_virtual_variant ? " | virtual" : ""}
               </div>
-              <div class="sr-price">${fmtRp(i.sell_price)}</div>
+              <div class="item-price">${fmtRp(i.sell_price)}</div>
+              <div class="item-stock ${i.stock <= i.min_stock ? "stock-low" : ""}">${i.stock <= 0 ? "Habis" : "Stok " + fmtQty(i.stock)}</div>
             </div>`,
         )
         .join("");
-      box.classList.add("show");
     }
 
-    const debouncedRenderItems = debounce(renderSearchResults, 120);
+    const debouncedRenderItems = debounce(renderItems, 120);
+
+    let pendingPriceNormal = 0;
+    let pendingPriceDiskon = 0;
+    let hasDiskon = false;
+    // Barang yang harga grupnya dibatalkan karena di bawah modal (untuk peringatan)
+    let groupPriceBlockedItems = [];
 
     function getActiveDiscountGroup() {
       const groupId = document.getElementById("groupSel")?.value;
@@ -2401,91 +1259,79 @@
       return allGroups.find((g) => String(g.id) === String(groupId)) || null;
     }
 
-    // Harga DASAR (gross) per unit SEBELUM Pot 1–4: pakai Level Harga grup
-    // (harga absolut per grup) bila di-set untuk grup pelanggan aktif, lalu harga
-    // grosir per jumlah. Potongan bertingkat (Pot 1–4) TIDAK dihitung di sini —
-    // itu dipisah agar bisa diisi/diubah manual per baris di kasir.
-    function hitungHargaDasar(item, basePrice, qty, supplierId = null) {
-      let dasar = parseFloat(basePrice) || 0;
-      if (item && item.is_discountable) {
-        const group = getActiveDiscountGroup();
-        if (group) {
-          const groupName = String(group.name || "").toLowerCase().trim();
-          const specPrice = (item.prices || []).find(
-            (p) => String(p.name || "").toLowerCase().trim() === groupName,
-          );
-          if (specPrice && parseFloat(specPrice.price) > 0) {
-            dasar = parseFloat(specPrice.price);
-          }
+    function applyDiscountGroupPrice(item, basePrice, supplierId = null) {
+      // 1. Jika barang tidak di-ceklis "Dapat Diskon Member", abaikan diskon grup
+      if (!item.is_discountable) return basePrice;
+
+      const group = getActiveDiscountGroup();
+      if (!group) return basePrice;
+
+      const groupName = String(group.name || "").toLowerCase().trim();
+      let hasGroupSetting = false;
+
+      // (1) LEVEL HARGA dulu: harga grup absolut dipakai sebagai harga DASAR.
+      let levelPrice = basePrice;
+      const specPrice = (item.prices || []).find(
+        (p) => String(p.name || "").toLowerCase().trim() === groupName,
+      );
+      if (specPrice && parseFloat(specPrice.price) > 0) {
+        levelPrice = parseFloat(specPrice.price);
+        hasGroupSetting = true;
+      }
+
+      // (2) Lalu DILANJUT "Potongan Harga Jual": diskon bertingkat di ATAS
+      //     harga Level Harga — bukan pengganti, tapi lanjutan.
+      let discountedPrice = levelPrice;
+      const gd = (item.group_discounts || []).find(
+        (d) => String(d.group_id) === String(group.id),
+      );
+      if (gd) {
+        let price = levelPrice;
+        [gd.disc1, gd.disc2, gd.disc3, gd.disc4].forEach((d) => {
+          const pct = parseFloat(d) || 0;
+          if (pct > 0) price = price * (1 - pct / 100);
+        });
+        if (price < levelPrice) {
+          discountedPrice = price;
+          hasGroupSetting = true;
         }
       }
-      return applyTierPrice(item, qty, Math.round(dasar));
-    }
 
-    // Lantai anti-rugi (HPP/modal) per unit. Di mode PKP harga-include, HPP
-    // dinaikkan sebesar PPN agar sebanding dengan harga label (yang masih
-    // mengandung PPN). Dipakai HANYA untuk PERINGATAN, bukan memaksa harga.
-    function hppFloorBarang(item, supplierId = null) {
-      let hpp = parseFloat(item?.min_price ?? item?.buy_price) || 0;
+      // Tidak ada setelan grup pada barang ini -> tidak ada diskon.
+      // (Persen di data grup pelanggan HANYA referensi, bukan auto-diskon.)
+      if (!hasGroupSetting) return basePrice;
+
+      // (3) Penjaga anti-rugi (di bawah HPP) — BERTINGKAT:
+      //   a) harga diskon penuh masih >= HPP -> pakai harga diskon.
+      //   b) Potongan bikin < HPP, tapi harga Level Harga >= HPP
+      //      -> lewati diskon Potongan, pakai harga Level Harga.
+      //   c) harga Level Harga pun < HPP -> peringatan + pakai harga normal.
+      // Pakai min_price (dikirim backend ke SEMUA role) agar konsisten admin & kasir.
+      let hpp = parseFloat(item.min_price ?? item.buy_price) || 0;
       if (supplierId) {
-        const sd = (item?.supplier_details || []).find(
+        const sd = (item.supplier_details || []).find(
           (s) => s.supplier_id === supplierId,
         );
         if (sd && parseFloat(sd.buy_price) > 0) hpp = parseFloat(sd.buy_price);
       }
+
+      // Mode PKP harga-include: harga jual masih mengandung PPN, sedangkan modal (hpp)
+      // sudah BERSIH PPN → naikkan lantai sebesar PPN agar perbandingan adil (harga
+      // label vs modal+PPN). Tarif PER BARANG (item.ppn_percent), fallback tarif toko.
+      // PKP mati / tarif 0 (barang non-PPN) → faktor 1 (perilaku lama, nol berubah).
       const tarifItem = PKP.is_pkp
-        ? (item?.ppn_percent != null ? item.ppn_percent : PKP.tarif) || 0
+        ? (item.ppn_percent != null ? item.ppn_percent : PKP.tarif) || 0
         : 0;
       const pkpFactor = tarifItem > 0 ? 1 + tarifItem / 100 : 1;
-      return hpp > 0 ? hpp * pkpFactor : 0;
-    }
+      const hppFloor = hpp * pkpFactor;
 
-    // Potongan DEFAULT (Pot 1–4) sebuah barang = setelan "Potongan Harga Jual" di
-    // form barang untuk GRUP pelanggan yang sedang dipilih. Pelanggan umum (tanpa
-    // grup) atau barang tanpa setelan → semua 0. Ini hanya nilai default; kasir
-    // tetap bisa mengubahnya manual per baris di keranjang.
-    function potonganDefault(item) {
-      const kosong = { disc1: 0, disc2: 0, disc3: 0, disc4: 0 };
-      const group = getActiveDiscountGroup();
-      // Auto-default hanya untuk barang "Dapat Diskon Member" + grup terpilih —
-      // sama seperti perilaku harga grup lama (kasir tetap bisa isi Pot manual).
-      if (!item || !item.is_discountable || !group) return kosong;
-      const gd = (item.group_discounts || []).find(
-        (d) => String(d.group_id) === String(group.id),
-      );
-      if (!gd) return kosong;
-      return {
-        disc1: parseFloat(gd.disc1) || 0,
-        disc2: parseFloat(gd.disc2) || 0,
-        disc3: parseFloat(gd.disc3) || 0,
-        disc4: parseFloat(gd.disc4) || 0,
-      };
-    }
+      if (hpp <= 0) return Math.round(discountedPrice); // HPP tak diketahui
+      if (discountedPrice >= hppFloor - 0.01) return Math.round(discountedPrice); // (a)
+      if (levelPrice >= hppFloor - 0.01) return Math.round(levelPrice); // (b)
 
-    // Harga NET per unit = harga dasar × potongan bertingkat Pot 1–4 (dibulatkan).
-    function terapkanPotongan(gross, c) {
-      let harga = parseFloat(gross) || 0;
-      [c.disc1, c.disc2, c.disc3, c.disc4].forEach((d) => {
-        const pct = parseFloat(d) || 0;
-        if (pct > 0) harga = harga * (1 - pct / 100);
-      });
-      return Math.round(harga);
-    }
-
-    // Hitung ulang harga satu baris keranjang berdasarkan Pot 1–4-nya. Menyetel
-    // c.harga_dasar (gross, kolom "Harga/Pcs") & c.price (net, dipakai Jumlah &
-    // pembayaran). Mengembalikan {gross, net, rugi} (rugi = net < modal).
-    function hitungBarisKeranjang(c) {
-      const item = allItems.find((x) => x.id === c.id);
-      const base = c.original_price || (item ? item.sell_price : c.price) || 0;
-      const gross = item
-        ? hitungHargaDasar(item, base, c.qty, c.supplier_id)
-        : Math.round(parseFloat(base) || 0);
-      const net = terapkanPotongan(gross, c);
-      c.harga_dasar = gross;
-      c.price = net;
-      const floor = hppFloorBarang(item, c.supplier_id);
-      return { gross, net, rugi: floor > 0 && net < floor - 0.01 };
+      // (c) Level Harga pun di bawah HPP -> catat untuk peringatan, pakai harga normal.
+      groupPriceBlockedItems.push(item.name);
+      return basePrice;
     }
 
     // Harga grosir/tiering berdasarkan JUMLAH beli. Tier disimpan sebagai
@@ -2508,473 +1354,222 @@
       return basePrice;
     }
 
-    // Peringatan (toast) bila potongan pada satu/lebih baris membuat harga net di
-    // bawah modal (HPP). Tidak memaksa harga — hanya memberi tahu kasir.
-    function warnRugi() {
-      const names = [];
-      cart.forEach((c) => {
-        const item = allItems.find((i) => i.id === c.id);
-        const floor = hppFloorBarang(item, c.supplier_id);
-        if (floor > 0 && c.price < floor - 0.01) names.push(c.name);
-      });
-      if (!names.length) return;
-      const uniq = [...new Set(names)];
-      const txt =
+    // Harga satuan final 1 baris keranjang: harga grup/level harga DULU,
+    // lalu harga grosir berdasarkan jumlah (ambil yang termurah utk pelanggan).
+    function computeLinePrice(item, basePrice, qty, supplierId = null) {
+      const groupPrice = applyDiscountGroupPrice(item, basePrice, supplierId);
+      return applyTierPrice(item, qty, groupPrice);
+    }
+
+    function notifyGroupPriceBlocked() {
+      if (!groupPriceBlockedItems.length) return;
+      const g = getActiveDiscountGroup();
+      const uniq = [...new Set(groupPriceBlockedItems)];
+      const names =
         uniq.slice(0, 3).join(", ") +
         (uniq.length > 3 ? `, +${uniq.length - 3} lainnya` : "");
       showToast(
-        `⚠️ Potongan membuat harga di bawah modal untuk ${uniq.length} barang (${txt}).`,
+        `⚠️ Harga grup ${g ? g.name : ""} di bawah modal untuk ${uniq.length} barang (${names}) — tetap dipakai harga normal.`,
         "warning",
       );
+      groupPriceBlockedItems = [];
     }
 
-    // Dipanggil saat pelanggan/grup diskon berubah: segarkan Pot 1–4 default dari
-    // grup baru untuk baris yang BELUM diubah manual, lalu hitung ulang harganya.
-    // Baris yang sudah diubah manual (pot_manual) dibiarkan apa adanya.
     function recalcCartPricesByGroup() {
-      cart.forEach((c) => {
-        const item = allItems.find((i) => i.id === c.id);
+      groupPriceBlockedItems = [];
+      cart.forEach((cartItem) => {
+        const item = allItems.find((i) => i.id === cartItem.id);
         if (!item) return;
-        if (!c.pot_manual) {
-          const def = potonganDefault(item);
-          c.disc1 = def.disc1;
-          c.disc2 = def.disc2;
-          c.disc3 = def.disc3;
-          c.disc4 = def.disc4;
-        }
-        hitungBarisKeranjang(c);
-      });
-      renderCart();
-      recalc();
-      warnRugi();
-    }
-
-    // Tampilkan foto barang aktif di kotak preview POS (#itemPreviewBox). image_path sudah
-    // memuat ?v= (cache-buster) dari server → foto terbaru langsung tampil di semua cabang.
-    function tampilkanPreviewBarang(item) {
-      const img = document.getElementById("itemPreviewImg");
-      const box = document.getElementById("itemPreviewBox");
-      if (!img || !box) return;
-      const ph = box.querySelector(".preview-placeholder");
-      if (item && item.image_path) {
-        img.src = item.image_path;
-        img.style.display = "block";
-        if (ph) ph.style.display = "none";
-      } else {
-        img.removeAttribute("src");
-        img.style.display = "none";
-        if (ph) ph.style.display = "";
-      }
-    }
-
-    // Tandai satu barang sebagai "barang aktif": dipakai tombol Detail Item
-    // (histori beli/jual) dan preview foto. Dikumpulkan di satu tempat agar konsisten.
-    function setBarangAktif(item) {
-      barangAktif = item || null;
-      const ai = document.getElementById("activeItemName");
-      if (ai) ai.textContent = item ? item.name : "—";
-      tampilkanPreviewBarang(item || null);
-      sorotBarisAktif();
-    }
-
-    // Klik satu baris di keranjang → jadikan barang aktif (tanpa mengubah qty).
-    function pilihBarangDariKeranjang(id) {
-      const item = allItems.find((x) => x.id === id);
-      if (item) setBarangAktif(item);
-    }
-
-    // Sorot baris keranjang yang barangnya sedang aktif. Hanya menandai kelas
-    // (tidak render ulang) → tidak mengganggu input Qty/Pot yang sedang diketik.
-    function sorotBarisAktif() {
-      const body = document.getElementById("cartTableBody");
-      if (!body) return;
-      const rows = body.querySelectorAll("tr");
-      const aktifId = barangAktif ? barangAktif.id : null;
-      cart.forEach((c, i) => {
-        if (rows[i])
-          rows[i].classList.toggle("row-active", aktifId != null && c.id === aktifId);
-      });
-    }
-
-    // ===== Popup Detail Potongan =====
-    let dpCartIndex = -1;
-
-    function bukaDetailPotongan() {
-      if (!barangAktif) {
-        showToast("Pilih barang dulu — klik hasil pencarian atau nama barang di keranjang", "warning");
-        return;
-      }
-
-      dpCartIndex = cart.findIndex(c => c.id === barangAktif.id);
-      if (dpCartIndex === -1) {
-        showToast("Barang belum ada di keranjang.", "warning");
-        return;
-      }
-
-      const c = cart[dpCartIndex];
-      document.getElementById("dpNamaBarang").textContent = c.name;
-      document.getElementById("dpPot1").value = c.disc1 || 0;
-      document.getElementById("dpPot2").value = c.disc2 || 0;
-      document.getElementById("dpPot3").value = c.disc3 || 0;
-      document.getElementById("dpPot4").value = c.disc4 || 0;
-
-      document.getElementById("detailPotonganModal").style.display = "flex";
-      activeModal = "detailPotongan";
-    }
-
-    function simpanDetailPotongan() {
-      if (dpCartIndex === -1 || !cart[dpCartIndex]) return;
-      const c = cart[dpCartIndex];
-
-      let p1 = parseFloat(document.getElementById("dpPot1").value) || 0;
-      let p2 = parseFloat(document.getElementById("dpPot2").value) || 0;
-      let p3 = parseFloat(document.getElementById("dpPot3").value) || 0;
-      let p4 = parseFloat(document.getElementById("dpPot4").value) || 0;
-
-      if (p1 > 100) p1 = 100;
-      if (p2 > 100) p2 = 100;
-      if (p3 > 100) p3 = 100;
-      if (p4 > 100) p4 = 100;
-
-      c.disc1 = p1;
-      c.disc2 = p2;
-      c.disc3 = p3;
-      c.disc4 = p4;
-      c.pot_manual = true;
-
-      hitungBarisKeranjang(c);
-      renderCart();
-      recalc();
-      warnRugi();
-      closeModals();
-      showToast("Detail potongan diperbarui.", "success");
-    }
-
-    // ===== Popup Detail Barang: histori beli & jual (hanya lihat) =====
-    // Memakai data yang sama dengan halaman catat-pembelian:
-    //   Beli → /purchases/item-history/ · Jual → /sales/item-history/
-    let dhTab = "beli";
-
-    function bukaDetailBarang() {
-      if (!barangAktif) {
-        showToast(
-          "Pilih barang dulu — klik hasil pencarian atau nama barang di keranjang",
-          "warning",
+        const basePrice = cartItem.original_price || item.sell_price;
+        cartItem.price = computeLinePrice(
+          item,
+          basePrice,
+          cartItem.qty,
+          cartItem.supplier_id,
         );
-        return;
-      }
-      document.getElementById("dhNamaBarang").textContent = barangAktif.name || "-";
-      dhTab = "beli";
-      document.getElementById("dhTabBeli").classList.add("active");
-      document.getElementById("dhTabJual").classList.remove("active");
-      document.getElementById("detailModal").style.display = "flex";
-      activeModal = "detail";
-      muatHistoriBarang();
+      });
+
+      renderCart();
+      recalc();
+      notifyGroupPriceBlocked();
     }
 
-    function gantiTabHistori(tab) {
-      dhTab = tab;
-      document.getElementById("dhTabBeli").classList.toggle("active", tab === "beli");
-      document.getElementById("dhTabJual").classList.toggle("active", tab === "jual");
-      muatHistoriBarang();
-    }
-
-    async function muatHistoriBarang() {
-      const body = document.getElementById("dhBody");
-      if (!barangAktif) return;
-      const isBeli = dhTab === "beli";
-      // Kolom ke-2 = lawan transaksi: Supplier (beli) / Pelanggan (jual).
-      document.getElementById("dhColPihak").textContent = isBeli ? "Supplier" : "Pelanggan";
-      body.innerHTML =
-        '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:1.5rem">Memuat…</td></tr>';
-      const url = isBeli
-        ? `/purchases/item-history/?item_id=${barangAktif.id}`
-        : `/sales/item-history/?item_id=${barangAktif.id}`;
-      try {
-        const data = await api("GET", url);
-        if (!data || !data.length) {
-          body.innerHTML =
-            '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:1.5rem">' +
-            (isBeli
-              ? "Belum ada riwayat harga beli barang ini."
-              : "Belum ada riwayat harga jual barang ini.") +
-            "</td></tr>";
-          return;
-        }
-        // Ini RIWAYAT HARGA, bukan daftar tiap transaksi: buang baris yang harganya
-        // sama dengan transaksi terbaru sebelumnya (bandingkan harga NETO setelah
-        // potongan, dibulatkan) → sisakan hanya saat harga BERUBAH. Data dari server
-        // urut baru→lama, jadi tiap baris tersisa = harga terbaru pada tingkat itu.
-        const perubahan = [];
-        let hargaSebelumnya = null;
-        for (const r of data) {
-          const neto = Math.round(r.harga_setelah_potongan || 0);
-          if (neto !== hargaSebelumnya) {
-            perubahan.push(r);
-            hargaSebelumnya = neto;
-          }
-        }
-        body.innerHTML = perubahan
-          .map((r) => {
-            const tgl = r.tanggal
-              ? new Date(r.tanggal + "T00:00:00").toLocaleDateString("id-ID")
-              : "-";
-            const pihak = isBeli ? r.supplier || "-" : r.pelanggan || "-";
-            return `<tr>
-                <td style="text-align:center">${tgl}</td>
-                <td>${pihak}</td>
-                <td class="num">${fmtQty(r.jumlah)}</td>
-                <td style="text-align:center">${r.satuan || "-"}</td>
-                <td class="num">${fmtRp(r.harga)}</td>
-                <td class="num">${r.potongan || 0}%</td>
-                <td class="num" style="font-weight:700;color:var(--primary)">${fmtRp(Math.round(r.harga_setelah_potongan))}</td>
-              </tr>`;
-          })
-          .join("");
-      } catch (e) {
-        body.innerHTML =
-          '<tr><td colspan="7" style="text-align:center;color:#ef4444;padding:1.5rem">Gagal memuat: ' +
-          e.message +
-          "</td></tr>";
-      }
-    }
-
-    // Tambah barang ke keranjang. Dari Enter/klik hasil pencarian
-    // (pindahKeQty = true) → kursor langsung pindah ke kolom Qty baris tsb agar
-    // kasir bisa mengetik jumlah lalu Enter untuk kembali ke pencarian.
-    // Dari barcode (pindahKeQty = false) → auto-tambah / tambah 1 tanpa pindah
-    // fokus, supaya bisa scan beruntun.
-    function promptQty(id, supplierId = null, pindahKeQty = true) {
+    function promptQty(id, supplierId = null) {
       const item = allItems.find((i) => i.id === id);
       if (!item) return;
-      setBarangAktif(item);
       const availableQty = getAvailableCartStock(item);
       if (availableQty <= 0) {
         showToast("Stok " + item.name + " habis!", "error");
         return;
       }
 
-      // Harga = harga jual normal. (Pemilihan "Harga Diskon" lewat modal dihapus;
-      // kasir bisa menyesuaikan lewat Pot 1–4 langsung di baris keranjang.)
-      const finalPrice = item.sell_price;
+      pendingItemId = id;
+      pendingSupplierId = supplierId; // Simpan context supplier dari barcode
+      document.getElementById("qtyItemName").textContent =
+        item.name + (supplierId ? " (Barcode Khusus)" : "");
+      document.getElementById("qtyInp").value = "1";
 
-      // Cari baris yang sudah ada (id + harga sama).
-      let idx = cart.findIndex(
-        (c) => c.id === id && c.original_price === finalPrice,
+      // --- CEK APAKAH BARANG INI PUNYA HARGA DISKON ---
+      pendingPriceNormal = item.sell_price;
+      hasDiskon = false;
+      pendingPriceDiskon = 0;
+
+      let dPriceObj = (item.prices || []).find(
+        (p) => p.name === "Harga Diskon",
+      );
+      const priceBox = document.getElementById("priceSelectorBox");
+
+      if (dPriceObj && dPriceObj.price > 0) {
+        hasDiskon = true;
+        pendingPriceDiskon = dPriceObj.price;
+        document.getElementById("lblNormal").textContent =
+          fmtRp(pendingPriceNormal);
+        document.getElementById("lblDiskon").textContent =
+          fmtRp(pendingPriceDiskon);
+        priceBox.style.display = "block";
+        document.getElementById("rdoNormal").checked = true;
+      } else {
+        priceBox.style.display = "none";
+        document.getElementById("rdoNormal").checked = true;
+      }
+      // ------------------------------------------------
+
+      document.getElementById("modalQty").style.display = "flex";
+      activeModal = "qty";
+      changeQtyIdx(0);
+    }
+
+    function changeQtyIdx(target) {
+      qtyIdx = target;
+      const inp = document.getElementById("qtyInp"),
+        bBat = document.getElementById("btnQtyBatal"),
+        bSim = document.getElementById("btnQtySimpan");
+      [inp, bBat, bSim].forEach((el) => el.classList.remove("kb-focus"));
+      if (qtyIdx === 0) {
+        inp.classList.add("kb-focus");
+        inp.focus();
+        inp.select();
+      } else if (qtyIdx === 1) {
+        bBat.classList.add("kb-focus");
+        inp.blur();
+      } else if (qtyIdx === 2) {
+        bSim.classList.add("kb-focus");
+        inp.blur();
+      }
+    }
+
+    function confirmQty() {
+      const qty = parseFloat(document.getElementById("qtyInp").value) || 1;
+      const item = allItems.find((i) => i.id === pendingItemId);
+      if (!item) return;
+
+      // --- TENTUKAN HARGA FINAL YANG DIPILIH KASIR ---
+      let finalPrice = pendingPriceNormal;
+      if (hasDiskon && document.getElementById("rdoDiskon").checked) {
+        finalPrice = pendingPriceDiskon;
+      }
+
+      // 🔥 FIX BUG KERANJANG: Pisahkan item Normal & Diskon 🔥
+      const ex = cart.find(
+        (c) => c.id === pendingItemId && c.original_price === finalPrice,
       );
 
-      if (idx === -1) {
-        // Belum ada → tambah baris baru dengan qty 1.
-        // Pot 1–4 default dari setelan "Potongan Harga Jual" barang (ikut grup
-        // pelanggan; umum → 0). Kasir bisa mengubahnya manual nanti di keranjang.
-        const def = potonganDefault(item);
-        const baris = {
+      groupPriceBlockedItems = [];
+      if (ex) {
+        const exIndex = cart.indexOf(ex);
+        const availableQty = getAvailableCartStock(item, exIndex);
+        if (ex.qty + qty > availableQty) {
+          showToast("Sisa stok tidak cukup!", "error");
+          return;
+        }
+        ex.qty = roundQty(ex.qty + qty);
+        ex.stock = availableQty;
+        // Hitung ulang harga satuan utk total qty (mis. harga grosir aktif)
+        ex.price = computeLinePrice(item, finalPrice, ex.qty, ex.supplier_id);
+      } else {
+        const availableQty = getAvailableCartStock(item);
+        if (qty > availableQty) {
+          showToast("Sisa stok tidak cukup!", "error");
+          return;
+        }
+        cart.push({
           id: item.id,
           name: item.name,
           unit: item.unit?.abbreviation || item.unit?.name || "pcs",
           original_price: finalPrice,
-          qty: 0,
+          price: computeLinePrice(
+            item,
+            finalPrice,
+            roundQty(qty),
+            pendingSupplierId,
+          ),
+          qty: roundQty(qty),
           stock: availableQty,
-          supplier_id: supplierId, // 🔥 Simpan ID Supplier jika dari barcode khusus
+          supplier_id: pendingSupplierId, // 🔥 Simpan ID Supplier jika dari barcode khusus
           ppn_percent: item.ppn_percent, // tarif PPN barang (null = ikut tarif toko)
-          disc1: def.disc1,
-          disc2: def.disc2,
-          disc3: def.disc3,
-          disc4: def.disc4,
-          pot_manual: false, // true bila kasir ubah Pot manual (jangan ditimpa default grup)
-        };
-        hitungBarisKeranjang(baris);
-        cart.push(baris);
-        idx = cart.length - 1;
-      } else if (!pindahKeQty) {
-        // Scan barcode barang yang sudah ada di keranjang → tambah 1.
-        const avail = getAvailableCartStock(item, idx);
-        if (cart[idx].qty + 1 > avail) {
-          showToast("Sisa stok tidak cukup!", "error");
-        } else {
-          cart[idx].qty = roundQty(cart[idx].qty + 1);
-          cart[idx].stock = avail;
-          hitungBarisKeranjang(cart[idx]);
-        }
+        });
       }
+      notifyGroupPriceBlocked();
 
-      warnRugi();
       document.getElementById("searchInp").value = "";
       filterItems();
       renderCart();
       recalc();
-
-      if (pindahKeQty) fokuskanQtyBaris(idx);
-    }
-
-    // Fokus & seleksi input Qty pada baris keranjang ke-idx.
-    function fokuskanQtyBaris(idx) {
-      const body = document.getElementById("cartTableBody");
-      const inp = body.querySelectorAll(".qty-cell-inp")[idx];
-      if (inp) {
-        inp.focus();
-        inp.select();
-      }
-    }
-
-    // Update perhitungan row "Jumlah" secara live saat mengetik Qty
-    window.updateRowCalc = function (el, i) {
-      if (!cart[i]) return;
-      let q = parseFloat(String(el.value).replace(",", "."));
-      if (isNaN(q) || q < 0) q = 0;
-
-      const price = cart[i].price; // Harga setelah potongan
-      const row = el.closest("tr");
-      if (row) {
-        const subCol = row.querySelector(".col-sub");
-        if (subCol) subCol.textContent = fmtRpKoma(price * q);
-      }
-
-      // Update footer sementara (tanpa renderCart supaya fokus tidak hilang)
-      const totalKuantiti = cart.reduce((s, c, idx) => s + (idx === i ? q : c.qty), 0);
-      const net = cart.reduce((s, c, idx) => s + c.price * (idx === i ? q : c.qty), 0);
-      setTxt("subTotal", totalKuantiti);
-      setTxt("sumGross", fmtRpKoma(net));
-
-      const diskonFaktur = getDiskonFaktur();
-      const biayaLain = getBiayaLain();
-      const grandTotal = net - diskonFaktur + biayaLain;
-      const bannerEl = document.getElementById("bannerTotalEl");
-      if (bannerEl) {
-        bannerEl.innerHTML = '<span class="rp">Rp.</span>' + new Intl.NumberFormat("id-ID").format(Math.round(grandTotal));
-      }
-    };
-
-    // Set qty sebuah baris dari input kolom Qty (dipicu onchange saat blur/Enter).
-    // Dibatasi minimal 1 & tidak melebihi sisa stok.
-    function setQty(i, val) {
-      if (!cart[i]) return;
-      const item = allItems.find((x) => x.id === cart[i].id);
-      const availableQty = getAvailableCartStock(item, i);
-      let q = parseFloat(String(val).replace(",", "."));
-      if (isNaN(q) || q < 0) q = 0;
-      q = roundQty(q);
-      if (q > availableQty) {
-        q = availableQty;
-        showToast(
-          "Sisa stok tidak cukup! Jumlah diset ke " + fmtQty(availableQty),
-          "warning",
-        );
-      }
-      cart[i].stock = availableQty;
-      cart[i].qty = q;
-      hitungBarisKeranjang(cart[i]);
-      warnRugi();
-      renderCart();
-      recalc();
+      closeModals();
     }
 
     function openPayModal() {
       if (cart.length === 0) return showToast("Keranjang kosong!", "warning");
-      const total =
-        cart.reduce((s, c) => s + c.price * c.qty, 0) + getBiayaLain();
+      const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
       document.getElementById("payTotalDisplay").textContent = fmtRp(total);
-
-      // Reset semua input pembayaran
-      document.getElementById("payInpTunai").value = total;
-      document.getElementById("payInpDeposit").value = 0;
-      document.getElementById("payInpKredit").value = 0;
-      document.getElementById("payInpDebit").value = 0;
-      document.getElementById("payInpKartuKredit").value = 0;
-      document.getElementById("payInpEmoney").value = 0;
-
-      // Format initial values
-      ["payInpTunai", "payInpDeposit", "payInpKredit", "payInpDebit", "payInpKartuKredit", "payInpEmoney"].forEach(id => {
-        formatBiayaLain(document.getElementById(id));
-      });
-
-      // Hitung summary
-      hitungTotalBayar();
-
+      document.getElementById("payInpModal").value = total;
       document.getElementById("modalPay").style.display = "flex";
       activeModal = "pay";
-
-      // Fokus ke input Tunai
+      payModalIdx = 1;
+      updatePayModalUI();
       setTimeout(() => {
-        const inp = document.getElementById("payInpTunai");
-        inp.focus();
-        inp.select();
+        const i = document.getElementById("payInpModal");
+        i.focus();
+        i.select();
       }, 50);
     }
 
-    // Helper untuk mengambil nilai angka murni dari input yang diformat
-    function getRawPay(id) {
-      const val = document.getElementById(id).value || "";
-      const rawStr = val.split(',')[0];
-      return parseFloat(rawStr.replace(/[^\d]/g, "")) || 0;
+    function changePayIdx(dir) {
+      payModalIdx = (payModalIdx + dir + 4) % 4;
+      updatePayModalUI();
     }
 
-    // Menghitung total bayar dari semua metode & kembali
-    function hitungTotalBayar() {
-      const tunai = getRawPay("payInpTunai");
-      const deposit = getRawPay("payInpDeposit");
-      const kredit = getRawPay("payInpKredit");
-      const debit = getRawPay("payInpDebit");
-      const kartuKredit = getRawPay("payInpKartuKredit");
-      const emoney = getRawPay("payInpEmoney");
-
-      const totalBayar = tunai + deposit + kredit + debit + kartuKredit + emoney;
-      const total =
-        cart.reduce((s, c) => s + c.price * c.qty, 0) - getDiskonFaktur() + getBiayaLain();
-      const kembali = totalBayar - total;
-
-      document.getElementById("payTotalBayarDisplay").textContent = fmtRpKoma(totalBayar);
-      document.getElementById("payKembaliDisplay").textContent = fmtRpKoma(Math.max(0, kembali));
-
-      // Sync hidden input untuk backward compat
-      document.getElementById("payInpModal").value = totalBayar;
-    }
-
-    // Tentukan metode bayar utama berdasarkan input terbesar
-    function tentukanMetodeBayar() {
-      const methods = [
-        { key: "cash", val: getRawPay("payInpTunai") },
-        { key: "deposit", val: getRawPay("payInpDeposit") },
-        { key: "credit", val: getRawPay("payInpKredit") },
-        { key: "card", val: getRawPay("payInpDebit") },
-        { key: "card", val: getRawPay("payInpKartuKredit") },
-        { key: "transfer", val: getRawPay("payInpEmoney") },
+    function updatePayModalUI() {
+      const btns = [
+        document.getElementById("btnPayCancel"),
+        document.getElementById("btnPayCash"),
+        document.getElementById("btnPayTrans"),
+        document.getElementById("btnPayCard"),
       ];
-      // Pilih metode dengan nilai terbesar
-      let best = methods[0];
-      methods.forEach(m => { if (m.val > best.val) best = m; });
-      return best.key;
+      btns.forEach((b) => {
+        b.classList.remove("kb-focus");
+        b.classList.remove("active");
+      });
+      btns[payModalIdx].classList.add("kb-focus");
+      if (payModalIdx > 0) {
+        btns[payModalIdx].classList.add("active");
+        payMethod = payModalMethods[payModalIdx];
+      }
     }
 
-    function simpanPembayaran() {
-      payMethod = tentukanMetodeBayar();
-      const totalBayar = parseFloat(document.getElementById("payInpModal").value) || 0;
-      document.getElementById("paidInp").value = totalBayar;
+    function confirmPayModal() {
+      document.getElementById("paidInp").value =
+        document.getElementById("payInpModal").value;
       prosesBayar();
     }
 
-    function simpanDanCetak() {
-      // Simpan dulu, cetak otomatis ditangani showReceipt
-      payMethod = tentukanMetodeBayar();
-      const totalBayar = parseFloat(document.getElementById("payInpModal").value) || 0;
-      document.getElementById("paidInp").value = totalBayar;
-      prosesBayar(true);
-    }
-
-    // Keyboard nav: tidak dipakai lagi di modal baru, tapi dijaga supaya tidak error
-    function changePayIdx(dir) {
-      // no-op untuk modal baru
-    }
-    function updatePayModalUI() {
-      // no-op untuk modal baru
-    }
-    function confirmPayModal() {
-      simpanPembayaran();
-    }
+    // =======================================================================
+    // FUNGSI BARU YANG DITAMBAHKAN UNTUK MENGATASI TOMBOL CASH/TRANSFER MATI
+    // =======================================================================
     function setPayMethodAndConfirm(method) {
       payMethod = method;
-      const totalBayar = parseFloat(document.getElementById("payInpModal").value) || 0;
-      document.getElementById("paidInp").value = totalBayar;
+      document.getElementById("paidInp").value =
+        document.getElementById("payInpModal").value;
       prosesBayar();
     }
 
@@ -2986,44 +1581,11 @@
       document.getElementById("searchInp").focus();
     }
 
-    function syncCustomerToMain() {
-      const custSel = document.getElementById("custSel");
-      const payKreditPel = document.getElementById("payKreditPel");
-      if (custSel && payKreditPel) {
-        custSel.value = payKreditPel.value;
-        handleCustomerChange();
-      }
-    }
-
     function handleCustomerChange() {
       const custId = document.getElementById("custSel").value;
-
-      // Sync ke modal pembayaran
-      const payKreditPel = document.getElementById("payKreditPel");
-      if (payKreditPel && payKreditPel.value !== custId) {
-        payKreditPel.value = custId;
-      }
-
       const selectedCust = allCusts.find((c) => String(c.id) === String(custId));
-
-      const lblSaldo = document.getElementById("lblSaldoPelanggan");
-      if (lblSaldo) {
-        if (selectedCust && selectedCust.deposit_balance > 0) {
-          lblSaldo.textContent = `Saldo (${fmtRp(selectedCust.deposit_balance)}) :`;
-        } else {
-          lblSaldo.textContent = `Saldo Pelanggan :`;
-        }
-      }
-
       document.getElementById("groupSel").value =
         selectedCust?.group_id || selectedCust?.group?.id || "";
-      // Tampilkan nama pelanggan terpilih (merah) di baris Stiker Card.
-      const disp = document.getElementById("custNameDisplay");
-      if (disp)
-        disp.textContent = selectedCust
-          ? (selectedCust.code ? selectedCust.code + " · " : "") +
-          selectedCust.name
-          : "";
       recalcCartPricesByGroup();
     }
 
@@ -3031,119 +1593,40 @@
       recalcCartPricesByGroup();
     }
 
-    // Baris kosong pengisi (mempertahankan garis kolom walau barang belum ada).
-    // WAJIB 11 sel — sama persis dengan jumlah kolom header
-    // (No · Kode · Nama · Qty · Harga/Pcs · Potongan · Jumlah · Aksi)
-    // agar garis vertikal antar-kolom tetap lurus & sejajar dengan header.
-    // Sel Nama Barang bisa memuat pesan bantuan.
-    function bikinBarisKosong(pesan = "") {
-      return `<tr class="ipos-filler-row">
-            <td class="ctr"></td><td></td>
-            <td>${pesan ? `<span class="empty-hint">${pesan}</span>` : ""}</td>
-            <td class="ctr"></td><td class="num"></td>
-            <td class="num"></td>
-            <td class="num"></td><td class="ctr"></td>
-          </tr>`;
-    }
-
-    // Satu input Pot (potongan %) untuk sel tabel keranjang. onchange (blur/Enter)
-    // → commit nilai lalu hitung ulang HANYA baris ini. onfocus → select agar
-    // gampang ditimpa.
-    function potInput(i, n, val) {
-      const v = parseFloat(val) || 0;
-      return `<input class="pot-inp" type="number" step="0.01" min="0" max="100" value="${v}" title="Potongan ${n} (%) — bisa diisi/ubah manual" onfocus="this.select()" onchange="ubahPotongan(${i}, ${n}, this.value)">`;
-    }
-
-    // Ubah salah satu Pot (1–4) sebuah baris secara MANUAL. Menandai baris ini
-    // (pot_manual) supaya tidak ditimpa default grup saat pelanggan berganti, lalu
-    // hitung ulang harga baris tsb saja — baris lain tidak terpengaruh.
-    function ubahPotongan(i, n, val) {
-      if (!cart[i]) return;
-      let pct = parseFloat(String(val).replace(",", "."));
-      if (isNaN(pct) || pct < 0) pct = 0;
-      if (pct > 100) pct = 100;
-      cart[i]["disc" + n] = pct;
-      cart[i].pot_manual = true;
-      hitungBarisKeranjang(cart[i]);
-      renderCart();
-      recalc();
-      warnRugi();
-    }
-
     function renderCart() {
       const totalQty = cart.reduce((sum, item) => sum + item.qty, 0);
+      document.getElementById("cartFabBadge").textContent = fmtQty(totalQty);
       document.getElementById("cartCount").textContent = fmtQty(totalQty);
-      const body = document.getElementById("cartTableBody");
-
-      // Hitung baris minimal dinamis agar memenuhi sisa tinggi layar tanpa scroll
-      let BARIS_MINIMAL = 6;
-      const wrap = document.querySelector(".ipos-table-wrap");
-      const thead = document.querySelector(".ipos-table thead");
-      if (wrap && thead) {
-        // Tinggi 1 baris kira-kira 45px (2.8rem)
-        const avail = wrap.clientHeight - thead.clientHeight;
-        const fit = Math.ceil(avail / 45); // Dibulatkan ke atas agar sisa ruang tertutup
-        if (fit > BARIS_MINIMAL) BARIS_MINIMAL = fit;
-
-        // Sembunyikan scrollbar jika yang ditambahkan hanya baris kosong (filler),
-        // agar baris terakhir yang terpotong tidak menyebabkan scroll.
-        if (cart.length < fit) {
-          wrap.style.overflowY = "hidden";
-        } else {
-          wrap.style.overflowY = "auto";
-        }
+      const list = document.getElementById("cartList");
+      if (!cart.length) {
+        list.innerHTML =
+          '<div style="padding:32px;text-align:center;color:var(--text-muted);font-size:14px">Belum ada barang</div>';
+        return;
       }
-
-      const barisBarang = cart
+      list.innerHTML = cart
         .map((c, i) => {
-          const src = allItems.find((x) => x.id === c.id);
-          const code = (src && (src.code || src.barcode)) || "-";
-          const gross = c.harga_dasar ?? c.price; // Harga/Pcs (sebelum Pot 1–4)
-          const floor = hppFloorBarang(src, c.supplier_id);
-          const rugi = floor > 0 && c.price < floor - 0.01; // net di bawah modal?
-
-          let effPct = 0;
-          if (gross > 0 && c.price < gross) {
-            effPct = ((gross - c.price) / gross) * 100;
+          let discInfo = "";
+          if (c.price < c.original_price) {
+            const diff = c.original_price - c.price;
+            const pct = Math.round((diff / c.original_price) * 100);
+            discInfo = `<span style="color:#f59e0b; font-size: 0.85em; font-weight: bold; margin-right: 5px;">[Diskon ${pct}% / -${fmtRp(diff)}]</span>`;
           }
-          let potDisplay = parseFloat(effPct.toFixed(2)) + '%';
-
           return `
-          <tr style="cursor:pointer" title="Klik baris ini untuk lihat Detail (histori beli/jual) barang" onclick="pilihBarangDariKeranjang(${c.id})">
-            <td class="ctr">${i + 1}</td>
-            <td class="col-code">${code}</td>
-            <td>${c.name}<span style="color:var(--text-muted);font-size:0.72rem"> / ${c.unit || "pcs"}</span></td>
-            <td class="ctr">
-              <div class="qty-ctrl" style="justify-content:center">
-                <button class="qty-btn" onclick="changeQty(${i},-1)">−</button>
-                <input class="qty-cell-inp" type="text" inputmode="decimal" value="${fmtQty(c.qty)}"
-                  title="Ketik jumlah lalu Enter" onfocus="this.select()" oninput="updateRowCalc(this, ${i})" onchange="setQty(${i}, this.value)">
-                <button class="qty-btn" onclick="changeQty(${i},1)">+</button>
-              </div>
-            </td>
-            <td class="num">${fmtRpKoma(gross)}</td>
-            <td class="num" title="Klik untuk edit potongan" style="color: var(--primary); font-weight: 500;" onclick="event.stopPropagation(); pilihBarangDariKeranjang(${c.id}); bukaDetailPotongan();">${potDisplay}</td>
-            <td class="num col-sub"${rugi ? ' style="color:#ef4444" title="Harga di bawah modal"' : ""}>${fmtRpKoma(c.price * c.qty)}</td>
-            <td class="ctr"><button class="ci-del" onclick="removeCart(${i})">✕</button></td>
-          </tr>`;
+          <div class="cart-item">
+            <div class="ci-info">
+              <div class="ci-name">${c.name}</div>
+              <div class="ci-price">${discInfo}${fmtRp(c.price)} / ${c.unit || "pcs"}</div>
+            </div>
+            <div class="qty-ctrl">
+              <button class="qty-btn" onclick="changeQty(${i},-1)">−</button>
+              <span style="font-size:14px;font-weight:700;min-width:18px;text-align:center">${fmtQty(c.qty)}</span>
+              <button class="qty-btn" onclick="changeQty(${i},1)">+</button>
+            </div>
+            <div class="ci-sub">${fmtRp(c.price * c.qty)}</div>
+            <button class="ci-del" onclick="removeCart(${i})">✕</button>
+          </div>`;
         })
         .join("");
-
-      // Tambah baris kosong sampai memenuhi baris minimal; pesan bantuan
-      // hanya di baris pertama saat keranjang masih kosong.
-      let barisKosong = "";
-      const jumlahKosong = Math.max(0, BARIS_MINIMAL - cart.length);
-      for (let f = 0; f < jumlahKosong; f++) {
-        barisKosong +=
-          !cart.length && f === 0
-            ? bikinBarisKosong(
-              "Belum ada barang — scan / ketik kode atau nama barang lalu Enter",
-            )
-            : bikinBarisKosong();
-      }
-
-      body.innerHTML = barisBarang + barisKosong;
-      sorotBarisAktif();
     }
 
     function changeQty(i, d) {
@@ -3151,14 +1634,20 @@
       const availableQty = getAvailableCartStock(item, i);
       cart[i].stock = availableQty;
       cart[i].qty = Math.max(
-        0,
+        1,
         Math.min(availableQty, roundQty(cart[i].qty + d)),
       );
-      // Harga menyesuaikan jumlah (harga grosir/tier) + Pot 1–4 baris ini.
-      hitungBarisKeranjang(cart[i]);
+      // Harga satuan menyesuaikan jumlah (harga grosir/tier berdasarkan qty)
+      groupPriceBlockedItems = [];
+      cart[i].price = computeLinePrice(
+        item,
+        cart[i].original_price || item.sell_price,
+        cart[i].qty,
+        cart[i].supplier_id,
+      );
+      notifyGroupPriceBlocked();
       renderCart();
       recalc();
-      warnRugi();
     }
     function removeCart(i) {
       cart.splice(i, 1);
@@ -3167,211 +1656,14 @@
     }
     function clearCart() {
       cart = [];
-      const oc = document.getElementById("othercost");
-      if (oc) oc.value = "0,00";
-      const idc = document.getElementById("invoiceDiscAmt");
-      if (idc) idc.value = "0,00";
-      const idp = document.getElementById("invoiceDiscPct");
-      if (idp) idp.value = "";
       renderCart();
       recalc();
       document.getElementById("searchInp").focus();
     }
-
-    // ===== FITUR PENDING TRANSAKSI =====
-    function getPendingList() {
-      try {
-        return JSON.parse(localStorage.getItem("ipos_pending_sales") || "[]");
-      } catch (e) {
-        return [];
-      }
-    }
-
-    function savePendingList(list) {
-      localStorage.setItem("ipos_pending_sales", JSON.stringify(list));
-      updatePendingCount();
-    }
-
-    function updatePendingCount() {
-      const list = getPendingList();
-      const el = document.getElementById("pendingCount");
-      if (el) el.textContent = list.length;
-    }
-
-    function holdTransaction() {
-      if (cart.length === 0) return showToast("Keranjang kosong!", "warning");
-
-      const list = getPendingList();
-      const custSel = document.getElementById("custSel");
-      const groupSel = document.getElementById("groupSel");
-      const ketEl = document.querySelector(".keterangan-inp");
-      const oc = document.getElementById("othercost");
-
-      const custName = custSel.options[custSel.selectedIndex]?.text || "Umum";
-      const totalAmount = cart.reduce((s, c) => s + c.price * c.qty, 0) + getBiayaLain();
-
-      const pendingData = {
-        id: Date.now(),
-        date: new Date().toLocaleString("id-ID", { timeZone: "Asia/Makassar", hour12: false }),
-        cart: JSON.parse(JSON.stringify(cart)), // copy
-        custId: custSel.value,
-        groupId: groupSel ? groupSel.value : "",
-        otherCost: oc ? oc.value : "",
-        keterangan: ketEl ? ketEl.value : "",
-        custName: custName,
-        totalItems: cart.reduce((s, c) => s + c.qty, 0),
-        totalAmount: totalAmount
-      };
-
-      list.push(pendingData);
-      savePendingList(list);
-
-      clearCart();
-      if (ketEl) ketEl.value = "";
-      showToast("Transaksi berhasil di-hold (pending).", "success");
-    }
-
-    function showPendingModal() {
-      const list = getPendingList();
-      const body = document.getElementById("pendingBody");
-
-      if (list.length === 0) {
-        body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:1.5rem">Tidak ada transaksi pending.</td></tr>';
-      } else {
-        body.innerHTML = list.map(p => `
-          <tr>
-            <td style="text-align:center; font-size: 0.85rem;">${p.date}</td>
-            <td>${p.custName}</td>
-            <td>${p.keterangan || "-"}</td>
-            <td class="num">${fmtQty(p.totalItems)}</td>
-            <td class="num" style="font-weight:700;color:var(--primary)">${fmtRp(p.totalAmount)}</td>
-            <td style="text-align:center; display:flex; justify-content:center; gap:0.4rem;">
-              <button onclick="recallTransaction(${p.id})" style="background:var(--primary);color:#fff;border:none;padding:0.4rem 0.7rem;border-radius:0.4rem;cursor:pointer;font-size:0.8rem;">Buka</button>
-              <button onclick="deletePendingTransaction(${p.id})" style="background:#ef4444;color:#fff;border:none;padding:0.4rem 0.7rem;border-radius:0.4rem;cursor:pointer;font-size:0.8rem;">Hapus</button>
-            </td>
-          </tr>
-        `).join("");
-      }
-
-      document.getElementById("pendingModal").style.display = "flex";
-      activeModal = "pending";
-    }
-
-    function recallTransaction(id) {
-      if (cart.length > 0) {
-        if (!confirm("Keranjang saat ini tidak kosong! Jika dilanjutkan, keranjang saat ini akan tertimpa. Lanjutkan?")) return;
-      }
-
-      const list = getPendingList();
-      const pIndex = list.findIndex(x => x.id === id);
-      if (pIndex === -1) return;
-
-      const p = list[pIndex];
-      cart = p.cart;
-
-      const custSel = document.getElementById("custSel");
-      if (custSel && p.custId) {
-        custSel.value = p.custId;
-        handleCustomerChange();
-      }
-
-      const oc = document.getElementById("othercost");
-      if (oc) {
-        oc.value = p.otherCost;
-        formatBiayaLain(oc);
-      }
-
-      const ketEl = document.querySelector(".keterangan-inp");
-      if (ketEl) ketEl.value = p.keterangan || "";
-
-      list.splice(pIndex, 1);
-      savePendingList(list);
-
-      renderCart();
-      recalc();
-      closeModals();
-      showToast("Transaksi berhasil dibuka kembali.", "success");
-    }
-
-    function deletePendingTransaction(id) {
-      if (!confirm("Hapus transaksi pending ini?")) return;
-      const list = getPendingList();
-      const newList = list.filter(x => x.id !== id);
-      savePendingList(newList);
-      showPendingModal(); // refresh
-    }
-
-    function getDiskonFaktur() {
-      const el = document.getElementById("invoiceDiscAmt");
-      if (!el) return 0;
-      const rawStr = (el.value || "").split(',')[0];
-      const n = parseFloat(rawStr.replace(/[^\d]/g, ""));
-      return isNaN(n) ? 0 : n;
-    }
-    function calcInvoiceDiscPct(el) {
-      const pct = parseFloat(el.value) || 0;
-      const net = cart.reduce((s, c) => s + c.price * c.qty, 0);
-      const amt = Math.round(net * (pct / 100));
-      const amtEl = document.getElementById("invoiceDiscAmt");
-      if (amtEl) amtEl.value = amt ? new Intl.NumberFormat("id-ID").format(amt) + ",00" : "0,00";
-      recalc();
-    }
-    function calcInvoiceDiscAmt(el) {
-      const rawStr = (el.value || "").split(',')[0];
-      const amt = parseFloat(rawStr.replace(/[^\d]/g, "")) || 0;
-      const net = cart.reduce((s, c) => s + c.price * c.qty, 0);
-      const pct = net > 0 ? ((amt / net) * 100).toFixed(2) : 0;
-      const pctEl = document.getElementById("invoiceDiscPct");
-      if (pctEl && document.activeElement !== pctEl) pctEl.value = amt > 0 ? pct : "";
-      recalc();
-    }
-
-    // Biaya Lain ditagihkan ke pelanggan (ongkir/admin) → nambah total yang dibayar.
-    // Ambil angka saja (buang pemisah ribuan / karakter non-digit).
-    function getBiayaLain() {
-      const el = document.getElementById("othercost");
-      if (!el) return 0;
-      const rawStr = (el.value || "").split(',')[0];
-      const n = parseFloat(rawStr.replace(/[^\d]/g, ""));
-      return isNaN(n) ? 0 : n;
-    }
-    // Tampilkan Biaya Lain dengan titik pemisah ribuan (mis. 1.500.000) biar mudah dibaca.
-    // Diarahkan ke formatDesimal global dari api.js.
-    function formatBiayaLain(el) {
-      if (typeof formatDesimal === "function") {
-        formatDesimal(el);
-      }
-    }
     function recalc() {
-      const setTxt = (id, val) => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = val;
-      };
-      // Gross = Σ Harga/Pcs (sebelum Pot 1–4) × qty. Net = Σ harga net × qty.
-      const gross = cart.reduce(
-        (s, c) => s + (c.harga_dasar ?? c.original_price ?? c.price) * c.qty,
-        0,
-      );
-      const net = cart.reduce((s, c) => s + c.price * c.qty, 0);
-
-      const diskonFaktur = getDiskonFaktur();
-      const biayaLain = getBiayaLain();
-      const grandTotal = net - diskonFaktur + biayaLain;
-
-      document.getElementById("bannerTotalEl").innerHTML =
-        '<span class="rp">Rp.</span>' +
-        new Intl.NumberFormat("id-ID").format(Math.round(grandTotal));
-
-      // Update persentase jika cart berubah tapi input nominal yang jadi sumber
-      if (document.getElementById("invoiceDiscPct") && document.activeElement !== document.getElementById("invoiceDiscPct")) {
-        const pct = net > 0 ? ((diskonFaktur / net) * 100).toFixed(2) : 0;
-        document.getElementById("invoiceDiscPct").value = diskonFaktur > 0 ? pct : "";
-      }
-
-      // Ringkasan: Sub Total = banyaknya kuantiti semua barang · Jumlah (net).
-      const totalKuantiti = cart.reduce((s, c) => s + c.qty, 0);
-      setTxt("subTotal", totalKuantiti);
-      setTxt("sumGross", fmtRpKoma(net));
+      const sub = cart.reduce((s, c) => s + c.price * c.qty, 0);
+      document.getElementById("subtotalEl").textContent = fmtRp(sub);
+      document.getElementById("totalEl").textContent = fmtRp(sub);
       // Mode PKP: harga sudah termasuk PPN → tampilkan porsi PPN (info), total TIDAK berubah.
       // PPN dihitung PER BARIS pakai tarif barang (c.ppn_percent), fallback tarif toko.
       const ppnRow = document.getElementById("ppnRow");
@@ -3404,69 +1696,41 @@
       }
     }
 
-    // (Fungsi panel keranjang mobile dihapus — layout tunggal baru sudah responsif.)
+    // =======================================================================
+    // FUNGSI TAMPILAN MOBILE / HP
+    // =======================================================================
+    function toggleCartPanel() {
+      document.getElementById("cartPanel").classList.toggle("show");
+    }
+
+    function closeCartPanel() {
+      document.getElementById("cartPanel").classList.remove("show");
+    }
+
+    function handleMobilePay() {
+      openPayModal();
+    }
 
     // =======================================================================
     // API TRANSAKSI
     // =======================================================================
-    async function prosesBayar(autoPrint = false) {
-      const total =
-        cart.reduce((s, c) => s + c.price * c.qty, 0) - getDiskonFaktur() + getBiayaLain();
-
-      // Baca semua tender langsung dari input modal bayar (bayar campur)
-      const tunai = getRawPay("payInpTunai");
-      const deposit = getRawPay("payInpDeposit");
-      const kredit = getRawPay("payInpKredit"); // porsi jual tempo → jadi piutang
-      const debit = getRawPay("payInpDebit");
-      const kartuKredit = getRawPay("payInpKartuKredit");
-      const emoney = getRawPay("payInpEmoney");
-
-      const diterimaSekarang = tunai + deposit + debit + kartuKredit + emoney; // di luar kredit
-      const totalBayar = diterimaSekarang + kredit;
-      const custId = document.getElementById("custSel").value;
-      const selectedCust = allCusts.find((c) => String(c.id) === String(custId));
-
-      // ── Validasi ──
-      if (totalBayar + 0.01 < total)
+    async function prosesBayar() {
+      const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
+      const paid = parseFloat(document.getElementById("paidInp").value) || 0;
+      if (payMethod === "cash" && paid < total)
         return showToast("Uang kurang!", "error");
-      if (kredit > 0.01 && !custId)
-        return showToast("Pilih pelanggan dulu untuk jual kredit", "error");
-      const kembali = Math.max(0, totalBayar - total); // kembalian hanya keluar dari tunai
-      if (kembali > tunai + 0.01)
-        return showToast("Pembayaran non-tunai melebihi tagihan, kurangi dulu", "error");
-      if (deposit > 0) {
-        const maxDep = selectedCust ? (selectedCust.deposit_balance || 0) : 0;
-        if (deposit > maxDep + 0.01)
-          return showToast("Saldo Pelanggan tidak mencukupi!", "error");
-      }
-
-      // Kas bersih setelah kembalian; sisa tagihan yang belum dibayar (kredit) → piutang di server
-      const cashApplied = Math.max(0, tunai - kembali);
-      const paid = Math.round((total - kredit) * 100) / 100; // bagian tagihan yang lunas sekarang
-
-      // Rincian tender diterima (hanya yang > 0). Σ jumlah = paid (invarian dijaga server)
-      const payments = [
-        { metode: "cash", jumlah: cashApplied },
-        { metode: "deposit", jumlah: deposit },
-        { metode: "debit", jumlah: debit },
-        { metode: "credit_card", jumlah: kartuKredit },
-        { metode: "emoney", jumlah: emoney },
-      ].filter((p) => p.jumlah > 0);
-
       try {
         if (typeof showLoading === "function") showLoading("Memproses...");
         const sale = await api("POST", "/sales/", {
           date: today(), // Menggunakan tanggal WITA
-          customer_id: custId || null,
-          discount: getDiskonFaktur(),
+          customer_id: document.getElementById("custSel").value || null,
+          discount: 0,
           // Mode PKP: kirim tarif PPN; harga jual dianggap SUDAH termasuk PPN (dikupas di server).
           tax: PKP.is_pkp && PKP.tarif > 0 ? PKP.tarif : 0,
           tax_percent: PKP.is_pkp && PKP.tarif > 0 ? PKP.tarif : 0,
           is_tax_included: true,
-          other_cost: getBiayaLain(), // biaya lain ditagihkan ke pelanggan
           paid: paid,
           payment_method: payMethod,
-          payments: payments, // rincian bayar campur → tiap metode ke akunnya sendiri
           items: cart.map((c) => ({
             item_id: c.id,
             qty: c.qty,
@@ -3476,12 +1740,6 @@
           })),
         });
         if (typeof hideLoading === "function") hideLoading();
-
-        // Segarkan saldo deposit lokal agar label "Saldo (Rp …)" langsung akurat tanpa reload
-        if (deposit > 0 && selectedCust) {
-          selectedCust.deposit_balance = (selectedCust.deposit_balance || 0) - deposit;
-          if (typeof handleCustomerChange === "function") handleCustomerChange();
-        }
 
         applyLocalStockConsumption(cart);
         clearCart();

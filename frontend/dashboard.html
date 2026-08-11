@@ -352,12 +352,17 @@
           console.log("3. Berhasil menempelkan data ke layar!");
         } catch (e) {
           console.error("❌ ERROR di loadKPI:", e);
+          ["kSales", "kTx", "kPur", "kCustDep", "kSuppDep", "kLow"].forEach(
+            (id) => {
+              const element = document.getElementById(id);
+              if (element) {
+                element.textContent = "Gagal dimuat";
+                element.title = e?.message || "Data dashboard tidak tersedia";
+              }
+            },
+          );
         }
       }
-
-      // Panggilan pertama saat halaman dimuat
-      loadKPI();
-      loadPOCount();
 
       async function loadPOCount() {
           const badge = document.getElementById("poBadge");
@@ -387,15 +392,79 @@
         }
       }
 
-      // Jalankan pengecekan
-      checkGatekeeper();
+      const dashboardPermissions = {
+        "/pos": ["sales.cashier", "view", "menu.sales"],
+        "/shifts": ["sales.cashier", "view", "menu.sales"],
+        "/sales": ["sales.transaction", "view", "menu.sales"],
+        "/delivery": ["sales.transaction", "view", "menu.sales"],
+        "/returns": ["sales.return", "view", "menu.sales"],
+        "/trade_in": ["sales.trade_in", "view", "menu.sales"],
+        "/po": ["purchase.order", "view", "menu.purchase"],
+        "/setoran": ["accounting.cash_in", "view", "menu.accounting"],
+        "/item/items": ["master.item", "view", "menu.master"],
+        "/purchases": ["purchase.transaction", "view", "menu.purchase"],
+        "/inventory": ["inventory.item_in", "view", "menu.inventory"],
+        "/warehouse": ["inventory.transfer", "view", "menu.inventory"],
+        "/assembly": ["assembly.transaction", "view", "menu.assembly"],
+        "/unit_conversion": ["master.unit", "view", "menu.master"],
+        "/konsinyasi": ["inventory.item_in", "view", "menu.inventory"],
+        "/item/dashboard": ["master.item", "view", "menu.master"],
+        "/reports": ["report.sales", "view", "menu.report"],
+        "/accounting": ["accounting.journal", "view", "menu.accounting"],
+        "/customers": ["master.customer", "view", "menu.master"],
+        "/supplier/dashboard": ["master.supplier", "view", "menu.master"],
+        "/supplier/tambahSuplier": ["master.supplier", "create", "menu.master"],
+        "/discounts": ["master.discount_period", "view", "menu.master"],
+        "/branches": ["master.warehouse", "view", "menu.settings"],
+        "/users": ["settings.user_management", "access", "menu.settings"],
+        "/barcode": ["master.barcode", "view", "menu.master"],
+      };
+
+      async function initializeDashboardPermissions() {
+        const state = await loadMyPermissions();
+        document.querySelectorAll(".menu-card").forEach((card) => {
+          const match = (card.getAttribute("onclick") || "").match(/['"](\/[^'"]+)['"]/);
+          if (!match) return;
+          const rule = dashboardPermissions[match[1]];
+          if (!rule) return;
+          const moduleAllowed = hasPermission(rule[0], rule[1], state);
+          const menuAllowed = hasPermission(rule[2], "show", state);
+          card.style.display = moduleAllowed && menuAllowed ? "" : "none";
+        });
+
+        document.querySelectorAll(".section-title").forEach((title) => {
+          const grid = title.nextElementSibling;
+          if (grid && !Array.from(grid.querySelectorAll(".menu-card")).some((card) => card.style.display !== "none")) {
+            title.style.display = "none";
+            grid.style.display = "none";
+          }
+        });
+
+        const settingsButton = document.querySelector(".topbar button[onclick*='/settings']");
+        if (settingsButton) {
+          settingsButton.style.display =
+            hasPermission("settings.general", "access", state) &&
+            hasPermission("menu.settings", "show", state)
+              ? ""
+              : "none";
+        }
+
+        if (hasPermission("report.sales", "view", state)) loadKPI();
+        else document.getElementById("kpiGrid").style.display = "none";
+        if (hasPermission("purchase.order", "view", state)) loadPOCount();
+        if (hasPermission("accounting.journal", "view", state)) checkGatekeeper();
+      }
+
+      initializeDashboardPermissions().catch((error) =>
+        console.error("Gagal menerapkan hak akses dashboard", error),
+      );
 
       // ==========================================
       // TAMBAHKAN KODE INI DI BAWAHNYA
       // ==========================================
       window.addEventListener("focus", () => {
-        console.log("Tab aktif kembali, memperbarui data dashboard...");
-        loadKPI();
+        const state = getPermissionState();
+        if (hasPermission("report.sales", "view", state)) loadKPI();
       });
     </script>
   </body>
