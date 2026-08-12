@@ -653,3 +653,58 @@ body.dark-mode .input-control::placeholder {
     margin: var(--space-sm) 0 0.375rem;
   }
 }
+
+/* Logout selalu tersedia untuk setiap sesi login dan tidak bergantung pada role. */
+.global-logout-button {
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 9000;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0.625rem 1rem;
+  border: 0;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(127, 29, 29, 0.35);
+  transition:
+    transform 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.global-logout-button:hover {
+  background: #b91c1c;
+  transform: translateY(-2px);
+}
+
+.global-logout-button:focus-visible {
+  outline: 3px solid rgba(220, 38, 38, 0.3);
+  outline-offset: 3px;
+}
+
+@media (max-width: 480px) {
+  .global-logout-button {
+    width: 46px;
+    min-height: 46px;
+    padding: 0;
+    font-size: 1.1rem;
+  }
+
+  .global-logout-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}

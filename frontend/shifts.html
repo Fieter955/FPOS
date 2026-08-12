@@ -106,6 +106,20 @@
 
           <div id="aktifShift" style="display: none">
             <div
+              id="shiftConflict"
+              style="
+                display: none;
+                margin-bottom: 18px;
+                padding: 14px 16px;
+                border-radius: 12px;
+                border: 1px solid rgba(239, 68, 68, 0.45);
+                background: rgba(239, 68, 68, 0.12);
+                color: #ef4444;
+                font-weight: 700;
+                line-height: 1.5;
+              "
+            ></div>
+            <div
               style="
                 display: flex;
                 align-items: center;
@@ -143,7 +157,7 @@
                     margin-bottom: 4px;
                   "
                 >
-                  Kasir
+                  Kasir Pembuka
                 </div>
                 <div
                   id="sKasir"
@@ -317,6 +331,11 @@
             document.getElementById("noShift").style.display = "block";
           } else {
             document.getElementById("aktifShift").style.display = "block";
+            if (curShift.has_conflict) {
+              const conflict = document.getElementById("shiftConflict");
+              conflict.style.display = "block";
+              conflict.textContent = `${curShift.open_shift_count} shift lama masih terbuka di cabang ini. POS diblokir sementara. Tutup shift yang tampil ini, lalu ulangi sampai tersisa satu shift aktif.`;
+            }
             const nama =
               curShift.user_name ||
               curShift.user?.username ||
@@ -352,7 +371,14 @@
           await api("POST", "/shifts/open", { opening_cash: cash });
           hideLoading();
           showToast("Shift berhasil dibuka! 🔓");
-          location.reload();
+          const langsungKePos = await showConfirm(
+            "Shift berhasil dibuka. Apakah ingin langsung menuju POS?",
+          );
+          if (langsungKePos) {
+            location.href = "/pos";
+          } else {
+            location.reload();
+          }
         } catch (e) {
           hideLoading();
           showToast(e.message, "error");

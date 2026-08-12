@@ -24,6 +24,7 @@ from ..services.virtual_units import (
     is_virtual_variant,
 )
 from ..services.inventory_fifo import consume_fifo, record_allocations, restore_allocations
+from ..services.shift_service import require_single_open_branch_shift
 from .accounting import create_auto_journal, pastikan_akun_ada  # ✅ Import di atas, sekali saja
 
 router = APIRouter()
@@ -265,12 +266,11 @@ def create_sale(
     local_datetime = get_local_datetime()
 
     # ── Cek Shift Kasir ───────────────────────────────────────────────────────
-    active_shift = get_query(db, models.Shift, current_user).filter(
-        models.Shift.user_id == current_user.id,
-        models.Shift.status  == "open"
-    ).first()
-    if not active_shift:
-        raise HTTPException(400, "Anda belum membuka shift kasir hari ini.")
+    active_shift = require_single_open_branch_shift(
+        db,
+        current_user,
+        for_update=True,
+    )
 
     # ── Kalkulasi Header ──────────────────────────────────────────────────────
     number      = data.number or _next_number(db, current_user)

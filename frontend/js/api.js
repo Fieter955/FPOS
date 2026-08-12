@@ -34,6 +34,40 @@ function clearToken() {
   sessionStorage.removeItem("fpos_effective_permissions");
 }
 
+async function logoutCurrentUser() {
+  const confirmed =
+    typeof showConfirm === "function"
+      ? await showConfirm("Yakin ingin keluar dari akun saat ini?")
+      : window.confirm("Yakin ingin keluar dari akun saat ini?");
+  if (!confirmed) return;
+
+  clearToken();
+  window.location.href = "/login";
+}
+
+function renderGlobalLogoutButton() {
+  const path = location.pathname.replace(/\.html$/, "").replace(/\/$/, "") || "/";
+  const loginPages = new Set(["/", "/index", "/login"]);
+  if (
+    !getToken() ||
+    loginPages.has(path) ||
+    document.getElementById("globalLogoutButton")
+  ) {
+    return;
+  }
+
+  const button = document.createElement("button");
+  button.id = "globalLogoutButton";
+  button.type = "button";
+  button.className = "global-logout-button";
+  button.title = "Keluar dari akun";
+  button.setAttribute("aria-label", "Keluar dari akun");
+  button.innerHTML =
+    '<span aria-hidden="true">🚪</span><span class="global-logout-label">Keluar</span>';
+  button.addEventListener("click", logoutCurrentUser);
+  document.body.appendChild(button);
+}
+
 function getUser() {
   try {
     return JSON.parse(localStorage.getItem("ipos_user") || "{}");
@@ -73,7 +107,7 @@ async function api(method, path, body = null) {
 
   if (r.status === 401) {
     clearToken();
-    window.location.href = "/";
+    window.location.href = "/login";
     return;
   }
   if (r.status === 403) {
@@ -173,7 +207,7 @@ function invalidateCache(path) {
 }
 
 function requireAuth() {
-  if (!getToken()) window.location.href = "/";
+  if (!getToken()) window.location.href = "/login";
 }
 
 // ==============================================================================
@@ -291,6 +325,8 @@ const PAGE_PERMISSIONS = {
 
 document.addEventListener("DOMContentLoaded", async () => {
   if (!getToken()) return;
+  // Logout adalah kontrol sesi dasar untuk semua akun, bukan hak akses admin.
+  renderGlobalLogoutButton();
   try {
     await loadMyPermissions();
     applyPermissionVisibility();

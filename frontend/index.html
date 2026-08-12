@@ -104,7 +104,52 @@
     <script src="/js/api.js"></script>
     <script src="/js/theme.js"></script>
     <script>
-      if (getToken()) window.location.href = "/dashboard";
+      function getLoginRoleNames(user) {
+        return String(user?.role || "")
+          .split(",")
+          .map((role) => role.trim().toLowerCase())
+          .filter(Boolean);
+      }
+
+      async function redirectAfterLogin(user = null) {
+        let currentUser = user;
+        if (!currentUser?.id) {
+          currentUser = await api("GET", "/auth/me");
+          if (!currentUser || !getToken()) return;
+          localStorage.setItem("ipos_user", JSON.stringify(currentUser));
+        }
+
+        const roles = getLoginRoleNames(currentUser);
+        const isCashier = roles.includes("kasir");
+        const isAdmin = roles.includes("admin");
+        if (!isCashier || isAdmin) {
+          window.location.href = "/dashboard";
+          return;
+        }
+
+        const branchId =
+          currentUser.branch_id || currentUser.active_branch_id || 1;
+        localStorage.setItem("active_branch_id", branchId);
+
+        try {
+          const shift = await api("GET", "/shifts/current");
+          if (!getToken()) return;
+          window.location.href =
+            shift && !shift.has_conflict ? "/pos" : "/shifts";
+        } catch (_error) {
+          // Jalur aman: jangan masukkan kasir ke POS jika status shift gagal dicek.
+          if (getToken()) window.location.href = "/shifts";
+        }
+      }
+
+      if (getToken()) {
+        const btn = document.getElementById("btnLogin");
+        btn.disabled = true;
+        btn.textContent = "Memeriksa shift...";
+        redirectAfterLogin().catch(() => {
+          if (getToken()) window.location.href = "/shifts";
+        });
+      }
       document
         .getElementById("loginForm")
         .addEventListener("submit", async (e) => {
@@ -124,7 +169,9 @@
             const r = await apiForm("/auth/login", fd);
             setToken(r.access_token);
             localStorage.setItem("ipos_user", JSON.stringify(r.user));
-            window.location.href = "/dashboard";
+            const branchId = r.user.branch_id || r.user.active_branch_id;
+            if (branchId) localStorage.setItem("active_branch_id", branchId);
+            await redirectAfterLogin(r.user);
           } catch (ex) {
             err.textContent = ex.message || "Username atau password salah.";
             err.style.display = "block";

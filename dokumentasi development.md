@@ -222,7 +222,7 @@ done
 
 uji opname
 
-pelajari tailscale diperangkat baru
+Panduan setup FPOS dan Tailscale di perangkat baru: [PANDUAN_SETUP_LAPTOP_BARU.md](PANDUAN_SETUP_LAPTOP_BARU.md)
 
 fitur yang jalan
 

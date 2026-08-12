@@ -12,6 +12,25 @@ from PyInstaller.utils.hooks import collect_submodules
 # (server tidak pernah bind → window "refused to connect"). Kumpulkan semua submodul uvicorn.
 _hidden = collect_submodules('uvicorn') + ['h11']
 
+# Environment build `ipos` juga berisi library data-science/CUDA berukuran beberapa
+# gigabyte. FPOS tidak mengimpornya; AI aplikasi memakai API online (OpenAI/Gemini/
+# Groq), sedangkan import Excel hanya membutuhkan pandas/openpyxl. Mengecualikan
+# modul opsional ini menjaga paket Windows tetap ringan tanpa mengurangi fitur FPOS.
+_excludes = [
+    'torch',
+    'torchvision',
+    'torchaudio',
+    'transformers',
+    'cv2',
+    'scipy',
+    'sklearn',
+    'matplotlib',
+    'PyQt5',
+    'IPython',
+    'notebook',
+    'nbformat',
+]
+
 a = Analysis(
     ['main.py'],
     pathex=[],
@@ -21,7 +40,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=_excludes,
     noarchive=False,
     optimize=0,
 )

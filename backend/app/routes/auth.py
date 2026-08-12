@@ -77,7 +77,12 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(),
             "username": user.username,
             "full_name": user.full_name,
             "role": user.role,
-            "active_branch_id": user.active_branch_id,
+            "branch_id": user.branch_id,
+            "active_branch_id": (
+                user.active_branch_id
+                if has_role(user, "admin")
+                else (user.branch_id or 1)
+            ),
             "branch_status": user.branch_status
         }
     }

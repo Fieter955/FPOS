@@ -257,6 +257,16 @@ def run_migrations():
     # Shift, audit, lisensi, print
     add_index("ix_shifts_user_id", "shifts", "user_id")
     add_index("ix_shifts_branch_id", "shifts", "branch_id")
+    # Satu cabang hanya boleh mempunyai satu shift aktif. Jika instalasi lama
+    # masih memiliki konflik, index dilewati tanpa mengubah data; konflik dapat
+    # ditutup manual dari halaman Shift dan index akan dibuat pada startup berikutnya.
+    try:
+        c.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_shifts_one_open_per_branch "
+            "ON shifts (branch_id) WHERE status = 'open'"
+        )
+    except Exception as e:
+        print(f"  ⚠ Skip unique shift aktif per cabang: {e}")
     add_index("ix_audit_logs_user_id", "audit_logs", "user_id")
     add_index("ix_users_branch_id", "users", "branch_id")
     add_index("ix_login_attempts_username", "login_attempts", "username")
@@ -653,6 +663,12 @@ if FRONTEND_DIR.exists():
 
     @app.get("/")
     async def root():
+        return FileResponse(str(FRONTEND_DIR / "index.html"), headers=_HTML_NO_CACHE)
+
+    @app.get("/login", include_in_schema=False)
+    @app.get("/login.html", include_in_schema=False)
+    async def login_page():
+        """Sajikan halaman login melalui URL GET yang eksplisit."""
         return FileResponse(str(FRONTEND_DIR / "index.html"), headers=_HTML_NO_CACHE)
 
     HTML_PAGES = [
