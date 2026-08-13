@@ -25,6 +25,7 @@ from ..services.virtual_units import (
 )
 from ..services.inventory_fifo import consume_fifo, record_allocations, restore_allocations
 from ..services.shift_service import require_single_open_branch_shift
+from ..services.tax_context import _sale_line_ppn_rates, _sales_ppn_context
 from .accounting import create_auto_journal, pastikan_akun_ada  # ✅ Import di atas, sekali saja
 
 router = APIRouter()
@@ -274,24 +275,12 @@ def create_sale(
 
     # ── Kalkulasi Header ──────────────────────────────────────────────────────
     number      = data.number or _next_number(db, current_user)
-    gross_subtotal = sum((it.sell_price * (1 - it.discount / 100)) * it.qty for it in data.items)
-    is_inc = data.is_tax_included if data.is_tax_included is not None else True
-    # Tarif PPN efektif TIAP BARIS (PKP). Urutan sumber tarif:
-    #   tarif yang dikirim baris → tarif barang (Item.ppn_percent) → tarif transaksi (data.tax).
-    # data.tax<=0 (non-PKP / struk biasa) → semua 0 → hasil identik perilaku lama (nol regresi).
-    line_rates = []
-    if (data.tax or 0) > 0:
-        _ids = [it.item_id for it in data.items]
-        _rows = db.query(models.Item.id, models.Item.ppn_percent).filter(models.Item.id.in_(_ids)).all()
-        _ppn_map = {rid: rppn for (rid, rppn) in _rows}
-        for it in data.items:
-            if it.ppn_percent is not None:
-                line_rates.append(float(it.ppn_percent))
-            else:
-                mp = _ppn_map.get(it.item_id)
-                line_rates.append(float(mp) if mp is not None else float(data.tax or 0))
-    else:
-        line_rates = [0.0 for _ in data.items]
+    # Accounting adalah saklar global yang otoritatif. Data Barang hanya menentukan
+    # pengecualian/tarif per item saat mode PKP aktif. Harga jual selalu mengikuti
+    # konvensi Accounting: sudah termasuk PPN.
+    _, tarif_toko = _sales_ppn_context(db)
+    is_inc = True
+    line_rates = _sale_line_ppn_rates(db, data.items, tarif_toko)
 
     # PPN penjualan dihitung PER BARIS (harga jual dianggap SUDAH termasuk PPN saat termasuk_ppn),
     # lalu dijumlah → subtotal/discount/tax/total. Konsisten dengan jurnal (4-1100/4-1150/2-1200).
@@ -347,7 +336,7 @@ def create_sale(
         discount=disc_amount,
         tax=tax_amount,
         tax_percent=eff_tax_percent,
-        is_tax_included=data.is_tax_included if data.is_tax_included is not None else True,
+        is_tax_included=is_inc,
         other_cost=other_cost,
         total=total,
         paid=data.paid,

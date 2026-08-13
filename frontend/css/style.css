@@ -84,6 +84,36 @@ html {
   -webkit-text-size-adjust: 100%; /* cegah iOS membesarkan teks sendiri saat landscape */
 }
 
+/* Laptop ber-viewport kecil membutuhkan ruang kerja yang lebih lega agar lebih
+   banyak kolom tabel, tombol, dan panel terlihat sekaligus. Browser tidak
+   menyediakan ukuran fisik layar (inci) secara andal, jadi lebar viewport
+   dipakai sebagai pendekatan. Pointer/hover membatasi aturan ini ke perangkat
+   desktop/laptop; HP dan tablet tetap memakai layout responsif normal. */
+@media screen and (min-width: 1024px) and (max-width: 1536px) and (hover: hover) and (pointer: fine) {
+  html {
+    --zoomed-viewport-height: calc(100vh / 0.75);
+    zoom: 75%;
+  }
+
+  /* `zoom` mengecilkan 100vh menjadi 75% tinggi layar. Kompensasi ini membuat
+     layout layar penuh tetap mengisi viewport secara vertikal, sama seperti
+     ketika pengguna memilih browser zoom 75%. `!important` diperlukan untuk
+     mengalahkan aturan per-halaman dan inline yang dimuat setelah style.css. */
+  body {
+    min-height: var(--zoomed-viewport-height) !important;
+  }
+  body[style*="height: 100vh"],
+  .app-container,
+  .pos-layout,
+  .ipos-screen,
+  .barcode-container {
+    height: var(--zoomed-viewport-height) !important;
+  }
+  .chat-wrap {
+    height: calc(var(--zoomed-viewport-height) - 200px) !important;
+  }
+}
+
 body {
   margin: 0;
   background-color: var(--bg-color);

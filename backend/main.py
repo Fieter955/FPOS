@@ -672,7 +672,7 @@ if FRONTEND_DIR.exists():
         return FileResponse(str(FRONTEND_DIR / "index.html"), headers=_HTML_NO_CACHE)
 
     HTML_PAGES = [
-        "index", "dashboard", "pos", "pos_2", "sales", "returns",
+        "index", "workspace", "dashboard", "pos", "pos_2", "sales", "returns",
         "customers", "suppliers", "inventory", "reports",
         "accounting", "shifts", "konsinyasi", "ai_advisor",
         "settings", "warehouse", "assembly", "discounts", "onboarding",
@@ -764,6 +764,9 @@ def reset_serve(publik: bool):
     run_cmd(["tailscale", "funnel" if publik else "serve", "reset"])
 
 def jalankan_tailscale(port: int, publik: bool) -> bool:
+    if os.environ.get("FPOS_SKIP_TAILSCALE") == "1":
+        return True  # Digunakan oleh smoke test build otomatis.
+
     ts_exe = cari_tailscale_exe()
     if not ts_exe:
         return False
@@ -825,8 +828,7 @@ def cek_dan_tanya_autostart():
 if __name__ == "__main__":
     import multiprocessing
     import socket
-    import webview
-    import ctypes
+    import webbrowser
 
     multiprocessing.freeze_support()
 
@@ -839,7 +841,12 @@ if __name__ == "__main__":
     # Jalankan sensor pop-up autostart sebelum server menyala
     cek_dan_tanya_autostart()
 
-    PORT = 8010
+    # Produksi selalu memakai 8010. Override hanya untuk smoke test build agar
+    # tidak mengganggu server FPOS lain yang sedang berjalan di komputer build.
+    try:
+        PORT = int(os.environ.get("FPOS_PORT", "8010"))
+    except ValueError:
+        PORT = 8010
     # AMAN secara default: tailscale "serve" (hanya tailnet). Set TAILSCALE_PUBLIC=true
     # di .env HANYA jika cabang berada di luar tailnet dan benar-benar butuh akses publik.
     PUBLIK = settings.TAILSCALE_PUBLIC
@@ -850,7 +857,7 @@ if __name__ == "__main__":
 
     def jalankan_server():
         jalankan_tailscale(PORT, PUBLIK)
-        # Bind ke localhost saja. Tailscale serve/funnel & WebView lokal mengakses
+        # Bind ke localhost saja. Tailscale serve/funnel & browser lokal mengakses
         # lewat 127.0.0.1, jadi app tidak perlu terekspos di seluruh interface (0.0.0.0).
         #
         # ⚠️ JANGAN tambahkan workers=N / gunicorn fork. SQLite = penulis tunggal,
@@ -860,35 +867,54 @@ if __name__ == "__main__":
         # untuk ≤15 user konkuren tanpa membekukan event loop.
         uvicorn.run(app, host="127.0.0.1", port=PORT)
 
-    def maximize_benar(window):
-        time.sleep(0.5) 
-        hwnd = ctypes.windll.user32.FindWindowW(None, "Eva Store")
-        if hwnd:
-            ctypes.windll.user32.ShowWindow(hwnd, 3)
+    def cari_browser_windows() -> str | None:
+        """Cari Edge/Chrome tanpa bergantung pada pywebview/pythonnet/.NET."""
+        kandidat = [
+            os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"),
+            os.path.expandvars(r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"),
+            os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe"),
+            os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
+            os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
+            os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+        ]
+        for path in kandidat:
+            if path and os.path.isfile(path):
+                return path
+        return None
+
+    def buka_tampilan_fpos(port: int) -> bool:
+        """Buka FPOS sebagai jendela aplikasi Edge/Chrome, lalu fallback browser bawaan."""
+        if os.environ.get("FPOS_SKIP_BROWSER") == "1":
+            return True  # Digunakan oleh smoke test build otomatis.
+
+        url = f"http://127.0.0.1:{port}"
+        browser = cari_browser_windows()
+        try:
+            if browser:
+                subprocess.Popen(
+                    [browser, f"--app={url}", "--start-maximized"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                return True
+            return bool(webbrowser.open(url, new=1, autoraise=True))
+        except Exception as e:
+            print(f"⚠️ Gagal membuka browser otomatis: {e}")
+            print(f"   Buka manual: {url}")
+            return False
+
+    def buka_setelah_server_siap(port: int):
+        for _ in range(120):  # Maksimal 30 detik, termasuk waktu setup Tailscale.
+            if is_server_running(port):
+                buka_tampilan_fpos(port)
+                return
+            time.sleep(0.25)
+        print(f"⚠️ Server tidak aktif di port {port} setelah 30 detik.")
 
     if is_server_running(PORT):
-        window = webview.create_window(
-            title="Eva Store",
-            url=f"http://127.0.0.1:{PORT}",
-            fullscreen=False, 
-            text_select=False,
-            confirm_close=True,
-        )
-        webview.start(maximize_benar, window)
+        buka_tampilan_fpos(PORT)
     else:
-        server_thread = threading.Thread(target=jalankan_server, daemon=True)
-        server_thread.start()
-
-        for _ in range(20):  
-            if is_server_running(PORT):
-                break
-            time.sleep(0.5)
-
-        window = webview.create_window(
-            title="Eva Store",
-            url=f"http://127.0.0.1:{PORT}",
-            fullscreen=False, 
-            text_select=False,
-            confirm_close=True,
-        )
-        webview.start(maximize_benar, window)
+        # Browser dibuka setelah server siap. Uvicorn berjalan di thread utama agar
+        # tetap hidup meski jendela browser ditutup dan Funnel masih bisa diakses.
+        threading.Thread(target=buka_setelah_server_siap, args=(PORT,), daemon=True).start()
+        jalankan_server()

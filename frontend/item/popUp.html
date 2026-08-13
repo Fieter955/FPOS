@@ -18,6 +18,27 @@
     background: var(--card-bg);
   }
 
+  /* `html { zoom:75% }` juga mengecilkan fixed overlay dan aturan 100vw/100vh.
+     Kompensasi harus ditempatkan di fragmen ini (setelah style modal dasar),
+     supaya tidak kalah oleh urutan CSS ketika popUp.html disisipkan dinamis. */
+  @media screen and (min-width: 1024px) and (max-width: 1536px) and (hover: hover) and (pointer: fine) {
+    #mBarang.modal-overlay {
+      inset: 0 auto auto 0 !important;
+      width: calc(100vw / 0.75) !important;
+      height: calc(100vh / 0.75) !important;
+      padding: 0 !important;
+      align-items: stretch !important;
+      justify-content: stretch !important;
+      z-index: 9500 !important;
+    }
+
+    #mBarang > .modal-box.wide {
+      width: 100% !important;
+      height: 100% !important;
+      flex: 1 1 auto;
+    }
+  }
+
   #mBarang .modal-hdr {
     margin-bottom: 24px;
     padding-bottom: 16px;
@@ -110,7 +131,7 @@
     <form id="fBarang" onsubmit="saveItem(event)">
       <input type="hidden" id="fId" />
 
-      <div id="detaiBarang">
+      <div id="detaiBarang" data-item-keyboard-section>
         <!-- KOLOM KIRI -->
         <div class="col-left">
           <div class="input-group">
@@ -241,9 +262,9 @@
 
       <!-- Slot komponen BOM: diisi hanya saat form dibuka dari assembly.html
            (section "Komponen / Bahan Baku" dipindah ke sini). Kosong di items.html. -->
-      <div id="slotKomponenBaru"></div>
+      <div id="slotKomponenBaru" data-item-keyboard-section></div>
 
-      <div class="row-price" style="margin-bottom: 16px">
+      <div class="row-price" data-item-keyboard-section style="margin-bottom: 16px">
         <div class="input-group" style="
             grid-column: 1 / -1;
             background: var(--bg-color);
@@ -298,11 +319,11 @@
             <select id="fPpn" class="input-control" style="margin: 0" onchange="togglePpnPercent()">
               <option value="included">Include (Harga Modal Sudah termasuk PPN)</option>
               <option value="excluded">Exclude (Harga Modal Belum termasuk PPN)</option>
-              <option value="none">Tanpa PPN (Non-PPN)</option>
+              <option value="none" selected>Tanpa PPN (Non-PPN)</option>
             </select>
           </div>
 
-          <div class="input-group" id="ppnPercentGroup" style="grid-area: ppn_pct">
+          <div class="input-group" id="ppnPercentGroup" style="grid-area: ppn_pct; display: none">
             <label>Tarif PPN (%)</label>
             <div style="display: flex; align-items: center; gap: 8px">
               <input id="fPpnPercent" type="text" inputmode="numeric" class="input-control" value="11,00"
@@ -339,7 +360,8 @@
           </div>
           <div class="input-group" style="grid-area: margin">
             <label>Margin (%)</label>
-            <input id="fMargin" type="text" inputmode="numeric" class="input-control" value="0,00" oninput="formatInputRibuan(this); onMarginInput()" />
+            <input id="fMargin" type="text" inputmode="decimal" class="input-control item-percent-input" value="0,00"
+              oninput="formatInputPersen(this); onMarginInput()" />
           </div>
           <div class="input-group" style="grid-area: jual">
             <label style="color: var(--primary); font-weight: bold">Harga Jual</label>
@@ -412,9 +434,10 @@
                   <option value="">Pilih Grup (Set Harga)</option>
                 </select>
                 <div style="display: flex; align-items: center; gap: 4px; flex: 1">
-                  <input id="fGroupPercentInput" type="text" inputmode="numeric" class="input-control"
+                  <input id="fGroupPercentInput" type="text" inputmode="decimal"
+                    class="input-control item-percent-input" value="0,00"
                     style="width: 65px; text-align: center; margin: 0" placeholder="0,00"
-                    oninput="formatInputRibuan(this); onGroupPercentInput()" />
+                    oninput="formatInputPersen(this); onGroupPercentInput()" />
                   <span style="font-weight: bold; font-size: 0.9em">%</span>
                 </div>
                 <span style="font-weight: 900; color: #f59e0b; font-size: 1.2em">➜</span>
@@ -452,7 +475,7 @@
           </div>
         </div>
       </div>
-      <div id="advancedSettings" style="
+      <div id="advancedSettings" data-item-keyboard-section style="
           background: var(--bg-color);
           padding: 16px;
           border-radius: 12px;
@@ -519,7 +542,7 @@
         </div>
       </div>
 
-      <div id="GroupPricePreview" style="
+      <div id="GroupPricePreview" data-item-keyboard-section style="
           background: var(--bg-color);
           padding: 16px;
           border-radius: 12px;
@@ -543,7 +566,7 @@
         </div>
       </div>
 
-      <div class="row2" style="margin-bottom: 16px">
+      <div class="row2" data-item-keyboard-section style="margin-bottom: 16px">
         <div class="input-group">
           <label>Peringatan Stok Menipis</label>
           <input id="fStokMin" type="text" inputmode="numeric" class="input-control" value="0,00"
@@ -556,7 +579,7 @@
       </div>
 
       <!-- === PILIH SUPPLIER === -->
-      <div class="sup-selection-section">
+      <div class="sup-selection-section" data-item-keyboard-section>
         <div class="sup-selection-header">
           <label>🚚 Supplier Barang Ini</label>
           <div class="sup-search-box" style="display: none">
@@ -571,7 +594,7 @@
         </div>
       </div>
 
-      <div class="modal-footer" style="
+      <div class="modal-footer" data-item-keyboard-section style="
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 12px;
@@ -584,7 +607,7 @@
           ">
           Batal
         </button>
-        <button type="submit" class="btn btn-primary">Simpan Barang</button>
+        <button type="submit" id="btnSimpanBarang" class="btn btn-primary">Simpan Barang</button>
       </div>
     </form>
   </div>

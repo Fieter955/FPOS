@@ -1,10 +1,86 @@
 const API_BASE = "/api";
+const SESSION_EXPIRED_NOTICE_KEY = "fpos_session_expired_notice";
+
+const FPOS_WORKSPACE_EMBEDDED = (() => {
+  if (window.self === window.top) return false;
+  try {
+    return window.parent.location.pathname.replace(/\.html$/, "") === "/workspace";
+  } catch {
+    return false;
+  }
+})();
+
+function markSessionExpired() {
+  try {
+    sessionStorage.setItem(SESSION_EXPIRED_NOTICE_KEY, "1");
+  } catch {}
+}
+
+function consumeSessionExpiredNotice() {
+  try {
+    const shouldNotify =
+      sessionStorage.getItem(SESSION_EXPIRED_NOTICE_KEY) === "1";
+    sessionStorage.removeItem(SESSION_EXPIRED_NOTICE_KEY);
+    return shouldNotify;
+  } catch {
+    return false;
+  }
+}
+
+function redirectToLogin({ sessionExpired = false } = {}) {
+  if (sessionExpired) markSessionExpired();
+  if (FPOS_WORKSPACE_EMBEDDED) {
+    window.parent.postMessage(
+      { type: "fpos-auth-expired", sessionExpired },
+      location.origin,
+    );
+    try {
+      window.top.location.replace("/login");
+      return;
+    } catch {}
+  }
+  window.location.replace("/login");
+}
+
+function handleUnauthorized(path) {
+  // HTTP 401 dari endpoint login berarti kredensial salah, bukan sesi kedaluwarsa.
+  // Biarkan apiForm() membaca detail error agar tetap tampil di formulir login.
+  if (path === "/auth/login") return false;
+  clearToken();
+  redirectToLogin({ sessionExpired: true });
+  return true;
+}
+
+function openWorkspaceTab(url, title = "", reuseExisting = false) {
+  const resolved = new URL(url, location.href);
+  if (FPOS_WORKSPACE_EMBEDDED) {
+    window.parent.postMessage(
+      {
+        type: "fpos-open-tab",
+        url: resolved.href,
+        title,
+        reuseExisting: Boolean(reuseExisting),
+      },
+      location.origin,
+    );
+    return;
+  }
+  window.location.href = resolved.href;
+}
+
+function focusWorkspaceDashboard() {
+  if (FPOS_WORKSPACE_EMBEDDED) {
+    window.parent.postMessage({ type: "fpos-focus-dashboard" }, location.origin);
+    return;
+  }
+  window.location.href = "/dashboard";
+}
 
 // Copot service worker lama + bersihkan cache-nya. SW lama (pass-through di sw.js &
 // cache-first di service-worker.js) hanya menambah overhead per-request dan bikin
 // loading/navigasi di browser lebih lambat dari versi .exe. Idempoten: setelah bersih,
 // jadi no-op. (Pendaftaran SW sudah dihapus dari index.html & pos.html.)
-if ("serviceWorker" in navigator) {
+if (!FPOS_WORKSPACE_EMBEDDED && "serviceWorker" in navigator) {
   navigator.serviceWorker
     .getRegistrations()
     .then((rs) => rs.forEach((r) => r.unregister()))
@@ -42,7 +118,7 @@ async function logoutCurrentUser() {
   if (!confirmed) return;
 
   clearToken();
-  window.location.href = "/login";
+  redirectToLogin();
 }
 
 function renderGlobalLogoutButton() {
@@ -105,9 +181,7 @@ async function api(method, path, body = null) {
     throw new Error("Tidak bisa terhubung ke server.");
   }
 
-  if (r.status === 401) {
-    clearToken();
-    window.location.href = "/login";
+  if (r.status === 401 && handleUnauthorized(path)) {
     return;
   }
   if (r.status === 403) {
@@ -160,6 +234,10 @@ async function apiForm(path, fd) {
     throw new Error("Tidak bisa terhubung.");
   }
 
+  if (r.status === 401 && handleUnauthorized(path)) {
+    return;
+  }
+
   let d;
   try {
     d = await r.json();
@@ -207,8 +285,19 @@ function invalidateCache(path) {
 }
 
 function requireAuth() {
-  if (!getToken()) window.location.href = "/login";
+  if (!getToken()) redirectToLogin();
 }
+
+function redirectStandalonePageToWorkspace() {
+  if (FPOS_WORKSPACE_EMBEDDED || !getToken()) return;
+  let path = location.pathname.replace(/\.html$/, "");
+  if (path.length > 1) path = path.replace(/\/$/, "");
+  if (["/", "/index", "/login", "/workspace"].includes(path)) return;
+  const start = `${path}${location.search}${location.hash}`;
+  window.location.replace(`/workspace?start=${encodeURIComponent(start)}`);
+}
+
+redirectStandalonePageToWorkspace();
 
 // ==============================================================================
 // Hak akses berbasis role
@@ -326,7 +415,7 @@ const PAGE_PERMISSIONS = {
 document.addEventListener("DOMContentLoaded", async () => {
   if (!getToken()) return;
   // Logout adalah kontrol sesi dasar untuk semua akun, bukan hak akses admin.
-  renderGlobalLogoutButton();
+  if (!FPOS_WORKSPACE_EMBEDDED) renderGlobalLogoutButton();
   try {
     await loadMyPermissions();
     applyPermissionVisibility();
@@ -337,6 +426,91 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Handler 401 global pada api() akan mengarahkan kembali ke halaman login.
   }
 });
+
+function initializeWorkspaceEmbedding() {
+  if (!FPOS_WORKSPACE_EMBEDDED) return;
+
+  document.body.classList.add("workspace-embedded-page");
+
+  const sendLocation = () => {
+    window.parent.postMessage(
+      {
+        type: "fpos-frame-location",
+        url: location.href,
+        title: document.title,
+      },
+      location.origin,
+    );
+  };
+
+  const cleanNavigationPath = (url) => {
+    try {
+      let path = new URL(url, location.href).pathname.replace(/\.html$/, "");
+      if (path.length > 1) path = path.replace(/\/$/, "");
+      return path;
+    } catch {
+      return "";
+    }
+  };
+
+  const inlineNavigationUrl = (element) => {
+    if (!(element instanceof Element)) return "";
+    const anchor = element.closest("a[href]");
+    if (anchor) return anchor.getAttribute("href");
+    const clickable = element.closest("[onclick]");
+    const code = clickable?.getAttribute("onclick") || "";
+    const match = code.match(
+      /(?:window\.)?location(?:\.href)?\s*=\s*['\"]([^'\"]+)['\"]/i,
+    );
+    return match?.[1] || "";
+  };
+
+  document.addEventListener(
+    "click",
+    (event) => {
+      const targetUrl = inlineNavigationUrl(event.target);
+      if (!targetUrl) return;
+      const currentPath = cleanNavigationPath(location.href);
+      const targetPath = cleanNavigationPath(targetUrl);
+
+      if (targetPath === "/dashboard") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        focusWorkspaceDashboard();
+        return;
+      }
+
+      if (currentPath === "/dashboard") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        openWorkspaceTab(targetUrl);
+      }
+    },
+    true,
+  );
+
+  for (const method of ["pushState", "replaceState"]) {
+    const original = history[method];
+    history[method] = function (...args) {
+      const result = original.apply(this, args);
+      queueMicrotask(sendLocation);
+      return result;
+    };
+  }
+  window.addEventListener("popstate", sendLocation);
+
+  const titleElement = document.querySelector("title");
+  if (titleElement) {
+    new MutationObserver(sendLocation).observe(titleElement, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+  }
+  sendLocation();
+}
+
+document.addEventListener("DOMContentLoaded", initializeWorkspaceEmbedding);
 
 // Debounce: tunda eksekusi `fn` sampai `ms` ms berlalu tanpa panggilan baru.
 // Dipakai untuk input pencarian agar tidak memicu request/render tiap ketukan huruf.
@@ -398,26 +572,40 @@ function hideLoading() {
   document.getElementById("_ld")?.remove();
 }
 
-function showConfirm(msg) {
+function showConfirm(msg, options = {}) {
   return new Promise((res) => {
+    const {
+      confirmText = "Ya, Lanjutkan",
+      cancelText = "Batal",
+      initialFocus = null,
+    } = options;
     const el = document.createElement("div");
     el.style.cssText =
       "position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;";
     el.innerHTML = `<div style="background:var(--card-bg,#1e293b);border-radius:20px;padding:32px;max-width:380px;width:100%;box-shadow:0 16px 48px rgba(0,0,0,.5);border:1px solid var(--border-color,#334155);">
       <p style="font-size:16px;color:var(--text-main,#f1f5f9);margin:0 0 24px;line-height:1.6;text-align:center;white-space:pre-line;">${msg}</p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        <button id="_cN" style="padding:13px;border-radius:10px;border:2px solid var(--border-color,#475569);background:transparent;color:var(--text-muted,#94a3b8);font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;">Batal</button>
-        <button id="_cY" style="padding:13px;border-radius:10px;border:none;background:#ef4444;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;">Ya, Lanjutkan</button>
+        <button id="_cN" style="padding:13px;border-radius:10px;border:2px solid var(--border-color,#475569);background:transparent;color:var(--text-muted,#94a3b8);font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;"></button>
+        <button id="_cY" style="padding:13px;border-radius:10px;border:none;background:#ef4444;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;"></button>
       </div></div>`;
     document.body.appendChild(el);
-    el.querySelector("#_cY").onclick = () => {
+    const confirmButton = el.querySelector("#_cY");
+    const cancelButton = el.querySelector("#_cN");
+    confirmButton.textContent = confirmText;
+    cancelButton.textContent = cancelText;
+    confirmButton.onclick = () => {
       el.remove();
       res(true);
     };
-    el.querySelector("#_cN").onclick = () => {
+    cancelButton.onclick = () => {
       el.remove();
       res(false);
     };
+    if (initialFocus === "confirm") {
+      setTimeout(() => confirmButton.focus(), 0);
+    } else if (initialFocus === "cancel") {
+      setTimeout(() => cancelButton.focus(), 0);
+    }
   });
 }
 
@@ -495,14 +683,97 @@ function today() {
   });
 }
 
+const openModalOrder = [];
+const modalFocusableSelector = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled]):not([type='hidden'])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[contenteditable='true']",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
+function isVisibleModalElement(el) {
+  if (!el || !el.isConnected) return false;
+  const style = window.getComputedStyle(el);
+  return (
+    style.display !== "none" &&
+    style.visibility !== "hidden" &&
+    el.getClientRects().length > 0
+  );
+}
+
+function getModalFocusableElements(modal) {
+  return Array.from(modal.querySelectorAll(modalFocusableSelector)).filter(
+    (el) => {
+      const style = window.getComputedStyle(el);
+      return (
+        !el.matches(":disabled") &&
+        style.display !== "none" &&
+        style.visibility !== "hidden" &&
+        el.getClientRects().length > 0
+      );
+    },
+  );
+}
+
+function getPreferredModalControl(controls) {
+  return controls.find((el) =>
+    el.matches("[autofocus], input, select, textarea, [contenteditable='true']"),
+  );
+}
+
+function getTopOpenModal() {
+  for (let i = openModalOrder.length - 1; i >= 0; i--) {
+    if (isVisibleModalElement(openModalOrder[i])) return openModalOrder[i];
+  }
+
+  // Fallback untuk modal lama yang ditampilkan langsung lewat style.display.
+  const visibleModals = Array.from(
+    document.querySelectorAll(".modal-overlay"),
+  ).filter(isVisibleModalElement);
+  return visibleModals[visibleModals.length - 1] || null;
+}
+
+function focusFirstModalControl(modal) {
+  if (getTopOpenModal() !== modal) return;
+  const controls = getModalFocusableElements(modal);
+  const preferred = getPreferredModalControl(controls);
+  const target = preferred || controls[0] || modal;
+  if (target === modal && !modal.hasAttribute("tabindex")) {
+    modal.setAttribute("tabindex", "-1");
+  }
+  target.focus({ preventScroll: true });
+}
+
+function syncModalScrollLock() {
+  const hasOpenModal = Boolean(getTopOpenModal());
+  document.body.style.overflow = hasOpenModal ? "hidden" : "";
+  // Lock scroll for .main-content layout
+  const main = document.querySelector(".main-content");
+  if (main) main.style.overflow = hasOpenModal ? "hidden" : "auto";
+}
+
 function openModal(id) {
   const m = document.getElementById(id);
   if (m) {
     m.style.display = "flex";
-    document.body.style.overflow = "hidden";
-    // Lock scroll for .main-content layout
-    const main = document.querySelector(".main-content");
-    if (main) main.style.overflow = "hidden";
+    m.setAttribute("role", "dialog");
+    m.setAttribute("aria-modal", "true");
+    m.removeAttribute("aria-hidden");
+
+    const oldIndex = openModalOrder.indexOf(m);
+    if (oldIndex !== -1) openModalOrder.splice(oldIndex, 1);
+    openModalOrder.push(m);
+
+    syncModalScrollLock();
+    // Fokuskan langsung agar penekanan Tab yang sangat cepat tidak sempat masuk
+    // ke tombol tutup yang muncul lebih dulu dalam urutan DOM.
+    focusFirstModalControl(m);
+    // Ulangi setelah browser selesai menghitung layout untuk modal yang baru
+    // disisipkan secara dinamis.
+    setTimeout(() => focusFirstModalControl(m), 0);
   }
 }
 
@@ -510,12 +781,61 @@ function closeModal(id) {
   const m = document.getElementById(id);
   if (m) {
     m.style.display = "none";
-    document.body.style.overflow = "";
-    // Restore scroll for .main-content layout
-    const main = document.querySelector(".main-content");
-    if (main) main.style.overflow = "auto";
+    m.removeAttribute("aria-modal");
+    m.setAttribute("aria-hidden", "true");
+
+    const oldIndex = openModalOrder.indexOf(m);
+    if (oldIndex !== -1) openModalOrder.splice(oldIndex, 1);
+    syncModalScrollLock();
   }
 }
+
+// Tahan navigasi Tab di dalam modal paling depan. Tanpa ini, fokus dari modal
+// tambah cepat (mis. Merek/Satuan saat membuat barang) dapat masuk ke halaman
+// atau form barang yang berada di belakang overlay.
+document.addEventListener(
+  "keydown",
+  (event) => {
+    if (
+      event.key !== "Tab" ||
+      event.defaultPrevented ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey
+    ) {
+      return;
+    }
+
+    const modal = getTopOpenModal();
+    if (!modal) return;
+
+    const controls = getModalFocusableElements(modal);
+    if (!controls.length) {
+      event.preventDefault();
+      focusFirstModalControl(modal);
+      return;
+    }
+
+    const first = controls[0];
+    const last = controls[controls.length - 1];
+    const active = document.activeElement;
+
+    if (!modal.contains(active)) {
+      event.preventDefault();
+      const entryTarget = event.shiftKey
+        ? last
+        : getPreferredModalControl(controls) || first;
+      entryTarget.focus({ preventScroll: true });
+    } else if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus({ preventScroll: true });
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus({ preventScroll: true });
+    }
+  },
+  true,
+);
 
 // Shared CSS
 (function () {
@@ -692,6 +1012,7 @@ function bukaModalUploadBukti() {
 // ─── FITUR MULTI-BRANCH SWITCHER UI ───────────────────────────────────────────
 // ==============================================================================
 async function initBranchSwitcher() {
+  if (FPOS_WORKSPACE_EMBEDDED) return;
   const user = getUser();
   if (!user || !user.id) return; // Abaikan jika belum login
 
@@ -772,6 +1093,7 @@ async function initBranchSwitcher() {
 
 // ── INIT GLOBAL ──
 document.addEventListener("DOMContentLoaded", () => {
+  if (FPOS_WORKSPACE_EMBEDDED) return;
   checkBillingStatus();
   initBranchSwitcher(); // 🔥 Panggil UI Cabang otomatis di semua halaman
 

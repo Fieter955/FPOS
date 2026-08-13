@@ -24,6 +24,7 @@
                 // isi dropdown grup diskon (jika data grup sudah lebih dulu termuat).
                 if (c.id === "popUpContainer") {
                   setupSupSearch();
+                  setupItemFormKeyboardNavigation();
                   populateDiscountGroupSelect();
                   // Modal baru saja masuk DOM: isi fKat/fMerek/fSat yang belum
                   // sempat terisi saat refreshSelects() awal (pakai cache, tanpa request baru).
@@ -203,14 +204,14 @@
         supplierSettingsMap = {},
         generalBuyPrice = 0,
         generalBarcode = "",
-        generalPpnType = "included",
+        generalPpnType = "none",
         generalPpnPercent = 0,
         sharedFieldNotified = false,
         currentSupplierContext = "",
         satuanRows = [],
         masterUnits = [],
         groupDiscounts = [], // Potongan Harga Jual per grup: [{group_id, disc1..disc4}]
-        lastPpnStatus = "included";
+        lastPpnStatus = "none";
 
       function formatInputRibuan(input) {
         if (typeof formatDesimal === "function") {
@@ -233,13 +234,325 @@
         return parseFloat(str.toString().replace(/\./g, "")) || 0;
       }
 
+      const ITEM_PERCENT_INPUT_SELECTOR = ".item-percent-input";
+
+      // Parser khusus persentase berformat Indonesia. parseFloat("12,50") hanya
+      // menghasilkan 12, sehingga semua perhitungan margin/potongan harus lewat sini.
+      function parseInputPersen(value) {
+        if (typeof value === "number")
+          return Number.isFinite(value) ? value : 0;
+
+        const raw = String(value ?? "").trim();
+        if (!raw) return 0;
+
+        let normalized;
+        if (raw.includes(",")) {
+          normalized = raw.replace(/\./g, "").replace(",", ".");
+        } else {
+          // Nilai dari API/JavaScript dapat memakai titik sebagai pemisah desimal.
+          normalized = raw;
+        }
+        normalized = normalized.replace(/[^0-9.-]/g, "");
+
+        const parsed = Number.parseFloat(normalized);
+        return Number.isFinite(parsed) ? parsed : 0;
+      }
+
+      function toPersen(value) {
+        return parseInputPersen(value).toLocaleString("id-ID", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+      }
+
+      function positionAfterDigitCount(text, digitCount) {
+        if (digitCount <= 0) return text.length;
+        let seen = 0;
+        for (let i = 0; i < text.length; i++) {
+          if (/\d/.test(text[i])) seen++;
+          if (seen >= digitCount) return i + 1;
+        }
+        return text.length;
+      }
+
+      // Selalu pertahankan dua angka desimal selama pengguna mengetik. Posisi kursor
+      // dihitung dari jumlah digit (bukan selisih panjang string), jadi pemisah ribuan
+      // maupun nol awal yang dinormalisasi tidak membuat kursor meloncat.
+      function formatInputPersen(input) {
+        if (!input) return;
+
+        const raw = String(input.value ?? "");
+        const caret = input.selectionStart ?? raw.length;
+        const commaIndex = raw.indexOf(",");
+        const dotIndexes = Array.from(raw.matchAll(/\./g), (match) => match.index);
+        const decimalIndex =
+          commaIndex >= 0
+            ? commaIndex
+            : dotIndexes.length === 1
+              ? dotIndexes[0]
+              : -1;
+        const caretInDecimal = decimalIndex >= 0 && caret > decimalIndex;
+
+        const rawInteger =
+          decimalIndex >= 0 ? raw.slice(0, decimalIndex) : raw;
+        const isNegative = rawInteger.trimStart().startsWith("-");
+        const integerDigits = rawInteger.replace(/\D/g, "") || "0";
+        const integerNumber = Number.parseInt(integerDigits, 10) || 0;
+        let formattedInteger = integerNumber.toLocaleString("id-ID");
+        if (isNegative) formattedInteger = `-${formattedInteger}`;
+
+        const rawDecimal =
+          decimalIndex >= 0 ? raw.slice(decimalIndex + 1) : "";
+        const decimalDigits = rawDecimal
+          .replace(/\D/g, "")
+          .slice(0, 2)
+          .padEnd(2, "0");
+        input.value = `${formattedInteger},${decimalDigits}`;
+
+        if (document.activeElement !== input) return;
+
+        let newCaret;
+        if (caretInDecimal) {
+          const decimalsBeforeCaret = raw
+            .slice(decimalIndex + 1, caret)
+            .replace(/\D/g, "").length;
+          newCaret =
+            formattedInteger.length + 1 + Math.min(decimalsBeforeCaret, 2);
+        } else {
+          const integersBeforeCaret = raw
+            .slice(0, Math.min(caret, decimalIndex >= 0 ? decimalIndex : caret))
+            .replace(/\D/g, "").length;
+          newCaret = positionAfterDigitCount(
+            formattedInteger,
+            integersBeforeCaret,
+          );
+        }
+
+        try {
+          input.setSelectionRange(newCaret, newCaret);
+        } catch (_) {}
+      }
+
+      function placePercentCaretBeforeComma(input) {
+        formatInputPersen(input);
+        const commaIndex = input.value.indexOf(",");
+        const caret = commaIndex >= 0 ? commaIndex : input.value.length;
+        try {
+          input.setSelectionRange(caret, caret);
+        } catch (_) {}
+      }
+
+      // Delegasi event membuat perilaku yang sama otomatis berlaku untuk field tabel
+      // satuan/level/tier/potongan yang dirender ulang secara dinamis.
+      document.addEventListener("focusin", (event) => {
+        const input = event.target.closest?.(ITEM_PERCENT_INPUT_SELECTOR);
+        if (!input) return;
+        placePercentCaretBeforeComma(input);
+        input.dataset.percentJustFocused = "1";
+        setTimeout(() => delete input.dataset.percentJustFocused, 0);
+      });
+
+      document.addEventListener("mouseup", (event) => {
+        const input = event.target.closest?.(ITEM_PERCENT_INPUT_SELECTOR);
+        if (!input || input.dataset.percentJustFocused !== "1") return;
+        event.preventDefault();
+        placePercentCaretBeforeComma(input);
+      });
+
+      document.addEventListener("focusout", (event) => {
+        const input = event.target.closest?.(ITEM_PERCENT_INPUT_SELECTOR);
+        if (input) formatInputPersen(input);
+      });
+
+      document.addEventListener("keydown", (event) => {
+        const input = event.target.closest?.(ITEM_PERCENT_INPUT_SELECTOR);
+        if (!input) return;
+
+        if (
+          event.key === "," ||
+          event.key === "." ||
+          event.key === "Decimal" ||
+          event.code === "NumpadDecimal"
+        ) {
+          event.preventDefault();
+          formatInputPersen(input);
+          const commaIndex = input.value.indexOf(",");
+          try {
+            input.setSelectionRange(commaIndex + 1, commaIndex + 1);
+          } catch (_) {}
+          return;
+        }
+
+        if (event.key === "-") {
+          event.preventDefault();
+          input.value = input.value.startsWith("-")
+            ? input.value.slice(1)
+            : `-${input.value}`;
+          placePercentCaretBeforeComma(input);
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          return;
+        }
+
+        if (input.selectionStart !== input.selectionEnd) return;
+        const commaIndex = input.value.indexOf(",");
+        const caret = input.selectionStart ?? 0;
+        const deletesSeparator =
+          (event.key === "Delete" && caret === commaIndex) ||
+          (event.key === "Backspace" && caret === commaIndex + 1);
+        if (deletesSeparator) event.preventDefault();
+      });
+
       let barcodeBuffer = "";
       let lastKeyTime = Date.now();
+
+      const ITEM_FORM_CONTROL_SELECTOR = [
+        "input:not([type='hidden']):not([disabled])",
+        "select:not([disabled])",
+        "textarea:not([disabled])",
+        "[contenteditable='true']",
+        "button[type='submit']:not([disabled])",
+      ].join(",");
+
+      function getItemFormControls(root) {
+        return Array.from(root.querySelectorAll(ITEM_FORM_CONTROL_SELECTOR)).filter(
+          (control) => {
+            if (control.getAttribute("tabindex") === "-1") return false;
+            const style = window.getComputedStyle(control);
+            return (
+              style.display !== "none" &&
+              style.visibility !== "hidden" &&
+              control.getClientRects().length > 0
+            );
+          },
+        );
+      }
+
+      function focusItemFormControl(control) {
+        if (!control) return false;
+        control.focus();
+        if (
+          control instanceof HTMLInputElement &&
+          ["", "text", "number", "search", "tel", "url", "email"].includes(
+            control.type,
+          )
+        )
+          control.select();
+        return true;
+      }
+
+      function moveItemFormFocus(form, target, direction) {
+        const controls = getItemFormControls(form);
+        const currentIndex = controls.indexOf(target);
+        if (currentIndex < 0) return false;
+        return focusItemFormControl(controls[currentIndex + direction]);
+      }
+
+      function jumpItemFormSection(form, target, direction) {
+        const currentSection = target.closest("[data-item-keyboard-section]");
+        if (!currentSection) return false;
+
+        const sections = Array.from(
+          form.querySelectorAll("[data-item-keyboard-section]"),
+        ).filter((section) => getItemFormControls(section).length > 0);
+        const currentIndex = sections.indexOf(currentSection);
+        if (currentIndex < 0) return false;
+
+        const destinationSection = sections[currentIndex + direction];
+        if (!destinationSection) return false;
+        return focusItemFormControl(getItemFormControls(destinationSection)[0]);
+      }
+
+      function isCaretAtArrowBoundary(target, key) {
+        if (!(target instanceof HTMLInputElement)) return false;
+        if (typeof target.selectionStart !== "number") return false;
+        if (target.selectionStart !== target.selectionEnd) {
+          // Fokus hasil Enter menyeleksi seluruh nilai. Dalam kondisi ini panah dapat
+          // langsung dipakai untuk lanjut/mundur; seleksi sebagian tetap diedit normal.
+          return (
+            target.selectionStart === 0 &&
+            target.selectionEnd === target.value.length
+          );
+        }
+        return key === "ArrowLeft"
+          ? target.selectionStart === 0
+          : target.selectionEnd === target.value.length;
+      }
+
+      function setupItemFormKeyboardNavigation() {
+        const form = document.getElementById("fBarang");
+        if (!form || form.dataset.keyboardNavigationReady === "true") return;
+
+        form.dataset.keyboardNavigationReady = "true";
+        form.addEventListener("keydown", handleItemFormKeyboardNavigation);
+      }
+
+      function handleItemFormKeyboardNavigation(e) {
+        if (
+          !["Enter", "ArrowLeft", "ArrowRight"].includes(e.key) ||
+          e.isComposing ||
+          e.defaultPrevented
+        )
+          return;
+
+        const target = e.target;
+        if (
+          !(target instanceof HTMLElement) ||
+          !target.matches("input, select, textarea, [contenteditable='true']")
+        )
+          return;
+
+        const form = target.closest("form");
+        if (!form) return;
+
+        if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+          // Shift+panah tetap untuk menyeleksi teks; Alt/Meta tidak diambil alih.
+          if (e.shiftKey || e.altKey || e.metaKey) return;
+
+          const direction = e.key === "ArrowRight" ? 1 : -1;
+          const moved = e.ctrlKey
+            ? jumpItemFormSection(form, target, direction)
+            : isCaretAtArrowBoundary(target, e.key) &&
+              moveItemFormFocus(form, target, direction);
+          if (!moved) return;
+
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+
+        // Shift+Enter tetap membuat baris baru di Catatan Tambahan.
+        if (target.matches("textarea") && e.shiftKey) return;
+
+        // Scanner mengirim rangkaian tombol dengan sangat cepat lalu Enter. Biarkan
+        // listener scanner di document menyelesaikan scan dan menahan submit form.
+        if (target.id === "fBarcode" && barcodeBuffer.length > 2) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Pertahankan kalkulasi margin sebelum fokus berpindah ke Harga Jual.
+        if (target.id === "fMargin") onMarginInput();
+        if (target.id === "fBarcode") barcodeBuffer = "";
+        moveItemFormFocus(form, target, e.shiftKey ? -1 : 1);
+      }
 
       document.addEventListener("keydown", (e) => {
         const modal = document.getElementById("mBarang");
         if (modal && modal.style.display === "flex") {
           const currentTime = Date.now();
+          const target = e.target;
+          const isEditableTarget =
+            target instanceof HTMLElement &&
+            (target.matches("input, textarea, select") ||
+              target.isContentEditable);
+
+          // Input form biasa tidak boleh ikut membentuk buffer scanner. fBarcode
+          // dikecualikan agar scan di kolom barcode tetap menahan submit dari Enter.
+          if (isEditableTarget && target.id !== "fBarcode") {
+            barcodeBuffer = "";
+            lastKeyTime = currentTime;
+            return;
+          }
           if (currentTime - lastKeyTime > 50) barcodeBuffer = "";
           if (e.key === "Enter" && barcodeBuffer.length > 2) {
             e.preventDefault();
@@ -330,6 +643,11 @@
         const el = document.getElementById("ppnModeHint");
         if (!el) return;
         const mode = document.getElementById("fPpn")?.value || "included";
+        if (mode !== "none" && !PKP_ITEM.is_pkp) {
+          el.textContent =
+            "Setelan PPN barang disimpan, tetapi Accounting masih non-PKP: kasir belum memungut PPN dan PPN pembelian masih melebur ke modal.";
+          return;
+        }
         el.textContent =
           mode === "none"
             ? "Barang ini tidak dikenakan PPN (Non-PPN). Tidak ada PPN saat beli maupun jual."
@@ -395,18 +713,25 @@
           fk.innerHTML =
             '<option value="">Semua Kategori</option>' + catOptions;
         const fKat = document.getElementById("fKat");
-        if (fKat)
+        const selectedCategory = fKat?.value || "";
+        if (fKat) {
           fKat.innerHTML =
             '<option value="">-- Pilih Jenis --</option>' + catOptions;
+          fKat.value = selectedCategory;
+        }
         const fMerek = document.getElementById("fMerek");
-        if (fMerek)
+        const selectedBrand = fMerek?.value || "";
+        if (fMerek) {
           fMerek.innerHTML =
             '<option value="">-- Pilih Merek --</option>' +
             (brands || [])
               .map((b) => `<option value="${b.id}">${b.name}</option>`)
               .join("");
+          fMerek.value = selectedBrand;
+        }
         const fSat = document.getElementById("fSat");
-        if (fSat)
+        const selectedUnit = fSat?.value || "";
+        if (fSat) {
           fSat.innerHTML =
             '<option value="">-- Pilih Satuan --</option>' +
             (units || [])
@@ -415,6 +740,8 @@
                   `<option value="${u.id}">${u.name}${u.abbreviation ? " (" + u.abbreviation + ")" : ""}</option>`,
               )
               .join("");
+          fSat.value = selectedUnit;
+        }
       }
 
       // Token render: tiap loadItems menaikkannya; render bertahap berhenti bila tokennya basi
@@ -483,7 +810,7 @@
         const selOpt = select.options[select.selectedIndex];
         if (!selOpt || !selOpt.value) {
           priceInput.value = "";
-          percentInput.value = "";
+          percentInput.value = "0,00";
           hint.textContent = "Pilih grup untuk mengatur harga khusus";
           return;
         }
@@ -502,9 +829,9 @@
           let p = groupPrices[key];
           priceInput.value = toRibuan(p);
           let pct = basePrice > 0 ? ((basePrice - p) / basePrice) * 100 : 0;
-          percentInput.value = pct.toFixed(2).replace(/\.00$/, "");
+          percentInput.value = toPersen(pct);
         } else {
-          percentInput.value = defaultDisc;
+          percentInput.value = toPersen(defaultDisc);
           let finalPrice = Math.round(
             basePrice - (basePrice * defaultDisc) / 100,
           );
@@ -518,7 +845,7 @@
         const percentInput = document.getElementById("fGroupPercentInput");
         const selOpt = select.options[select.selectedIndex];
         if (!selOpt || !selOpt.value) return;
-        const pct = parseFloat(percentInput.value) || 0;
+        const pct = parseInputPersen(percentInput.value);
         const hjualInput = document.getElementById("fHJual");
         const hjualDiskonInput = document.getElementById("fHJualDiskon");
         const checkbox = document.getElementById("fIsDiscountable");
@@ -549,7 +876,7 @@
             : toAngka(hjualInput.value);
         let pct =
           basePrice > 0 ? ((basePrice - finalPrice) / basePrice) * 100 : 0;
-        percentInput.value = pct.toFixed(2).replace(/\.00$/, "");
+        percentInput.value = toPersen(pct);
         groupPrices[selOpt.getAttribute("data-name").toLowerCase()] =
           finalPrice;
         syncGroupPricesFromMain();
@@ -565,8 +892,9 @@
               toAngka(document.getElementById("fHBeli")?.value) || 0;
             base.sell_price =
               toAngka(document.getElementById("fHJual")?.value) || 0;
-            base.margin_percent =
-              parseFloat(document.getElementById("fMargin")?.value) || 0;
+            base.margin_percent = parseInputPersen(
+              document.getElementById("fMargin")?.value,
+            );
             base.child_unit_id = document.getElementById("fSat")?.value || "";
           }
 
@@ -610,6 +938,7 @@
           const st = await api("GET", "/accounting/pkp-status");
           PKP_ITEM.is_pkp = !!st.is_pkp;
           PKP_ITEM.tarif = parseFloat(st.tarif_ppn) || 0;
+          updatePpnModeHint();
           updatePpnBreakdown(); // segarkan bila modal kebetulan sudah terbuka
         } catch (e) {
           /* diam: bila gagal, panel tetap tersembunyi (perilaku lama) */
@@ -623,6 +952,10 @@
       function updatePpnBreakdown() {
         const box = document.getElementById("ppnBreakdown");
         if (!box) return;
+        if (!PKP_ITEM.is_pkp) {
+          box.style.display = "none"; // Accounting non-PKP: belum ada PPN Masukan/Keluaran
+          return;
+        }
         const t = parseFloat(document.getElementById("fPpnPercent")?.value) || 0;
         const mode = document.getElementById("fPpn")?.value || "included";
         const angkaBeli = toAngka(document.getElementById("fHBeli")?.value) || 0;
@@ -844,11 +1177,12 @@
             targetPpnType = s.ppn_type || "included";
             targetPpnPercent = s.ppn_percent || 0;
           } else {
-            // Supplier baru: mulai dari harga umum + PPN default supplier
+            // Supplier baru mengikuti setelan eksplisit supplier. Jika supplier belum
+            // memiliki setelan PPN, pertahankan default form (Tanpa PPN).
             targetHBeli = generalBuyPrice;
             targetBarcode = generalBarcode;
-            targetPpnType = "included";
-            targetPpnPercent = defPpn;
+            targetPpnType = supplierData?.ppn_type || generalPpnType;
+            targetPpnPercent = targetPpnType === "none" ? 0 : defPpn;
           }
         }
 
@@ -936,8 +1270,9 @@
 
       function calcHJualFromMargin() {
         const hBeli = toAngka(document.getElementById("fHBeli").value) || 0;
-        const margin =
-          parseFloat(document.getElementById("fMargin").value) || 0;
+        const margin = parseInputPersen(
+          document.getElementById("fMargin").value,
+        );
         const hJual = Math.round(hBeli + (hBeli * margin) / 100);
         document.getElementById("fHJual").value = toRibuan(hJual);
         updateDiscountPreview();
@@ -947,18 +1282,18 @@
       function calcMarginFromHJual() {
         const hBeli = toAngka(document.getElementById("fHBeli").value) || 0;
         const hJual = toAngka(document.getElementById("fHJual").value) || 0;
-        document.getElementById("fMargin").value =
-          hBeli > 0
-            ? (((hJual - hBeli) / hBeli) * 100).toFixed(2).replace(/\.00$/, "")
-            : "0";
+        document.getElementById("fMargin").value = toPersen(
+          hBeli > 0 ? ((hJual - hBeli) / hBeli) * 100 : 0,
+        );
         updateDiscountPreview();
         syncGroupPricesFromMain();
       }
 
       // Harga beli dihitung dari harga jual (shared) & margin — dipakai di konteks supplier
       function calcHBeliFromMargin() {
-        const margin =
-          parseFloat(document.getElementById("fMargin").value) || 0;
+        const margin = parseInputPersen(
+          document.getElementById("fMargin").value,
+        );
         const hJual = toAngka(document.getElementById("fHJual").value) || 0;
         const hBeli =
           margin > -100 ? Math.round(hJual / (1 + margin / 100)) : 0;
@@ -1139,22 +1474,22 @@
         setVal("fHJual", "0,00");
         setVal("fHJualDiskon", "0,00");
         setVal("fStokMin", "0,00");
-        setVal("fPpn", "included");
+        setVal("fPpn", "none");
         setVal("fPpnPercent", toDesimal(PKP_ITEM.tarif > 0 ? PKP_ITEM.tarif : 11));
-        lastPpnStatus = "included";
+        lastPpnStatus = "none";
         togglePpnPercent();
         updatePpnModeHint();
         document.getElementById("fIsDiscountable").checked = true;
         document.getElementById("fDiscountGroupSelect").selectedIndex = 0;
         setVal("fGroupPriceInput", "");
-        setVal("fGroupPercentInput", "");
+        setVal("fGroupPercentInput", "0,00");
         groupPrices = {};
         groupDiscounts = [];
         selectedSups.clear();
         supplierSettingsMap = {};
         generalBuyPrice = 0;
         generalBarcode = "";
-        generalPpnType = "included";
+        generalPpnType = "none";
         generalPpnPercent = 0;
         sharedFieldNotified = false;
         currentSupplierContext = "";
@@ -1188,18 +1523,33 @@
               item.is_discountable;
           document.getElementById("fHBeli").value = toRibuan(item.buy_price);
           document.getElementById("fHJual").value = toRibuan(item.sell_price);
-          // Tarif PPN barang (jika tersimpan) → prefill. null = belum diset, ikut tarif toko.
+          // Barang lama tetap memakai status PPN tersimpannya saat diedit. Nilai null
+          // adalah data lama yang mengikuti tarif toko; hanya barang BARU yang default
+          // ke Tanpa PPN.
           if (item.ppn_percent != null) {
+            const itemPpnPercent = parseFloat(item.ppn_percent) || 0;
             document.getElementById("fPpnPercent").value = item.ppn_percent;
-            generalPpnPercent = parseFloat(item.ppn_percent) || 0;
+            generalPpnPercent = itemPpnPercent;
             // ppn_percent = 0 EKSPLISIT (bukan null) → barang ditandai Tanpa PPN.
-            if (parseFloat(item.ppn_percent) === 0) {
+            if (itemPpnPercent === 0) {
               document.getElementById("fPpn").value = "none";
               generalPpnType = "none";
               lastPpnStatus = "none";
               const grp = document.getElementById("ppnPercentGroup");
               if (grp) grp.style.display = "none";
+            } else {
+              document.getElementById("fPpn").value = "included";
+              generalPpnType = "included";
+              lastPpnStatus = "included";
+              const grp = document.getElementById("ppnPercentGroup");
+              if (grp) grp.style.display = "";
             }
+          } else {
+            document.getElementById("fPpn").value = "included";
+            generalPpnType = "included";
+            lastPpnStatus = "included";
+            const grp = document.getElementById("ppnPercentGroup");
+            if (grp) grp.style.display = "";
           }
           updatePpnModeHint();
           updatePpnBreakdown();
@@ -1208,14 +1558,11 @@
           initialBuyPrice = generalBuyPrice;
           initialSellPrice = parseFloat(item.sell_price) || 0;
           initialGroupPrices = {};
-          if (initialBuyPrice > 0)
-            document.getElementById("fMargin").value = (
-              ((initialSellPrice - initialBuyPrice) / initialBuyPrice) *
-              100
-            )
-              .toFixed(2)
-              .replace(/\.00$/, "");
-          else document.getElementById("fMargin").value = "0";
+          document.getElementById("fMargin").value = toPersen(
+            initialBuyPrice > 0
+              ? ((initialSellPrice - initialBuyPrice) / initialBuyPrice) * 100
+              : 0,
+          );
           document.getElementById("fStokMin").value = toRibuan(item.min_stock);
           document.getElementById("fDesk").value = item.description || "";
           if (item.barcode?.trim()) {
@@ -1363,18 +1710,26 @@
           };
         }
         const sellPrice = toAngka(document.getElementById("fHJual").value);
-        if (
-          editItemId &&
-          (generalBuyPrice !== initialBuyPrice ||
-            sellPrice !== initialSellPrice)
-        ) {
+        const normalizePrice = (value) =>
+          Math.round(((Number(value) || 0) + Number.EPSILON) * 100) / 100;
+        const buyPriceChanged =
+          normalizePrice(generalBuyPrice) !== normalizePrice(initialBuyPrice);
+        const sellPriceChanged =
+          normalizePrice(sellPrice) !== normalizePrice(initialSellPrice);
+        if (editItemId && (buyPriceChanged || sellPriceChanged)) {
           let msg = "Deteksi perubahan harga UTAMA:\n";
-          if (generalBuyPrice !== initialBuyPrice)
+          if (buyPriceChanged)
             msg += `- Harga Beli: ${fmtRp(initialBuyPrice)} ➜ ${fmtRp(generalBuyPrice)}\n`;
-          if (sellPrice !== initialSellPrice)
+          if (sellPriceChanged)
             msg += `- Harga Jual: ${fmtRp(initialSellPrice)} ➜ ${fmtRp(sellPrice)}\n`;
           msg += "\nSimpan perubahan?";
-          if (!(await showConfirm(msg))) return;
+          if (
+            !(await showConfirm(msg, {
+              confirmText: "Setuju & Ubah",
+              initialFocus: "confirm",
+            }))
+          )
+            return;
         }
         let multi_prices = [];
         // Harga Diskon selalu disertakan jika ada, karena posisinya di luar tab Harga Lanjutan
@@ -1438,8 +1793,9 @@
           unit_id: parseInt(document.getElementById("fSat").value) || null,
           buy_price: generalBuyPrice,
           sell_price: sellPrice,
-          profit_margin:
-            parseFloat(document.getElementById("fMargin").value) || 0,
+          profit_margin: parseInputPersen(
+            document.getElementById("fMargin").value,
+          ),
           // Tarif PPN barang (satu angka, dipakai beli & jual). Sumber: field tarif PPN.
           ppn_percent: lastPpnPercent,
           min_stock: toAngka(document.getElementById("fStokMin").value),
@@ -1829,8 +2185,9 @@
           buy_price_auto:
             toAngka(document.getElementById("fHBeli")?.value) || 0,
           sell_price: toAngka(document.getElementById("fHJual")?.value) || 0,
-          margin_percent:
-            parseFloat(document.getElementById("fMargin")?.value) || 0,
+          margin_percent: parseInputPersen(
+            document.getElementById("fMargin")?.value,
+          ),
           group_prices: {},
           tier_prices: [],
         };
@@ -1951,7 +2308,7 @@
             let cols = `<td style="text-align:center; color:var(--primary); font-size:10px;">${isBase ? "▶" : isDraft ? "*" : "•"}</td><td><select class="input-control" onchange="updateAdvancedRowField(${idx}, 'child_unit_id', this.value)"><option value="">-- Pilih --</option>${unitOptions}</select></td><td><input class="input-control" value="${isBase ? "Dasar" : "Konversi"}" disabled></td><td class="sep"><input type="number" step="0.0001" class="input-control" value="${row.conversion_factor || ""}" ${isBase ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'conversion_factor', this.value)" style="text-align:right;"></td><td class="sep"><input type="text" class="input-control" value="${toRibuan(row.buy_price_auto)}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'buy_price_auto', this.value)" style="text-align:right;"></td>`;
 
             if (currentAdvancedType === "satuan") {
-              cols += `<td><input type="text" inputmode="numeric" class="input-control" value="${toDesimal(row.margin_percent)}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'margin_percent', this.value)" style="text-align:right;"></td><td><input type="text" class="input-control" value="${toRibuan(row.sell_price)}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'sell_price', this.value, 'sell')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
+              cols += `<td><input type="text" inputmode="decimal" class="input-control item-percent-input" value="${toPersen(row.margin_percent)}" oninput="formatInputPersen(this)" onchange="updateAdvancedRowField(${idx}, 'margin_percent', this.value)" style="text-align:right;"></td><td><input type="text" class="input-control" value="${toRibuan(row.sell_price)}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'sell_price', this.value, 'sell')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
             } else if (currentAdvancedType === "levelHarga") {
               allGroups.forEach((group, gIdx) => {
                 let groupPrice = row.group_prices[group.id];
@@ -1972,7 +2329,7 @@
                 const displayMargin =
                   groupPrice > 0 ? groupMargin.toFixed(2) : "";
 
-                cols += `<td><input type="text" inputmode="numeric" class="input-control" value="${toDesimal(displayMargin)}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'group_margin', this.value, '${group.id}')" style="text-align:right;"></td><td class="sep"><input type="text" class="input-control" value="${displayPrice}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'group_price', this.value, '${group.id}')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
+                cols += `<td><input type="text" inputmode="decimal" class="input-control item-percent-input" value="${toPersen(displayMargin)}" oninput="formatInputPersen(this)" onchange="updateAdvancedRowField(${idx}, 'group_margin', this.value, '${group.id}')" style="text-align:right;"></td><td class="sep"><input type="text" class="input-control" value="${displayPrice}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'group_price', this.value, '${group.id}')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
               });
             } else if (currentAdvancedType === "levelJumlah") {
               for (let i = 0; i < 4; i++) {
@@ -2005,7 +2362,7 @@
 
                 cols += `<td style="text-align:center; font-weight:600; color:var(--text-muted); font-size:12px; border-left:1px solid var(--border-color)">${dariQty}</td>
                          <td><input type="text" inputmode="numeric" class="input-control" value="${sampaiVal ? toDesimal(sampaiVal) : ""}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'tier_sampai', this.value, ${i})" style="text-align:right;" placeholder="∞"></td>
-                         <td><input type="text" inputmode="numeric" class="input-control" value="${marginVal ? toDesimal(marginVal) : ""}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'tier_margin', this.value, ${i})" style="text-align:right;" placeholder="% Mg"></td>
+                         <td><input type="text" inputmode="decimal" class="input-control item-percent-input" value="${toPersen(marginVal)}" oninput="formatInputPersen(this)" onchange="updateAdvancedRowField(${idx}, 'tier_margin', this.value, ${i})" style="text-align:right;" placeholder="% Mg"></td>
                          <td class="${i < 3 ? "sep" : ""}"><input type="text" class="input-control" value="${priceVal}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'tier_price', this.value, ${i})" style="text-align:right; font-weight:700; color:var(--primary)" placeholder="Harga"></td>`;
               }
             }
@@ -2033,12 +2390,9 @@
           const currentBaseSell = toAngka(fHJual.value) || 0;
           const margin =
             baseBuyPrice > 0
-              ? (
-                  ((currentBaseSell - baseBuyPrice) / baseBuyPrice) *
-                  100
-                ).toFixed(2)
+              ? ((currentBaseSell - baseBuyPrice) / baseBuyPrice) * 100
               : 0;
-          fMargin.value = margin.replace(/\.00$/, "");
+          fMargin.value = toPersen(margin);
         }
 
         // Sinkronisasi ulang seluruh baris berdasarkan nilai dasar baru
@@ -2069,8 +2423,9 @@
           if (row.is_draft) {
             row.is_draft = false;
             row.conversion_factor = 1;
-            row.margin_percent =
-              parseFloat(document.getElementById("fMargin")?.value) || 0;
+            row.margin_percent = parseInputPersen(
+              document.getElementById("fMargin")?.value,
+            );
             ensureEmptySatuanRow();
           }
           const unit = masterUnits.find((u) => String(u.id) === String(val));
@@ -2091,11 +2446,11 @@
             reverseSyncToBase(idx);
           }
         } else if (field === "margin_percent") {
-          row.margin_percent = parseFloat(val) || 0;
+          row.margin_percent = parseInputPersen(val);
           recalcAdvancedRow(idx, "margin");
           if (row.is_base) {
             const fMargin = document.getElementById("fMargin");
-            if (fMargin) fMargin.value = val;
+            if (fMargin) fMargin.value = toPersen(row.margin_percent);
             const fHJual = document.getElementById("fHJual");
             if (fHJual) fHJual.value = toRibuan(row.sell_price);
             syncGroupPricesFromMain();
@@ -2107,7 +2462,7 @@
             const fHJual = document.getElementById("fHJual");
             if (fHJual) fHJual.value = toRibuan(row.sell_price);
             const fMargin = document.getElementById("fMargin");
-            if (fMargin) fMargin.value = row.margin_percent;
+            if (fMargin) fMargin.value = toPersen(row.margin_percent);
             syncGroupPricesFromMain();
           }
         } else if (field === "group_price") {
@@ -2131,7 +2486,7 @@
           }
         } else if (field === "group_discount") {
           const groupId = extra;
-          const disc = parseFloat(val) || 0;
+          const disc = parseInputPersen(val);
           row.group_prices[groupId] = Math.round(
             row.sell_price * (1 - disc / 100),
           );
@@ -2144,7 +2499,7 @@
           }
         } else if (field === "group_margin") {
           const groupId = extra;
-          const margin = parseFloat(val) || 0;
+          const margin = parseInputPersen(val);
           row.group_prices[groupId] = Math.round(
             row.buy_price_auto * (1 + margin / 100),
           );
@@ -2158,7 +2513,7 @@
               if (allGroups[0] && String(allGroups[0].id) === String(groupId)) {
                 const fMargin = document.getElementById("fMargin");
                 if (fMargin) {
-                  fMargin.value = margin.toFixed(2).replace(/\.00$/, "");
+                  fMargin.value = toPersen(margin);
                   calcHJualFromMargin();
                 }
               }
@@ -2213,7 +2568,7 @@
           const tierIdx = extra;
           if (!row.tier_prices[tierIdx])
             row.tier_prices[tierIdx] = { min_qty: 0, price: 0 };
-          const margin = parseFloat(val) || 0;
+          const margin = parseInputPersen(val);
           // Harga tier = H. Pokok + margin% (konsisten dgn margin utama & % Mg level harga)
           row.tier_prices[tierIdx].price = Math.round(
             row.buy_price_auto * (1 + margin / 100),
@@ -2395,10 +2750,10 @@
         return `<tr class="${isEmpty ? "empty-row" : ""}">
                     <td style="text-align:center;color:var(--text-muted);font-size:14px;">${isEmpty ? "*" : "▶"}</td>
                     <td><select class="input-control group-select" data-group-id="${gd ? gd.group_id : ""}" onchange="handlePotonganRowChange(this)">${potonganGroupOptions(gd ? gd.group_id : "")}</select></td>
-                    <td class="sep"><input type="text" inputmode="numeric" placeholder="0,00" class="input-control" style="text-align:right" value="${v("disc1") ? toDesimal(v("disc1")) : ""}" oninput="formatInputRibuan(this); handlePotonganRowChange(this)"></td>
-                    <td><input type="text" inputmode="numeric" placeholder="0,00" class="input-control" style="text-align:right" value="${v("disc2") ? toDesimal(v("disc2")) : ""}" oninput="formatInputRibuan(this); handlePotonganRowChange(this)"></td>
-                    <td><input type="text" inputmode="numeric" placeholder="0,00" class="input-control" style="text-align:right" value="${v("disc3") ? toDesimal(v("disc3")) : ""}" oninput="formatInputRibuan(this); handlePotonganRowChange(this)"></td>
-                    <td><input type="text" inputmode="numeric" placeholder="0,00" class="input-control" style="text-align:right" value="${v("disc4") ? toDesimal(v("disc4")) : ""}" oninput="formatInputRibuan(this); handlePotonganRowChange(this)"></td>
+                    <td class="sep"><input type="text" inputmode="decimal" placeholder="0,00" class="input-control item-percent-input" style="text-align:right" value="${toPersen(v("disc1"))}" oninput="formatInputPersen(this); handlePotonganRowChange(this)"></td>
+                    <td><input type="text" inputmode="decimal" placeholder="0,00" class="input-control item-percent-input" style="text-align:right" value="${toPersen(v("disc2"))}" oninput="formatInputPersen(this); handlePotonganRowChange(this)"></td>
+                    <td><input type="text" inputmode="decimal" placeholder="0,00" class="input-control item-percent-input" style="text-align:right" value="${toPersen(v("disc3"))}" oninput="formatInputPersen(this); handlePotonganRowChange(this)"></td>
+                    <td><input type="text" inputmode="decimal" placeholder="0,00" class="input-control item-percent-input" style="text-align:right" value="${toPersen(v("disc4"))}" oninput="formatInputPersen(this); handlePotonganRowChange(this)"></td>
                   </tr>`;
       }
 
@@ -2427,13 +2782,13 @@
             ? sel.value
             : sel.value || sel.dataset.groupId || "";
           if (!gid) return; // baris kosong / belum pilih grup
-          const inp = tr.querySelectorAll('input[type="number"]');
+          const inp = tr.querySelectorAll("input.item-percent-input");
           next.push({
             group_id: parseInt(gid),
-            disc1: parseFloat(inp[0]?.value) || 0,
-            disc2: parseFloat(inp[1]?.value) || 0,
-            disc3: parseFloat(inp[2]?.value) || 0,
-            disc4: parseFloat(inp[3]?.value) || 0,
+            disc1: parseInputPersen(inp[0]?.value),
+            disc2: parseInputPersen(inp[1]?.value),
+            disc3: parseInputPersen(inp[2]?.value),
+            disc4: parseInputPersen(inp[3]?.value),
           });
         });
         groupDiscounts = next;

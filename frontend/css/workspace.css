@@ -1,0 +1,246 @@
+.workspace-page {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.workspace-shell {
+  display: grid;
+  grid-template-rows: 3.35rem minmax(0, 1fr);
+  width: 100%;
+  height: 100vh;
+  min-height: 0;
+  background: var(--bg-color);
+}
+
+.workspace-chrome {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.55rem max(0.75rem, env(safe-area-inset-right)) 0;
+  padding-left: max(0.75rem, env(safe-area-inset-left));
+  background: #dce3ec;
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+}
+
+.dark-mode .workspace-chrome {
+  background: #111827;
+}
+
+.workspace-brand {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 0 0 auto;
+  padding-bottom: 0.5rem;
+  color: var(--text-main);
+  font-size: 0.86rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.workspace-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 0.5rem;
+  background: var(--primary);
+  color: #fff;
+  font-size: 1rem;
+  line-height: 1;
+  box-shadow: 0 4px 10px var(--primary-light);
+}
+
+.workspace-tabs-viewport {
+  min-width: 0;
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.45) transparent;
+}
+
+.workspace-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.25rem;
+  min-width: max-content;
+  height: 100%;
+}
+
+.workspace-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: clamp(8.5rem, 15vw, 13rem);
+  height: 2.65rem;
+  padding: 0.55rem 0.65rem 0.5rem 0.85rem;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 0.85rem 0.85rem 0 0;
+  background: rgba(255, 255, 255, 0.42);
+  color: #475569;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.dark-mode .workspace-tab {
+  background: rgba(51, 65, 85, 0.55);
+  color: #cbd5e1;
+}
+
+.workspace-tab:hover {
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text-main);
+}
+
+.dark-mode .workspace-tab:hover {
+  background: #334155;
+}
+
+.workspace-tab.is-active {
+  z-index: 2;
+  background: var(--bg-color);
+  color: var(--text-main);
+  border-color: var(--border-color);
+  box-shadow: inset 0 3px 0 var(--primary);
+}
+
+.workspace-tab-icon {
+  flex: 0 0 auto;
+  color: var(--primary);
+  font-size: 0.95rem;
+}
+
+.workspace-tab-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-tab-close {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: currentColor;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.workspace-tab-close:hover,
+.workspace-tab-close:focus-visible {
+  background: rgba(100, 116, 139, 0.2);
+  outline: none;
+}
+
+.workspace-tab:focus-visible {
+  outline: 3px solid var(--primary-light);
+  outline-offset: -3px;
+}
+
+.workspace-tab-count {
+  align-self: center;
+  flex: 0 0 auto;
+  min-width: 2.8rem;
+  padding-bottom: 0.55rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+.workspace-frames {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-color);
+}
+
+.workspace-frame {
+  position: absolute;
+  inset: 0;
+  display: none;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--bg-color);
+}
+
+.workspace-frame.is-active {
+  display: block;
+}
+
+.workspace-boot {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.workspace-spinner {
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 3px solid var(--primary-light);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: workspace-spin 0.75s linear infinite;
+}
+
+@keyframes workspace-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media screen and (min-width: 1024px) and (max-width: 1536px) and (hover: hover) and (pointer: fine) {
+  .workspace-shell {
+    height: var(--zoomed-viewport-height);
+  }
+}
+
+@media (max-width: 640px) {
+  .workspace-shell {
+    grid-template-rows: 3.15rem minmax(0, 1fr);
+  }
+
+  .workspace-chrome {
+    gap: 0.4rem;
+    padding-top: 0.45rem;
+  }
+
+  .workspace-brand > span:last-child,
+  .workspace-tab-count {
+    display: none;
+  }
+
+  .workspace-tab {
+    width: 9.25rem;
+    height: 2.5rem;
+  }
+}

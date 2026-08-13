@@ -1,0 +1,20 @@
+FPOS 5.0.0 - Paket Windows 64-bit
+Build: 13 Agustus 2026
+
+CARA MEMASANG DI LAPTOP LAIN
+
+1. Ekstrak seluruh isi ZIP. Jangan menjalankan FPOS langsung dari dalam ZIP.
+2. Pindahkan folder hasil ekstrak ke C:\FPOS.
+   Hindari Desktop/Documents yang tersinkron OneDrive atau Google Drive.
+3. Buka C:\FPOS\.env dengan Notepad.
+4. Isi VENDOR_BOOTSTRAP_PASSWORD dengan password awal yang kuat dan unik.
+5. Biarkan SECRET_KEY kosong. Aplikasi membuat kunci unik saat pertama dijalankan.
+6. Klik dua kali FPOS.exe. Izinkan auto-start bila laptop akan menjadi server tetap.
+
+PENTING
+
+- FPOS.exe wajib tetap bersama folder _internal dan frontend-dist.
+- Paket ini bersih: tidak membawa database, kunci, backup, log, atau upload laptop lama.
+- Database baru (ipos.db) dibuat otomatis pada pemakaian pertama.
+- Windows 10/11 64-bit disarankan.
+- Panduan lengkap tersedia di PANDUAN_SETUP_LAPTOP_BARU.md.

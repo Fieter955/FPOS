@@ -384,8 +384,8 @@
           // Asumsi prefix untuk accounting.py di main.py Anda adalah /accounting
           const res = await api("GET", "/accounting/setup-status");
           if (res.is_setup_completed === false) {
-            // Belum setup? Tendang ke halaman onboarding!
-            window.location.replace("/onboarding.html");
+            // Di workspace, onboarding dibuka sebagai tab tanpa mengganti Dashboard.
+            openWorkspaceTab("/onboarding.html", "Onboarding", true);
           }
         } catch (e) {
           console.error("Gagal mengecek status setup", e);

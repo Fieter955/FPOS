@@ -29,6 +29,12 @@ _excludes = [
     'IPython',
     'notebook',
     'nbformat',
+    # Tampilan kini memakai Edge/Chrome. Hindari WinForms + pythonnet/.NET yang
+    # rentan diblokir Windows ketika ZIP berasal dari internet.
+    'webview',
+    'pythonnet',
+    'clr_loader',
+    'clr',
 ]
 
 a = Analysis(

@@ -54,6 +54,23 @@
         <p style="margin: 0">Sistem kasir toko bangunan</p>
       </div>
       <div
+        id="sessionExpiredMsg"
+        role="alert"
+        style="
+          display: none;
+          color: #b45309;
+          background: rgba(245, 158, 11, 0.14);
+          border: 1px solid rgba(245, 158, 11, 0.35);
+          padding: 12px;
+          border-radius: 10px;
+          margin-bottom: 20px;
+          font-weight: 600;
+          font-size: 14px;
+        "
+      >
+        Sesi Anda telah berakhir. Silakan masuk kembali.
+      </div>
+      <div
         id="errMsg"
         style="
           display: none;
@@ -104,6 +121,10 @@
     <script src="/js/api.js"></script>
     <script src="/js/theme.js"></script>
     <script>
+      if (consumeSessionExpiredNotice()) {
+        document.getElementById("sessionExpiredMsg").style.display = "block";
+      }
+
       function getLoginRoleNames(user) {
         return String(user?.role || "")
           .split(",")
@@ -123,7 +144,7 @@
         const isCashier = roles.includes("kasir");
         const isAdmin = roles.includes("admin");
         if (!isCashier || isAdmin) {
-          window.location.href = "/dashboard";
+          window.location.href = "/workspace";
           return;
         }
 
@@ -134,11 +155,15 @@
         try {
           const shift = await api("GET", "/shifts/current");
           if (!getToken()) return;
+          const startPage = shift && !shift.has_conflict ? "/pos" : "/shifts";
           window.location.href =
-            shift && !shift.has_conflict ? "/pos" : "/shifts";
+            "/workspace?start=" + encodeURIComponent(startPage);
         } catch (_error) {
           // Jalur aman: jangan masukkan kasir ke POS jika status shift gagal dicek.
-          if (getToken()) window.location.href = "/shifts";
+          if (getToken()) {
+            window.location.href =
+              "/workspace?start=" + encodeURIComponent("/shifts");
+          }
         }
       }
 
@@ -147,7 +172,10 @@
         btn.disabled = true;
         btn.textContent = "Memeriksa shift...";
         redirectAfterLogin().catch(() => {
-          if (getToken()) window.location.href = "/shifts";
+          if (getToken()) {
+            window.location.href =
+              "/workspace?start=" + encodeURIComponent("/shifts");
+          }
         });
       }
       document

@@ -28,13 +28,14 @@
   <div class="modal-box">
     <div class="modal-hdr">
       <h2 id="mMerekTitle">Tambah Merek</h2>
-      <button class="btn-x" onclick="closeModal('mMerek')">×</button>
+      <button class="btn-x" onclick="closeMerekModal()">×</button>
     </div>
     <div class="input-group">
       <label>Nama *</label
       ><input
         id="merekNama"
         class="input-control"
+        autofocus
         placeholder="contoh: Gresik, Tiga Roda"
       />
     </div>
@@ -44,7 +45,7 @@
     </div>
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
       <button
-        onclick="closeModal('mMerek')"
+        onclick="closeMerekModal()"
         class="btn"
         style="
           background: var(--bg-color);

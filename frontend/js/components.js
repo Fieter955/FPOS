@@ -298,7 +298,7 @@ function createPurchaseGrid(container, config = {}) {
     const discGroup = row.querySelector(".disc-group");
     const formBarangEdit = row.querySelector(".pg-name-edit");
 
-    const calculateRow = () => {
+    const calculateRow = ({ preserveMargin = false } = {}) => {
       if (isBranchRequest || showSupplierColumn) {
         if (onChange) onChange();
         return;
@@ -327,7 +327,7 @@ function createPurchaseGrid(container, config = {}) {
       });
       nettoDiv.textContent = fmtRp(qty * hargaNeto);
       const hj = toAngka(jualInp.value);
-      if (hargaNeto > 0 && hj > 0) {
+      if (!preserveMargin && hargaNeto > 0 && hj > 0) {
         const margin = ((hj - hargaNeto) / hargaNeto) * 100;
         marginInp.value = margin.toFixed(2).replace(/\.00$/, "");
       }
@@ -437,7 +437,7 @@ function createPurchaseGrid(container, config = {}) {
       .querySelectorAll(".pg-disc")
       .forEach((inp) => (inp.oninput = calculateRow));
     if (marginInp) {
-      marginInp.oninput = () => {
+      const applyMarginToSellPrice = () => {
         const hb = toAngka(beliInp.value);
         let hargaNeto = hb;
         row.querySelectorAll(".pg-disc").forEach((inp) => {
@@ -447,8 +447,19 @@ function createPurchaseGrid(container, config = {}) {
         const margin = parseFloat(marginInp.value) || 0;
         const hj = hargaNeto + (hargaNeto * margin) / 100;
         jualInp.value = toRibuan(Math.round(hj));
-        calculateRow();
+        // Harga jual dibulatkan ke rupiah. Jangan hitung balik margin dari hasil
+        // pembulatan karena akan menimpa persentase yang baru saja diketik.
+        calculateRow({ preserveMargin: true });
       };
+      marginInp.oninput = applyMarginToSellPrice;
+      marginInp.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        event.stopPropagation();
+        applyMarginToSellPrice();
+        jualInp.focus();
+        jualInp.select();
+      });
     }
     if (delBtn) {
       delBtn.onclick = () => {
@@ -1774,6 +1785,19 @@ function setupBarcodeScanner(onScan, config = {}) {
   let lastKeyTime = Date.now();
 
   document.addEventListener("keydown", (e) => {
+    const target = e.target;
+    const isEditableTarget =
+      target instanceof HTMLElement &&
+      (target.matches("input, textarea, select") || target.isContentEditable);
+
+    // Ketikan di form adalah input manual, bukan data scanner. Selain mencegah
+    // Enter diambil alih, reset buffer agar angka form tidak terbawa ke scan berikutnya.
+    if (isEditableTarget) {
+      buffer = "";
+      lastKeyTime = Date.now();
+      return;
+    }
+
     // Abaikan jika tombol fungsi atau navigasi
     if (e.key.length > 1 && e.key !== "Enter") return;
 

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0f172a" />
+    <title>FPOS</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/workspace.css" />
+  </head>
+  <body class="workspace-page">
+    <div class="workspace-shell">
+      <header class="workspace-chrome" aria-label="Tab kerja FPOS">
+        <div class="workspace-brand" aria-label="FPOS">
+          <span class="workspace-brand-mark" aria-hidden="true">▦</span>
+          <span>FPOS</span>
+        </div>
+        <div class="workspace-tabs-viewport">
+          <div
+            id="workspaceTabs"
+            class="workspace-tabs"
+            role="tablist"
+            aria-label="Fitur yang sedang dibuka"
+          ></div>
+        </div>
+        <div
+          id="workspaceTabCount"
+          class="workspace-tab-count"
+          aria-live="polite"
+        ></div>
+      </header>
+
+      <main id="workspaceFrames" class="workspace-frames">
+        <div id="workspaceBoot" class="workspace-boot" role="status">
+          <span class="workspace-spinner" aria-hidden="true"></span>
+          <span>Menyiapkan ruang kerja…</span>
+        </div>
+      </main>
+    </div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/theme.js"></script>
+    <script src="/js/workspace.js?v=20260813-navigation-toast-fix"></script>
+  </body>
+</html>

@@ -467,7 +467,8 @@
               <b>dipisah otomatis</b> dari harga modal barang — dicatat sebagai pajak yang bisa
               dikreditkan, bukan dilebur jadi modal. Jika belum PKP, biarkan mati: PPN otomatis
               menjadi bagian harga modal. <b>Perubahan ini hanya berlaku untuk pembelian baru</b>;
-              pembelian yang sudah tercatat tidak berubah.
+              pembelian yang sudah tercatat tidak berubah. Saat mode PKP aktif, tarif diterapkan
+              sesuai Data Barang; barang berstatus <b>Tanpa PPN</b> tetap tidak dipungut PPN.
             </p>
             <label style="display: flex; align-items: center; gap: 10px; font-weight: 600; cursor: pointer">
               <input type="checkbox" id="chkPkp" style="width: 18px; height: 18px" />
@@ -1381,7 +1382,7 @@
           const info = document.getElementById("pkpInfo");
           if (info)
             info.textContent = res.is_pkp
-              ? `Mode PKP AKTIF — PPN pembelian dipisah & penjualan memungut PPN ${res.tarif_ppn}% (harga termasuk PPN).`
+              ? `Mode PKP AKTIF — barang kena pajak memakai tarif ${res.tarif_ppn}% (harga termasuk PPN); barang Tanpa PPN tetap bebas PPN.`
               : "Mode non-PKP — PPN melebur jadi modal; kasir tidak memungut PPN.";
         } catch (e) {
           /* abaikan diam-diam (mis. belum punya akses) */
@@ -1394,7 +1395,7 @@
         const tarif = parseFloat(document.getElementById("inpTarifPpn").value) || 0;
         const ok = await showConfirm(
           (nilai
-            ? `Nyalakan mode PKP (tarif PPN ${tarif}%)?\n\nMulai sekarang, pembelian BARU memisah PPN dari modal, dan kasir memungut PPN ${tarif}% (harga jual dianggap sudah termasuk PPN).`
+            ? `Nyalakan mode PKP (tarif PPN ${tarif}%)?\n\nMulai sekarang, pembelian BARU memisah PPN dari modal, dan kasir memungut PPN ${tarif}% untuk barang kena pajak. Barang berstatus Tanpa PPN tetap bebas PPN.`
             : "Matikan mode PKP?\n\nPPN pembelian kembali dilebur ke modal & kasir tidak memungut PPN.") +
             "\n\nTransaksi yang sudah tercatat tidak berubah.",
         );

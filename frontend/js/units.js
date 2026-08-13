@@ -19,17 +19,29 @@ async function loadSat() {
 }
 
 function openSatModal(item = null) {
+  const nama = document.getElementById("sNama");
   editSatId = null;
   document.getElementById("mSatTitle").textContent = "Tambah Satuan";
-  document.getElementById("sNama").value = "";
+  nama.value = "";
   document.getElementById("sAbr").value = "";
   if (item) {
     editSatId = item.id;
     document.getElementById("mSatTitle").textContent = "Edit Satuan";
-    document.getElementById("sNama").value = item.name;
+    nama.value = item.name;
     document.getElementById("sAbr").value = item.abbreviation || "";
   }
   openModal("mSat");
+
+  // Fokus eksplisit ke Nama Satuan. Jalankan lagi sesudah event klik/layout selesai
+  // karena WebView dapat mengembalikan fokus ke tombol "+" setelah handler onclick.
+  const focusNama = () => {
+    if (document.getElementById("mSat")?.style.display === "flex") {
+      nama.focus({ preventScroll: true });
+    }
+  };
+  focusNama();
+  requestAnimationFrame(focusNama);
+  setTimeout(focusNama, 0);
 }
 
 function editSat(u) {
