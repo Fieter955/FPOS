@@ -14,6 +14,7 @@ from ..database import get_db
 from .. import models
 from ..auth import get_current_user, get_query
 from ..permissions import has_permission
+from ..services.low_stock import get_low_stock_items
 
 # 👇 IMPORT LOGIKA DARI ACCOUNTING (SINGLE SOURCE OF TRUTH) 👇
 from .accounting import get_income_statement 
@@ -62,32 +63,9 @@ def get_dashboard_data(db: Session = Depends(get_db), current_user: models.User 
         acc_report = get_income_statement(start_date=start_month, end_date=today_local, db=db, current_user=current_user)
         net_profit_month = acc_report.get("net_profit", 0)
 
-    # Hitung stok menipis berdasarkan Gudang Cabang Aktif
-    low_stock_count = 0
-    gudang_cabang = db.query(models.Warehouse.id).filter(
-        models.Warehouse.branch_id == current_user.active_branch_id
-    ).all()
-    warehouse_ids = [g[0] for g in gudang_cabang]
-
-    if warehouse_ids:
-        stock_per_item = db.query(
-            models.WarehouseStock.item_id,
-            func.sum(models.WarehouseStock.stock).label('total_local_stock')
-        ).filter(
-            models.WarehouseStock.warehouse_id.in_(warehouse_ids)
-        ).group_by(models.WarehouseStock.item_id).subquery()
-
-        low_stock_count = db.query(func.count(models.Item.id)).join(
-            stock_per_item, models.Item.id == stock_per_item.c.item_id
-        ).filter(
-            models.Item.is_active == True,
-            stock_per_item.c.total_local_stock <= models.Item.min_stock
-        ).scalar() or 0
-    elif not current_user.active_branch_id: 
-        low_stock_count = db.query(func.count(models.Item.id)).filter(
-            models.Item.is_active == True,
-            models.Item.stock <= models.Item.min_stock
-        ).scalar() or 0
+    # Satu sumber data dengan tab Persediaan > Stok Menipis agar jumlah dan
+    # rincian barang yang terlihat pengguna selalu konsisten.
+    low_stock_items = get_low_stock_items(db, current_user.active_branch_id)
 
     # Top 5 Produk Terlaris Bulan Ini (Filter Cabang)
     top_items_raw = get_query(db, models.Sale, current_user).join(
@@ -140,7 +118,8 @@ def get_dashboard_data(db: Session = Depends(get_db), current_user: models.User 
         "total_purchases_today": float(total_purchases_today),
         "total_transactions_today": int(total_tx_today),
         "net_profit_monthly": float(net_profit_month), # 👈 Data Net Profit Akurat
-        "low_stock_count": int(low_stock_count),
+        "low_stock_count": len(low_stock_items),
+        "low_stock_items": low_stock_items,
         "total_customer_deposit": float(total_cust_deposit),
         "total_supplier_deposit": float(total_supp_deposit),
         "top_items": top_items,

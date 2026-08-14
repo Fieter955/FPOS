@@ -27,6 +27,15 @@
       font-family: 'Courier New', Courier, monospace !important;
     }
 
+    #rcptBox h2,
+    #rcptBox p {
+      color: #222 !important;
+    }
+
+    #rcptBox p b {
+      color: #111 !important;
+    }
+
     body {
       overflow: hidden;
     }
@@ -1570,12 +1579,12 @@
           <div class="ipos-summary-row">
             <span class="k" style="display: flex; align-items: center; gap: 4px;">
               Potongan
-              <input type="number" id="invoiceDiscPct"
+              <input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" id="invoiceDiscPct"
                 style="width: 45px; font-size: 0.85rem; padding: 0.1rem; text-align: center; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-color); color: var(--text-main);"
                 placeholder="0" oninput="calcInvoiceDiscPct(this)" /> %
             </span>
             <input type="text" id="invoiceDiscAmt" class="cost-inp" placeholder="0,00" value="0,00"
-              onfocus="this.select()" inputmode="numeric" autocomplete="off"
+              onfocus="this.select()" inputmode="decimal" data-input-desimal data-min="0" autocomplete="off"
               oninput="formatBiayaLain(this); calcInvoiceDiscAmt(this)" />
           </div>
           <div class="ipos-summary-row">
@@ -1583,7 +1592,7 @@
           </div>
           <div class="ipos-summary-row">
             <span class="k">Biaya Lain</span><input type="text" id="othercost" class="cost-inp" placeholder="0,00"
-              value="0,00" onfocus="this.select()" inputmode="numeric" autocomplete="off"
+              value="0,00" onfocus="this.select()" inputmode="decimal" data-input-desimal data-min="0" autocomplete="off"
               oninput="formatBiayaLain(this); recalc()" />
           </div>
           <div class="ipos-summary-row" id="ppnRow" style="display: none">
@@ -1624,18 +1633,18 @@
         <!-- Baris 1: Tunai | Deposit -->
         <div class="mpy-row">
           <label class="mpy-lbl">Tunai :</label>
-          <input type="text" inputmode="numeric" id="payInpTunai" class="mpy-inp mpy-inp-num" value="0"
+          <input type="text" inputmode="decimal" data-input-desimal data-min="0" id="payInpTunai" class="mpy-inp mpy-inp-num" value="0"
             oninput="formatBiayaLain(this); hitungTotalBayar()" />
           <span class="mpy-sep"></span>
           <label class="mpy-lbl" id="lblSaldoPelanggan">Saldo Pelanggan :</label>
-          <input type="text" inputmode="numeric" id="payInpDeposit" class="mpy-inp mpy-inp-num" style="flex: 1"
+          <input type="text" inputmode="decimal" data-input-desimal data-min="0" id="payInpDeposit" class="mpy-inp mpy-inp-num" style="flex: 1"
             value="0" oninput="formatBiayaLain(this); hitungTotalBayar()" />
         </div>
 
         <!-- Baris 2: Kredit | Pel. / Jt. -->
         <div class="mpy-row">
           <label class="mpy-lbl">Kredit :</label>
-          <input type="text" inputmode="numeric" id="payInpKredit" class="mpy-inp mpy-inp-num" value="0"
+          <input type="text" inputmode="decimal" data-input-desimal data-min="0" id="payInpKredit" class="mpy-inp mpy-inp-num" value="0"
             oninput="formatBiayaLain(this); hitungTotalBayar()" />
           <span class="mpy-sep"></span>
           <label class="mpy-lbl mpy-lbl-sm">Pel. :</label>
@@ -1649,7 +1658,7 @@
         <!-- Baris 3: Kartu Debit | Bank + Ref -->
         <div class="mpy-row">
           <label class="mpy-lbl">Kartu Debit :</label>
-          <input type="text" inputmode="numeric" id="payInpDebit" class="mpy-inp mpy-inp-num" value="0"
+          <input type="text" inputmode="decimal" data-input-desimal data-min="0" id="payInpDebit" class="mpy-inp mpy-inp-num" value="0"
             oninput="formatBiayaLain(this); hitungTotalBayar()" />
           <span class="mpy-sep"></span>
           <label class="mpy-lbl mpy-lbl-sm">Bank :</label>
@@ -1662,7 +1671,7 @@
         <!-- Baris 4: Kartu Kredit | Bank + Ref -->
         <div class="mpy-row">
           <label class="mpy-lbl">Kartu Kredit :</label>
-          <input type="text" inputmode="numeric" id="payInpKartuKredit" class="mpy-inp mpy-inp-num" value="0"
+          <input type="text" inputmode="decimal" data-input-desimal data-min="0" id="payInpKartuKredit" class="mpy-inp mpy-inp-num" value="0"
             oninput="formatBiayaLain(this); hitungTotalBayar()" />
           <span class="mpy-sep"></span>
           <label class="mpy-lbl mpy-lbl-sm">Bank :</label>
@@ -1675,7 +1684,7 @@
         <!-- Baris 5: E-Money | Prod. + Ref -->
         <div class="mpy-row">
           <label class="mpy-lbl">E-Money :</label>
-          <input type="text" inputmode="numeric" id="payInpEmoney" class="mpy-inp mpy-inp-num" value="0"
+          <input type="text" inputmode="decimal" data-input-desimal data-min="0" id="payInpEmoney" class="mpy-inp mpy-inp-num" value="0"
             oninput="formatBiayaLain(this); hitungTotalBayar()" />
           <span class="mpy-sep"></span>
           <label class="mpy-lbl mpy-lbl-sm">Prod. :</label>
@@ -1797,29 +1806,25 @@
           <tbody>
             <tr>
               <td style="font-weight: 500; font-size: 1.1rem; padding: 1.25rem 1rem;">Potongan Pertama</td>
-              <td style="padding: 1.25rem 1rem;"><input type="number" id="dpPot1" class="cost-inp" step="0.01" min="0"
-                  max="100"
+              <td style="padding: 1.25rem 1rem;"><input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" id="dpPot1" class="cost-inp"
                   style="width: 100%; text-align: right; padding: 0.75rem; font-size: 1.2rem; border-radius: 8px;" />
               </td>
             </tr>
             <tr>
               <td style="font-weight: 500; font-size: 1.1rem; padding: 1.25rem 1rem;">Potongan Kedua</td>
-              <td style="padding: 1.25rem 1rem;"><input type="number" id="dpPot2" class="cost-inp" step="0.01" min="0"
-                  max="100"
+              <td style="padding: 1.25rem 1rem;"><input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" id="dpPot2" class="cost-inp"
                   style="width: 100%; text-align: right; padding: 0.75rem; font-size: 1.2rem; border-radius: 8px;" />
               </td>
             </tr>
             <tr>
               <td style="font-weight: 500; font-size: 1.1rem; padding: 1.25rem 1rem;">Potongan Ketiga</td>
-              <td style="padding: 1.25rem 1rem;"><input type="number" id="dpPot3" class="cost-inp" step="0.01" min="0"
-                  max="100"
+              <td style="padding: 1.25rem 1rem;"><input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" id="dpPot3" class="cost-inp"
                   style="width: 100%; text-align: right; padding: 0.75rem; font-size: 1.2rem; border-radius: 8px;" />
               </td>
             </tr>
             <tr>
               <td style="font-weight: 500; font-size: 1.1rem; padding: 1.25rem 1rem;">Potongan Keempat</td>
-              <td style="padding: 1.25rem 1rem;"><input type="number" id="dpPot4" class="cost-inp" step="0.01" min="0"
-                  max="100"
+              <td style="padding: 1.25rem 1rem;"><input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" id="dpPot4" class="cost-inp"
                   style="width: 100%; text-align: right; padding: 0.75rem; font-size: 1.2rem; border-radius: 8px;" />
               </td>
             </tr>
@@ -2613,10 +2618,10 @@
 
       const c = cart[dpCartIndex];
       document.getElementById("dpNamaBarang").textContent = c.name;
-      document.getElementById("dpPot1").value = c.disc1 || 0;
-      document.getElementById("dpPot2").value = c.disc2 || 0;
-      document.getElementById("dpPot3").value = c.disc3 || 0;
-      document.getElementById("dpPot4").value = c.disc4 || 0;
+      document.getElementById("dpPot1").value = toDesimal(c.disc1 || 0);
+      document.getElementById("dpPot2").value = toDesimal(c.disc2 || 0);
+      document.getElementById("dpPot3").value = toDesimal(c.disc3 || 0);
+      document.getElementById("dpPot4").value = toDesimal(c.disc4 || 0);
 
       document.getElementById("detailPotonganModal").style.display = "flex";
       activeModal = "detailPotongan";
@@ -2626,10 +2631,10 @@
       if (dpCartIndex === -1 || !cart[dpCartIndex]) return;
       const c = cart[dpCartIndex];
 
-      let p1 = parseFloat(document.getElementById("dpPot1").value) || 0;
-      let p2 = parseFloat(document.getElementById("dpPot2").value) || 0;
-      let p3 = parseFloat(document.getElementById("dpPot3").value) || 0;
-      let p4 = parseFloat(document.getElementById("dpPot4").value) || 0;
+      let p1 = parseDesimal(document.getElementById("dpPot1"));
+      let p2 = parseDesimal(document.getElementById("dpPot2"));
+      let p3 = parseDesimal(document.getElementById("dpPot3"));
+      let p4 = parseDesimal(document.getElementById("dpPot4"));
 
       if (p1 > 100) p1 = 100;
       if (p2 > 100) p2 = 100;
@@ -2820,7 +2825,7 @@
     // Update perhitungan row "Jumlah" secara live saat mengetik Qty
     window.updateRowCalc = function (el, i) {
       if (!cart[i]) return;
-      let q = parseFloat(String(el.value).replace(",", "."));
+      let q = parseDesimal(el);
       if (isNaN(q) || q < 0) q = 0;
 
       const price = cart[i].price; // Harga setelah potongan
@@ -2851,7 +2856,7 @@
       if (!cart[i]) return;
       const item = allItems.find((x) => x.id === cart[i].id);
       const availableQty = getAvailableCartStock(item, i);
-      let q = parseFloat(String(val).replace(",", "."));
+      let q = parseDesimal(val, { maximumFractionDigits: 4 });
       if (isNaN(q) || q < 0) q = 0;
       q = roundQty(q);
       if (q > availableQty) {
@@ -2904,9 +2909,7 @@
 
     // Helper untuk mengambil nilai angka murni dari input yang diformat
     function getRawPay(id) {
-      const val = document.getElementById(id).value || "";
-      const rawStr = val.split(',')[0];
-      return parseFloat(rawStr.replace(/[^\d]/g, "")) || 0;
+      return parseDesimal(document.getElementById(id));
     }
 
     // Menghitung total bayar dari semua metode & kembali
@@ -2948,7 +2951,7 @@
 
     function simpanPembayaran() {
       payMethod = tentukanMetodeBayar();
-      const totalBayar = parseFloat(document.getElementById("payInpModal").value) || 0;
+      const totalBayar = Number(document.getElementById("payInpModal").value) || 0;
       document.getElementById("paidInp").value = totalBayar;
       prosesBayar();
     }
@@ -2956,7 +2959,7 @@
     function simpanDanCetak() {
       // Simpan dulu, cetak otomatis ditangani showReceipt
       payMethod = tentukanMetodeBayar();
-      const totalBayar = parseFloat(document.getElementById("payInpModal").value) || 0;
+      const totalBayar = Number(document.getElementById("payInpModal").value) || 0;
       document.getElementById("paidInp").value = totalBayar;
       prosesBayar(true);
     }
@@ -2973,7 +2976,7 @@
     }
     function setPayMethodAndConfirm(method) {
       payMethod = method;
-      const totalBayar = parseFloat(document.getElementById("payInpModal").value) || 0;
+      const totalBayar = Number(document.getElementById("payInpModal").value) || 0;
       document.getElementById("paidInp").value = totalBayar;
       prosesBayar();
     }
@@ -3051,7 +3054,7 @@
     // gampang ditimpa.
     function potInput(i, n, val) {
       const v = parseFloat(val) || 0;
-      return `<input class="pot-inp" type="number" step="0.01" min="0" max="100" value="${v}" title="Potongan ${n} (%) — bisa diisi/ubah manual" onfocus="this.select()" onchange="ubahPotongan(${i}, ${n}, this.value)">`;
+      return `<input class="pot-inp" type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" value="${v}" title="Potongan ${n} (%) — bisa diisi/ubah manual" onfocus="this.select()" onchange="ubahPotongan(${i}, ${n}, this.value)">`;
     }
 
     // Ubah salah satu Pot (1–4) sebuah baris secara MANUAL. Menandai baris ini
@@ -3059,7 +3062,7 @@
     // hitung ulang harga baris tsb saja — baris lain tidak terpengaruh.
     function ubahPotongan(i, n, val) {
       if (!cart[i]) return;
-      let pct = parseFloat(String(val).replace(",", "."));
+      let pct = parseDesimal(val);
       if (isNaN(pct) || pct < 0) pct = 0;
       if (pct > 100) pct = 100;
       cart[i]["disc" + n] = pct;
@@ -3116,7 +3119,7 @@
             <td class="ctr">
               <div class="qty-ctrl" style="justify-content:center">
                 <button class="qty-btn" onclick="changeQty(${i},-1)">−</button>
-                <input class="qty-cell-inp" type="text" inputmode="decimal" value="${fmtQty(c.qty)}"
+                <input class="qty-cell-inp" type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0" value="${fmtQty(c.qty)}"
                   title="Ketik jumlah lalu Enter" onfocus="this.select()" oninput="updateRowCalc(this, ${i})" onchange="setQty(${i}, this.value)">
                 <button class="qty-btn" onclick="changeQty(${i},1)">+</button>
               </div>
@@ -3304,12 +3307,10 @@
     function getDiskonFaktur() {
       const el = document.getElementById("invoiceDiscAmt");
       if (!el) return 0;
-      const rawStr = (el.value || "").split(',')[0];
-      const n = parseFloat(rawStr.replace(/[^\d]/g, ""));
-      return isNaN(n) ? 0 : n;
+      return parseDesimal(el);
     }
     function calcInvoiceDiscPct(el) {
-      const pct = parseFloat(el.value) || 0;
+      const pct = parseDesimal(el);
       const net = cart.reduce((s, c) => s + c.price * c.qty, 0);
       const amt = Math.round(net * (pct / 100));
       const amtEl = document.getElementById("invoiceDiscAmt");
@@ -3317,12 +3318,12 @@
       recalc();
     }
     function calcInvoiceDiscAmt(el) {
-      const rawStr = (el.value || "").split(',')[0];
-      const amt = parseFloat(rawStr.replace(/[^\d]/g, "")) || 0;
+      const amt = parseDesimal(el);
       const net = cart.reduce((s, c) => s + c.price * c.qty, 0);
       const pct = net > 0 ? ((amt / net) * 100).toFixed(2) : 0;
       const pctEl = document.getElementById("invoiceDiscPct");
-      if (pctEl && document.activeElement !== pctEl) pctEl.value = amt > 0 ? pct : "";
+      if (pctEl && document.activeElement !== pctEl)
+        pctEl.value = toDesimal(amt > 0 ? pct : 0);
       recalc();
     }
 
@@ -3331,9 +3332,7 @@
     function getBiayaLain() {
       const el = document.getElementById("othercost");
       if (!el) return 0;
-      const rawStr = (el.value || "").split(',')[0];
-      const n = parseFloat(rawStr.replace(/[^\d]/g, ""));
-      return isNaN(n) ? 0 : n;
+      return parseDesimal(el);
     }
     // Tampilkan Biaya Lain dengan titik pemisah ribuan (mis. 1.500.000) biar mudah dibaca.
     // Diarahkan ke formatDesimal global dari api.js.
@@ -3465,6 +3464,7 @@
           is_tax_included: true,
           other_cost: getBiayaLain(), // biaya lain ditagihkan ke pelanggan
           paid: paid,
+          cash_received: tunai,
           payment_method: payMethod,
           payments: payments, // rincian bayar campur → tiap metode ke akunnya sendiri
           items: cart.map((c) => ({
@@ -3499,7 +3499,6 @@
       document.getElementById("rcptModal").style.display = "flex";
       activeModal = "rcpt";
       rcptIdx = 2;
-      updateRcptUI();
 
       // Panggil API Print secara otomatis jika diperlukan, atau isi Box struk
       const box = document.getElementById("rcptBox");
@@ -3512,6 +3511,12 @@
             <button id="btnRcptSelesai" class="rcpt-btn" style="flex:1; background:#10b981; color:white; border:none;" onclick="closeModals()">✓ Selesai</button>
           </div>
         `;
+      updateRcptUI();
+    }
+
+    function changeRcptIdx(dir) {
+      rcptIdx = (rcptIdx + dir + 3) % 3;
+      updateRcptUI();
     }
 
     function updateRcptUI() {
@@ -3521,7 +3526,10 @@
         document.getElementById("btnRcptSelesai"),
       ];
       btns.forEach((b, i) => {
-        if (b) b.classList.toggle("kb-focus", i === rcptIdx);
+        if (!b) return;
+        const isSelected = i === rcptIdx;
+        b.classList.toggle("kb-focus", isSelected);
+        if (isSelected) b.focus({ preventScroll: true });
       });
     }
 

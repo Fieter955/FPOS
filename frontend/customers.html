@@ -147,7 +147,7 @@
       <div class="modal-box">
         <div class="modal-hdr">
           <h2 id="mCustTitle">Tambah Pelanggan</h2>
-          <button class="btn-x" onclick="closeModal('mPelanggan')">×</button>
+          <button class="btn-x" onclick="closeCustomerModal('mPelanggan')">×</button>
         </div>
         <input type="hidden" id="cId" />
         <div class="input-group">
@@ -195,7 +195,7 @@
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
           <button
-            onclick="closeModal('mPelanggan')"
+            onclick="closeCustomerModal('mPelanggan')"
             class="btn"
             style="
               background: var(--bg-color);
@@ -215,7 +215,7 @@
       <div class="modal-box">
         <div class="modal-hdr">
           <h2 id="mGrupTitle">Tambah Grup Diskon</h2>
-          <button class="btn-x" onclick="closeModal('mGrup')">×</button>
+          <button class="btn-x" onclick="closeCustomerModal('mGrup')">×</button>
         </div>
         <input type="hidden" id="gId" />
         <div class="input-group">
@@ -230,8 +230,11 @@
           <label>Diskon (%) — Referensi saja</label>
           <input
             id="gDisc"
-            type="number"
-            step="0.01"
+            type="text"
+            inputmode="decimal"
+            data-input-desimal
+            data-min="0"
+            data-max="100"
             class="input-control"
             placeholder="0"
           />
@@ -250,7 +253,7 @@
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
           <button
-            onclick="closeModal('mGrup')"
+            onclick="closeCustomerModal('mGrup')"
             class="btn"
             style="
               background: var(--bg-color);
@@ -270,7 +273,7 @@
       <div class="modal-box">
         <div class="modal-hdr">
           <h2 id="mTrfTitle">Transfer Saldo Pelanggan</h2>
-          <button class="btn-x" onclick="closeModal('mTransferSaldo')">
+          <button class="btn-x" onclick="closeCustomerModal('mTransferSaldo')">
             ×
           </button>
         </div>
@@ -288,7 +291,10 @@
           <label>Nominal Transfer *</label>
           <input
             id="trfAmount"
-            type="number"
+            type="text"
+            inputmode="decimal"
+            data-input-desimal
+            data-min="1"
             class="input-control"
             placeholder="0"
             min="1"
@@ -297,7 +303,7 @@
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
           <button
-            onclick="closeModal('mTransferSaldo')"
+            onclick="closeCustomerModal('mTransferSaldo')"
             class="btn"
             style="
               background: var(--bg-color);
@@ -319,11 +325,83 @@
     <script src="/js/components.js"></script>
     <script>
       requireAuth();
+      const customerSort =
+        new URLSearchParams(location.search).get("sort") === "deposit_desc"
+          ? "deposit_desc"
+          : "";
       let editCustId = null,
         editGrupId = null,
         trfSourceId = null,
         trfCombo = null,
         curTab = "cust";
+      let customerDraft = null;
+
+      function serializeCustomerDraft(modalId) {
+        const value = (id) => document.getElementById(id)?.value ?? "";
+        if (modalId === "mPelanggan") {
+          return JSON.stringify({
+            id: value("cId"),
+            name: value("cNama"),
+            phone: value("cPhone"),
+            email: value("cEmail"),
+            address: value("cAlamat"),
+            groupId: value("cGrup"),
+          });
+        }
+        if (modalId === "mGrup") {
+          return JSON.stringify({
+            id: value("gId"),
+            name: value("gNama"),
+            discount: parseDesimal(document.getElementById("gDisc")),
+          });
+        }
+        if (modalId === "mTransferSaldo") {
+          return JSON.stringify({
+            sourceId: trfSourceId,
+            targetId: trfCombo?.val?.() ?? "",
+            targetSearch:
+              document.querySelector("#trfTargetCombo .combobox-input")?.value ??
+              "",
+            amount: parseDesimal(document.getElementById("trfAmount")),
+          });
+        }
+        return "";
+      }
+
+      function beginCustomerDraft(modalId) {
+        customerDraft = {
+          modalId,
+          baseline: serializeCustomerDraft(modalId),
+        };
+        notifyUnsavedChangesChanged();
+      }
+
+      function clearCustomerDraft(modalId = null) {
+        if (modalId && customerDraft?.modalId !== modalId) return;
+        customerDraft = null;
+        notifyUnsavedChangesChanged();
+      }
+
+      function closeCustomerModal(modalId) {
+        closeModal(modalId);
+        clearCustomerDraft(modalId);
+      }
+
+      function hasDirtyCustomerDraft() {
+        return Boolean(
+          customerDraft &&
+            serializeCustomerDraft(customerDraft.modalId) !==
+              customerDraft.baseline,
+        );
+      }
+
+      async function saveCustomerDraft() {
+        if (!customerDraft) return true;
+        if (customerDraft.modalId === "mPelanggan") return saveCust();
+        if (customerDraft.modalId === "mGrup") return saveGrup();
+        if (customerDraft.modalId === "mTransferSaldo") return saveTransfer();
+        return false;
+      }
 
       function switchTab(t) {
         curTab = t;
@@ -361,6 +439,7 @@
         const q = document.getElementById("srchCust").value;
         let url = "/customers/?limit=300";
         if (q) url += `&search=${encodeURIComponent(q)}`;
+        if (customerSort) url += `&sort=${customerSort}`;
         try {
           const d = await api("GET", url);
           document.getElementById("tblCust").innerHTML = d.length
@@ -395,6 +474,7 @@
         );
         document.getElementById("cGrup").value = "";
         loadGrupSelect();
+        beginCustomerDraft("mPelanggan");
       }
       const _origOM = openModal;
       window.openModal = function (id) {
@@ -415,13 +495,14 @@
         await loadGrupSelect();
         document.getElementById("cGrup").value = c.group_id || "";
         _origOM("mPelanggan");
+        beginCustomerDraft("mPelanggan");
       }
 
       async function saveCust() {
         const name = document.getElementById("cNama").value.trim();
         if (!name) {
           showToast("Nama wajib diisi", "error");
-          return;
+          return false;
         }
         const data = {
           name,
@@ -434,10 +515,12 @@
           if (editCustId) await api("PUT", `/customers/${editCustId}`, data);
           else await api("POST", "/customers/", data);
           showToast("Pelanggan disimpan ✓");
-          closeModal("mPelanggan");
+          closeCustomerModal("mPelanggan");
           loadCust();
+          return true;
         } catch (ex) {
           showToast(ex.message, "error");
+          return false;
         }
       }
 
@@ -473,7 +556,9 @@
         trfSourceId = c.id;
         document.getElementById("trfSourceInfo").textContent =
           `Sumber: ${c.name} (Saldo: ${fmtRp(c.deposit_balance)})`;
-        document.getElementById("trfAmount").value = c.deposit_balance;
+        document.getElementById("trfAmount").value = toDesimal(
+          c.deposit_balance,
+        );
 
         // Load all customers for target
         const all = await api("GET", "/customers/?limit=1000");
@@ -487,19 +572,25 @@
         trfCombo = createPremiumCombo(container, options, {
           placeholder: "Pilih pelanggan tujuan...",
           labField: "name", // Explicitly use 'name'
-          onSelect: () => {},
+          onSelect: notifyUnsavedChangesChanged,
         });
 
         openModal("mTransferSaldo");
+        beginCustomerDraft("mTransferSaldo");
       }
 
       async function saveTransfer() {
         const targetId = trfCombo.val();
-        const amount = parseFloat(document.getElementById("trfAmount").value);
+        const amount = parseDesimal(document.getElementById("trfAmount"));
 
-        if (!targetId) return showToast("Pilih pelanggan tujuan", "error");
-        if (!amount || amount <= 0)
-          return showToast("Masukkan nominal valid", "error");
+        if (!targetId) {
+          showToast("Pilih pelanggan tujuan", "error");
+          return false;
+        }
+        if (!amount || amount <= 0) {
+          showToast("Masukkan nominal valid", "error");
+          return false;
+        }
 
         try {
           showLoading("Memproses transfer...");
@@ -508,10 +599,12 @@
             amount: amount,
           });
           showToast("Transfer berhasil ✓");
-          closeModal("mTransferSaldo");
+          closeCustomerModal("mTransferSaldo");
           loadCust();
+          return true;
         } catch (ex) {
           showToast(ex.message, "error");
+          return false;
         } finally {
           hideLoading();
         }
@@ -541,7 +634,8 @@
           "Tambah Grup Diskon";
         document.getElementById("gId").value = "";
         document.getElementById("gNama").value = "";
-        document.getElementById("gDisc").value = 0;
+        document.getElementById("gDisc").value = "0,00";
+        beginCustomerDraft("mGrup");
       }
       const _origOM2 = window.openModal;
       window.openModal = function (id) {
@@ -556,31 +650,35 @@
         document.getElementById("mGrupTitle").textContent = "Edit Grup";
         document.getElementById("gId").value = g.id;
         document.getElementById("gNama").value = g.name;
-        document.getElementById("gDisc").value = g.discount_percent;
+        document.getElementById("gDisc").value = toDesimal(
+          g.discount_percent,
+        );
         _origOM2("mGrup");
+        beginCustomerDraft("mGrup");
       }
 
       async function saveGrup() {
         const name = document.getElementById("gNama").value.trim();
         if (!name) {
           showToast("Nama wajib diisi", "error");
-          return;
+          return false;
         }
         const data = {
           name,
-          discount_percent:
-            parseFloat(document.getElementById("gDisc").value) || 0,
+          discount_percent: parseDesimal(document.getElementById("gDisc")),
         };
         try {
           if (editGrupId)
             await api("PUT", `/customers/groups/${editGrupId}`, data);
           else await api("POST", "/customers/groups", data);
           showToast("Grup disimpan ✓");
-          closeModal("mGrup");
+          closeCustomerModal("mGrup");
           loadGrup();
           loadGrupSelect();
+          return true;
         } catch (ex) {
           showToast(ex.message, "error");
+          return false;
         }
       }
 
@@ -595,8 +693,29 @@
         }
       }
 
+      // Data master adalah fungsi utama halaman dan harus mulai dimuat sebelum
+      // fitur tambahan. Ini juga menjaga tabel tetap bekerja bila browser masih
+      // sempat membawa api.js lama dari cache development.
       loadCust();
-      loadGrupSelect();
+      loadGrupSelect().catch((ex) => showToast(ex.message, "error"));
+
+      if (
+        typeof registerUnsavedChangesGuard === "function" &&
+        typeof notifyUnsavedChangesChanged === "function"
+      ) {
+        ["mPelanggan", "mGrup", "mTransferSaldo"].forEach((modalId) => {
+          const modal = document.getElementById(modalId);
+          modal.addEventListener("input", notifyUnsavedChangesChanged);
+          modal.addEventListener("change", notifyUnsavedChangesChanged);
+        });
+
+        registerUnsavedChangesGuard({
+          label: "Pelanggan",
+          isDirty: hasDirtyCustomerDraft,
+          save: saveCustomerDraft,
+          discard: clearCustomerDraft,
+        });
+      }
     </script>
   </body>
 </html>

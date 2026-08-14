@@ -86,7 +86,7 @@
   <div class="input-group"><label>Nama Proyek *</label><input id="projNama" class="input-control" placeholder="contoh: Renovasi Rumah Pak Budi"></div>
   <div class="input-group"><label>Nama Klien</label><input id="projKlien" class="input-control" placeholder="Nama pemilik / kontraktor"></div>
   <div class="row2" style="margin-bottom:16px">
-    <div class="input-group"><label>Nilai Proyek (Rp)</label><input id="projNilai" type="number" class="input-control" min="0" value="0" inputmode="numeric"></div>
+    <div class="input-group"><label>Nilai Proyek (Rp)</label><input id="projNilai" type="text" class="input-control" data-input-desimal data-min="0" value="0,00" inputmode="decimal"></div>
     <div class="input-group"><label>Tanggal Mulai</label><input id="projTgl" type="date" class="input-control"></div>
   </div>
   <div class="input-group"><label>Deskripsi / Catatan</label><textarea id="projDesk" class="input-control" rows="2" placeholder="Jenis pekerjaan, lokasi, dll..."></textarea></div>
@@ -129,7 +129,7 @@ function updateFields(){
   document.getElementById('dynamicFields').innerHTML=flds.map(f=>`
     <div class="input-group" style="margin:0">
       <label>${f.label}</label>
-      <input id="f_${f.id}" type="${f.id==='jenis'?'text':'number'}" class="input-control" placeholder="${f.placeholder}" step="0.1" min="0">
+      <input id="f_${f.id}" type="text" ${f.id==='jenis'?'':'inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0"'} class="input-control" placeholder="${f.placeholder}">
     </div>`).join('');
 }
 
@@ -141,7 +141,7 @@ async function hitung(){
   flds.forEach(f=>{
     const v=document.getElementById(`f_${f.id}`)?.value;
     if(!v||v==='0'){ok=false;}
-    params[f.id]=f.id==='jenis'?v:parseFloat(v)||0;
+    params[f.id]=f.id==='jenis'?v:parseDesimal(v,{maximumFractionDigits:4});
   });
   if(!ok){showToast('Isi semua field dulu','error');return;}
   try{
@@ -245,7 +245,7 @@ async function saveProyek(){
   if(!name){showToast('Nama proyek wajib diisi','error');return;}
   const id=document.getElementById('projId').value;
   const data={name,client_name:document.getElementById('projKlien').value||null,
-    project_value:parseFloat(document.getElementById('projNilai').value)||null,
+    project_value:parseDesimal(document.getElementById('projNilai'))||null,
     start_date:document.getElementById('projTgl').value||null,
     description:document.getElementById('projDesk').value||null};
   try{

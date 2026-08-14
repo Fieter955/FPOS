@@ -251,6 +251,10 @@
                   <input
                     type="text"
                     id="fJumlah"
+                    inputmode="decimal"
+                    data-input-desimal
+                    data-desimal-maks="4"
+                    data-min="0"
                     class="input-control"
                     value="1"
                     style="flex: 1"
@@ -277,6 +281,9 @@
                   <input
                     type="text"
                     id="fHargaBeli"
+                    inputmode="decimal"
+                    data-input-desimal
+                    data-min="0"
                     class="input-control"
                     value="0"
                     style="flex: 1"
@@ -288,6 +295,9 @@
                   <input
                     type="text"
                     id="fMargin"
+                    inputmode="decimal"
+                    data-input-desimal
+                    data-min="0"
                     class="input-control"
                     value="0"
                     style="width: 90px"
@@ -296,6 +306,9 @@
                   <input
                     type="text"
                     id="fHargaJual"
+                    inputmode="decimal"
+                    data-input-desimal
+                    data-min="0"
                     class="input-control"
                     value="0"
                     style="flex: 1"
@@ -313,6 +326,10 @@
                   <input
                     type="text"
                     id="fPot1"
+                    inputmode="decimal"
+                    data-input-desimal
+                    data-min="0"
+                    data-max="100"
                     class="input-control"
                     value="0"
                     style="width: 90px"
@@ -332,6 +349,10 @@
                   <input
                     type="text"
                     id="fPot2"
+                    inputmode="decimal"
+                    data-input-desimal
+                    data-min="0"
+                    data-max="100"
                     class="input-control"
                     value="0"
                     style="width: 90px"
@@ -351,6 +372,10 @@
                   <input
                     type="text"
                     id="fPot3"
+                    inputmode="decimal"
+                    data-input-desimal
+                    data-min="0"
+                    data-max="100"
                     class="input-control"
                     value="0"
                     style="width: 90px"
@@ -370,6 +395,10 @@
                   <input
                     type="text"
                     id="fPot4"
+                    inputmode="decimal"
+                    data-input-desimal
+                    data-min="0"
+                    data-max="100"
                     class="input-control"
                     value="0"
                     style="width: 90px"
@@ -392,6 +421,10 @@
                   <input
                     type="text"
                     id="fPPN"
+                    inputmode="decimal"
+                    data-input-desimal
+                    data-min="0"
+                    data-max="100"
                     class="input-control"
                     value="0"
                     style="width: 90px"
@@ -470,9 +503,8 @@
     <script src="/js/components.js"></script>
     <script>
       // ===== Helper format angka (selaras dengan grid) =====
-      const toAngka = (s) =>
-        parseFloat(String(s).replace(/\./g, "").replace(",", ".")) || 0;
-      const toRibuan = (n) => (n || 0).toLocaleString("id-ID");
+      const toAngka = (s) => parseDesimal(s);
+      const toRibuan = (n) => toDesimal(n);
 
       const $ = (id) => document.getElementById(id);
 
@@ -541,10 +573,10 @@
       // Hitung harga neto setelah seluruh potongan bertingkat
       function hitungNeto() {
         const hb = toAngka($("fHargaBeli").value);
-        const p1 = parseFloat($("fPot1").value) || 0;
-        const p2 = parseFloat($("fPot2").value) || 0;
-        const p3 = parseFloat($("fPot3").value) || 0;
-        const p4 = parseFloat($("fPot4").value) || 0;
+        const p1 = parseDesimal($("fPot1"));
+        const p2 = parseDesimal($("fPot2"));
+        const p3 = parseDesimal($("fPot3"));
+        const p4 = parseDesimal($("fPot4"));
         const setelah1 = hb * (1 - p1 / 100);
         const setelah2 = setelah1 * (1 - p2 / 100); // pot2 dari hasil pot1
         const setelah3 = setelah2 * (1 - p3 / 100); // pot3 dari hasil pot2
@@ -560,9 +592,9 @@
         $("fPot2Harga").value = toRibuan(Math.round(setelah2));
         $("fPot3Harga").value = toRibuan(Math.round(setelah3));
         $("fPot4Harga").value = toRibuan(Math.round(setelah4));
-        const qty = parseFloat($("fJumlah").value) || 0;
+        const qty = parseDesimal($("fJumlah"));
         const subtotal = qty * neto;
-        const ppn = parseFloat($("fPPN").value) || 0;
+        const ppn = parseDesimal($("fPPN"));
         $("fPPNNilai").value = toRibuan(Math.round((subtotal * ppn) / 100));
         $("fTotal").value = toRibuan(Math.round(subtotal));
       }
@@ -570,7 +602,7 @@
       // Margin -> Harga Jual
       function hitungDariMargin() {
         const { neto } = hitungNeto();
-        const margin = parseFloat($("fMargin").value) || 0;
+        const margin = parseDesimal($("fMargin"));
         const hj = neto + (neto * margin) / 100;
         $("fHargaJual").value = toRibuan(Math.round(hj));
       }
@@ -716,7 +748,7 @@
             if (jenisId) payload.category_id = jenisId;
             if (satuanId) payload.unit_id = satuanId;
             payload.sell_price = toAngka($("fHargaJual").value);
-            payload.profit_margin = parseFloat($("fMargin").value) || 0;
+            payload.profit_margin = parseDesimal($("fMargin"));
             await api("PUT", `/items/${baris.item_id}`, payload);
 
             // Harga beli khusus supplier yang dipilih.
@@ -753,17 +785,17 @@
             baris.unit_name =
               (daftarSatuan.find((u) => u.id == satuanId) || {}).name ||
               baris.unit_name;
-          baris.qty = parseFloat($("fJumlah").value) || 0;
+        baris.qty = parseDesimal($("fJumlah"));
           baris.buy_price = toAngka($("fHargaBeli").value);
           baris.sell_price = toAngka($("fHargaJual").value);
-          baris.profit_margin = parseFloat($("fMargin").value) || 0;
+        baris.profit_margin = parseDesimal($("fMargin"));
           baris.discs = [
-            parseFloat($("fPot1").value) || 0,
-            parseFloat($("fPot2").value) || 0,
-            parseFloat($("fPot3").value) || 0,
-            parseFloat($("fPot4").value) || 0,
+          parseDesimal($("fPot1")),
+          parseDesimal($("fPot2")),
+          parseDesimal($("fPot3")),
+          parseDesimal($("fPot4")),
           ];
-          baris.ppn = parseFloat($("fPPN").value) || 0;
+        baris.ppn = parseDesimal($("fPPN"));
           draft.rows[draft.editRow] = baris;
           sessionStorage.setItem("purchase_form_draft", JSON.stringify(draft));
         }

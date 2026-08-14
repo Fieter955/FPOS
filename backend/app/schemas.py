@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional, List
 from datetime import date, datetime
 
@@ -294,6 +294,14 @@ class SupplierCreate(BaseModel):
     item_ids: Optional[List[int]] = None
     model_config = {"from_attributes": True}
 
+    @field_validator("PpnSupplier", mode="before")
+    @classmethod
+    def normalize_empty_ppn(cls, value):
+        """Supplier baru tanpa setelan pajak selalu diperlakukan sebagai Non PPN."""
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return 0
+        return value
+
 class SupplierUpdate(BaseModel):
     name: Optional[str] = None
     address: Optional[str] = None
@@ -563,6 +571,9 @@ class SaleCreate(BaseModel):
     is_tax_included: bool = True
     other_cost: float = 0   # biaya lain ditagihkan ke pelanggan (nambah total) → Pendapatan Lain-lain
     paid: float = 0
+    # Uang tunai bruto yang diserahkan pelanggan, sebelum kembalian. `paid`
+    # tetap menyatakan nilai bersih yang diterapkan ke tagihan/jurnal.
+    cash_received: Optional[float] = None
     payment_method: str = "cash"
     payments: Optional[List[SplitBayar]] = None   # rincian tender bayar campur; None → pakai logika lama (payment_method + paid)
     notes: Optional[str] = None

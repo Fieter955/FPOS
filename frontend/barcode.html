@@ -286,11 +286,11 @@
         >
           <div class="input-group">
             <label>Lebar 1 Stiker (mm)</label>
-            <input type="number" id="paperW" class="input-control" value="33" />
+            <input type="text" inputmode="decimal" data-input-desimal data-min="0" id="paperW" class="input-control" value="33" />
           </div>
           <div class="input-group">
             <label>Tinggi Stiker (mm)</label>
-            <input type="number" id="paperH" class="input-control" value="15" />
+            <input type="text" inputmode="decimal" data-input-desimal data-min="0" id="paperH" class="input-control" value="15" />
           </div>
         </div>
 
@@ -305,7 +305,10 @@
           <div class="input-group">
             <label>Jarak Antar Kolom (mm)</label>
             <input
-              type="number"
+              type="text"
+              inputmode="decimal"
+              data-input-desimal
+              data-min="0"
               id="gapX"
               class="input-control"
               value="2"
@@ -316,7 +319,10 @@
           <div class="input-group">
             <label>Jarak Antar Baris (mm)</label>
             <input
-              type="number"
+              type="text"
+              inputmode="decimal"
+              data-input-desimal
+              data-min="0"
               id="gapY"
               class="input-control"
               value="0"
@@ -553,15 +559,15 @@
         const cols = parseInt(
           document.querySelector('input[name="colLayout"]:checked').value,
         );
-        const w = parseFloat(document.getElementById("paperW").value) || 33;
-        const h = parseFloat(document.getElementById("paperH").value) || 15;
+        const w = parseDesimal(document.getElementById("paperW")) || 33;
+        const h = parseDesimal(document.getElementById("paperH")) || 15;
         const gapX = Math.max(
           0,
-          parseFloat(document.getElementById("gapX").value) || 0,
+          parseDesimal(document.getElementById("gapX")),
         );
         const gapY = Math.max(
           0,
-          parseFloat(document.getElementById("gapY").value) || 0,
+          parseDesimal(document.getElementById("gapY")),
         );
 
         // Susun label: tiap barang di daftar diulang sebanyak qty-nya.

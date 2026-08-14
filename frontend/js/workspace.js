@@ -8,6 +8,17 @@
   const framesElement = document.getElementById("workspaceFrames");
   const tabCountElement = document.getElementById("workspaceTabCount");
   const bootElement = document.getElementById("workspaceBoot");
+  const accountElement = document.getElementById("workspaceAccount");
+  const accountButton = document.getElementById("workspaceAccountButton");
+  const accountMenu = document.getElementById("workspaceAccountMenu");
+  const accountAvatar = document.getElementById("workspaceAccountAvatar");
+  const accountName = document.getElementById("workspaceAccountName");
+  const accountMenuAvatar = document.getElementById(
+    "workspaceAccountMenuAvatar",
+  );
+  const accountMenuName = document.getElementById("workspaceAccountMenuName");
+  const accountUsername = document.getElementById("workspaceAccountUsername");
+  const logoutButton = document.getElementById("workspaceLogoutButton");
 
   const allowedPaths = new Set(
     [
@@ -110,6 +121,8 @@
   let tabs = [];
   let activeTabId = DASHBOARD_ID;
   let nextTabNumber = Date.now();
+  let nextUnsavedRequestNumber = Date.now();
+  const pendingUnsavedRequests = new Map();
 
   function cleanPath(pathname) {
     let path = pathname || "/";
@@ -172,6 +185,8 @@
       loaded: false,
       frame: null,
       element: null,
+      hasUnsavedChanges: false,
+      unsavedStateKnown: false,
     };
   }
 
@@ -201,6 +216,8 @@
         loaded: false,
         frame: null,
         element: null,
+        hasUnsavedChanges: false,
+        unsavedStateKnown: false,
       };
       tabs.push(restoredTab);
       if (saved?.id === restored?.activeTabId) {
@@ -317,9 +334,32 @@
       return tabs[0];
     }
     if (reuseExisting) {
-      const existing = tabs.find((tab) => tab.url === url);
+      const requestedPath = cleanPath(
+        new URL(url, location.origin).pathname,
+      ).toLowerCase();
+      const existing = tabs.find((tab) => {
+        if (tab.url === url) return true;
+        if (tab.isDashboard) return false;
+        return (
+          cleanPath(new URL(tab.url, location.origin).pathname).toLowerCase() ===
+          requestedPath
+        );
+      });
       if (existing) {
+        const routeChanged = existing.url !== url;
+        const wasLoaded = existing.loaded;
+        if (routeChanged) {
+          existing.url = url;
+          existing.title = cleanDocumentTitle(requestedTitle, url);
+          updateTabPresentation(existing);
+        }
         activateTab(existing.id);
+        if (routeChanged && wasLoaded && existing.frame?.contentWindow) {
+          existing.frame.contentWindow.postMessage(
+            { type: "fpos-route-state", url },
+            location.origin,
+          );
+        }
         return existing;
       }
     }
@@ -339,6 +379,8 @@
       loaded: false,
       frame: null,
       element: null,
+      hasUnsavedChanges: false,
+      unsavedStateKnown: false,
     };
     tabs.push(tab);
     createTabElement(tab);
@@ -347,13 +389,93 @@
     return tab;
   }
 
+  function requestUnsavedAction(tab, type, timeoutMs = 15000) {
+    if (!tab?.loaded || !tab.frame?.contentWindow) {
+      return Promise.resolve({ success: true, dirty: false });
+    }
+    const requestId = `unsaved-${nextUnsavedRequestNumber++}`;
+    return new Promise((resolve) => {
+      const timeout = window.setTimeout(() => {
+        pendingUnsavedRequests.delete(requestId);
+        resolve({
+          success: false,
+          dirty: Boolean(tab.hasUnsavedChanges),
+          timedOut: true,
+        });
+      }, timeoutMs);
+      pendingUnsavedRequests.set(requestId, {
+        source: tab.frame.contentWindow,
+        resolve: (response) => {
+          window.clearTimeout(timeout);
+          resolve(response);
+        },
+      });
+      tab.frame.contentWindow.postMessage({ type, requestId }, location.origin);
+    });
+  }
+
+  async function refreshTabUnsavedState(tab) {
+    const response = await requestUnsavedAction(
+      tab,
+      "fpos-unsaved-status-request",
+      2000,
+    );
+    if (!response.timedOut) {
+      tab.hasUnsavedChanges = Boolean(response.dirty);
+      tab.unsavedStateKnown = true;
+    }
+    return Boolean(tab.hasUnsavedChanges);
+  }
+
+  async function saveTabBeforeExit(tab) {
+    activateTab(tab.id);
+    const response = await requestUnsavedAction(
+      tab,
+      "fpos-unsaved-save-request",
+      60000,
+    );
+    if (!response.success) {
+      showToast(
+        `Perubahan pada tab ${tab.title} belum berhasil disimpan.`,
+        "error",
+      );
+      return false;
+    }
+    tab.hasUnsavedChanges = Boolean(response.dirty);
+    return !tab.hasUnsavedChanges;
+  }
+
+  async function discardTabChanges(tab) {
+    await requestUnsavedAction(
+      tab,
+      "fpos-unsaved-discard-request",
+      5000,
+    );
+    tab.hasUnsavedChanges = false;
+  }
+
   async function requestCloseTab(tabId) {
     const tab = tabs.find((item) => item.id === tabId);
     if (!tab || tab.isDashboard) return;
-    const confirmed = await showConfirm(
-      `Tutup tab “${tab.title}”?\nIsian yang belum disimpan pada tab ini akan hilang.`,
-    );
-    if (confirmed) removeTab(tabId);
+    const dirty = await refreshTabUnsavedState(tab);
+    if (dirty) {
+      const action = await showUnsavedChangesDialog(
+        `Perubahan pada tab “${tab.title}” belum disimpan. Apa yang ingin dilakukan?`,
+        {
+          saveText: "Simpan & Tutup",
+          discardText: "Tutup Tanpa Simpan",
+        },
+      );
+      if (action === "cancel") return;
+      if (action === "save") {
+        if (!(await saveTabBeforeExit(tab))) return;
+      } else {
+        await discardTabChanges(tab);
+      }
+      removeTab(tabId);
+      return;
+    }
+    removeTab(tabId);
   }
 
   function removeTab(tabId, { activateDashboard = false } = {}) {
@@ -399,6 +521,8 @@
     // Iframe baru dapat memancarkan event load sementara untuk about:blank, atau
     // event terlambat setelah tab ditutup. Keduanya bukan navigasi keluar FPOS.
     if (!frame?.isConnected || !frame.contentWindow) return;
+    tab.hasUnsavedChanges = false;
+    tab.unsavedStateKnown = false;
 
     // Jangan membaca contentWindow.location di event load. Edge/Chrome dapat
     // melempar SecurityError sementara walaupun halaman masih same-origin, yang
@@ -420,7 +544,18 @@
       return;
     }
     const message = event.data || {};
-    if (message.type === "fpos-open-tab") {
+    if (message.type === "fpos-unsaved-response") {
+      const pending = pendingUnsavedRequests.get(message.requestId);
+      if (!pending || pending.source !== event.source) return;
+      pendingUnsavedRequests.delete(message.requestId);
+      pending.resolve(message);
+    } else if (message.type === "fpos-unsaved-state") {
+      const tab = tabFromSource(event.source);
+      if (tab) {
+        tab.hasUnsavedChanges = Boolean(message.dirty);
+        tab.unsavedStateKnown = true;
+      }
+    } else if (message.type === "fpos-open-tab") {
       openTab(message.url, message.title, {
         reuseExisting: Boolean(message.reuseExisting),
       });
@@ -429,15 +564,119 @@
     } else if (message.type === "fpos-frame-location") {
       const tab = tabFromSource(event.source);
       if (tab) updateTabFromLocation(tab, message.url, message.title);
+    } else if (message.type === "fpos-branches-changed") {
+      refreshBranchSwitcher({ force: true });
     } else if (message.type === "fpos-auth-expired") {
       if (message.sessionExpired) markSessionExpired();
       window.location.replace("/login");
+    } else if (message.type === "fpos-request-logout") {
+      logoutCurrentUser();
     }
   }
+
+  async function prepareWorkspaceLogout() {
+    const loadedTabs = tabs.filter((tab) => !tab.isDashboard && tab.loaded);
+    const dirtyStates = await Promise.all(
+      loadedTabs.map(async (tab) => ({
+        tab,
+        dirty: await refreshTabUnsavedState(tab),
+      })),
+    );
+    const dirtyTabs = dirtyStates
+      .filter((entry) => entry.dirty)
+      .map((entry) => entry.tab);
+
+    if (!dirtyTabs.length) {
+      return showConfirm("Yakin ingin keluar dari akun saat ini?");
+    }
+
+    const tabNames = dirtyTabs.map((tab) => `• ${tab.title}`).join("\n");
+    const action = await showUnsavedChangesDialog(
+      `Ada perubahan yang belum disimpan:\n${tabNames}\n\nApa yang ingin dilakukan sebelum keluar dari akun?`,
+      {
+        saveText: "Simpan Semua & Keluar",
+        discardText: "Keluar Tanpa Simpan",
+      },
+    );
+    if (action === "cancel") return false;
+    if (action === "discard") {
+      for (const tab of dirtyTabs) await discardTabChanges(tab);
+      return true;
+    }
+    for (const tab of dirtyTabs) {
+      if (!(await saveTabBeforeExit(tab))) return false;
+    }
+    return true;
+  }
+
+  window.fposPrepareForLogout = prepareWorkspaceLogout;
 
   function applyStoredTheme() {
     const isDark = localStorage.getItem("ipos_theme") === "dark";
     document.body.classList.toggle("dark-mode", isDark);
+  }
+
+  function initialsForAccount(value) {
+    const parts = String(value || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (!parts.length) return "A";
+    const first = parts[0].charAt(0);
+    const last = parts.length > 1 ? parts[parts.length - 1].charAt(0) : "";
+    return `${first}${last}`.toLocaleUpperCase("id-ID");
+  }
+
+  function populateAccountMenu() {
+    const user = getUser();
+    const username = String(user.username || "").trim();
+    const displayName = String(user.full_name || username || "Pengguna").trim();
+    const initials = initialsForAccount(displayName);
+
+    accountAvatar.textContent = initials;
+    accountMenuAvatar.textContent = initials;
+    accountName.textContent = displayName;
+    accountMenuName.textContent = displayName;
+    accountUsername.textContent = username ? `@${username}` : "Akun aktif";
+    accountButton.title = `Akun: ${displayName}`;
+    accountButton.setAttribute("aria-label", `Buka menu akun ${displayName}`);
+  }
+
+  function setAccountMenuOpen(open, { returnFocus = false } = {}) {
+    const shouldOpen = Boolean(open);
+    accountMenu.hidden = !shouldOpen;
+    accountButton.setAttribute("aria-expanded", String(shouldOpen));
+    accountElement.classList.toggle("is-open", shouldOpen);
+    if (returnFocus) accountButton.focus();
+  }
+
+  function initializeAccountMenu() {
+    populateAccountMenu();
+
+    accountButton.addEventListener("click", () => {
+      const shouldOpen = accountButton.getAttribute("aria-expanded") !== "true";
+      setAccountMenuOpen(shouldOpen);
+      if (shouldOpen) logoutButton.focus();
+    });
+
+    logoutButton.addEventListener("click", async () => {
+      setAccountMenuOpen(false);
+      await logoutCurrentUser();
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!accountElement.contains(event.target)) setAccountMenuOpen(false);
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (
+        event.key === "Escape" &&
+        accountButton.getAttribute("aria-expanded") === "true"
+      ) {
+        event.preventDefault();
+        setAccountMenuOpen(false, { returnFocus: true });
+      }
+    });
   }
 
   function initialize() {
@@ -446,6 +685,7 @@
       return;
     }
 
+    initializeAccountMenu();
     restoreState();
     const requestedStart = normalizeTabUrl(
       new URLSearchParams(location.search).get("start") || "",
@@ -462,6 +702,8 @@
           loaded: false,
           frame: null,
           element: null,
+          hasUnsavedChanges: false,
+          unsavedStateKnown: false,
         });
         activeTabId = tabs[tabs.length - 1].id;
       }

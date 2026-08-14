@@ -26,6 +26,7 @@ from ..services.virtual_units import (
 from ..services.inventory_fifo import consume_fifo, record_allocations, restore_allocations
 from ..services.shift_service import require_single_open_branch_shift
 from ..services.tax_context import _sale_line_ppn_rates, _sales_ppn_context
+from ..services.payment_change import calculate_change
 from .accounting import create_auto_journal, pastikan_akun_ada  # ✅ Import di atas, sekali saja
 
 router = APIRouter()
@@ -304,7 +305,16 @@ def create_sale(
     # Pastikan akun Pendapatan Biaya Lain ada SEBELUM stok berubah (mandat jurnal atomic)
     if other_cost > 0.01:
         pastikan_akun_ada(db, ["4-1500"])
-    change      = max(0, data.paid - total)
+    try:
+        change = calculate_change(
+            paid=data.paid,
+            total=total,
+            payments=data.payments,
+            cash_received=data.cash_received,
+            payment_method=data.payment_method,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     status      = "paid" if data.paid >= total else ("partial" if data.paid > 0 else "unpaid")
 
     # ── Resolve Customer 'Umum' if empty ──────────────────────────────────────

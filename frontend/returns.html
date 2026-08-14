@@ -195,7 +195,11 @@
               >)</label
             >
             <input
-              type="number"
+              type="text"
+              inputmode="decimal"
+              data-input-desimal
+              data-desimal-maks="4"
+              data-min="0.0001"
               id="mReturnQty"
               class="input-control"
               value="1"
@@ -674,7 +678,9 @@
         );
         if (existing) {
           const qtyInp = existing.querySelector(".row-qty");
-          qtyInp.value = (parseFloat(qtyInp.value) || 0) + 1;
+          qtyInp.value = toDesimal(parseDesimal(qtyInp) + 1, {
+            maximumFractionDigits: 4,
+          });
           calculateManualReturnTotal();
           return;
         }
@@ -688,15 +694,15 @@
             <div class="row-factur-info" style="font-size:10px; color:var(--primary); margin-top:4px"></div>
           </td>
           <td style="text-align: center; font-weight: 700" class="row-avail">-</td>
-          <td><input type="number" class="input-control row-qty" value="1" style="text-align: center; width: 100%; box-sizing: border-box;" oninput="calculateManualReturnTotal()" /></td>
+          <td><input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0" class="input-control row-qty" value="1" style="text-align: center; width: 100%; box-sizing: border-box;" oninput="calculateManualReturnTotal()" /></td>
           <td style="text-align: right">
             <div style="display:flex; align-items:center; gap:4px; justify-content:flex-end; width: 100%;">
-                <input type="text" class="input-control row-price-awal" value="0" style="text-align:right; width: 100%; box-sizing: border-box; padding:4px" oninput="onPriceInput(this)" />
+                <input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control row-price-awal" value="0" style="text-align:right; width: 100%; box-sizing: border-box; padding:4px" oninput="onPriceInput(this)" />
                 <button class="btn" onclick="showPriceHistory(${item.id}, this)" style="padding:4px; background:var(--bg-color); border:1px solid var(--border-color); flex-shrink: 0;" title="Cari Faktur">📜</button>
             </div>
           </td>
-          <td style="text-align: center"><input type="number" class="input-control row-ppn" value="0" style="text-align: center; width: 100%; box-sizing: border-box; padding:4px" oninput="calculateManualReturnTotal()" /></td>
-          <td style="text-align: right"><input type="text" class="input-control row-price-akhir" value="0" style="text-align:right; width: 100%; box-sizing: border-box; padding:4px; background:var(--bg-color)" readonly /></td>
+          <td style="text-align: center"><input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" class="input-control row-ppn" value="0" style="text-align: center; width: 100%; box-sizing: border-box; padding:4px" oninput="calculateManualReturnTotal()" /></td>
+          <td style="text-align: right"><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control row-price-akhir" value="0" style="text-align:right; width: 100%; box-sizing: border-box; padding:4px; background:var(--bg-color)" readonly /></td>
           <td style="text-align: right; font-weight: 700" class="row-total">Rp 0</td>
           <td><button class="btn" style="color:var(--danger); background:transparent; padding:0" onclick="this.closest('tr').remove(); calculateManualReturnTotal()">✕</button></td>
         `;
@@ -790,8 +796,7 @@
             row.dataset.purchaseId = pid;
 
             // Pastikan qty retur tidak melebihi sisa faktur yang baru dipilih
-            let currentQty =
-              parseFloat(row.querySelector(".row-qty").value) || 0;
+            let currentQty = parseDesimal(row.querySelector(".row-qty"));
             if (currentQty > avail) {
               row.querySelector(".row-qty").value = avail;
             }
@@ -808,11 +813,11 @@
       function calculateManualReturnTotal() {
         let grand = 0;
         document.querySelectorAll("#mManualGridBody tr").forEach((row) => {
-          const qty = parseFloat(row.querySelector(".row-qty").value) || 0;
+          const qty = parseDesimal(row.querySelector(".row-qty"));
           const priceAwal = parseRibuan(
             row.querySelector(".row-price-awal").value,
           );
-          const ppn = parseFloat(row.querySelector(".row-ppn").value) || 0;
+          const ppn = parseDesimal(row.querySelector(".row-ppn"));
 
           const priceAkhir = priceAwal + (priceAwal * ppn) / 100;
           row.querySelector(".row-price-akhir").value =
@@ -957,8 +962,11 @@
           ? "Retur Penjualan"
           : "Retur Pembelian";
         document.getElementById("mReturnMax").textContent = item.qty_available;
-        document.getElementById("mReturnQty").value = item.qty_available;
-        document.getElementById("mReturnQty").max = item.qty_available;
+        document.getElementById("mReturnQty").value = toDesimal(
+          item.qty_available,
+          { maximumFractionDigits: 4 },
+        );
+        document.getElementById("mReturnQty").dataset.max = item.qty_available;
         document.getElementById("mReturnReason").value = "";
         document.getElementById("mReturnNotes").value = "";
 
@@ -987,8 +995,7 @@
       }
 
       async function prosesRetur() {
-        const qty =
-          parseFloat(document.getElementById("mReturnQty").value) || 0;
+        const qty = parseDesimal(document.getElementById("mReturnQty"));
         if (qty <= 0) return showToast("Jumlah retur tidak valid", "error");
         if (qty > activeItem.qty_available)
           return showToast("Jumlah melebihi batas tersisa", "error");
@@ -1217,23 +1224,15 @@
       }
 
       function formatRibuan(val) {
-        if (val === undefined || val === null || val === "") return "";
-        let num = parseFloat(val.toString().replace(/[^0-9.-]/g, "")) || 0;
-        return num.toLocaleString("id-ID");
+        return toDesimal(val);
       }
 
       function parseRibuan(s) {
-        if (!s) return 0;
-        return parseFloat(s.toString().replace(/\./g, "")) || 0;
+        return parseDesimal(s);
       }
 
       function onPriceInput(inp) {
-        let val = inp.value.replace(/[^0-9]/g, "");
-        if (val === "") {
-          inp.value = "";
-        } else {
-          inp.value = parseInt(val).toLocaleString("id-ID");
-        }
+        formatDesimal(inp);
         calculateManualReturnTotal();
       }
 
@@ -1263,11 +1262,11 @@
         rows.forEach((row) => {
           const itemId = row.dataset.itemId;
           const pid = row.dataset.purchaseId;
-          const qty = parseFloat(row.querySelector(".row-qty").value) || 0;
+          const qty = parseDesimal(row.querySelector(".row-qty"));
           const priceAwal = parseRibuan(
             row.querySelector(".row-price-awal").value,
           );
-          const ppn = parseFloat(row.querySelector(".row-ppn").value) || 0;
+          const ppn = parseDesimal(row.querySelector(".row-ppn"));
           const avail =
             parseFloat(row.querySelector(".row-avail").textContent) || 0;
 

@@ -28,21 +28,6 @@
           >
             ← Kembali
           </button>
-          <button
-            onclick="logoutApp()"
-            style="
-              background: #ef4444;
-              color: white;
-              border: none;
-              padding: 8px 16px;
-              border-radius: 8px;
-              font-weight: bold;
-              cursor: pointer;
-              box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            "
-          >
-            🚪 Keluar (Logout)
-          </button>
         </div>
         <h1 style="margin-bottom: 24px; margin-top: 0">⚙️ Pengaturan Sistem</h1>
 
@@ -482,15 +467,6 @@
         });
         if (t.toLowerCase() === "backup") loadSysInfo();
         if (t.toLowerCase() === "developer") loadPembayaran();
-      }
-
-      function logoutApp() {
-        showConfirm("Yakin ingin keluar dari akun saat ini?").then((ok) => {
-          if (ok) {
-            clearToken();
-            window.location.href = "/login";
-          }
-        });
       }
 
       /* ── CRUD Settings (Toko & Printer) ── */

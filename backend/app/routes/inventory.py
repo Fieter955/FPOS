@@ -10,11 +10,8 @@ from .. import models
 from ..auth import get_current_user, get_query 
 from ..schemas import AdjustmentCreate
 from sqlalchemy import func 
-from ..services.virtual_units import (
-    get_effective_stock_from_source,
-    get_stock_source_item,
-    is_virtual_variant,
-)
+from ..services.low_stock import get_low_stock_items
+from ..services.virtual_units import is_virtual_variant
 
 router = APIRouter()
 
@@ -122,52 +119,7 @@ def get_movements(
 # ─── 2. STOK MENIPIS (VERSI MULTI-CABANG) ──────────────────────────────────
 @router.get("/low-stock")
 def get_low_stock(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    gudang_cabang = db.query(models.Warehouse.id).filter(
-        models.Warehouse.branch_id == current_user.active_branch_id
-    ).all()
-    warehouse_ids = [g[0] for g in gudang_cabang]
-
-    items = db.query(models.Item).filter(models.Item.is_active == True).all()
-    item_map = {item.id: item for item in items}
-    parent_ids = {
-        item.parent_item_id
-        for item in items
-        if is_virtual_variant(item) and item.parent_item_id and item.parent_item_id not in item_map
-    }
-    if parent_ids:
-        for parent in db.query(models.Item).filter(models.Item.id.in_(parent_ids)).all():
-            item_map[parent.id] = parent
-
-    if warehouse_ids:
-        rows = db.query(
-            models.WarehouseStock.item_id,
-            func.sum(models.WarehouseStock.stock),
-        ).filter(
-            models.WarehouseStock.warehouse_id.in_(warehouse_ids)
-        ).group_by(models.WarehouseStock.item_id).all()
-        stock_map = {item_id: float(stock or 0) for item_id, stock in rows}
-    else:
-        stock_map = {
-            item_id: float(item.stock or 0)
-            for item_id, item in item_map.items()
-        }
-    
-    results = []
-    for item in items:
-        source_item = get_stock_source_item(db, item, item_map=item_map)
-        source_stock = stock_map.get(source_item.id, 0.0)
-        stok_lokal = round(get_effective_stock_from_source(item, source_stock), 4)
-
-        if stok_lokal <= item.min_stock:
-            results.append({
-                "id": item.id, 
-                "code": item.code, 
-                "name": item.name, 
-                "stock": stok_lokal, 
-                "min_stock": item.min_stock
-            })
-            
-    return results
+    return get_low_stock_items(db, current_user.active_branch_id)
 
 
 # ─── 3. PENYESUAIAN STOK MANUAL / OPNAME BARU DENGAN JURNAL ─────────────────

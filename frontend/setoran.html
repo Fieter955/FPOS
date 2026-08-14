@@ -342,11 +342,11 @@
             <div class="row2 p-inputs-row" style="margin-bottom:16px">
               <div class="input-group p-cash-group">
                 <label>Dari Kas</label>
-                <input type="text" class="input-control p-cash-amt" placeholder="0" />
+                <input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control p-cash-amt" placeholder="0,00" />
               </div>
               <div class="input-group p-bank-group">
                 <label>Dari Bank</label>
-                <input type="text" class="input-control p-bank-amt" placeholder="0" />
+                <input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control p-bank-amt" placeholder="0,00" />
               </div>
             </div>
 
@@ -388,8 +388,8 @@
               closeBtn = overlay.querySelector(".btn-x"),
               cancelBtn = overlay.querySelector(".p-cancel");
 
-        const parseNum = (s) => parseFloat(String(s).replace(/\./g, "").replace(",", ".")) || 0;
-        const formatNum = (n) => (n || 0).toLocaleString("id-ID");
+        const parseNum = (s) => parseDesimal(s);
+        const formatNum = (n) => toDesimal(n);
         let bankCombo = null;
 
         const syncTotal = () => {
@@ -419,8 +419,8 @@
           syncTotal();
         };
 
-        cashInp.oninput = (e) => { e.target.value = formatNum(parseNum(e.target.value)); syncTotal(); };
-        bankInp.oninput = (e) => { e.target.value = formatNum(parseNum(e.target.value)); syncTotal(); };
+        cashInp.oninput = (e) => { formatDesimal(e.target); syncTotal(); };
+        bankInp.oninput = (e) => { formatDesimal(e.target); syncTotal(); };
         methodSel.onchange = () => applyMethod(true);
 
         const close = () => { overlay.remove(); document.body.style.overflow = ""; };

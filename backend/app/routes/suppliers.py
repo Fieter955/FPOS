@@ -14,6 +14,7 @@ router = APIRouter()
 def get_suppliers(
     search: Optional[str] = None,
     active_only: bool = True,
+    sort: Optional[str] = None,
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
@@ -26,6 +27,12 @@ def get_suppliers(
         q = q.filter(
             models.Supplier.name.ilike(f"%{search}%") |
             models.Supplier.code.ilike(f"%{search}%")
+        )
+    if sort == "deposit_desc":
+        q = q.order_by(
+            models.Supplier.deposit_balance.desc(),
+            models.Supplier.name.asc(),
+            models.Supplier.id.asc(),
         )
     return q.offset(skip).limit(limit).all()
 

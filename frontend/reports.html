@@ -270,7 +270,7 @@
         return new Intl.NumberFormat("id-ID").format(n || 0);
       }
       function parseNum(s) {
-        return parseFloat(String(s).replace(/\./g, "").replace(",", ".")) || 0;
+        return parseDesimal(s);
       }
 
       function switchTab(t) {

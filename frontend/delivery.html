@@ -295,7 +295,7 @@
           `
     <div style="display:grid;grid-template-columns:3fr 1fr 36px;gap:8px;margin-bottom:8px;align-items:center" id="sjrow${idx}">
       <select class="input-control" style="margin:0;padding:10px 12px;font-size:14px">${opts}</select>
-      <input type="number" value="${qty}" min="1" class="input-control" style="margin:0;padding:10px;font-size:15px;font-weight:700;text-align:center">
+      <input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" value="${qty}" class="input-control sj-qty" style="margin:0;padding:10px;font-size:15px;font-weight:700;text-align:center">
       <button onclick="document.getElementById('sjrow${idx}').remove()" style="width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,.15);color:#ef4444;border:none;cursor:pointer;font-size:16px">✕</button>
     </div>`,
         );
@@ -339,11 +339,11 @@
         const items = [];
         document.querySelectorAll("#sjRows > div").forEach((row) => {
           const sel = row.querySelector("select"),
-            inp = row.querySelector("input[type=number]");
+            inp = row.querySelector(".sj-qty");
           if (sel.value)
             items.push({
               item_id: parseInt(sel.value),
-              qty: parseFloat(inp.value) || 1,
+              qty: parseDesimal(inp) || 1,
             });
         });
         if (!items.length) {

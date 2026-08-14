@@ -33,6 +33,42 @@ function createPremiumCombo(container, data, config = {}) {
   const dropdown = target.querySelector(".premium-dropdown");
   const hidden = target.querySelector(".combobox-value");
   let currentData = data;
+  let highlightedIndex = -1;
+
+  const closeDropdown = () => {
+    dropdown.classList.remove("show");
+    highlightedIndex = -1;
+  };
+
+  const selectItem = (el) => {
+    if (!el) return;
+
+    hidden.value = el.dataset.id;
+    input.value = el.dataset.label;
+    closeDropdown();
+
+    if (onSelect) {
+      const obj = currentData.find((d) => d[valField] == el.dataset.id);
+      onSelect(obj);
+    }
+  };
+
+  const highlightItem = (nextIndex) => {
+    const items = Array.from(
+      dropdown.querySelectorAll(".premium-dropdown-item[data-id]"),
+    );
+    items.forEach((el) => el.classList.remove("highlight"));
+
+    if (items.length === 0) {
+      highlightedIndex = -1;
+      return;
+    }
+
+    highlightedIndex = (nextIndex + items.length) % items.length;
+    const activeItem = items[highlightedIndex];
+    activeItem.classList.add("highlight");
+    activeItem.scrollIntoView({ block: "nearest" });
+  };
 
   const positionDropdown = () => {
     const rect = input.getBoundingClientRect();
@@ -79,6 +115,8 @@ function createPremiumCombo(container, data, config = {}) {
         .join("");
     }
 
+    highlightedIndex = -1;
+
     dropdown.classList.add("show");
     positionDropdown();
 
@@ -87,23 +125,56 @@ function createPremiumCombo(container, data, config = {}) {
       .forEach((el) => {
         el.onclick = (e) => {
           e.stopPropagation();
-          hidden.value = el.dataset.id;
-          input.value = el.dataset.label;
-          dropdown.classList.remove("show");
-          if (onSelect) {
-            const obj = currentData.find((d) => d[valField] == el.dataset.id);
-            onSelect(obj);
-          }
+          selectItem(el);
         };
       });
   };
 
   input.onfocus = () => render(input.value);
   input.oninput = () => render(input.value);
+  input.onkeydown = (e) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (!dropdown.classList.contains("show")) render(input.value);
+
+      if (e.key === "ArrowDown") {
+        highlightItem(highlightedIndex < 0 ? 0 : highlightedIndex + 1);
+      } else {
+        const itemCount = dropdown.querySelectorAll(
+          ".premium-dropdown-item[data-id]",
+        ).length;
+        highlightItem(
+          highlightedIndex < 0 ? itemCount - 1 : highlightedIndex - 1,
+        );
+      }
+      return;
+    }
+
+    if (e.key === "Enter" && dropdown.classList.contains("show")) {
+      const items = dropdown.querySelectorAll(
+        ".premium-dropdown-item[data-id]",
+      );
+      const activeItem = items[highlightedIndex];
+      if (!activeItem) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      selectItem(activeItem);
+      return;
+    }
+
+    if (e.key === "Escape" && dropdown.classList.contains("show")) {
+      e.preventDefault();
+      e.stopPropagation();
+      closeDropdown();
+    }
+  };
 
   const handleOutsideClick = (e) => {
     if (!target.contains(e.target)) {
-      dropdown.classList.remove("show");
+      closeDropdown();
     }
   };
   document.addEventListener("click", handleOutsideClick);
@@ -209,9 +280,8 @@ function createPurchaseGrid(container, config = {}) {
       currency: "IDR",
       minimumFractionDigits: 0,
     }).format(n || 0);
-  const toAngka = (s) =>
-    parseFloat(String(s).replace(/\./g, "").replace(",", ".")) || 0;
-  const toRibuan = (n) => (n || 0).toLocaleString("id-ID");
+  const toAngka = (s) => parseDesimal(s);
+  const toRibuan = (n) => toDesimal(n);
 
   const addRow = (item = null) => {
     const id = barisIdx++;
@@ -236,21 +306,21 @@ function createPurchaseGrid(container, config = {}) {
              
                 ${allowNameEdit ? `<input type="text" class="input-control pg-name-edit" value="${item?.name || ""}" placeholder="Nama barang (bisa diubah)..." style="font-size:11px; margin-top:4px; border-color:var(--primary)" />` : ""}
             </div>
-            <input type="number" class="combobox-input pg-ordered" value="${qtyOrdered}" style="text-align:center" />
+            <input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" class="combobox-input pg-ordered" value="${qtyOrdered}" style="text-align:center" />
             ${
               showSupplierColumn
                 ? '<div id="pg-supp-' + id + '"></div>'
                 : !isBranchRequest
                   ? `
-                ${isFulfillment ? `<input type="number" class="combobox-input pg-received" value="${qtyReceived}" style="text-align:center; border-color:var(--primary)" />` : ""}
-                <input type="text" class="combobox-input pg-beli" value="${toRibuan(item?.buy_price || 0)}" style="text-align:left" />
-                <input type="number" step="0.01" class="combobox-input pg-margin" value="${item?.profit_margin || 0}" style="text-align:center" />
-                <input type="text" class="combobox-input pg-jual" value="${toRibuan(item?.sell_price || 0)}" style="text-align:left" />
+                ${isFulfillment ? `<input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" class="combobox-input pg-received" value="${qtyReceived}" style="text-align:center; border-color:var(--primary)" />` : ""}
+                <input type="text" inputmode="decimal" data-input-desimal class="combobox-input pg-beli" value="${toRibuan(item?.buy_price || 0)}" style="text-align:left" />
+                <input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" class="combobox-input pg-margin" value="${item?.profit_margin || 0}" style="text-align:center" />
+                <input type="text" inputmode="decimal" data-input-desimal class="combobox-input pg-jual" value="${toRibuan(item?.sell_price || 0)}" style="text-align:left" />
                 <div class="disc-group">
-                    <input type="number" class="combobox-input pg-disc" value="${item?.disc1 || 0}" placeholder="0" style="text-align:center" />
-                    ${item?.disc2 ? `<input type="number" class="combobox-input pg-disc" value="${item.disc2}" placeholder="0" style="text-align:center" />` : ""}
-                    ${item?.disc3 ? `<input type="number" class="combobox-input pg-disc" value="${item.disc3}" placeholder="0" style="text-align:center" />` : ""}
-                    ${item?.disc4 ? `<input type="number" class="combobox-input pg-disc" value="${item.disc4}" placeholder="0" style="text-align:center" />` : ""}
+                    <input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" class="combobox-input pg-disc" value="${item?.disc1 || 0}" placeholder="0,00" style="text-align:center" />
+                    ${item?.disc2 ? `<input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" class="combobox-input pg-disc" value="${item.disc2}" placeholder="0,00" style="text-align:center" />` : ""}
+                    ${item?.disc3 ? `<input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" class="combobox-input pg-disc" value="${item.disc3}" placeholder="0,00" style="text-align:center" />` : ""}
+                    ${item?.disc4 ? `<input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" class="combobox-input pg-disc" value="${item.disc4}" placeholder="0,00" style="text-align:center" />` : ""}
                     <button class="btn-plus-disc" title="Diskon Bertingkat">+</button>
                 </div>
                 <div class="purchase-grid-netto">Rp 0</div>
@@ -304,8 +374,8 @@ function createPurchaseGrid(container, config = {}) {
         return;
       }
       // Total based on received qty in fulfillment mode, otherwise ordered qty
-      const qOrd = parseFloat(ordInp.value) || 0;
-      const qRec = recInp ? parseFloat(recInp.value) || 0 : 0;
+      const qOrd = parseDesimal(ordInp);
+      const qRec = recInp ? parseDesimal(recInp) : 0;
       const qty = isFulfillment ? qRec : qOrd;
 
       // Visual feedback for mismatch in fulfillment mode
@@ -322,7 +392,7 @@ function createPurchaseGrid(container, config = {}) {
       const hb = toAngka(beliInp.value);
       let hargaNeto = hb;
       row.querySelectorAll(".pg-disc").forEach((inp) => {
-        const d = parseFloat(inp.value) || 0;
+        const d = parseDesimal(inp);
         hargaNeto = hargaNeto * (1 - d / 100);
       });
       nettoDiv.textContent = fmtRp(qty * hargaNeto);
@@ -397,7 +467,11 @@ function createPurchaseGrid(container, config = {}) {
         if (inputs.length >= 4)
           return showToast("Maksimal 4 tingkat diskon", "warning");
         const newInp = document.createElement("input");
-        newInp.type = "number";
+        newInp.type = "text";
+        newInp.inputMode = "decimal";
+        newInp.dataset.inputDesimal = "";
+        newInp.dataset.min = "0";
+        newInp.dataset.max = "100";
         newInp.className = "combobox-input pg-disc";
         newInp.placeholder = "0";
         newInp.style.textAlign = "center";
@@ -411,12 +485,12 @@ function createPurchaseGrid(container, config = {}) {
       // If fulfillment, auto-update received if it was the same as ordered (synced)
       if (isFulfillment && recInp) {
         const prevOrd = ordInp._prevVal || 0;
-        const currentRec = parseFloat(recInp.value) || 0;
+        const currentRec = parseDesimal(recInp);
         if (currentRec === prevOrd || currentRec === 0) {
           recInp.value = ordInp.value;
         }
       }
-      ordInp._prevVal = parseFloat(ordInp.value) || 0;
+      ordInp._prevVal = parseDesimal(ordInp);
       calculateRow();
     };
     if (recInp) recInp.oninput = calculateRow;
@@ -441,10 +515,10 @@ function createPurchaseGrid(container, config = {}) {
         const hb = toAngka(beliInp.value);
         let hargaNeto = hb;
         row.querySelectorAll(".pg-disc").forEach((inp) => {
-          const d = parseFloat(inp.value) || 0;
+          const d = parseDesimal(inp);
           hargaNeto = hargaNeto * (1 - d / 100);
         });
-        const margin = parseFloat(marginInp.value) || 0;
+        const margin = parseDesimal(marginInp);
         const hj = hargaNeto + (hargaNeto * margin) / 100;
         jualInp.value = toRibuan(Math.round(hj));
         // Harga jual dibulatkan ke rupiah. Jangan hitung balik margin dari hasil
@@ -511,7 +585,7 @@ function createPurchaseGrid(container, config = {}) {
           const discInputs = row.querySelectorAll(".pg-disc");
           const discs =
             discInputs.length > 0
-              ? Array.from(discInputs).map((inp) => parseFloat(inp.value) || 0)
+              ? Array.from(discInputs).map((inp) => parseDesimal(inp))
               : [0, 0];
 
           let hargaNeto = hb;
@@ -519,12 +593,12 @@ function createPurchaseGrid(container, config = {}) {
             hargaNeto = hargaNeto * (1 - d / 100);
           });
 
-          const qOrd = parseFloat(row.querySelector(".pg-ordered").value) || 0;
+          const qOrd = parseDesimal(row.querySelector(".pg-ordered"));
           const recInp = row.querySelector(".pg-received");
           // Kolom "Terima" hanya muncul pada mode fulfillment. Bila tidak ada
           // (pembelian biasa, request cabang, atau pilih-supplier), jumlah yang
           // diterima dianggap sama dengan "Pesan" — bukan 0.
-          const qRec = recInp ? parseFloat(recInp.value) || 0 : qOrd;
+          const qRec = recInp ? parseDesimal(recInp) : qOrd;
 
           const hjInp = row.querySelector(".pg-jual");
           const hj = hjInp
@@ -533,7 +607,7 @@ function createPurchaseGrid(container, config = {}) {
 
           const margInp = row.querySelector(".pg-margin");
           const margin = margInp
-            ? parseFloat(margInp.value) || 0
+            ? parseDesimal(margInp)
             : row._itemData?.profit_margin || 0;
 
           const nameEditInp = row.querySelector(".pg-name-edit");
@@ -625,9 +699,8 @@ function createPurchaseSummaryGrid(container, config = {}) {
       currency: "IDR",
       minimumFractionDigits: 0,
     }).format(n || 0);
-  const toAngka = (s) =>
-    parseFloat(String(s).replace(/\./g, "").replace(",", ".")) || 0;
-  const toRibuan = (n) => (n || 0).toLocaleString("id-ID");
+  const toAngka = (s) => parseDesimal(s);
+  const toRibuan = (n) => toDesimal(n);
 
   const cariByName = (daftar, name) => {
     const t = (name || "").trim().toLowerCase();
@@ -848,12 +921,12 @@ function createPurchaseSummaryGrid(container, config = {}) {
             <div class="pg2-no" style="text-align:center; color:var(--text-muted); font-weight:600"></div>
             <div class="pg2-combo"></div>
             <div class="pg2-jenis"></div>
-            <input type="number" class="combobox-input pg2-qty" value="${row._detail.qty}" min="0" style="text-align:center" />
+            <input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0" class="combobox-input pg2-qty" value="${row._detail.qty}" style="text-align:center" />
             <div class="pg2-satuan"></div>
-            <input type="text" class="combobox-input pg2-beli" value="0" style="text-align:right" />
+            <input type="text" inputmode="decimal" data-input-desimal data-min="0" class="combobox-input pg2-beli" value="0" style="text-align:right" />
             <div class="pg2-disc disc-group"></div>
             <div class="pg2-total purchase-grid-netto" style="text-align:right">Rp 0</div>
-            <input type="number" class="combobox-input pg2-tax" value="0" min="0" step="0.01" style="text-align:center" />
+            <input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" class="combobox-input pg2-tax" value="0" style="text-align:center" />
             <div style="display:flex; gap:6px; justify-content:flex-end; align-items:center">
                 <button class="btn btn-primary pg2-detail" style="padding:6px 10px; font-size:12px; border-radius:8px" title="Detail Item">Detail</button>
                 <button class="btn pg2-del" style="color:var(--danger); background:transparent; padding:0; justify-content:center" title="Hapus baris">✕</button>
@@ -873,7 +946,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
     const bacaDiskon = () => {
       row._detail.discs = Array.from(
         discCell.querySelectorAll(".pg2-disc-inp"),
-      ).map((inp) => parseFloat(inp.value) || 0);
+      ).map((inp) => parseDesimal(inp));
     };
     const bangunDiskon = () => {
       const discs =
@@ -881,8 +954,11 @@ function createPurchaseSummaryGrid(container, config = {}) {
       discCell.innerHTML = "";
       discs.forEach((d) => {
         const inp = document.createElement("input");
-        inp.type = "number";
-        inp.min = "0";
+        inp.type = "text";
+        inp.inputMode = "decimal";
+        inp.dataset.inputDesimal = "";
+        inp.dataset.min = "0";
+        inp.dataset.max = "100";
         inp.className = "combobox-input pg2-disc-inp";
         inp.value = d || 0;
         inp.style.textAlign = "center";
@@ -999,7 +1075,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
 
     // ── Jumlah ──
     qtyInp.oninput = () => {
-      row._detail.qty = parseFloat(qtyInp.value) || 0;
+      row._detail.qty = parseDesimal(qtyInp);
       hitungTotal(row);
       if (onChange) onChange();
     };
@@ -1019,7 +1095,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
     // ── Kolom "PPN Included (%)" — hanya tampil saat transaksi Include.
     //    Nilai disimpan ke setelan supplier saat blur; tipe ikut tipe transaksi.
     taxInp.addEventListener("blur", () => {
-      const val = parseFloat(taxInp.value) || 0;
+      const val = parseDesimal(taxInp);
       const tipeTransaksi =
         (typeof getTipePpn === "function" ? getTipePpn() : "") || "";
       row._detail.ppn = val;
@@ -1039,7 +1115,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
         return;
       }
       // sinkronkan qty & diskon terbaru dari input
-      row._detail.qty = parseFloat(qtyInp.value) || 0;
+      row._detail.qty = parseDesimal(qtyInp);
       bacaDiskon();
       const idx = Array.from(body.children).indexOf(row);
       if (onDetail) onDetail(idx, row._detail);
@@ -1276,7 +1352,7 @@ function createPaymentModal(config = {}) {
   const title =
     type === "ap" ? "Bayar Hutang Supplier" : "Terima Pembayaran Piutang";
   const apiPath = type === "ap" ? "/purchases" : "/sales";
-  overlay.innerHTML = `<div class="modal-box" style="width:min(92vw, 480px)"><div class="modal-hdr"><h2>💸 ${title}</h2><button class="btn-x">×</button></div><input type="hidden" class="p-id" /><input type="hidden" class="p-remaining" /><div class="p-info" style="background:var(--bg-color); border-radius:var(--radius-sm); padding:0.875rem; margin-bottom:var(--space-md); font-size:0.9375rem;"></div><div class="input-group" style="margin-bottom:16px"><label>Metode Pembayaran *</label><select class="input-control p-method"><option value="cash">Kas</option><option value="bank">Bank</option><option value="mix">Gabungan</option></select></div><div class="p-balances" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;"><div style="background:var(--bg-color); border-radius:10px; padding:12px"><div>Saldo Kas</div><div class="p-cash-balance" style="font-weight:800">Rp 0</div></div><div style="background:var(--bg-color); border-radius:10px; padding:12px"><div>Saldo Bank</div><div class="p-bank-balance" style="font-weight:800">Rp 0</div></div></div><div class="row2" style="margin-bottom:16px"><div class="input-group p-cash-group"><label>Dari Kas</label><input type="text" class="input-control p-cash-amt" placeholder="0" /></div><div class="input-group p-bank-group"><label>Dari Bank</label><input type="text" class="input-control p-bank-amt" placeholder="0" /></div></div><div style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2); border-radius:12px; padding:14px; margin-bottom:16px;"><div style="display:flex; justify-content:space-between;"><span>Total Bayar</span><b class="p-total-label" style="font-size:1.125rem; color:#10b981">Rp 0</b></div></div><div class="input-group"><label>Catatan</label><input type="text" class="input-control p-note" /></div><div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px;"><button class="btn p-cancel">Batal</button><button class="btn btn-primary p-submit">✓ Konfirmasi</button></div></div>`;
+  overlay.innerHTML = `<div class="modal-box" style="width:min(92vw, 480px)"><div class="modal-hdr"><h2>💸 ${title}</h2><button class="btn-x">×</button></div><input type="hidden" class="p-id" /><input type="hidden" class="p-remaining" /><div class="p-info" style="background:var(--bg-color); border-radius:var(--radius-sm); padding:0.875rem; margin-bottom:var(--space-md); font-size:0.9375rem;"></div><div class="input-group" style="margin-bottom:16px"><label>Metode Pembayaran *</label><select class="input-control p-method"><option value="cash">Kas</option><option value="bank">Bank</option><option value="mix">Gabungan</option></select></div><div class="p-balances" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;"><div style="background:var(--bg-color); border-radius:10px; padding:12px"><div>Saldo Kas</div><div class="p-cash-balance" style="font-weight:800">Rp 0</div></div><div style="background:var(--bg-color); border-radius:10px; padding:12px"><div>Saldo Bank</div><div class="p-bank-balance" style="font-weight:800">Rp 0</div></div></div><div class="row2" style="margin-bottom:16px"><div class="input-group p-cash-group"><label>Dari Kas</label><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control p-cash-amt" placeholder="0,00" /></div><div class="input-group p-bank-group"><label>Dari Bank</label><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control p-bank-amt" placeholder="0,00" /></div></div><div style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2); border-radius:12px; padding:14px; margin-bottom:16px;"><div style="display:flex; justify-content:space-between;"><span>Total Bayar</span><b class="p-total-label" style="font-size:1.125rem; color:#10b981">Rp 0</b></div></div><div class="input-group"><label>Catatan</label><input type="text" class="input-control p-note" /></div><div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px;"><button class="btn p-cancel">Batal</button><button class="btn btn-primary p-submit">✓ Konfirmasi</button></div></div>`;
   const idInp = overlay.querySelector(".p-id"),
     remInp = overlay.querySelector(".p-remaining"),
     infoDiv = overlay.querySelector(".p-info"),
@@ -1293,12 +1369,11 @@ function createPaymentModal(config = {}) {
     cancelBtn = overlay.querySelector(".p-cancel"),
     closeBtn = overlay.querySelector(".btn-x");
   const fmtRp = (n) => "Rp " + Math.round(n).toLocaleString("id-ID");
-  const parseNum = (s) =>
-    parseFloat(String(s).replace(/\./g, "").replace(",", ".")) || 0;
-  const formatNum = (n) => (n || 0).toLocaleString("id-ID");
+  const parseNum = (s) => parseDesimal(s);
+  const formatNum = (n) => toDesimal(n);
   const syncTotal = () => {
     totalLabel.textContent = fmtRp(
-      parseNum(cashInp.value) + parseNum(bankInp.value),
+      parseNum(cashInp) + parseNum(bankInp),
     );
   };
   const applyMethod = (reset = false) => {
@@ -1321,11 +1396,11 @@ function createPaymentModal(config = {}) {
     syncTotal();
   };
   cashInp.oninput = (e) => {
-    e.target.value = formatNum(parseNum(e.target.value));
+    formatDesimal(e.target);
     syncTotal();
   };
   bankInp.oninput = (e) => {
-    e.target.value = formatNum(parseNum(e.target.value));
+    formatDesimal(e.target);
     syncTotal();
   };
   methodSel.onchange = () => applyMethod(true);
@@ -1337,8 +1412,8 @@ function createPaymentModal(config = {}) {
   closeBtn.onclick = close;
   submitBtn.onclick = async () => {
     const id = idInp.value;
-    const cash = parseNum(cashInp.value);
-    const bank = parseNum(bankInp.value);
+    const cash = parseNum(cashInp);
+    const bank = parseNum(bankInp);
     if (cash + bank <= 0) return showToast("Masukkan nominal", "error");
     try {
       showLoading("Memproses...");
@@ -1441,14 +1516,14 @@ async function createOrderManager(containerId, config = {}) {
                             <label style="margin:0">Diskon Global (%)</label>
                             <div id="om-toggle-disc" style="width:80px"></div>
                         </div>
-                        <input type="number" id="om-global-disc" class="input-control" value="0" />
+                        <input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" id="om-global-disc" class="input-control" value="0,00" />
                     </div>
                     <div class="input-group">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px">
                             <label style="margin:0">PPN (%)</label>
                             <div id="om-toggle-tax" style="width:80px"></div>
                         </div>
-                        <input type="number" id="om-global-tax" class="input-control" value="0" />
+                        <input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" id="om-global-tax" class="input-control" value="0,00" />
                     </div>
                 </div>
                 <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(0,0,0,0.1); padding-top:16px">
@@ -1485,8 +1560,8 @@ async function createOrderManager(containerId, config = {}) {
     }, 0);
     const discInput = document.getElementById("om-global-disc");
     const taxInput = document.getElementById("om-global-tax");
-    const disc = discInput ? parseFloat(discInput.value) || 0 : 0;
-    const tax = taxInput ? parseFloat(taxInput.value) || 0 : 0;
+    const disc = discInput ? parseDesimal(discInput) : 0;
+    const tax = taxInput ? parseDesimal(taxInput) : 0;
     const grand = subtotal * (1 - disc / 100) * (1 + tax / 100);
     const totalLabel = document.getElementById("om-total-label");
     if (totalLabel) totalLabel.textContent = fmtRp(grand);
@@ -1581,8 +1656,8 @@ async function createOrderManager(containerId, config = {}) {
     const fmtPct = (v) =>
       v % 1 === 0 ? v.toString() : parseFloat(v.toFixed(2)).toString();
 
-    if (discInput) discInput.value = fmtPct(discPct);
-    if (taxInput) taxInput.value = fmtPct(taxPct);
+    if (discInput) discInput.value = toDesimal(fmtPct(discPct));
+    if (taxInput) taxInput.value = toDesimal(fmtPct(taxPct));
 
     if (initialData.supplier_id && supplierCombo)
       supplierCombo.set(
@@ -1608,16 +1683,15 @@ async function createOrderManager(containerId, config = {}) {
       is_tax_included:
         document.querySelector('input[name="om-tax-type"]:checked').value ===
         "include",
-      tax_percent:
-        parseFloat(document.getElementById("om-global-tax").value) || 0,
+      tax_percent: parseDesimal(document.getElementById("om-global-tax")),
       discount:
         isBranchRequest || isSplitFulfillment
           ? 0
-          : parseFloat(document.getElementById("om-global-disc").value) || 0,
+          : parseDesimal(document.getElementById("om-global-disc")),
       tax:
         isBranchRequest || isSplitFulfillment
           ? 0
-          : parseFloat(document.getElementById("om-global-tax").value) || 0,
+          : parseDesimal(document.getElementById("om-global-tax")),
       items: itemsGrid.getData(),
     }),
     itemsGrid,

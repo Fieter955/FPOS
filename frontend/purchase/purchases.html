@@ -71,6 +71,331 @@
       background: var(--card-bg);
       border-radius: 20px;
     }
+
+    /* Mode form purchase dibuat rapat agar kontrol utama tetap terlihat di laptop. */
+    body.purchase-form-active .main-content {
+      padding: 12px 20px 8px;
+    }
+
+    body.purchase-form-active .main-content>button:first-child {
+      margin-bottom: 6px !important;
+      font-size: 13px;
+    }
+
+    body.purchase-form-active .pg-header {
+      gap: 6px !important;
+      margin-bottom: 0;
+    }
+
+    body.purchase-form-active .pg-header h1 {
+      margin-bottom: 2px;
+      font-size: 22px;
+      line-height: 1.15;
+    }
+
+    body.purchase-form-active .pg-header p {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    body.purchase-form-active .tabs .btn {
+      min-height: 32px;
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    body.purchase-form-active #viewForm {
+      padding-top: 6px !important;
+    }
+
+    .form-heading-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .form-heading-row .modal-hdr {
+      margin: 0;
+      padding: 0;
+    }
+
+    .form-heading-row h2 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.2;
+    }
+
+    .form-meta {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 6px 16px;
+      padding: 6px 10px;
+      font-size: 12px;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+    }
+
+    .purchase-primary-fields {
+      display: grid !important;
+      grid-template-columns: 2fr 1fr 1fr !important;
+      gap: 10px !important;
+      margin-bottom: 8px !important;
+    }
+
+    .purchase-primary-fields .input-group {
+      min-width: 0;
+      margin-bottom: 0;
+    }
+
+    .purchase-primary-fields label {
+      margin-bottom: 3px !important;
+      font-size: 12px;
+    }
+
+    .purchase-primary-fields .input-control,
+    .purchase-primary-fields #supplierCombobox .combobox-input {
+      height: 36px;
+      padding: 0 10px;
+      font-size: 14px;
+      border-width: 1px;
+      border-radius: 8px;
+    }
+
+    .purchase-items-card {
+      padding: 10px 12px !important;
+      margin-bottom: 10px !important;
+      border-radius: 12px;
+    }
+
+    .purchase-items-header {
+      margin-bottom: 6px !important;
+    }
+
+    .purchase-items-header h3 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .purchase-items-header .btn {
+      min-height: 32px;
+      padding: 6px 12px;
+      font-size: 12px;
+      border-radius: 8px;
+    }
+
+    #viewForm .purchase-grid-container {
+      max-height: 205px;
+      overflow-y: auto;
+      scrollbar-gutter: stable;
+    }
+
+    #viewForm .purchase-grid-header {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      align-items: center;
+      gap: 8px !important;
+      padding: 4px 8px !important;
+      line-height: 1.15;
+    }
+
+    #viewForm .purchase-grid-body {
+      min-height: 0 !important;
+    }
+
+    #viewForm .purchase-grid-row {
+      min-height: 40px;
+      gap: 8px !important;
+      padding: 4px 8px !important;
+    }
+
+    #viewForm .purchase-grid-row .combobox-input {
+      height: 30px;
+      min-height: 30px;
+      padding: 0 6px;
+    }
+
+    #viewForm .purchase-grid-row .pg2-detail {
+      min-height: 30px;
+      padding: 4px 8px !important;
+    }
+
+    /* Tiga panel bawah: detail transaksi, potongan, dan pembayaran. */
+    .summary-box-container {
+      width: 100%;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: 0 !important;
+      background: transparent !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+    }
+
+    .summary-box-grid {
+      display: grid !important;
+      grid-template-columns: minmax(250px, 0.75fr) minmax(360px, 1.1fr) minmax(320px, 1fr);
+      gap: 10px !important;
+      font-size: 13px !important;
+      align-items: stretch;
+    }
+
+    .summary-panel {
+      min-width: 0 !important;
+      gap: 4px !important;
+      padding: 10px !important;
+      background: var(--card-bg) !important;
+      border: 1px solid var(--border-color) !important;
+      border-radius: 12px !important;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .summary-adjustments>div {
+      grid-template-columns: 88px 58px minmax(0, 1fr) 28px !important;
+      gap: 5px !important;
+    }
+
+    .summary-payment>div {
+      grid-template-columns: 82px minmax(0, 1fr) 28px !important;
+      gap: 5px !important;
+    }
+
+    .summary-payment>div:first-child {
+      grid-template-columns: 82px minmax(0, 1fr) !important;
+      margin-bottom: 2px !important;
+      padding-bottom: 6px !important;
+    }
+
+    .summary-panel .input-control:not(#totalAkhir):not(#sumKredit) {
+      height: 28px !important;
+      padding: 0 7px !important;
+      min-width: 0;
+      font-size: 13px;
+    }
+
+    .summary-panel .btn {
+      width: 28px !important;
+      height: 28px !important;
+    }
+
+    .summary-panel #totalAkhir {
+      font-size: 19px !important;
+    }
+
+    .transaction-details-panel {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .due-fields {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(90px, 0.65fr);
+      gap: 8px;
+    }
+
+    .transaction-details-panel .input-group {
+      min-width: 0;
+      margin-bottom: 5px;
+    }
+
+    .transaction-details-panel label {
+      margin-bottom: 3px !important;
+      font-size: 11px;
+    }
+
+    .transaction-details-panel .input-control {
+      height: 30px;
+      padding: 0 8px;
+      font-size: 13px;
+      border-width: 1px;
+      border-radius: 8px;
+    }
+
+    .transaction-details-panel textarea.input-control {
+      height: 44px;
+      padding: 6px 8px;
+      resize: none;
+    }
+
+    .form-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: auto;
+    }
+
+    .transaction-details-panel .form-actions .btn {
+      width: 100% !important;
+      height: 30px !important;
+      min-height: 30px;
+      padding: 5px 8px;
+      font-size: 12px;
+    }
+
+    @media (max-width: 1023px) {
+      .summary-box-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .transaction-details-panel {
+        grid-column: 1 / -1;
+      }
+    }
+
+    @media (max-width: 768px) {
+      body.purchase-form-active .main-content {
+        padding: var(--content-pad);
+      }
+
+      .form-heading-row {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .form-meta {
+        width: 100%;
+        justify-content: flex-start;
+      }
+
+      .purchase-primary-fields,
+      .summary-box-grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+      }
+
+      #viewForm .purchase-grid-container {
+        max-height: none;
+        overflow-y: visible;
+        scrollbar-gutter: auto;
+      }
+
+      .transaction-details-panel {
+        grid-column: auto;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .summary-panel {
+        padding: 12px !important;
+      }
+
+      .summary-adjustments>div {
+        grid-template-columns: 92px 56px minmax(0, 1fr) 30px !important;
+        gap: 6px !important;
+      }
+
+      .summary-payment>div {
+        grid-template-columns: 88px minmax(0, 1fr) 30px !important;
+        gap: 6px !important;
+      }
+
+      .summary-payment>div:first-child {
+        grid-template-columns: 88px minmax(0, 1fr) !important;
+      }
+    }
   </style>
 </head>
 
@@ -82,7 +407,7 @@
             color: var(--text-muted);
             padding: 0;
             margin-bottom: 16px;
-          " onclick="location.href = '/dashboard'">
+          " onclick="kembaliKeDashboard()">
         ← Kembali
       </button>
 
@@ -149,21 +474,22 @@
       </div>
 
       <div id="viewForm" class="view-section" style="display: none; padding-top: 16px">
-        <div class="modal-hdr">
-          <h2 id="formTitle">📥 Catat Pembelian</h2>
+        <div class="form-heading-row">
+          <div class="modal-hdr">
+            <h2 id="formTitle">📥 Catat Pembelian</h2>
+          </div>
+
+          <div class="form-meta">
+            <div><span style="color: var(--text-muted)">🕒 Jam:</span> <strong id="infoTime"
+                style="color: var(--text-main); margin-left: 4px;">-</strong></div>
+            <div><span style="color: var(--text-muted)">👤 User:</span> <strong id="infoUser"
+                style="color: var(--text-main); margin-left: 4px;">-</strong></div>
+            <div><span style="color: var(--text-muted)">🏢 Cabang:</span> <strong id="infoBranch"
+                style="color: var(--text-main); margin-left: 4px;">-</strong></div>
+          </div>
         </div>
 
-        <div
-          style="display: flex; gap: 24px; margin-bottom: 16px; font-size: 13px; background: var(--card-bg); padding: 12px 16px; border-radius: 12px; border: 1px solid var(--border-color); flex-wrap: wrap;">
-          <div><span style="color: var(--text-muted)">🕒 Jam:</span> <strong id="infoTime"
-              style="color: var(--text-main); margin-left: 4px;">-</strong></div>
-          <div><span style="color: var(--text-muted)">👤 User:</span> <strong id="infoUser"
-              style="color: var(--text-main); margin-left: 4px;">-</strong></div>
-          <div><span style="color: var(--text-muted)">🏢 Cabang:</span> <strong id="infoBranch"
-              style="color: var(--text-main); margin-left: 4px;">-</strong></div>
-        </div>
-
-        <div style="
+        <div class="purchase-primary-fields" style="
               display: grid;
               grid-template-columns: 2fr 1fr 1fr;
               gap: 16px;
@@ -191,15 +517,15 @@
 
         <!-- Tabel barang langsung bisa diisi (Tipe PPN default "Include"). -->
         <div id="mainFormContentWrapper" style="position: relative;">
-          <div class="card" style="padding: 20px; margin-bottom: 20px">
-            <div style="
+          <div class="card purchase-items-card" style="padding: 20px; margin-bottom: 20px">
+            <div class="purchase-items-header" style="
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
                 margin-bottom: 16px;
               ">
               <h3>Daftar Barang</h3>
-              <button class="btn btn-primary" id="btnAddRow" onclick="formGrid.addRow()">
+              <button class="btn btn-primary" id="btnAddRow" onclick="tambahBarisPembelian()">
                 + Tambah Baris
               </button>
             </div>
@@ -209,10 +535,38 @@
           <!-- SUMMARY BOX (Aesthetic Modern Style) -->
           <div class="summary-box-container card"
             style="padding: 24px; margin-bottom: 24px; border: 1px solid var(--border-color); background: var(--card-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);">
-            <div style="display: flex; flex-wrap: wrap; gap: 32px; font-size: 14px; color: var(--text-main);">
+            <div class="summary-box-grid"
+              style="display: flex; flex-wrap: wrap; gap: 32px; font-size: 14px; color: var(--text-main);">
+
+              <!-- Detail transaksi dan aksi -->
+              <div class="summary-panel transaction-details-panel">
+                <div class="due-fields">
+                  <div class="input-group">
+                    <label>Tanggal Jatuh Tempo</label>
+                    <input type="date" id="bDueDate" class="input-control" />
+                  </div>
+                  <div class="input-group">
+                    <label>Jatuh Tempo (Hari)</label>
+                    <input type="number" id="bDueDays" class="input-control" min="0" />
+                  </div>
+                </div>
+
+                <div class="input-group">
+                  <label>Catatan</label>
+                  <textarea id="bNotes" class="input-control" rows="2" placeholder="Keterangan..."></textarea>
+                </div>
+
+                <div class="form-actions">
+                  <button onclick="batalkanForm()" class="btn">← Batal</button>
+                  <button onclick="simpanPembelian()" class="btn btn-primary" id="btnSimpan">
+                    ✓ Simpan
+                  </button>
+                </div>
+              </div>
 
               <!-- Kiri -->
-              <div style="flex: 1; min-width: 320px; display: flex; flex-direction: column; gap: 12px;">
+              <div class="summary-panel summary-adjustments"
+                style="flex: 1; min-width: 320px; display: flex; flex-direction: column; gap: 12px;">
 
                 <!-- Sub Total -->
                 <div style="display: grid; grid-template-columns: 120px 80px 1fr 36px; gap: 12px; align-items: center;">
@@ -230,7 +584,7 @@
                 <div style="display: grid; grid-template-columns: 120px 80px 1fr 36px; gap: 12px; align-items: center;">
                   <div style="text-align: right; color: var(--text-muted); font-weight: 500;">Potongan <span
                       style="font-size: 11px; opacity: 0.7;">(%)</span></div>
-                  <input type="number" id="bBulkDisc" class="input-control"
+                  <input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" id="bBulkDisc" class="input-control"
                     style="text-align: right; height: 36px; padding: 0 12px; border-radius: 8px;" value="0"
                     oninput="applyBulkDiscount()" />
                   <input type="text" id="bBulkDiscAmt" readonly class="input-control"
@@ -251,7 +605,7 @@
                 <div style="display: grid; grid-template-columns: 120px 80px 1fr 36px; gap: 12px; align-items: center;">
                   <div style="text-align: right; color: var(--text-muted); font-weight: 500;">Potongan Nota <span
                       style="font-size: 11px; opacity: 0.7;">(%)</span></div>
-                  <input type="number" id="bDisc" class="input-control"
+                  <input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" id="bDisc" class="input-control"
                     style="text-align: right; height: 36px; padding: 0 12px; border-radius: 8px;" value="0"
                     oninput="hitungGrandTotal()" />
                   <input type="text" id="bDiscAmt" readonly class="input-control"
@@ -272,7 +626,7 @@
                 <div style="display: grid; grid-template-columns: 120px 80px 1fr 36px; gap: 12px; align-items: center;">
                   <div style="text-align: right; color: var(--text-muted); font-weight: 500;">Pajak <span
                       style="font-size: 11px; opacity: 0.7;">(%)</span></div>
-                  <input type="number" id="bTax" class="input-control"
+                  <input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" id="bTax" class="input-control"
                     style="text-align: right; height: 36px; padding: 0 12px; border-radius: 8px; border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.05);"
                     value="0" oninput="hitungGrandTotal()" />
                   <input type="text" id="bTaxAmt" readonly class="input-control"
@@ -319,7 +673,7 @@
               </div>
 
               <!-- Kanan -->
-              <div
+              <div class="summary-panel summary-payment"
                 style="flex: 1; min-width: 320px; display: flex; flex-direction: column; gap: 12px; background: var(--bg-color); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color);">
 
                 <!-- Total Akhir (Highlighted) -->
@@ -406,34 +760,6 @@
 
             <span id="totalLabel" style="display: none;">Rp 0</span>
           </div>
-
-          <div class="input-group" style="display: flex">
-            <div style="margin-right: 16px">
-              <label style="margin-bottom: 6px">Tanggal Jatuh Tempo</label>
-              <input type="date" id="bDueDate" class="input-control" />
-            </div>
-            <div>
-              <label style="margin-bottom: 6px">Jatuh Tempo (Hari)</label>
-              <input type="number" id="bDueDays" class="input-control" min="0" />
-            </div>
-          </div>
-
-          <div class="input-group">
-            <label style="margin-bottom: 6px">Catatan</label>
-            <textarea id="bNotes" class="input-control" rows="2" placeholder="Keterangan..."></textarea>
-          </div>
-
-          <div style="
-              display: grid;
-              grid-template-columns: 1fr 1fr;
-              gap: 12px;
-              margin-top: 16px;
-            ">
-            <button onclick="switchTab('list')" class="btn">← Batal</button>
-            <button onclick="simpanPembelian()" class="btn btn-primary" id="btnSimpan">
-              ✓ Simpan
-            </button>
-          </div>
         </div><!-- END OVERLAY WRAPPER -->
       </div>
 
@@ -495,6 +821,7 @@
 
   <script src="/js/api.js"></script>
   <script src="/js/theme.js"></script>
+  <script src="/js/purchase-draft.js"></script>
   <script src="/js/components.js?v=potongan4"></script>
   <script src="/js/print.js"></script>
   <script>
@@ -509,6 +836,120 @@
       allSuppliers = [];
     let pendingPaymentData = null; // To store data while mismatch modal is open
     let tarifPpnStandar = 11; // Tarif PPN standar toko (dimuat dari setelan; default 11%)
+    let draftAutosaveTimer = null;
+    let draftBaselineSnapshot = null;
+    let lastPersistedSnapshot = null;
+    let isRestoringPurchaseDraft = false;
+    let draftStorageWarningShown = false;
+
+    function getPurchaseDraftStore(mode = currentFormMode) {
+      if (typeof PurchaseDraftStore === "undefined") return null;
+      const user = getUser();
+      const userId =
+        user.id || user.username || user.email || user.name || "anonymous";
+      const branchId =
+        localStorage.getItem("active_branch_id") ||
+        user.active_branch_id ||
+        myBranchId ||
+        1;
+      return PurchaseDraftStore.create({ userId, branchId, mode });
+    }
+
+    function serializePurchaseForm() {
+      const supplierIdRaw = document.querySelector(
+        "#supplierCombobox .combobox-value",
+      )?.value;
+      return {
+        mode: currentFormMode,
+        draft_id: draftId,
+        supplier_id: supplierIdRaw ? parseInt(supplierIdRaw, 10) : null,
+        supplier_name:
+          document.querySelector("#supplierCombobox .combobox-input")?.value ||
+          "",
+        date: document.getElementById("bDate")?.value || "",
+        due_date: document.getElementById("bDueDate")?.value || "",
+        due_days: document.getElementById("bDueDays")?.value || "0",
+        tax_type: document.getElementById("bTaxType")?.value || "include",
+        bulk_disc: document.getElementById("bBulkDisc")?.value || "0,00",
+        disc: document.getElementById("bDisc")?.value || "0,00",
+        tax: document.getElementById("bTax")?.value || "0,00",
+        notes: document.getElementById("bNotes")?.value || "",
+        rows: formGrid?.getDetailRows?.() || [],
+      };
+    }
+
+    function comparablePurchaseDraft(draft) {
+      return JSON.stringify(draft || null);
+    }
+
+    function savePurchaseDraftNow() {
+      if (
+        isRestoringPurchaseDraft ||
+        !formGrid ||
+        (currentTab !== "po" && currentTab !== "purchase")
+      ) {
+        return true;
+      }
+      if (draftAutosaveTimer) {
+        clearTimeout(draftAutosaveTimer);
+        draftAutosaveTimer = null;
+      }
+
+      const draft = serializePurchaseForm();
+      const snapshot = comparablePurchaseDraft(draft);
+      const store = getPurchaseDraftStore(draft.mode);
+      if (!store) return false;
+
+      if (snapshot === draftBaselineSnapshot) {
+        lastPersistedSnapshot = null;
+        return store.remove();
+      }
+      if (snapshot === lastPersistedSnapshot) return true;
+
+      const saved = store.save(draft);
+      if (saved) {
+        lastPersistedSnapshot = snapshot;
+      } else if (!draftStorageWarningShown && document.visibilityState !== "hidden") {
+        draftStorageWarningShown = true;
+        showToast(
+          "Draft tidak dapat disimpan di perangkat ini. Jangan tutup halaman sebelum transaksi disimpan.",
+          "warning",
+        );
+      }
+      return saved;
+    }
+
+    function schedulePurchaseDraftSave() {
+      if (
+        isRestoringPurchaseDraft ||
+        draftBaselineSnapshot === null ||
+        (currentTab !== "po" && currentTab !== "purchase")
+      ) {
+        return;
+      }
+      clearTimeout(draftAutosaveTimer);
+      draftAutosaveTimer = setTimeout(savePurchaseDraftNow, 250);
+    }
+
+    function handlePurchaseGridChange() {
+      hitungGrandTotal();
+      schedulePurchaseDraftSave();
+    }
+
+    function tambahBarisPembelian() {
+      formGrid?.addRow();
+      schedulePurchaseDraftSave();
+    }
+
+    function kembaliKeDashboard() {
+      savePurchaseDraftNow();
+      focusWorkspaceDashboard();
+    }
+
+    function batalkanForm() {
+      savePurchaseDraftNow();
+      switchTab("list", { draftAlreadySaved: true });
+    }
 
     function checkRequiredSelection() {
       const supplierVal = document.querySelector("#supplierCombobox .combobox-value")?.value;
@@ -530,7 +971,7 @@
       if (taxType === "include") {
         if (bTax) {
           bTax.readOnly = true;
-          bTax.value = 0;
+          bTax.value = "0,00";
           bTax.style.opacity = "0.5";
           bTax.style.pointerEvents = "none";
         }
@@ -539,7 +980,7 @@
         // Tanpa PPN: pajak dikunci 0 & kolom PPN per-baris disembunyikan.
         if (bTax) {
           bTax.readOnly = true;
-          bTax.value = 0;
+          bTax.value = "0,00";
           bTax.style.opacity = "0.5";
           bTax.style.pointerEvents = "none";
         }
@@ -555,6 +996,7 @@
 
       checkRequiredSelection();
       if (typeof hitungGrandTotal === "function") hitungGrandTotal();
+      schedulePurchaseDraftSave();
     }
 
     // Setup Global Barcode Scanner
@@ -569,6 +1011,7 @@
           const item = items[0];
           if (formGrid) {
             formGrid.addRow(item);
+            schedulePurchaseDraftSave();
             showToast("Berhasil menambah: " + item.name);
           }
         } else {
@@ -612,6 +1055,16 @@
     document.getElementById("bDate").addEventListener("change", updateDueDate);
     document.getElementById("bDueDays").addEventListener("input", updateDueDate);
     document.getElementById("bDueDate").addEventListener("change", updateDueDays);
+    document
+      .getElementById("viewForm")
+      .addEventListener("input", schedulePurchaseDraftSave);
+    document
+      .getElementById("viewForm")
+      .addEventListener("change", schedulePurchaseDraftSave);
+    window.addEventListener("pagehide", savePurchaseDraftNow);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") savePurchaseDraftNow();
+    });
 
     // Realtime Info
     setInterval(() => {
@@ -638,8 +1091,84 @@
     }
     loadUserInfo();
 
-    function switchTab(tab) {
+    async function applyPurchaseFormDraft(draft, { notify = false } = {}) {
+      if (!draft || typeof draft !== "object") return false;
+      isRestoringPurchaseDraft = true;
+      try {
+        draftId = draft.draft_id || null;
+        document.getElementById("bDate").value = draft.date || today();
+        document.getElementById("bDueDays").value = draft.due_days ?? 0;
+        updateDueDate();
+        if (draft.due_date) {
+          document.getElementById("bDueDate").value = draft.due_date;
+        }
+
+        const taxType = document.getElementById("bTaxType");
+        taxType.value = draft.tax_type || "include";
+        handleTaxTypeChange();
+        document.getElementById("bBulkDisc").value =
+          draft.bulk_disc ?? "0,00";
+        document.getElementById("bDisc").value = draft.disc ?? "0,00";
+        document.getElementById("bTax").value = draft.tax ?? "0,00";
+        document.getElementById("bNotes").value = draft.notes || "";
+
+        const comboContainer = document.getElementById("supplierCombobox");
+        if (draft.supplier_id) {
+          comboContainer._combo.set(
+            draft.supplier_id,
+            draft.supplier_name || "",
+          );
+          try {
+            const items = await api(
+              "GET",
+              `/purchases/items/?supplier_id=${draft.supplier_id}`,
+            );
+            formGrid.updateDataSource(items);
+          } catch (error) {
+            console.error("Gagal memuat barang supplier untuk draft", error);
+          }
+        } else if (draft.supplier_name) {
+          const supplierInput = comboContainer.querySelector(".combobox-input");
+          if (supplierInput) supplierInput.value = draft.supplier_name;
+        }
+
+        if (Array.isArray(draft.rows)) formGrid.loadRows(draft.rows);
+        hitungGrandTotal();
+        checkRequiredSelection();
+        lastPersistedSnapshot = comparablePurchaseDraft(
+          serializePurchaseForm(),
+        );
+        if (notify) {
+          showToast(
+            currentFormMode === "po"
+              ? "Draft pesanan dipulihkan"
+              : "Draft pembelian dipulihkan",
+            "info",
+          );
+        }
+        return true;
+      } finally {
+        isRestoringPurchaseDraft = false;
+      }
+    }
+
+    async function restorePersistentPurchaseDraft() {
+      const store = getPurchaseDraftStore(currentFormMode);
+      const draft = store?.read();
+      if (!draft) return false;
+      return applyPurchaseFormDraft(draft, { notify: true });
+    }
+
+    function switchTab(tab, options = {}) {
+      const leavingForm = currentTab === "po" || currentTab === "purchase";
+      if (leavingForm && !options.draftAlreadySaved) savePurchaseDraftNow();
+      if (leavingForm && tab === currentTab) return;
+
       currentTab = tab;
+      document.body.classList.toggle(
+        "purchase-form-active",
+        tab === "po" || tab === "purchase",
+      );
       document
         .querySelectorAll(".view-section")
         .forEach((el) => (el.style.display = "none"));
@@ -656,16 +1185,27 @@
         currentFormMode = "po";
         document.getElementById("formTitle").textContent =
           "📝 Catat Pesanan (Draft)";
-        openForm();
+        openForm().catch((error) => {
+          isRestoringPurchaseDraft = false;
+          console.error("Gagal membuka form pesanan", error);
+          showToast("Gagal membuka form pesanan", "error");
+        });
       } else if (tab === "purchase") {
         currentFormMode = "purchase";
         document.getElementById("formTitle").textContent =
           "📥 Catat Pembelian";
-        openForm();
+        openForm().catch((error) => {
+          isRestoringPurchaseDraft = false;
+          console.error("Gagal membuka form pembelian", error);
+          showToast("Gagal membuka form pembelian", "error");
+        });
       } else if (tab === "payment") openPaymentTab();
     }
 
-    async function openForm(existing = null) {
+    async function openForm(existing = null, { restorePersistent = true } = {}) {
+      draftBaselineSnapshot = null;
+      lastPersistedSnapshot = null;
+      isRestoringPurchaseDraft = true;
       document.getElementById("formGridContainer").innerHTML =
         '<div id="gridTarget"></div>';
       document.getElementById("bDate").value = today();
@@ -679,8 +1219,10 @@
         handleTaxTypeChange();
       }
 
-      document.getElementById("bDisc").value = 0;
-      document.getElementById("bTax").value = 0;
+      document.getElementById("bDisc").value = "0,00";
+      document.getElementById("bTax").value = "0,00";
+      document.getElementById("bBulkDisc").value = "0,00";
+      document.getElementById("bNotes").value = "";
       document.getElementById("totalLabel").textContent = "Rp 0";
       draftId = existing ? existing.id : null;
 
@@ -702,6 +1244,7 @@
           );
           if (formGrid) formGrid.updateDataSource(items);
           checkRequiredSelection();
+          schedulePurchaseDraftSave();
         },
       });
 
@@ -734,18 +1277,24 @@
         }));
         formGrid = createPurchaseSummaryGrid("gridTarget", {
           initialItems: items,
-          onChange: hitungGrandTotal,
+          onChange: handlePurchaseGridChange,
           onDetail: bukaDetailItem,
           getSupplierId: ambilSupplierIdTerpilih,
           ...konfigPpnGrid(),
         });
       } else {
         formGrid = createPurchaseSummaryGrid("gridTarget", {
-          onChange: hitungGrandTotal,
+          onChange: handlePurchaseGridChange,
           onDetail: bukaDetailItem,
           getSupplierId: ambilSupplierIdTerpilih,
           ...konfigPpnGrid(),
         });
+      }
+      hitungGrandTotal();
+      isRestoringPurchaseDraft = false;
+      draftBaselineSnapshot = comparablePurchaseDraft(serializePurchaseForm());
+      if (!existing && restorePersistent) {
+        await restorePersistentPurchaseDraft();
       }
     }
 
@@ -765,7 +1314,7 @@
         getTarifStandar: () => tarifPpnStandar,
         setPajakRingkasan: (persen) => {
           const bTax = document.getElementById("bTax");
-          if (bTax) bTax.value = persen;
+          if (bTax) bTax.value = toDesimal(persen);
           if (typeof hitungGrandTotal === "function") hitungGrandTotal();
         },
       };
@@ -774,27 +1323,14 @@
     // Simpan seluruh state form ke sessionStorage lalu buka halaman detail item.
     // Dipakai sebagai callback onDetail dari grid (tombol "Detail" tiap baris).
     function bukaDetailItem(rowIndex, detail) {
-      const supEl = document.querySelector(
-        "#supplierCombobox .combobox-value",
+      const draft = serializePurchaseForm();
+      const supData = (allSuppliers || []).find(
+        (supplier) => supplier.id === draft.supplier_id,
       );
-      const supInput = document.querySelector(
-        "#supplierCombobox .combobox-input",
-      );
-      const supId = supEl && supEl.value ? parseInt(supEl.value) : null;
-      const supData = (allSuppliers || []).find((s) => s.id === supId);
-      const draft = {
-        mode: currentFormMode,
-        supplier_id: supId,
-        supplier_name: supInput ? supInput.value : "",
-        supplier_ppn: supData ? supData.PpnSupplier || 0 : 0,
-        date: document.getElementById("bDate").value,
-        disc: document.getElementById("bDisc").value,
-        tax: document.getElementById("bTax").value,
-        notes: document.getElementById("bNotes").value,
-        rows: formGrid.getDetailRows(),
-        editRow: rowIndex,
-      };
+      draft.supplier_ppn = supData ? supData.PpnSupplier || 0 : 0;
+      draft.editRow = rowIndex;
       sessionStorage.setItem("purchase_form_draft", JSON.stringify(draft));
+      savePurchaseDraftNow();
       location.href = "detail_item.html";
     }
 
@@ -807,33 +1343,16 @@
           : "📥 Catat Pembelian";
 
       currentTab = currentFormMode;
+      document.body.classList.add("purchase-form-active");
       document
         .querySelectorAll(".view-section")
         .forEach((el) => (el.style.display = "none"));
       document.getElementById("viewForm").style.display = "block";
 
-      await openForm();
-
-      document.getElementById("bDate").value = draft.date || today();
-      document.getElementById("bDisc").value = draft.disc || 0;
-      document.getElementById("bTax").value = draft.tax || 0;
-      document.getElementById("bNotes").value = draft.notes || "";
-
-      if (draft.supplier_id) {
-        document
-          .getElementById("supplierCombobox")
-          ._combo.set(draft.supplier_id, draft.supplier_name || "");
-        const items = await api(
-          "GET",
-          `/purchases/items/?supplier_id=${draft.supplier_id}`,
-        );
-        formGrid.updateDataSource(items);
-      }
-
-      if (draft.rows && draft.rows.length) {
-        formGrid.loadRows(draft.rows);
-      }
-      hitungGrandTotal();
+      await openForm(null, { restorePersistent: false });
+      await applyPurchaseFormDraft(draft);
+      lastPersistedSnapshot = null;
+      savePurchaseDraftNow();
     }
 
     function formatTotalStr(num) {
@@ -842,7 +1361,7 @@
 
     function applyBulkDiscount() {
       if (!formGrid) return;
-      const val = parseFloat(document.getElementById("bBulkDisc").value) || 0;
+      const val = parseDesimal(document.getElementById("bBulkDisc"));
       const rows = formGrid.getDetailRows();
       rows.forEach(r => {
         if (!r.discs) r.discs = [0];
@@ -860,8 +1379,8 @@
       let totalQty = items.reduce((acc, it) => acc + (it.qty || 0), 0);
       let sumItemDiscAmt = items.reduce((acc, it) => acc + ((it.discount || 0) * (it.qty || 0)), 0);
 
-      const disc = parseFloat(document.getElementById("bDisc").value) || 0;
-      const tax = parseFloat(document.getElementById("bTax").value) || 0;
+      const disc = parseDesimal(document.getElementById("bDisc"));
+      const tax = parseDesimal(document.getElementById("bTax"));
       const taxType = document.getElementById("bTaxType")?.value || "exclude";
 
       let discAmt = (sub * disc) / 100;
@@ -903,12 +1422,12 @@
         return showToast("Tambahkan minimal 1 barang", "error");
       try {
         showLoading();
-        taxValue = parseFloat(document.getElementById("bTax").value || 0);
+        const taxValue = parseDesimal(document.getElementById("bTax"));
         const payload = {
           date: document.getElementById("bDate").value,
           due_date: document.getElementById("bDueDate").value || null,
           supplier_id: parseInt(sid),
-          discount: parseFloat(document.getElementById("bDisc").value) || 0,
+          discount: parseDesimal(document.getElementById("bDisc")),
           tax: taxValue,
           tax_percent: taxValue,
           is_tax_included: document.getElementById("bTaxType")?.value === "include",
@@ -919,9 +1438,14 @@
         };
         if (draftId) await api("PUT", `/purchases/${draftId}`, payload);
         else await api("POST", "/purchases/", payload);
+        getPurchaseDraftStore(currentFormMode)?.remove();
+        sessionStorage.removeItem("purchase_form_draft");
+        sessionStorage.removeItem("purchase_form_return");
+        lastPersistedSnapshot = null;
+        draftBaselineSnapshot = null;
         hideLoading();
         showToast("Berhasil disimpan ✓");
-        switchTab("list");
+        switchTab("list", { draftAlreadySaved: true });
       } catch (ex) {
         hideLoading();
         showToast(ex.message, "error");
@@ -1345,10 +1869,21 @@
         useEntitySelect: true,
         entityPlaceholder: "Semua Supplier",
       });
+
+      const params = new URLSearchParams(location.search);
+      const isDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || "");
+      const startDate = params.get("start_date");
+      const endDate = params.get("end_date");
+      const startInput = document.querySelector(
+        "#mainFilterContainer .f-start",
+      );
+      const endInput = document.querySelector("#mainFilterContainer .f-end");
+      if (startInput && isDate(startDate)) startInput.value = startDate;
+      if (endInput && isDate(endDate)) endInput.value = endDate;
     }
 
     function parseNum(s) {
-      return parseFloat(String(s).replace(/\./g, "").replace(",", ".")) || 0;
+      return parseDesimal(s);
     }
     async function showDetail(id) {
       try {

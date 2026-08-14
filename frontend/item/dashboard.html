@@ -114,14 +114,14 @@
                 <div class="row2" style="margin-bottom: 16px;">
                     <div class="input-group">
                         <label>Harga Pokok :</label>
-                        <input type="text" class="input-control" placeholder="0,00" style="text-align: right;">
+                            <input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control" placeholder="0,00" style="text-align: right;">
                     </div>
                     <div class="input-group">
                         <label>Margin (%) & Harga Jual :</label>
                         <div style="display: flex; align-items: center; gap: 8px;">
-                            <input type="text" class="input-control" placeholder="0,00" style="width: 80px; text-align: center;">
+                            <input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" class="input-control" placeholder="0,00" style="width: 80px; text-align: center;">
                             <span style="font-weight: bold;">% =</span>
-                            <input type="text" class="input-control" placeholder="0,00" style="flex: 1; text-align: right;">
+                            <input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control" placeholder="0,00" style="flex: 1; text-align: right;">
                         </div>
                     </div>
                 </div>
@@ -140,7 +140,7 @@
                 <div class="row2" style="margin-bottom: 16px;">
                     <div class="input-group">
                         <label>Komisi Sales :</label>
-                        <input type="text" class="input-control" placeholder="0,00" style="text-align: right;">
+                        <input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control" placeholder="0,00" style="text-align: right;">
                     </div>
                     <div></div>
                 </div>
@@ -152,5 +152,6 @@
             </div>
         </main>
     </div>
+    <script src="/js/api.js"></script>
 </body>
 </html>

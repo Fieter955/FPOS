@@ -113,7 +113,9 @@
             <label>Besar Diskon (%) *</label
             ><input
               id="dPct"
-              type="number"
+              type="text"
+              inputmode="decimal"
+              data-input-desimal
               class="input-control"
               min="0"
               max="100"
@@ -129,7 +131,10 @@
               ></label
             ><input
               id="dMinQty"
-              type="number"
+              type="text"
+              inputmode="decimal"
+              data-input-desimal
+              data-desimal-maks="4"
               class="input-control"
               min="0"
               value="0"
@@ -139,7 +144,9 @@
             <label>Min. Nominal Belanja</label
             ><input
               id="dMinAmt"
-              type="number"
+              type="text"
+              inputmode="decimal"
+              data-input-desimal
               class="input-control"
               min="0"
               value="0"
@@ -247,9 +254,9 @@
         document.getElementById("dNama").value = "";
         document.getElementById("dItem").value = "";
         document.getElementById("dKat").value = "";
-        document.getElementById("dPct").value = 0;
-        document.getElementById("dMinQty").value = 0;
-        document.getElementById("dMinAmt").value = 0;
+        document.getElementById("dPct").value = "0,00";
+        document.getElementById("dMinQty").value = "0,00";
+        document.getElementById("dMinAmt").value = "0,00";
         document.getElementById("dFrom").value = "";
         document.getElementById("dTo").value = "";
         openModal("mDiskon");
@@ -262,9 +269,16 @@
         document.getElementById("dNama").value = x.name;
         document.getElementById("dItem").value = x.item_id || "";
         document.getElementById("dKat").value = x.category_id || "";
-        document.getElementById("dPct").value = x.discount_percent;
-        document.getElementById("dMinQty").value = x.min_qty || 0;
-        document.getElementById("dMinAmt").value = x.min_amount || 0;
+        document.getElementById("dPct").value = toDesimal(
+          x.discount_percent,
+        );
+        document.getElementById("dMinQty").value = toDesimal(
+          x.min_qty || 0,
+          { maximumFractionDigits: 4 },
+        );
+        document.getElementById("dMinAmt").value = toDesimal(
+          x.min_amount || 0,
+        );
         document.getElementById("dFrom").value = x.valid_from || "";
         document.getElementById("dTo").value = x.valid_to || "";
         openModal("mDiskon");
@@ -276,7 +290,7 @@
           showToast("Nama wajib diisi", "error");
           return;
         }
-        const pct = parseFloat(document.getElementById("dPct").value) || 0;
+        const pct = parseDesimal(document.getElementById("dPct"));
         if (pct <= 0 || pct > 100) {
           showToast("Besar diskon harus antara 1-100%", "error");
           return;
@@ -286,8 +300,8 @@
           item_id: parseInt(document.getElementById("dItem").value) || null,
           category_id: parseInt(document.getElementById("dKat").value) || null,
           discount_percent: pct,
-          min_qty: parseFloat(document.getElementById("dMinQty").value) || 0,
-          min_amount: parseFloat(document.getElementById("dMinAmt").value) || 0,
+          min_qty: parseDesimal(document.getElementById("dMinQty")),
+          min_amount: parseDesimal(document.getElementById("dMinAmt")),
           valid_from: document.getElementById("dFrom").value || null,
           valid_to: document.getElementById("dTo").value || null,
         };

@@ -270,6 +270,9 @@
                   <label>Tunai (Kas)</label
                   ><input
                     type="text"
+                    inputmode="decimal"
+                    data-input-desimal
+                    data-min="0"
                     id="payCash"
                     class="input-control"
                     placeholder="0"
@@ -280,6 +283,9 @@
                   <label>Bank (Transfer)</label
                   ><input
                     type="text"
+                    inputmode="decimal"
+                    data-input-desimal
+                    data-min="0"
                     id="payBank"
                     class="input-control"
                     placeholder="0"
@@ -439,8 +445,8 @@
           `
       <div style="display:grid;grid-template-columns:3fr 1fr 2fr 1fr 36px;gap:8px;margin-bottom:8px;align-items:center" id="rrow${idx}">
         <select class="input-control" style="margin:0;padding:10px 12px;font-size:14px" onchange="fillReturnPrice(${idx},this);recalc()">${makeItemOpts()}</select>
-        <input type="number" value="1" min="1" class="input-control" style="margin:0;padding:10px;text-align:center;font-weight:700" oninput="recalc()">
-        <input type="number" value="0" min="0" class="input-control rp" style="margin:0;padding:10px;font-size:14px" oninput="recalc()">
+        <input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" value="1" class="input-control" style="margin:0;padding:10px;text-align:center;font-weight:700" oninput="recalc()">
+        <input type="text" inputmode="decimal" data-input-desimal data-min="0" value="0" class="input-control rp" style="margin:0;padding:10px;font-size:14px" oninput="recalc()">
         <select class="input-control condition-sel" style="margin:0;padding:10px;font-size:12px">
           <option value="good">Bagus</option>
           <option value="damaged">Rusak (Broken)</option>
@@ -464,8 +470,8 @@
           `
       <div style="display:grid;grid-template-columns:3fr 1fr 2fr 36px;gap:8px;margin-bottom:8px;align-items:center" id="nrow${idx}">
         <select class="input-control" style="margin:0;padding:10px 12px;font-size:14px" onchange="fillNewPrice(${idx},this);recalc()">${makeItemOpts()}</select>
-        <input type="number" value="1" min="1" class="input-control" style="margin:0;padding:10px;text-align:center;font-weight:700" oninput="recalc()">
-        <input type="number" value="0" min="0" class="input-control np" style="margin:0;padding:10px;font-size:14px" oninput="recalc()">
+        <input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" value="1" class="input-control" style="margin:0;padding:10px;text-align:center;font-weight:700" oninput="recalc()">
+        <input type="text" inputmode="decimal" data-input-desimal data-min="0" value="0" class="input-control np" style="margin:0;padding:10px;font-size:14px" oninput="recalc()">
         <button onclick="document.getElementById('nrow${idx}').remove();recalc()" style="width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,.15);color:#ef4444;border:none;cursor:pointer;font-size:16px;font-weight:700">✕</button>
       </div>`,
         );
@@ -480,23 +486,22 @@
       function sumRows(containerId) {
         let total = 0;
         document.querySelectorAll(`#${containerId} > div`).forEach((row) => {
-          const inputs = row.querySelectorAll("input[type=number]");
+          const inputs = row.querySelectorAll("input[data-input-desimal]");
           total +=
-            (parseFloat(inputs[0]?.value) || 0) *
-            (parseFloat(inputs[1]?.value) || 0);
+            parseDesimal(inputs[0]) * parseDesimal(inputs[1]);
         });
         return total;
       }
 
       function toAngka(s) {
-        return parseFloat(String(s).replace(/\./g, "").replace(",", ".")) || 0;
+        return parseDesimal(s);
       }
       function toRibuan(n) {
-        return (n || 0).toLocaleString("id-ID");
+        return toDesimal(n);
       }
 
       function formatAndRecalc(inp) {
-        inp.value = toRibuan(toAngka(inp.value));
+        formatDesimal(inp);
         recalc();
       }
 
@@ -573,8 +578,8 @@
           retIdx = 0;
           document.getElementById("newRows").innerHTML = "";
           newIdx = 0;
-          document.getElementById("payCash").value = "";
-          document.getElementById("payBank").value = "";
+          document.getElementById("payCash").value = "0,00";
+          document.getElementById("payBank").value = "0,00";
           addReturnRow();
           addNewRow();
           recalc();
@@ -593,24 +598,24 @@
           newItems = [];
         document.querySelectorAll("#returnRows > div").forEach((row) => {
           const sel = row.querySelector("select");
-          const inps = row.querySelectorAll("input[type=number]");
+          const inps = row.querySelectorAll("input[data-input-desimal]");
           const cond = row.querySelector(".condition-sel").value;
           if (sel.value)
             returnItems.push({
               item_id: parseInt(sel.value),
-              qty: parseFloat(inps[0]?.value) || 1,
-              return_price: parseFloat(inps[1]?.value) || 0,
+              qty: parseDesimal(inps[0]) || 1,
+              return_price: parseDesimal(inps[1]),
               condition: cond,
             });
         });
         document.querySelectorAll("#newRows > div").forEach((row) => {
           const sel = row.querySelector("select");
-          const inps = row.querySelectorAll("input[type=number]");
+          const inps = row.querySelectorAll("input[data-input-desimal]");
           if (sel.value)
             newItems.push({
               item_id: parseInt(sel.value),
-              qty: parseFloat(inps[0]?.value) || 1,
-              sell_price: parseFloat(inps[1]?.value) || 0,
+              qty: parseDesimal(inps[0]) || 1,
+              sell_price: parseDesimal(inps[1]),
             });
         });
 

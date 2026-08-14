@@ -610,28 +610,41 @@ _USE_BUILT = _BUILT_FRONTEND.exists() and (
     getattr(sys, "frozen", False) or os.getenv("FPOS_USE_BUILD") == "1"
 )
 FRONTEND_DIR = _BUILT_FRONTEND if _USE_BUILT else (ROOT_DIR / "frontend")
-# Aset di frontend-dist ber-hash (immutable) → boleh cache 1 tahun; sumber dev cache pendek (1 jam).
+# Aset di frontend-dist ber-hash (immutable) → boleh cache 1 tahun. Aset source
+# development tidak boleh disimpan agar HTML terbaru tidak pernah bertemu JS lama.
 _ASSET_MAX_AGE = 31536000 if _USE_BUILT else 3600
 _ASSET_IMMUTABLE = _USE_BUILT
+_ASSET_NO_STORE = not _USE_BUILT
 MANIFEST_PATH = FRONTEND_DIR / "manifest.json"
 
 class CachedStaticFiles(StaticFiles):
     """StaticFiles + header Cache-Control agar aset (js/css/gambar) tidak di-download ulang
     setiap kunjungan. Hemat round-trip — terasa banget via Tailscale.
     Catatan: bila disajikan dari frontend-dist, nama file sudah ber-hash → aman pakai
-    max_age panjang + immutable. Dari sumber (dev) max_age moderat agar update cepat kebaca."""
-    def __init__(self, *args, max_age: int = 3600, immutable: bool = False, **kwargs):
+    max_age panjang + immutable. Aset source development memakai ``no-store``."""
+    def __init__(
+        self,
+        *args,
+        max_age: int = 3600,
+        immutable: bool = False,
+        no_store: bool = False,
+        **kwargs,
+    ):
         self.max_age = max_age
         self.immutable = immutable
+        self.no_store = no_store
         super().__init__(*args, **kwargs)
 
     async def get_response(self, path, scope):
         response = await super().get_response(path, scope)
         # Hanya cache respons sukses (200/304) — jangan cache error seperti 404.
         if response.status_code < 400:
-            cc = f"public, max-age={self.max_age}"
-            if self.immutable:
-                cc += ", immutable"
+            if self.no_store:
+                cc = "no-store"
+            else:
+                cc = f"public, max-age={self.max_age}"
+                if self.immutable:
+                    cc += ", immutable"
             response.headers["Cache-Control"] = cc
         return response
 
@@ -653,9 +666,9 @@ def health():
 
 if FRONTEND_DIR.exists():
     if (FRONTEND_DIR / "js").exists():
-        app.mount("/js", CachedStaticFiles(directory=str(FRONTEND_DIR / "js"), max_age=_ASSET_MAX_AGE, immutable=_ASSET_IMMUTABLE), name="js")
+        app.mount("/js", CachedStaticFiles(directory=str(FRONTEND_DIR / "js"), max_age=_ASSET_MAX_AGE, immutable=_ASSET_IMMUTABLE, no_store=_ASSET_NO_STORE), name="js")
     if (FRONTEND_DIR / "css").exists():
-        app.mount("/css", CachedStaticFiles(directory=str(FRONTEND_DIR / "css"), max_age=_ASSET_MAX_AGE, immutable=_ASSET_IMMUTABLE), name="css")
+        app.mount("/css", CachedStaticFiles(directory=str(FRONTEND_DIR / "css"), max_age=_ASSET_MAX_AGE, immutable=_ASSET_IMMUTABLE, no_store=_ASSET_NO_STORE), name="css")
 
     # Halaman HTML harus selalu divalidasi ulang ke server (ETag tetap → 304 bila tak berubah),
     # supaya hasil edit frontend tidak tertutup cache lama webview/browser.

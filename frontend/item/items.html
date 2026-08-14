@@ -229,6 +229,78 @@
         color: var(--text-muted);
         font-size: 14px;
       }
+      .supplier-context-combobox {
+        position: relative;
+        flex: 1;
+        min-width: 0;
+      }
+      .supplier-context-input {
+        width: 100%;
+        margin: 0 !important;
+        padding-right: 38px;
+        box-sizing: border-box;
+      }
+      .supplier-context-input[aria-expanded="true"] {
+        border-color: var(--primary);
+      }
+      .supplier-context-chevron {
+        position: absolute;
+        top: 50%;
+        right: 14px;
+        transform: translateY(-55%);
+        color: var(--text-muted);
+        font-size: 18px;
+        line-height: 1;
+        pointer-events: none;
+      }
+      .supplier-context-dropdown {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        max-height: 250px;
+        overflow-y: auto;
+        display: none;
+        background: var(--card-bg, #fff);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+        z-index: 10000;
+      }
+      .supplier-context-dropdown.show {
+        display: block;
+      }
+      .supplier-context-option {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 9px 12px;
+        cursor: pointer;
+        border-bottom: 1px solid var(--border-color);
+      }
+      .supplier-context-option:last-of-type {
+        border-bottom: none;
+      }
+      .supplier-context-option:hover,
+      .supplier-context-option.highlighted {
+        background: var(--primary-light);
+        color: var(--primary);
+      }
+      .supplier-context-option small {
+        color: var(--text-muted);
+        white-space: nowrap;
+      }
+      .supplier-context-empty,
+      .supplier-context-hint {
+        padding: 10px 12px;
+        color: var(--text-muted);
+        font-size: 12px;
+        text-align: center;
+      }
+      .supplier-context-hint {
+        border-top: 1px solid var(--border-color);
+      }
       .sup-search-box {
         position: relative;
         width: 100%;
@@ -349,6 +421,7 @@
     <script src="/js/kategori.js"></script>
     <script src="/js/merek.js?v=20260813-modal-focus"></script>
     <script src="/js/units.js?v=20260813-modal-focus"></script>
-    <script src="/js/item/itemForm.js?v=20260813-item-keyboard-nav"></script>
+    <script src="/js/supplier-form-keyboard.js?v=20260814-enter-nav"></script>
+    <script src="/js/item/itemForm.js?v=20260814-supplier-search"></script>
   </body>
 </html>

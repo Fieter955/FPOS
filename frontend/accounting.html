@@ -476,7 +476,7 @@
             </label>
             <div style="margin-top: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
               <label style="font-weight: 600">Tarif PPN penjualan (%)</label>
-              <input type="number" id="inpTarifPpn" class="input-control" style="width: 90px" value="11" min="0" step="0.5" />
+              <input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" id="inpTarifPpn" class="input-control" style="width: 90px" value="11,00" />
               <span style="color: var(--text-muted); font-size: 13px">harga jual dianggap sudah termasuk PPN ini</span>
               <button class="btn btn-primary" onclick="simpanStatusPkp()">Simpan</button>
             </div>
@@ -678,10 +678,11 @@
             <label>Jumlah (Rp) *</label>
             <input
               id="kJumlah"
-              type="number"
+              type="text"
+              data-input-desimal
               class="input-control"
               min="0"
-              inputmode="numeric"
+              inputmode="decimal"
               placeholder="0"
               style="font-size: 20px; font-weight: 700"
             />
@@ -837,7 +838,9 @@
         }
 
         const amount = parseFloat(params.get("amount") || 0) || 0;
-        document.getElementById("kJumlah").value = amount > 0 ? amount : "";
+        document.getElementById("kJumlah").value = toDesimal(
+          amount > 0 ? amount : 0,
+        );
         openModal("mKas");
       }
 
@@ -872,7 +875,7 @@
                     <option value="credit" ${defaultPos === "credit" ? "selected" : ""}>Kredit</option>
                 </select>
             </td>
-            <td><input type="number" min="0" class="input-control j-amt" value="0" style="font-weight:bold; color:var(--primary); text-align:right" oninput="calcJurnal()" /></td>
+            <td><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control j-amt" value="0,00" style="font-weight:bold; color:var(--primary); text-align:right" oninput="calcJurnal()" /></td>
             <td style="text-align:center;"><button class="btn" style="background:#ef4444; color:white; border:none; padding:4px 8px;" onclick="this.closest('tr').remove(); calcJurnal()">X</button></td>
         `;
         document.getElementById("tblJurnalInput").appendChild(tr);
@@ -885,7 +888,7 @@
 
         rows.forEach((r) => {
           const pos = r.querySelector(".j-pos").value;
-          const amt = parseFloat(r.querySelector(".j-amt").value) || 0;
+          const amt = parseDesimal(r.querySelector(".j-amt"));
           if (pos === "debit") tDebit += amt;
           else tKredit += amt;
         });
@@ -928,7 +931,7 @@
         rows.forEach((r) => {
           const accId = r.querySelector(".j-akun").value;
           const pos = r.querySelector(".j-pos").value;
-          const amt = parseFloat(r.querySelector(".j-amt").value) || 0;
+          const amt = parseDesimal(r.querySelector(".j-amt"));
 
           if (!accId || amt <= 0) {
             if (amt > 0 && !accId) hasError = true;
@@ -1012,7 +1015,7 @@
 
       async function saveKas() {
         const ket = document.getElementById("kKet").value.trim(),
-          jml = parseFloat(document.getElementById("kJumlah").value) || 0,
+          jml = parseDesimal(document.getElementById("kJumlah")),
           akunId = document.getElementById("kAkun").value;
         if (!ket || !jml || !akunId) {
           showToast("Data wajib diisi lengkap", "error");
@@ -1378,7 +1381,10 @@
           const chk = document.getElementById("chkPkp");
           if (chk) chk.checked = !!res.is_pkp;
           const tar = document.getElementById("inpTarifPpn");
-          if (tar) tar.value = res.tarif_ppn != null ? res.tarif_ppn : 11;
+          if (tar)
+            tar.value = toDesimal(
+              res.tarif_ppn != null ? res.tarif_ppn : 11,
+            );
           const info = document.getElementById("pkpInfo");
           if (info)
             info.textContent = res.is_pkp
@@ -1392,7 +1398,7 @@
       async function simpanStatusPkp() {
         const chk = document.getElementById("chkPkp");
         const nilai = !!chk.checked;
-        const tarif = parseFloat(document.getElementById("inpTarifPpn").value) || 0;
+        const tarif = parseDesimal(document.getElementById("inpTarifPpn"));
         const ok = await showConfirm(
           (nilai
             ? `Nyalakan mode PKP (tarif PPN ${tarif}%)?\n\nMulai sekarang, pembelian BARU memisah PPN dari modal, dan kasir memungut PPN ${tarif}% untuk barang kena pajak. Barang berstatus Tanpa PPN tetap bebas PPN.`

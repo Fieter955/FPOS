@@ -234,173 +234,21 @@
         return parseFloat(str.toString().replace(/\./g, "")) || 0;
       }
 
-      const ITEM_PERCENT_INPUT_SELECTOR = ".item-percent-input";
-
-      // Parser khusus persentase berformat Indonesia. parseFloat("12,50") hanya
-      // menghasilkan 12, sehingga semua perhitungan margin/potongan harus lewat sini.
       function parseInputPersen(value) {
-        if (typeof value === "number")
-          return Number.isFinite(value) ? value : 0;
-
-        const raw = String(value ?? "").trim();
-        if (!raw) return 0;
-
-        let normalized;
-        if (raw.includes(",")) {
-          normalized = raw.replace(/\./g, "").replace(",", ".");
-        } else {
-          // Nilai dari API/JavaScript dapat memakai titik sebagai pemisah desimal.
-          normalized = raw;
-        }
-        normalized = normalized.replace(/[^0-9.-]/g, "");
-
-        const parsed = Number.parseFloat(normalized);
-        return Number.isFinite(parsed) ? parsed : 0;
+        return typeof parseDesimal === "function"
+          ? parseDesimal(value)
+          : Number.parseFloat(String(value).replace(",", ".")) || 0;
       }
 
       function toPersen(value) {
-        return parseInputPersen(value).toLocaleString("id-ID", {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        });
+        return typeof toDesimal === "function"
+          ? toDesimal(value)
+          : parseInputPersen(value).toFixed(2).replace(".", ",");
       }
 
-      function positionAfterDigitCount(text, digitCount) {
-        if (digitCount <= 0) return text.length;
-        let seen = 0;
-        for (let i = 0; i < text.length; i++) {
-          if (/\d/.test(text[i])) seen++;
-          if (seen >= digitCount) return i + 1;
-        }
-        return text.length;
-      }
-
-      // Selalu pertahankan dua angka desimal selama pengguna mengetik. Posisi kursor
-      // dihitung dari jumlah digit (bukan selisih panjang string), jadi pemisah ribuan
-      // maupun nol awal yang dinormalisasi tidak membuat kursor meloncat.
       function formatInputPersen(input) {
-        if (!input) return;
-
-        const raw = String(input.value ?? "");
-        const caret = input.selectionStart ?? raw.length;
-        const commaIndex = raw.indexOf(",");
-        const dotIndexes = Array.from(raw.matchAll(/\./g), (match) => match.index);
-        const decimalIndex =
-          commaIndex >= 0
-            ? commaIndex
-            : dotIndexes.length === 1
-              ? dotIndexes[0]
-              : -1;
-        const caretInDecimal = decimalIndex >= 0 && caret > decimalIndex;
-
-        const rawInteger =
-          decimalIndex >= 0 ? raw.slice(0, decimalIndex) : raw;
-        const isNegative = rawInteger.trimStart().startsWith("-");
-        const integerDigits = rawInteger.replace(/\D/g, "") || "0";
-        const integerNumber = Number.parseInt(integerDigits, 10) || 0;
-        let formattedInteger = integerNumber.toLocaleString("id-ID");
-        if (isNegative) formattedInteger = `-${formattedInteger}`;
-
-        const rawDecimal =
-          decimalIndex >= 0 ? raw.slice(decimalIndex + 1) : "";
-        const decimalDigits = rawDecimal
-          .replace(/\D/g, "")
-          .slice(0, 2)
-          .padEnd(2, "0");
-        input.value = `${formattedInteger},${decimalDigits}`;
-
-        if (document.activeElement !== input) return;
-
-        let newCaret;
-        if (caretInDecimal) {
-          const decimalsBeforeCaret = raw
-            .slice(decimalIndex + 1, caret)
-            .replace(/\D/g, "").length;
-          newCaret =
-            formattedInteger.length + 1 + Math.min(decimalsBeforeCaret, 2);
-        } else {
-          const integersBeforeCaret = raw
-            .slice(0, Math.min(caret, decimalIndex >= 0 ? decimalIndex : caret))
-            .replace(/\D/g, "").length;
-          newCaret = positionAfterDigitCount(
-            formattedInteger,
-            integersBeforeCaret,
-          );
-        }
-
-        try {
-          input.setSelectionRange(newCaret, newCaret);
-        } catch (_) {}
+        if (typeof formatDesimal === "function") formatDesimal(input);
       }
-
-      function placePercentCaretBeforeComma(input) {
-        formatInputPersen(input);
-        const commaIndex = input.value.indexOf(",");
-        const caret = commaIndex >= 0 ? commaIndex : input.value.length;
-        try {
-          input.setSelectionRange(caret, caret);
-        } catch (_) {}
-      }
-
-      // Delegasi event membuat perilaku yang sama otomatis berlaku untuk field tabel
-      // satuan/level/tier/potongan yang dirender ulang secara dinamis.
-      document.addEventListener("focusin", (event) => {
-        const input = event.target.closest?.(ITEM_PERCENT_INPUT_SELECTOR);
-        if (!input) return;
-        placePercentCaretBeforeComma(input);
-        input.dataset.percentJustFocused = "1";
-        setTimeout(() => delete input.dataset.percentJustFocused, 0);
-      });
-
-      document.addEventListener("mouseup", (event) => {
-        const input = event.target.closest?.(ITEM_PERCENT_INPUT_SELECTOR);
-        if (!input || input.dataset.percentJustFocused !== "1") return;
-        event.preventDefault();
-        placePercentCaretBeforeComma(input);
-      });
-
-      document.addEventListener("focusout", (event) => {
-        const input = event.target.closest?.(ITEM_PERCENT_INPUT_SELECTOR);
-        if (input) formatInputPersen(input);
-      });
-
-      document.addEventListener("keydown", (event) => {
-        const input = event.target.closest?.(ITEM_PERCENT_INPUT_SELECTOR);
-        if (!input) return;
-
-        if (
-          event.key === "," ||
-          event.key === "." ||
-          event.key === "Decimal" ||
-          event.code === "NumpadDecimal"
-        ) {
-          event.preventDefault();
-          formatInputPersen(input);
-          const commaIndex = input.value.indexOf(",");
-          try {
-            input.setSelectionRange(commaIndex + 1, commaIndex + 1);
-          } catch (_) {}
-          return;
-        }
-
-        if (event.key === "-") {
-          event.preventDefault();
-          input.value = input.value.startsWith("-")
-            ? input.value.slice(1)
-            : `-${input.value}`;
-          placePercentCaretBeforeComma(input);
-          input.dispatchEvent(new Event("input", { bubbles: true }));
-          return;
-        }
-
-        if (input.selectionStart !== input.selectionEnd) return;
-        const commaIndex = input.value.indexOf(",");
-        const caret = input.selectionStart ?? 0;
-        const deletesSeparator =
-          (event.key === "Delete" && caret === commaIndex) ||
-          (event.key === "Backspace" && caret === commaIndex + 1);
-        if (deletesSeparator) event.preventDefault();
-      });
 
       let barcodeBuffer = "";
       let lastKeyTime = Date.now();
@@ -600,7 +448,7 @@
         ppnGroup.style.display = "";
 
         // Default tarif bila kosong: ikut supplier terpilih → tarif toko → fallback 11.
-        if (!(parseFloat(ppnInput.value) > 0)) {
+        if (!(parseDesimal(ppnInput) > 0)) {
           const contextVal = document.getElementById("fSupplierContext")?.value;
           let targetPpn = PKP_ITEM.tarif > 0 ? PKP_ITEM.tarif : 11;
           if (contextVal && contextVal !== "") {
@@ -616,7 +464,7 @@
         // Konversi angka Harga Modal saat ganti mode agar NILAI EKONOMIS (total bayar ke
         // supplier) TETAP. Konvensi standar — sinkron dengan grid pembelian (components.js):
         //   included = angka SUDAH termasuk PPN (gross) · excluded = angka BELUM termasuk (net).
-        const ppnPercent = parseFloat(ppnInput.value) || 0;
+        const ppnPercent = parseDesimal(ppnInput);
         let hBeli = toAngka(hBeliEl.value);
         if (lastPpnStatus === "included" && currentPpnStatus === "excluded") {
           // gross → net: kupas PPN dari dalam (angka TURUN)
@@ -956,7 +804,7 @@
           box.style.display = "none"; // Accounting non-PKP: belum ada PPN Masukan/Keluaran
           return;
         }
-        const t = parseFloat(document.getElementById("fPpnPercent")?.value) || 0;
+        const t = parseDesimal(document.getElementById("fPpnPercent"));
         const mode = document.getElementById("fPpn")?.value || "included";
         const angkaBeli = toAngka(document.getElementById("fHBeli")?.value) || 0;
         const labelJual = toAngka(document.getElementById("fHJual")?.value) || 0;
@@ -1043,17 +891,234 @@
       let selectedSups = new Map();
       let supSearchTimeout;
       let cariSupTimeout;
+      const SUPPLIER_CONTEXT_GENERAL_LABEL =
+        "-- Harga Umum (Default Semua Supplier) --";
+      let supplierContextOptions = [];
+      let supplierContextHighlightedIndex = 0;
 
       async function loadSuppliers() {
         try {
           const res = await api("GET", "/suppliers/?limit=500");
           allSups = Array.isArray(res) ? res : res.data || [];
+          if (document.getElementById("fSupplierContext"))
+            updateSupplierContextDropdown();
         } catch (e) {
           console.error("Gagal load suppliers:", e);
         }
       }
 
+      function getSupplierContextCandidates() {
+        const suppliers =
+          editItemId === null ? allSups : Array.from(selectedSups.values());
+        return [
+          {
+            value: "",
+            name: SUPPLIER_CONTEXT_GENERAL_LABEL,
+            code: "",
+            searchText: "harga umum default semua supplier umum",
+          },
+          ...suppliers.map((supplier) => ({
+            value: String(supplier.id),
+            name: supplier.name || "-",
+            code: supplier.code || "",
+            searchText: `${supplier.name || ""} ${supplier.code || ""}`,
+          })),
+        ];
+      }
+
+      function syncSupplierContextCombobox() {
+        const select = document.getElementById("fSupplierContext");
+        const input = document.getElementById("fSupplierContextSearch");
+        if (!select || !input) return;
+
+        const selectedValue = String(select.value || "");
+        const selectedSupplier =
+          allSups.find((supplier) => String(supplier.id) === selectedValue) ||
+          selectedSups.get(Number(selectedValue));
+        input.value = selectedValue
+          ? selectedSupplier?.name ||
+            select.selectedOptions[0]?.textContent?.trim() ||
+            ""
+          : SUPPLIER_CONTEXT_GENERAL_LABEL;
+        input.dataset.selectedValue = selectedValue;
+      }
+
+      function closeSupplierContextDropdown(restoreSelection = true) {
+        const input = document.getElementById("fSupplierContextSearch");
+        const dropdown = document.getElementById("supplierContextDropdown");
+        if (!input || !dropdown) return;
+        dropdown.classList.remove("show");
+        input.setAttribute("aria-expanded", "false");
+        input.removeAttribute("aria-activedescendant");
+        supplierContextOptions = [];
+        supplierContextHighlightedIndex = 0;
+        if (restoreSelection) syncSupplierContextCombobox();
+      }
+
+      function updateSupplierContextHighlight(nextIndex) {
+        const input = document.getElementById("fSupplierContextSearch");
+        const dropdown = document.getElementById("supplierContextDropdown");
+        const optionElements = Array.from(
+          dropdown?.querySelectorAll(".supplier-context-option") || [],
+        );
+        if (!input || optionElements.length === 0) {
+          input?.removeAttribute("aria-activedescendant");
+          return;
+        }
+
+        supplierContextHighlightedIndex =
+          (nextIndex + optionElements.length) % optionElements.length;
+        optionElements.forEach((option, index) => {
+          const highlighted = index === supplierContextHighlightedIndex;
+          option.classList.toggle("highlighted", highlighted);
+          option.setAttribute("aria-selected", String(highlighted));
+        });
+        const activeOption = optionElements[supplierContextHighlightedIndex];
+        input.setAttribute("aria-activedescendant", activeOption.id);
+        activeOption.scrollIntoView({ block: "nearest" });
+      }
+
+      function renderSupplierContextDropdown(
+        searchText = "",
+        resetHighlight = true,
+      ) {
+        const input = document.getElementById("fSupplierContextSearch");
+        const dropdown = document.getElementById("supplierContextDropdown");
+        if (!input || !dropdown) return;
+
+        const search = String(searchText || "").toLowerCase().trim();
+        const matches = getSupplierContextCandidates().filter((option) =>
+          option.searchText.toLowerCase().includes(search),
+        );
+        supplierContextOptions = matches.slice(0, 50);
+        if (resetHighlight) supplierContextHighlightedIndex = 0;
+        dropdown.replaceChildren();
+
+        if (supplierContextOptions.length === 0) {
+          const empty = document.createElement("div");
+          empty.className = "supplier-context-empty";
+          empty.textContent = "Supplier tidak ditemukan";
+          dropdown.appendChild(empty);
+        } else {
+          supplierContextOptions.forEach((option, index) => {
+            const optionElement = document.createElement("div");
+            optionElement.id = `supplier-context-option-${option.value || "general"}`;
+            optionElement.className = "supplier-context-option";
+            optionElement.setAttribute("role", "option");
+            optionElement.dataset.value = option.value;
+
+            const name = document.createElement("span");
+            name.textContent = option.name;
+            optionElement.appendChild(name);
+            if (option.code) {
+              const code = document.createElement("small");
+              code.textContent = `[${option.code}]`;
+              optionElement.appendChild(code);
+            }
+
+            optionElement.addEventListener("mousedown", (event) =>
+              event.preventDefault(),
+            );
+            optionElement.addEventListener("click", () =>
+              chooseSupplierContext(option.value),
+            );
+            dropdown.appendChild(optionElement);
+          });
+
+          if (matches.length > supplierContextOptions.length) {
+            const hint = document.createElement("div");
+            hint.className = "supplier-context-hint";
+            hint.textContent = `Menampilkan 50 dari ${matches.length} supplier. Lanjutkan mengetik.`;
+            dropdown.appendChild(hint);
+          }
+        }
+
+        dropdown.classList.add("show");
+        input.setAttribute("aria-expanded", "true");
+        updateSupplierContextHighlight(supplierContextHighlightedIndex);
+      }
+
+      function chooseSupplierContext(value) {
+        const select = document.getElementById("fSupplierContext");
+        if (!select) return;
+        const normalizedValue = String(value || "");
+        const optionExists = Array.from(select.options).some(
+          (option) => option.value === normalizedValue,
+        );
+        if (!optionExists) return;
+
+        select.value = normalizedValue;
+        onSupplierContextChange();
+        syncSupplierContextCombobox();
+        closeSupplierContextDropdown(false);
+      }
+
+      function setupSupplierContextCombobox() {
+        const input = document.getElementById("fSupplierContextSearch");
+        const dropdown = document.getElementById("supplierContextDropdown");
+        const wrapper = input?.closest(".supplier-context-combobox");
+        if (!input || !dropdown || !wrapper) return;
+        if (input.dataset.comboboxReady === "true") return;
+        input.dataset.comboboxReady = "true";
+
+        input.addEventListener("focus", () => {
+          input.select();
+          renderSupplierContextDropdown("", true);
+        });
+        input.addEventListener("click", () => {
+          if (!dropdown.classList.contains("show")) {
+            input.select();
+            renderSupplierContextDropdown("", true);
+          }
+        });
+        input.addEventListener("input", () => {
+          renderSupplierContextDropdown(input.value, true);
+        });
+        input.addEventListener("keydown", (event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!dropdown.classList.contains("show"))
+              renderSupplierContextDropdown(input.value, true);
+            const direction = event.key === "ArrowDown" ? 1 : -1;
+            updateSupplierContextHighlight(
+              supplierContextHighlightedIndex + direction,
+            );
+            return;
+          }
+          if (event.key === "Enter" && dropdown.classList.contains("show")) {
+            event.preventDefault();
+            event.stopPropagation();
+            const selectedOption =
+              supplierContextOptions[supplierContextHighlightedIndex];
+            if (selectedOption) chooseSupplierContext(selectedOption.value);
+            return;
+          }
+          if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            closeSupplierContextDropdown(true);
+          } else if (event.key === "Tab") {
+            closeSupplierContextDropdown(true);
+          }
+        });
+        input.addEventListener("blur", () => {
+          setTimeout(() => {
+            if (!wrapper.contains(document.activeElement))
+              closeSupplierContextDropdown(true);
+          }, 0);
+        });
+        document.addEventListener("click", (event) => {
+          if (!wrapper.contains(event.target))
+            closeSupplierContextDropdown(true);
+        });
+
+        updateSupplierContextDropdown();
+        syncSupplierContextCombobox();
+      }
+
       function setupSupSearch() {
+        setupSupplierContextCombobox();
         const input = document.getElementById("supSearchInput");
         const dropdown = document.getElementById("supDropdown");
         if (!input || !dropdown) return; // popUp.html belum termuat — dipanggil ulang setelah load
@@ -1140,7 +1205,7 @@
         const currentPpnPercent =
           currentPpnType === "none"
             ? 0
-            : parseFloat(document.getElementById("fPpnPercent").value) || 0;
+            : parseDesimal(document.getElementById("fPpnPercent"));
         if (oldContext === "") {
           generalBuyPrice = currentHBeli;
           generalBarcode = finalBarcode;
@@ -1215,6 +1280,7 @@
         toggleBarcodeUI();
         calcMarginFromHJual(); // harga jual tetap (shared) -> margin menyesuaikan
         syncGroupPricesFromMain();
+        syncSupplierContextCombobox();
 
         // 4) Notifikasi status supplier yang dipilih
         if (nextSupplierId !== "") {
@@ -1250,6 +1316,7 @@
           select.value = "";
           if (currentSupplierContext !== "") onSupplierContextChange();
         }
+        syncSupplierContextCombobox();
       }
 
       function renderSelectedSups() {
@@ -1495,6 +1562,7 @@
         currentSupplierContext = "";
         renderSelectedSups();
         document.getElementById("fSupplierContext").value = "";
+        syncSupplierContextCombobox();
         document.getElementById("supSearchInput").value = "";
 
         // Pra-isi Harga Modal dari "harga pokok minimum" bila dipanggil dari alur lain
@@ -1695,7 +1763,7 @@
         const lastPpnPercent =
           lastPpnType === "none"
             ? 0
-            : parseFloat(document.getElementById("fPpnPercent").value) || 0;
+            : parseDesimal(document.getElementById("fPpnPercent"));
         if (lastSupplierId === "" || lastSupplierId === "UNSELECTED") {
           generalBuyPrice = lastBuyPrice;
           generalBarcode = lastBarcode;
@@ -2136,13 +2204,12 @@
           phone: document.querySelector("#mQuickSup #sPhone")?.value || null,
           email: document.querySelector("#mQuickSup #sEmail")?.value || null,
           address: document.querySelector("#mQuickSup #sAlamat")?.value || null,
-          PpnSupplier:
-            parseFloat(
-              document.querySelector("#mQuickSup #PpnSupplier")?.value,
-            ) || 0,
-          credit_limit:
-            parseFloat(document.querySelector("#mQuickSup #sCredit")?.value) ||
-            0,
+          PpnSupplier: parseDesimal(
+            document.querySelector("#mQuickSup #PpnSupplier"),
+          ),
+          credit_limit: parseDesimal(
+            document.querySelector("#mQuickSup #sCredit"),
+          ),
           notes: document.querySelector("#mQuickSup #sNotes")?.value || null,
           item_ids: [],
         };
@@ -2305,10 +2372,10 @@
                   `<option value="${u.id}" ${parseInt(row.child_unit_id) === u.id ? "selected" : ""}>${u.name}${u.abbreviation ? " (" + u.abbreviation + ")" : ""}</option>`,
               )
               .join("");
-            let cols = `<td style="text-align:center; color:var(--primary); font-size:10px;">${isBase ? "▶" : isDraft ? "*" : "•"}</td><td><select class="input-control" onchange="updateAdvancedRowField(${idx}, 'child_unit_id', this.value)"><option value="">-- Pilih --</option>${unitOptions}</select></td><td><input class="input-control" value="${isBase ? "Dasar" : "Konversi"}" disabled></td><td class="sep"><input type="number" step="0.0001" class="input-control" value="${row.conversion_factor || ""}" ${isBase ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'conversion_factor', this.value)" style="text-align:right;"></td><td class="sep"><input type="text" class="input-control" value="${toRibuan(row.buy_price_auto)}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'buy_price_auto', this.value)" style="text-align:right;"></td>`;
+            let cols = `<td style="text-align:center; color:var(--primary); font-size:10px;">${isBase ? "▶" : isDraft ? "*" : "•"}</td><td><select class="input-control" onchange="updateAdvancedRowField(${idx}, 'child_unit_id', this.value)"><option value="">-- Pilih --</option>${unitOptions}</select></td><td><input class="input-control" value="${isBase ? "Dasar" : "Konversi"}" disabled></td><td class="sep"><input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" class="input-control" value="${row.conversion_factor || ""}" ${isBase ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'conversion_factor', this.value)" style="text-align:right;"></td><td class="sep"><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control" value="${toRibuan(row.buy_price_auto)}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'buy_price_auto', this.value)" style="text-align:right;"></td>`;
 
             if (currentAdvancedType === "satuan") {
-              cols += `<td><input type="text" inputmode="decimal" class="input-control item-percent-input" value="${toPersen(row.margin_percent)}" oninput="formatInputPersen(this)" onchange="updateAdvancedRowField(${idx}, 'margin_percent', this.value)" style="text-align:right;"></td><td><input type="text" class="input-control" value="${toRibuan(row.sell_price)}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'sell_price', this.value, 'sell')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
+              cols += `<td><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control item-percent-input" value="${toPersen(row.margin_percent)}" oninput="formatInputPersen(this)" onchange="updateAdvancedRowField(${idx}, 'margin_percent', this.value)" style="text-align:right;"></td><td><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control" value="${toRibuan(row.sell_price)}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'sell_price', this.value, 'sell')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
             } else if (currentAdvancedType === "levelHarga") {
               allGroups.forEach((group, gIdx) => {
                 let groupPrice = row.group_prices[group.id];
@@ -2329,7 +2396,7 @@
                 const displayMargin =
                   groupPrice > 0 ? groupMargin.toFixed(2) : "";
 
-                cols += `<td><input type="text" inputmode="decimal" class="input-control item-percent-input" value="${toPersen(displayMargin)}" oninput="formatInputPersen(this)" onchange="updateAdvancedRowField(${idx}, 'group_margin', this.value, '${group.id}')" style="text-align:right;"></td><td class="sep"><input type="text" class="input-control" value="${displayPrice}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'group_price', this.value, '${group.id}')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
+                cols += `<td><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control item-percent-input" value="${toPersen(displayMargin)}" oninput="formatInputPersen(this)" onchange="updateAdvancedRowField(${idx}, 'group_margin', this.value, '${group.id}')" style="text-align:right;"></td><td class="sep"><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control" value="${displayPrice}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'group_price', this.value, '${group.id}')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
               });
             } else if (currentAdvancedType === "levelJumlah") {
               for (let i = 0; i < 4; i++) {
@@ -2361,9 +2428,9 @@
                 const sampaiVal = tier.sampai_qty || "";
 
                 cols += `<td style="text-align:center; font-weight:600; color:var(--text-muted); font-size:12px; border-left:1px solid var(--border-color)">${dariQty}</td>
-                         <td><input type="text" inputmode="numeric" class="input-control" value="${sampaiVal ? toDesimal(sampaiVal) : ""}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'tier_sampai', this.value, ${i})" style="text-align:right;" placeholder="∞"></td>
-                         <td><input type="text" inputmode="decimal" class="input-control item-percent-input" value="${toPersen(marginVal)}" oninput="formatInputPersen(this)" onchange="updateAdvancedRowField(${idx}, 'tier_margin', this.value, ${i})" style="text-align:right;" placeholder="% Mg"></td>
-                         <td class="${i < 3 ? "sep" : ""}"><input type="text" class="input-control" value="${priceVal}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'tier_price', this.value, ${i})" style="text-align:right; font-weight:700; color:var(--primary)" placeholder="Harga"></td>`;
+                         <td><input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0" class="input-control" value="${sampaiVal ? toDesimal(sampaiVal, { maximumFractionDigits: 4 }) : ""}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'tier_sampai', this.value, ${i})" style="text-align:right;" placeholder="∞"></td>
+                         <td><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control item-percent-input" value="${toPersen(marginVal)}" oninput="formatInputPersen(this)" onchange="updateAdvancedRowField(${idx}, 'tier_margin', this.value, ${i})" style="text-align:right;" placeholder="% Mg"></td>
+                         <td class="${i < 3 ? "sep" : ""}"><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control" value="${priceVal}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'tier_price', this.value, ${i})" style="text-align:right; font-weight:700; color:var(--primary)" placeholder="Harga"></td>`;
               }
             }
             return `<tr class="${isBase ? "base-row" : ""} ${isDraft ? "empty-row" : ""}"> ${cols} </tr>`;
@@ -2433,7 +2500,9 @@
             row.child_name = `${document.getElementById("fNama")?.value || "Barang"} ${unit.abbreviation || unit.name}`;
           recalcAdvancedRow(idx);
         } else if (field === "conversion_factor") {
-          row.conversion_factor = parseFloat(val) || 0;
+          row.conversion_factor = parseDesimal(val, {
+            maximumFractionDigits: 4,
+          });
           recalcAdvancedRow(idx);
         } else if (field === "buy_price_auto") {
           row.buy_price_auto = toAngka(val);
@@ -2521,7 +2590,7 @@
           }
         } else if (field === "tier_sampai") {
           const tierIdx = extra;
-          let sampaiVal = parseFloat(val) || 0;
+          let sampaiVal = parseDesimal(val, { maximumFractionDigits: 4 });
 
           // Cari Dari Qty untuk tier ini
           let dariQty = 1;
@@ -2750,10 +2819,10 @@
         return `<tr class="${isEmpty ? "empty-row" : ""}">
                     <td style="text-align:center;color:var(--text-muted);font-size:14px;">${isEmpty ? "*" : "▶"}</td>
                     <td><select class="input-control group-select" data-group-id="${gd ? gd.group_id : ""}" onchange="handlePotonganRowChange(this)">${potonganGroupOptions(gd ? gd.group_id : "")}</select></td>
-                    <td class="sep"><input type="text" inputmode="decimal" placeholder="0,00" class="input-control item-percent-input" style="text-align:right" value="${toPersen(v("disc1"))}" oninput="formatInputPersen(this); handlePotonganRowChange(this)"></td>
-                    <td><input type="text" inputmode="decimal" placeholder="0,00" class="input-control item-percent-input" style="text-align:right" value="${toPersen(v("disc2"))}" oninput="formatInputPersen(this); handlePotonganRowChange(this)"></td>
-                    <td><input type="text" inputmode="decimal" placeholder="0,00" class="input-control item-percent-input" style="text-align:right" value="${toPersen(v("disc3"))}" oninput="formatInputPersen(this); handlePotonganRowChange(this)"></td>
-                    <td><input type="text" inputmode="decimal" placeholder="0,00" class="input-control item-percent-input" style="text-align:right" value="${toPersen(v("disc4"))}" oninput="formatInputPersen(this); handlePotonganRowChange(this)"></td>
+                    <td class="sep"><input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" placeholder="0,00" class="input-control item-percent-input" style="text-align:right" value="${toPersen(v("disc1"))}" oninput="formatInputPersen(this); handlePotonganRowChange(this)"></td>
+                    <td><input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" placeholder="0,00" class="input-control item-percent-input" style="text-align:right" value="${toPersen(v("disc2"))}" oninput="formatInputPersen(this); handlePotonganRowChange(this)"></td>
+                    <td><input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" placeholder="0,00" class="input-control item-percent-input" style="text-align:right" value="${toPersen(v("disc3"))}" oninput="formatInputPersen(this); handlePotonganRowChange(this)"></td>
+                    <td><input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" placeholder="0,00" class="input-control item-percent-input" style="text-align:right" value="${toPersen(v("disc4"))}" oninput="formatInputPersen(this); handlePotonganRowChange(this)"></td>
                   </tr>`;
       }
 

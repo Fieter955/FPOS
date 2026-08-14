@@ -20,6 +20,15 @@
       -webkit-tap-highlight-color: transparent;
     }
 
+    #rcptBox h2,
+    #rcptBox p {
+      color: #222 !important;
+    }
+
+    #rcptBox p b {
+      color: #111 !important;
+    }
+
     body {
       overflow: hidden;
     }
@@ -636,7 +645,7 @@
       </h3>
       <label style="color: var(--text-muted)">Masukkan Jumlah (Qty):</label>
 
-      <input type="number" id="qtyInp" class="input-control kb-focus" value="1" min="1" style="
+      <input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" id="qtyInp" class="input-control kb-focus" value="1" style="
             font-size: 2rem;
             font-weight: 900;
             text-align: center;
@@ -736,7 +745,7 @@
       </div>
 
       <label style="color: var(--text-muted); font-size: 0.8125rem">Uang Diterima dari Pelanggan:</label>
-      <input type="number" id="payInpModal" class="input-control" value="0" style="
+      <input type="text" inputmode="decimal" data-input-desimal data-min="0" id="payInpModal" class="input-control" value="0" style="
             font-size: 1.5rem;
             font-weight: bold;
             text-align: right;
@@ -1459,7 +1468,7 @@
     }
 
     function confirmQty() {
-      const qty = parseFloat(document.getElementById("qtyInp").value) || 1;
+      const qty = parseDesimal(document.getElementById("qtyInp")) || 1;
       const item = allItems.find((i) => i.id === pendingItemId);
       if (!item) return;
 
@@ -1522,7 +1531,7 @@
       if (cart.length === 0) return showToast("Keranjang kosong!", "warning");
       const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
       document.getElementById("payTotalDisplay").textContent = fmtRp(total);
-      document.getElementById("payInpModal").value = total;
+      document.getElementById("payInpModal").value = toDesimal(total);
       document.getElementById("modalPay").style.display = "flex";
       activeModal = "pay";
       payModalIdx = 1;
@@ -1716,9 +1725,12 @@
     // =======================================================================
     async function prosesBayar() {
       const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
-      const paid = parseFloat(document.getElementById("paidInp").value) || 0;
-      if (payMethod === "cash" && paid < total)
+      const tendered = parseDesimal(document.getElementById("paidInp").value);
+      if (payMethod === "cash" && tendered < total)
         return showToast("Uang kurang!", "error");
+      if (payMethod !== "cash" && tendered > total + 0.01)
+        return showToast("Pembayaran non-tunai tidak boleh melebihi tagihan", "error");
+      const paid = payMethod === "cash" ? total : tendered;
       try {
         if (typeof showLoading === "function") showLoading("Memproses...");
         const sale = await api("POST", "/sales/", {
@@ -1730,6 +1742,7 @@
           tax_percent: PKP.is_pkp && PKP.tarif > 0 ? PKP.tarif : 0,
           is_tax_included: true,
           paid: paid,
+          cash_received: payMethod === "cash" ? tendered : null,
           payment_method: payMethod,
           items: cart.map((c) => ({
             item_id: c.id,
@@ -1757,7 +1770,6 @@
       document.getElementById("rcptModal").style.display = "flex";
       activeModal = "rcpt";
       rcptIdx = 2;
-      updateRcptUI();
 
       // Panggil API Print secara otomatis jika diperlukan, atau isi Box struk
       const box = document.getElementById("rcptBox");
@@ -1770,6 +1782,12 @@
             <button id="btnRcptSelesai" class="rcpt-btn" style="flex:1; background:#10b981; color:white; border:none;" onclick="closeModals()">✓ Selesai</button>
           </div>
         `;
+      updateRcptUI();
+    }
+
+    function changeRcptIdx(dir) {
+      rcptIdx = (rcptIdx + dir + 3) % 3;
+      updateRcptUI();
     }
 
     function updateRcptUI() {
@@ -1779,7 +1797,10 @@
         document.getElementById("btnRcptSelesai"),
       ];
       btns.forEach((b, i) => {
-        if (b) b.classList.toggle("kb-focus", i === rcptIdx);
+        if (!b) return;
+        const isSelected = i === rcptIdx;
+        b.classList.toggle("kb-focus", isSelected);
+        if (isSelected) b.focus({ preventScroll: true });
       });
     }
 

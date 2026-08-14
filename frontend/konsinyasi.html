@@ -451,9 +451,9 @@
           `
           <div style="display:grid;grid-template-columns:3fr 1fr 2fr 2fr 36px;gap:8px;margin-bottom:8px;align-items:center" id="ir${idx}">
             <select class="input-control" onchange="autoPrice('ir${idx}',this,'in')">${itemOpts()}</select>
-            <input type="number" value="1" class="input-control" oninput="calcIn()">
-            <input type="number" value="0" class="input-control ip-buy" oninput="calcIn()">
-            <input type="number" value="0" class="input-control ip-sell">
+            <input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" value="1" class="input-control" oninput="calcIn()">
+            <input type="text" inputmode="decimal" data-input-desimal data-min="0" value="0" class="input-control ip-buy" oninput="calcIn()">
+            <input type="text" inputmode="decimal" data-input-desimal data-min="0" value="0" class="input-control ip-sell">
             <button onclick="document.getElementById('ir${idx}').remove();calcIn()" class="bsm btn-batal">✕</button>
           </div>`,
         );
@@ -466,9 +466,9 @@
           `
           <div style="display:grid;grid-template-columns:3fr 1fr 2fr 2fr 36px;gap:8px;margin-bottom:8px;align-items:center" id="or${idx}">
             <select class="input-control" onchange="autoPrice('or${idx}',this,'out')">${itemOpts()}</select>
-            <input type="number" value="1" class="input-control" oninput="calcOut()">
-            <input type="number" value="0" class="input-control op-buy" oninput="calcOut()">
-            <input type="number" value="0" class="input-control op-sell">
+            <input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" value="1" class="input-control" oninput="calcOut()">
+            <input type="text" inputmode="decimal" data-input-desimal data-min="0" value="0" class="input-control op-buy" oninput="calcOut()">
+            <input type="text" inputmode="decimal" data-input-desimal data-min="0" value="0" class="input-control op-sell">
             <button onclick="document.getElementById('or${idx}').remove();calcOut()" class="bsm btn-batal">✕</button>
           </div>`,
         );
@@ -488,16 +488,16 @@
       function calcIn() {
         let s = 0;
         document.querySelectorAll("#inRows > div").forEach((r) => {
-          const i = r.querySelectorAll("input[type=number]");
-          s += (parseFloat(i[0].value) || 0) * (parseFloat(i[1].value) || 0);
+          const i = r.querySelectorAll("input[data-input-desimal]");
+          s += parseDesimal(i[0]) * parseDesimal(i[1]);
         });
         document.getElementById("inTotal").textContent = fmtRp(s);
       }
       function calcOut() {
         let s = 0;
         document.querySelectorAll("#outRows > div").forEach((r) => {
-          const i = r.querySelectorAll("input[type=number]");
-          s += (parseFloat(i[0].value) || 0) * (parseFloat(i[1].value) || 0);
+          const i = r.querySelectorAll("input[data-input-desimal]");
+          s += parseDesimal(i[0]) * parseDesimal(i[1]);
         });
         document.getElementById("outTotal").textContent = fmtRp(s);
       }
@@ -510,13 +510,13 @@
         const items = [];
         document.querySelectorAll("#inRows > div").forEach((r) => {
           const sel = r.querySelector("select");
-          const i = r.querySelectorAll("input[type=number]");
+          const i = r.querySelectorAll("input[data-input-desimal]");
           if (sel.value)
             items.push({
               item_id: parseInt(sel.value),
-              qty: parseFloat(i[0].value),
-              consign_price: parseFloat(i[1].value),
-              sell_price: parseFloat(i[2].value),
+              qty: parseDesimal(i[0]),
+              consign_price: parseDesimal(i[1]),
+              sell_price: parseDesimal(i[2]),
             });
         });
         try {
@@ -544,12 +544,12 @@
         const items = [];
         document.querySelectorAll("#outRows > div").forEach((r) => {
           const sel = r.querySelector("select");
-          const i = r.querySelectorAll("input[type=number]");
+          const i = r.querySelectorAll("input[data-input-desimal]");
           if (sel.value)
             items.push({
               item_id: parseInt(sel.value),
-              qty: parseFloat(i[0].value),
-              sell_price: parseFloat(i[2].value),
+              qty: parseDesimal(i[0]),
+              sell_price: parseDesimal(i[2]),
             });
         });
         try {
@@ -628,7 +628,7 @@
             "beforeend",
             `<div class="tagih-item-row" data-id="${it.item_id}" data-price="${price}">
             <div><b>${it.item_name}</b></div><div class="font-mono">${sisa}</div>
-            <input type="number" class="input-control val-qty" value="0" max="${sisa}" oninput="calcTagihFinal()">
+            <input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0" data-max="${sisa}" class="input-control val-qty" value="0" oninput="calcTagihFinal()">
             <div class="font-mono val-subtotal">Rp 0</div></div>`,
           );
         });
@@ -641,8 +641,8 @@
         currentGrandTotal = 0;
         document.querySelectorAll(".tagih-item-row").forEach((row) => {
           const sub =
-            (parseFloat(row.querySelector(".val-qty").value) || 0) *
-            parseFloat(row.dataset.price);
+            parseDesimal(row.querySelector(".val-qty")) *
+            Number(row.dataset.price || 0);
           row.querySelector(".val-subtotal").textContent = fmtRp(sub);
           currentGrandTotal += sub;
         });
@@ -653,7 +653,7 @@
       async function doProsesTagihan() {
         const items = [];
         document.querySelectorAll(".tagih-item-row").forEach((row) => {
-          const qty = parseFloat(row.querySelector(".val-qty").value) || 0;
+          const qty = parseDesimal(row.querySelector(".val-qty"));
           if (qty > 0) items.push({ item_id: parseInt(row.dataset.id), qty });
         });
         if (!items.length) return showToast("Isi Qty terjual!");

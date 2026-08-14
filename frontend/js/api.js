@@ -1,5 +1,7 @@
 const API_BASE = "/api";
 const SESSION_EXPIRED_NOTICE_KEY = "fpos_session_expired_notice";
+let fposUnsavedChangesGuard = null;
+let fposSuppressNextUnloadWarning = false;
 
 const FPOS_WORKSPACE_EMBEDDED = (() => {
   if (window.self === window.top) return false;
@@ -110,38 +112,104 @@ function clearToken() {
   sessionStorage.removeItem("fpos_effective_permissions");
 }
 
+function registerUnsavedChangesGuard(guard) {
+  fposUnsavedChangesGuard = guard || null;
+  notifyUnsavedChangesChanged();
+  return () => {
+    if (fposUnsavedChangesGuard === guard) {
+      fposUnsavedChangesGuard = null;
+      notifyUnsavedChangesChanged();
+    }
+  };
+}
+
+function hasUnsavedChanges() {
+  try {
+    return Boolean(fposUnsavedChangesGuard?.isDirty?.());
+  } catch (error) {
+    console.error("Gagal memeriksa perubahan yang belum disimpan", error);
+    return true;
+  }
+}
+
+function notifyUnsavedChangesChanged() {
+  if (!FPOS_WORKSPACE_EMBEDDED) return;
+  window.parent.postMessage(
+    {
+      type: "fpos-unsaved-state",
+      dirty: hasUnsavedChanges(),
+      label: fposUnsavedChangesGuard?.label || document.title,
+    },
+    location.origin,
+  );
+}
+
+async function saveUnsavedChanges() {
+  if (!hasUnsavedChanges()) return true;
+  if (typeof fposUnsavedChangesGuard?.save !== "function") return false;
+  try {
+    const saved = (await fposUnsavedChangesGuard.save()) !== false;
+    if (saved) notifyUnsavedChangesChanged();
+    return saved && !hasUnsavedChanges();
+  } catch (error) {
+    console.error("Gagal menyimpan perubahan sebelum keluar", error);
+    if (typeof showToast === "function") {
+      showToast(error?.message || "Gagal menyimpan perubahan", "error");
+    }
+    return false;
+  }
+}
+
+async function discardUnsavedChanges() {
+  fposSuppressNextUnloadWarning = true;
+  try {
+    await fposUnsavedChangesGuard?.discard?.();
+  } finally {
+    notifyUnsavedChangesChanged();
+    setTimeout(() => {
+      fposSuppressNextUnloadWarning = false;
+    }, 1500);
+  }
+}
+
+async function resolveUnsavedChangesBeforeExit(message, options = {}) {
+  if (!hasUnsavedChanges()) return true;
+  const action = await showUnsavedChangesDialog(message, options);
+  if (action === "cancel") return false;
+  if (action === "discard") {
+    await discardUnsavedChanges();
+    return true;
+  }
+  return saveUnsavedChanges();
+}
+
 async function logoutCurrentUser() {
-  const confirmed =
-    typeof showConfirm === "function"
-      ? await showConfirm("Yakin ingin keluar dari akun saat ini?")
-      : window.confirm("Yakin ingin keluar dari akun saat ini?");
+  if (FPOS_WORKSPACE_EMBEDDED) {
+    window.parent.postMessage({ type: "fpos-request-logout" }, location.origin);
+    return;
+  }
+
+  let confirmed;
+  if (typeof window.fposPrepareForLogout === "function") {
+    confirmed = await window.fposPrepareForLogout();
+  } else if (hasUnsavedChanges()) {
+    confirmed = await resolveUnsavedChangesBeforeExit(
+      "Perubahan belum disimpan. Apa yang ingin dilakukan sebelum keluar dari akun?",
+      {
+        saveText: "Simpan & Keluar",
+        discardText: "Keluar Tanpa Simpan",
+      },
+    );
+  } else {
+    confirmed =
+      typeof showConfirm === "function"
+        ? await showConfirm("Yakin ingin keluar dari akun saat ini?")
+        : window.confirm("Yakin ingin keluar dari akun saat ini?");
+  }
   if (!confirmed) return;
 
   clearToken();
   redirectToLogin();
-}
-
-function renderGlobalLogoutButton() {
-  const path = location.pathname.replace(/\.html$/, "").replace(/\/$/, "") || "/";
-  const loginPages = new Set(["/", "/index", "/login"]);
-  if (
-    !getToken() ||
-    loginPages.has(path) ||
-    document.getElementById("globalLogoutButton")
-  ) {
-    return;
-  }
-
-  const button = document.createElement("button");
-  button.id = "globalLogoutButton";
-  button.type = "button";
-  button.className = "global-logout-button";
-  button.title = "Keluar dari akun";
-  button.setAttribute("aria-label", "Keluar dari akun");
-  button.innerHTML =
-    '<span aria-hidden="true">🚪</span><span class="global-logout-label">Keluar</span>';
-  button.addEventListener("click", logoutCurrentUser);
-  document.body.appendChild(button);
 }
 
 function getUser() {
@@ -414,8 +482,6 @@ const PAGE_PERMISSIONS = {
 
 document.addEventListener("DOMContentLoaded", async () => {
   if (!getToken()) return;
-  // Logout adalah kontrol sesi dasar untuk semua akun, bukan hak akses admin.
-  if (!FPOS_WORKSPACE_EMBEDDED) renderGlobalLogoutButton();
   try {
     await loadMyPermissions();
     applyPermissionVisibility();
@@ -609,60 +675,438 @@ function showConfirm(msg, options = {}) {
   });
 }
 
+function showUnsavedChangesDialog(msg, options = {}) {
+  return new Promise((resolve) => {
+    const {
+      saveText = "Simpan & Keluar",
+      discardText = "Keluar Tanpa Simpan",
+      cancelText = "Batal",
+    } = options;
+    const overlay = document.createElement("div");
+    overlay.style.cssText =
+      "position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px;";
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "alertdialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.style.cssText =
+      "background:var(--card-bg,#1e293b);border-radius:20px;padding:28px;max-width:480px;width:100%;box-shadow:0 16px 48px rgba(0,0,0,.5);border:1px solid var(--border-color,#334155);";
+
+    const text = document.createElement("p");
+    text.style.cssText =
+      "font-size:16px;color:var(--text-main,#f1f5f9);margin:0 0 24px;line-height:1.6;text-align:center;white-space:pre-line;";
+    text.textContent = msg;
+
+    const actions = document.createElement("div");
+    actions.style.cssText =
+      "display:grid;grid-template-columns:1fr;gap:10px;";
+    const makeButton = (label, styles, action) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = label;
+      button.style.cssText =
+        `padding:13px;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;${styles}`;
+      button.onclick = () => finish(action);
+      return button;
+    };
+    const saveButton = makeButton(
+      saveText,
+      "border:none;background:var(--primary,#2563eb);color:#fff;",
+      "save",
+    );
+    const discardButton = makeButton(
+      discardText,
+      "border:none;background:#ef4444;color:#fff;",
+      "discard",
+    );
+    const cancelButton = makeButton(
+      cancelText,
+      "border:2px solid var(--border-color,#475569);background:transparent;color:var(--text-main,#f1f5f9);",
+      "cancel",
+    );
+    actions.append(saveButton, discardButton, cancelButton);
+    dialog.append(text, actions);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    let finished = false;
+    const finish = (action) => {
+      if (finished) return;
+      finished = true;
+      document.removeEventListener("keydown", onKeyDown, true);
+      overlay.remove();
+      resolve(action);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        finish("cancel");
+      }
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) finish("cancel");
+    });
+    setTimeout(() => cancelButton.focus(), 0);
+  });
+}
+
+window.addEventListener("beforeunload", (event) => {
+  if (fposSuppressNextUnloadWarning || !hasUnsavedChanges()) return;
+  event.preventDefault();
+  event.returnValue = "";
+});
+
+window.addEventListener("message", async (event) => {
+  if (
+    !FPOS_WORKSPACE_EMBEDDED ||
+    event.origin !== location.origin ||
+    event.source !== window.parent
+  ) {
+    return;
+  }
+  const message = event.data || {};
+  if (!message.type?.startsWith("fpos-unsaved-")) return;
+
+  const response = {
+    type: "fpos-unsaved-response",
+    requestId: message.requestId,
+    action: message.type,
+  };
+  if (message.type === "fpos-unsaved-status-request") {
+    response.dirty = hasUnsavedChanges();
+    response.label = fposUnsavedChangesGuard?.label || document.title;
+    response.success = true;
+  } else if (message.type === "fpos-unsaved-save-request") {
+    response.success = await saveUnsavedChanges();
+    response.dirty = hasUnsavedChanges();
+  } else if (message.type === "fpos-unsaved-discard-request") {
+    await discardUnsavedChanges();
+    response.success = true;
+    response.dirty = false;
+  } else {
+    return;
+  }
+  window.parent.postMessage(response, location.origin);
+});
+
 function fmtRp(n) {
   if (n == null) return "Rp 0";
   return "Rp " + Math.round(n).toLocaleString("id-ID");
 }
 
-function formatDesimal(el) {
-  if (!el) return;
-  const start = el.selectionStart;
-  const oldLen = el.value.length;
+const PEMILIH_INPUT_DESIMAL = "input[data-input-desimal]";
 
-  let parts = el.value.split(',');
-  let integerPart = parts[0].replace(/[^0-9-]/g, "");
-  let angka = parseInt(integerPart) || 0;
-  
-  // Format bagian bulat dengan pemisah ribuan
-  let formattedInteger = integerPart ? new Intl.NumberFormat("id-ID").format(angka) : "0";
-  
-  // Format bagian desimal (jika ada koma)
-  if (parts.length > 1) {
-    let decimalPart = parts[1].replace(/[^0-9]/g, "").substring(0, 2);
-    el.value = formattedInteger + "," + decimalPart;
+function batasiBilangan(value, min, max) {
+  let hasil = value;
+  if (Number.isFinite(min) && hasil < min) hasil = min;
+  if (Number.isFinite(max) && hasil > max) hasil = max;
+  return hasil;
+}
+
+function opsiInputDesimal(target, overrides = {}) {
+  const dataset = target?.dataset || {};
+  const minimum = Number.parseInt(
+    overrides.minimumFractionDigits ??
+      overrides.minimum ??
+      overrides.desimalMin ??
+      dataset.desimalMin ??
+      2,
+    10,
+  );
+  const maksimum = Number.parseInt(
+    overrides.maximumFractionDigits ??
+      overrides.maksimum ??
+      overrides.desimalMaks ??
+      dataset.desimalMaks ??
+      Math.max(minimum, 2),
+    10,
+  );
+  const minRaw = overrides.min ?? dataset.min;
+  const maxRaw = overrides.max ?? dataset.max;
+  return {
+    minimum: Math.max(0, Number.isFinite(minimum) ? minimum : 2),
+    maksimum: Math.max(
+      Math.max(0, Number.isFinite(minimum) ? minimum : 2),
+      Number.isFinite(maksimum) ? maksimum : 2,
+    ),
+    min: minRaw === "" || minRaw == null ? NaN : Number(minRaw),
+    max: maxRaw === "" || maxRaw == null ? NaN : Number(maxRaw),
+    bolehNegatif:
+      overrides.bolehNegatif === true ||
+      dataset.bolehNegatif === "true" ||
+      (minRaw != null && Number(minRaw) < 0),
+  };
+}
+
+function tentukanPemisahDesimal(raw, maksimumDesimal = 2) {
+  const komaTerakhir = raw.lastIndexOf(",");
+  const titikTerakhir = raw.lastIndexOf(".");
+  if (komaTerakhir >= 0 && titikTerakhir >= 0) {
+    return Math.max(komaTerakhir, titikTerakhir);
+  }
+
+  const pemisah = komaTerakhir >= 0 ? "," : titikTerakhir >= 0 ? "." : "";
+  if (!pemisah) return -1;
+  const posisi = raw.lastIndexOf(pemisah);
+  const jumlahPemisah = raw.split(pemisah).length - 1;
+  const digitSesudah = raw.slice(posisi + 1).replace(/\D/g, "");
+  const digitSebelum = raw.slice(0, posisi).replace(/\D/g, "") || "0";
+
+  // Format Indonesia memakai titik untuk ribuan. Satu titik setelah angka bukan nol
+  // dengan tiga digit di belakang tetap dibaca sebagai ribuan (contoh 1.000).
+  // Bentuk 0.5/0.25 tetap dianggap desimal agar titik dan koma fleksibel.
+  if (
+    pemisah === "." &&
+    jumlahPemisah === 1 &&
+    digitSesudah.length === 3 &&
+    Number(digitSebelum) !== 0 &&
+    maksimumDesimal <= 2
+  ) {
+    return -1;
+  }
+
+  if (jumlahPemisah > 1) {
+    const semuaGrupRibuan = raw
+      .split(pemisah)
+      .slice(1)
+      .every((bagian) => bagian.replace(/\D/g, "").length === 3);
+    if (semuaGrupRibuan) return -1;
+  }
+  return posisi;
+}
+
+function uraikanDesimal(value, options = {}) {
+  const opts = opsiInputDesimal(null, options);
+  if (typeof value === "number") {
+    const aman = Number.isFinite(value) ? value : 0;
+    const mutlak = Math.abs(aman).toFixed(opts.maksimum);
+    const [bulat, desimal = ""] = mutlak.split(".");
+    return {
+      negatif: aman < 0 && opts.bolehNegatif,
+      bulat: bulat.replace(/^0+(?=\d)/, "") || "0",
+      desimal,
+      adaPemisah: opts.minimum > 0,
+    };
+  }
+
+  const raw = String(value ?? "").trim();
+  const posisiPemisah = tentukanPemisahDesimal(raw, opts.maksimum);
+  const bagianBulat =
+    posisiPemisah >= 0 ? raw.slice(0, posisiPemisah) : raw;
+  const bagianDesimal =
+    posisiPemisah >= 0 ? raw.slice(posisiPemisah + 1) : "";
+  return {
+    negatif: opts.bolehNegatif && /^\s*-/.test(raw),
+    bulat: bagianBulat.replace(/\D/g, "").replace(/^0+(?=\d)/, "") || "0",
+    desimal: bagianDesimal.replace(/\D/g, "").slice(0, opts.maksimum),
+    adaPemisah: posisiPemisah >= 0,
+  };
+}
+
+function kelompokkanRibuan(digit) {
+  return (digit || "0").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+function parseDesimal(value, options = {}) {
+  if (value instanceof HTMLInputElement) {
+    options = opsiInputDesimal(value, options);
+    value = value.value;
+  }
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const opts = opsiInputDesimal(null, options);
+  const bagian = uraikanDesimal(value, opts);
+  const desimal = bagian.desimal ? `.${bagian.desimal}` : "";
+  const hasil = Number(`${bagian.negatif ? "-" : ""}${bagian.bulat}${desimal}`);
+  return Number.isFinite(hasil) ? hasil : 0;
+}
+
+function toDesimal(value, options = {}) {
+  const opts = opsiInputDesimal(null, options);
+  let angka =
+    typeof value === "number" ? value : parseDesimal(String(value ?? ""), opts);
+  if (!Number.isFinite(angka)) angka = 0;
+  angka = batasiBilangan(angka, opts.min, opts.max);
+
+  const fixed = Math.abs(angka).toFixed(opts.maksimum);
+  const [bagianBulat, desimalPenuh = ""] = fixed.split(".");
+  let desimal = desimalPenuh.replace(/0+$/, "");
+  if (desimal.length < opts.minimum) desimal = desimal.padEnd(opts.minimum, "0");
+  const tanda = angka < 0 && opts.bolehNegatif ? "-" : "";
+  return `${tanda}${kelompokkanRibuan(bagianBulat)}${desimal ? `,${desimal}` : ""}`;
+}
+
+function posisiSetelahJumlahDigit(text, jumlahDigit) {
+  if (jumlahDigit <= 0) return text.startsWith("-") ? 1 : 0;
+  let terlihat = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    if (/\d/.test(text[i])) terlihat += 1;
+    if (terlihat >= jumlahDigit) return i + 1;
+  }
+  return text.length;
+}
+
+function formatDesimal(input, options = {}) {
+  if (!input) return "0,00";
+  const opts = opsiInputDesimal(input, options);
+  const raw = String(input.value ?? "");
+  const posisiKursor = input.selectionStart ?? raw.length;
+  const akhirSeleksi = input.selectionEnd ?? posisiKursor;
+  const seluruhNilaiDipilih =
+    posisiKursor === 0 && akhirSeleksi === raw.length && raw.length > 0;
+  const posisiPemisah = tentukanPemisahDesimal(raw, opts.maksimum);
+  const kursorDiDesimal = posisiPemisah >= 0 && posisiKursor > posisiPemisah;
+  const bagian = uraikanDesimal(raw, opts);
+  const bulatTerformat = `${bagian.negatif ? "-" : ""}${kelompokkanRibuan(bagian.bulat)}`;
+  const desimalTerformat = bagian.desimal
+    .slice(0, opts.maksimum)
+    .padEnd(opts.minimum, "0");
+  const hasil = `${bulatTerformat}${desimalTerformat ? `,${desimalTerformat}` : ""}`;
+  input.value = hasil;
+
+  if (document.activeElement !== input) return hasil;
+  if (seluruhNilaiDipilih) {
+    try {
+      input.setSelectionRange(0, hasil.length);
+    } catch (_) {}
+    return hasil;
+  }
+  let posisiBaru;
+  if (kursorDiDesimal) {
+    const jumlahDesimalSebelumKursor = raw
+      .slice(posisiPemisah + 1, posisiKursor)
+      .replace(/\D/g, "").length;
+    posisiBaru =
+      bulatTerformat.length +
+      1 +
+      Math.min(jumlahDesimalSebelumKursor, desimalTerformat.length);
+  } else if (!raw.replace(/\D/g, "")) {
+    posisiBaru = bulatTerformat.length;
   } else {
-    el.value = formattedInteger;
+    const batasBulat = posisiPemisah >= 0 ? posisiPemisah : raw.length;
+    const jumlahBulatSebelumKursor = raw
+      .slice(0, Math.min(posisiKursor, batasBulat))
+      .replace(/\D/g, "").length;
+    posisiBaru = posisiSetelahJumlahDigit(
+      bulatTerformat,
+      jumlahBulatSebelumKursor,
+    );
+  }
+  try {
+    input.setSelectionRange(posisiBaru, posisiBaru);
+  } catch (_) {}
+  return hasil;
+}
+
+function validasiInputDesimal(input) {
+  const opts = opsiInputDesimal(input);
+  const sebelumDibatasi = parseDesimal(input, opts);
+  const angka = batasiBilangan(sebelumDibatasi, opts.min, opts.max);
+  input.value = toDesimal(angka, opts);
+  input.setCustomValidity("");
+  if (angka !== sebelumDibatasi) {
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  return angka;
+}
+
+function siapkanInputDesimal(input) {
+  if (!input || input.dataset.inputDesimalSiap === "1") return;
+  if (input.hasAttribute("min") && input.dataset.min == null) {
+    input.dataset.min = input.getAttribute("min");
+  }
+  if (input.hasAttribute("max") && input.dataset.max == null) {
+    input.dataset.max = input.getAttribute("max");
+  }
+  if (input.type === "number") input.type = "text";
+  input.inputMode = "decimal";
+  input.dataset.inputDesimalSiap = "1";
+  formatDesimal(input);
+}
+
+function aktifkanInputDesimal(root = document) {
+  if (root.matches?.(PEMILIH_INPUT_DESIMAL)) siapkanInputDesimal(root);
+  root.querySelectorAll?.(PEMILIH_INPUT_DESIMAL).forEach(siapkanInputDesimal);
+}
+
+document.addEventListener("focusin", (event) => {
+  const input = event.target.closest?.(PEMILIH_INPUT_DESIMAL);
+  if (!input) return;
+  siapkanInputDesimal(input);
+  formatDesimal(input);
+  if (parseDesimal(input) === 0) {
+    const posisi = Math.max(0, input.value.indexOf(","));
+    try {
+      input.setSelectionRange(posisi, posisi);
+      input.dataset.desimalBaruFokus = "1";
+      setTimeout(() => delete input.dataset.desimalBaruFokus, 0);
+    } catch (_) {}
+  }
+});
+
+document.addEventListener("mouseup", (event) => {
+  const input = event.target.closest?.(PEMILIH_INPUT_DESIMAL);
+  if (!input || input.dataset.desimalBaruFokus !== "1") return;
+  event.preventDefault();
+  const posisi = Math.max(0, input.value.indexOf(","));
+  try {
+    input.setSelectionRange(posisi, posisi);
+  } catch (_) {}
+});
+
+document.addEventListener("keydown", (event) => {
+  const input = event.target.closest?.(PEMILIH_INPUT_DESIMAL);
+  if (!input) return;
+  if (
+    event.key === "," ||
+    event.key === "." ||
+    event.key === "Decimal" ||
+    event.code === "NumpadDecimal"
+  ) {
+    event.preventDefault();
+    formatDesimal(input);
+    const posisi = input.value.indexOf(",");
+    try {
+      input.setSelectionRange(posisi + 1, posisi + 1);
+    } catch (_) {}
+    return;
   }
 
-  if (document.activeElement === el && el.value) {
-    const newLen = el.value.length;
-    let newPos = start + (newLen - oldLen);
-    if (newPos < 0) newPos = 0;
-    try { el.setSelectionRange(newPos, newPos); } catch (e) {}
+  if (input.selectionStart !== input.selectionEnd) return;
+  const posisiKoma = input.value.indexOf(",");
+  const posisiKursor = input.selectionStart ?? 0;
+  const menghapusKoma =
+    (event.key === "Delete" && posisiKursor === posisiKoma) ||
+    (event.key === "Backspace" && posisiKursor === posisiKoma + 1);
+  if (menghapusKoma) event.preventDefault();
+});
+
+document.addEventListener("input", (event) => {
+  const input = event.target.closest?.(PEMILIH_INPUT_DESIMAL);
+  if (input && !event.isComposing) formatDesimal(input);
+});
+
+document.addEventListener("focusout", (event) => {
+  const input = event.target.closest?.(PEMILIH_INPUT_DESIMAL);
+  if (input) validasiInputDesimal(input);
+});
+
+document.addEventListener("DOMContentLoaded", () => aktifkanInputDesimal());
+
+const pemantauInputDesimal = new MutationObserver((mutations) => {
+  mutations.forEach((mutation) => {
+    mutation.addedNodes.forEach((node) => {
+      if (node.nodeType === Node.ELEMENT_NODE) aktifkanInputDesimal(node);
+    });
+  });
+});
+document.addEventListener("DOMContentLoaded", () => {
+  if (document.body) {
+    pemantauInputDesimal.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
   }
-}
-
-function parseDesimal(str) {
-  if (typeof str === "number") return str;
-  if (!str) return 0;
-  let parts = str.toString().split(',');
-  let integerPart = parts[0].replace(/[^0-9-]/g, "");
-  if (!integerPart) integerPart = "0";
-  let decimalPart = parts.length > 1 ? parts[1].replace(/[^0-9]/g, "").substring(0, 2) : "00";
-  let floatStr = integerPart + "." + decimalPart;
-  return parseFloat(floatStr) || 0;
-}
-
-function toDesimal(num) {
-  if (num === null || num === undefined || num === "") return "0,00";
-  let floatNum = parseFloat(num);
-  if (isNaN(floatNum)) return "0,00";
-  
-  let parts = floatNum.toFixed(2).split('.');
-  let integerPart = parseInt(parts[0]) || 0;
-  let formattedInteger = new Intl.NumberFormat("id-ID").format(integerPart);
-  return formattedInteger + "," + parts[1];
-}
+});
 
 function fmtDate(d) {
   if (!d) return "-";
@@ -1011,7 +1455,36 @@ function bukaModalUploadBukti() {
 // ==============================================================================
 // ─── FITUR MULTI-BRANCH SWITCHER UI ───────────────────────────────────────────
 // ==============================================================================
-async function initBranchSwitcher() {
+const GLOBAL_BRANCH_SWITCHER_ID = "globalBranchSwitcher";
+const GLOBAL_BRANCH_SELECT_ID = "globalBranchSelect";
+
+async function handleGlobalBranchChange(event) {
+  const select = event.currentTarget;
+  localStorage.setItem("active_branch_id", select.value);
+
+  // Refresh data user agar branch_status terbaru ikut tersimpan sebelum reload.
+  try {
+    const updatedUser = await api("GET", "/auth/me");
+    localStorage.setItem("ipos_user", JSON.stringify(updatedUser));
+  } catch (e) {
+    console.error("Gagal sinkron status cabang:", e);
+  }
+
+  window.location.reload();
+}
+
+function renderBranchOptions(select, branches, activeId) {
+  const options = branches.map((branch) => {
+    const option = document.createElement("option");
+    option.value = String(branch.id);
+    option.textContent = `📍 ${branch.name}`;
+    option.selected = String(branch.id) === String(activeId);
+    return option;
+  });
+  select.replaceChildren(...options);
+}
+
+async function refreshBranchSwitcher({ force = false } = {}) {
   if (FPOS_WORKSPACE_EMBEDDED) return;
   const user = getUser();
   if (!user || !user.id) return; // Abaikan jika belum login
@@ -1019,7 +1492,9 @@ async function initBranchSwitcher() {
   // Jika Kasir/Staff biasa, paksa ID Cabangnya sendiri dan tampilkan badge statis
   if (!user.role.includes("admin")) {
     localStorage.setItem("active_branch_id", user.branch_id || 1);
+    if (document.getElementById(GLOBAL_BRANCH_SWITCHER_ID)) return;
     const badge = document.createElement("div");
+    badge.id = GLOBAL_BRANCH_SWITCHER_ID;
     badge.style.cssText =
       "position:fixed; bottom:20px; left:20px; z-index:9999; background:var(--card-bg, #1e293b); padding:8px 16px; border-radius:12px; border:1px solid var(--border-color); box-shadow:0 10px 25px rgba(0,0,0,0.3); color:var(--text-muted); font-size:13px; font-weight:bold;";
     badge.innerHTML = "📍 Kasir Cabang";
@@ -1030,6 +1505,8 @@ async function initBranchSwitcher() {
   // Jika Admin, load daftar cabang dan buat Dropdown
   try {
     // Cabang jarang berubah → cache per-sesi agar tiap pindah halaman tidak fetch ulang.
+    // Setelah master cabang berubah, force membuang cache sebelum mengambil data terbaru.
+    if (force) invalidateCache("/branches/");
     const branches = await cachedApi("/branches/");
     // 401/redirect atau respons tak terduga → hentikan diam-diam tanpa lempar error
     if (!Array.isArray(branches)) return;
@@ -1051,44 +1528,52 @@ async function initBranchSwitcher() {
       }
     }
 
-    const switcher = document.createElement("div");
-    switcher.style.cssText =
-      "position:fixed; bottom:20px; left:20px; z-index:9999; background:var(--card-bg, #1e293b); padding:8px 12px; border-radius:12px; border:2px solid var(--primary); box-shadow:0 10px 25px rgba(0,0,0,0.5); display:flex; align-items:center; gap:10px; transition:0.3s;";
+    let switcher = document.getElementById(GLOBAL_BRANCH_SWITCHER_ID);
+    let select = document.getElementById(GLOBAL_BRANCH_SELECT_ID);
+    if (!switcher || !select) {
+      switcher?.remove();
+      switcher = document.createElement("div");
+      switcher.id = GLOBAL_BRANCH_SWITCHER_ID;
+      switcher.style.cssText =
+        "position:fixed; bottom:20px; left:20px; z-index:9999; background:var(--card-bg, #1e293b); padding:8px 12px; border-radius:12px; border:2px solid var(--primary); box-shadow:0 10px 25px rgba(0,0,0,0.5); display:flex; align-items:center; gap:10px; transition:0.3s;";
 
-    let options = branches
-      .map(
-        (b) =>
-          `<option value="${b.id}" ${b.id == activeId ? "selected" : ""}>📍 ${b.name}</option>`,
-      )
-      .join("");
+      const label = document.createElement("span");
+      label.style.cssText =
+        "font-size:11px; color:var(--text-muted); font-weight:bold; letter-spacing:0.5px;";
+      label.textContent = "ZONA KERJA:";
 
-    switcher.innerHTML = `
-      <span style="font-size:11px; color:var(--text-muted); font-weight:bold; letter-spacing:0.5px;">ZONA KERJA:</span>
-      <select id="globalBranchSelect" style="background:transparent; color:var(--primary); font-weight:900; border:none; outline:none; cursor:pointer; font-size:14px; width:150px; text-overflow:ellipsis;">
-          ${options}
-      </select>
-    `;
-    document.body.appendChild(switcher);
+      select = document.createElement("select");
+      select.id = GLOBAL_BRANCH_SELECT_ID;
+      select.style.cssText =
+        "background:transparent; color:var(--primary); font-weight:900; border:none; outline:none; cursor:pointer; font-size:14px; width:auto; min-width:150px; max-width:min(24rem, calc(100vw - 9rem));";
+      select.addEventListener("change", handleGlobalBranchChange);
 
-    // Saat admin mengganti cabang, simpan dan refresh halaman!
-    document
-      .getElementById("globalBranchSelect")
-      .addEventListener("change", async function () {
-        localStorage.setItem("active_branch_id", this.value);
+      switcher.append(label, select);
+      document.body.appendChild(switcher);
+    }
 
-        // 🔥 REVISI: Refresh data user agar branch_status terbaru ikut tersimpan sebelum reload
-        try {
-          const updatedUser = await api("GET", "/auth/me");
-          localStorage.setItem("ipos_user", JSON.stringify(updatedUser));
-        } catch (e) {
-          console.error("Gagal sinkron status cabang:", e);
-        }
-
-        window.location.reload();
-      });
+    renderBranchOptions(select, branches, activeId);
+    return true;
   } catch (e) {
     console.error("Gagal meload cabang untuk switcher", e);
+    return false;
   }
+}
+
+async function notifyBranchListChanged() {
+  invalidateCache("/branches/");
+  if (FPOS_WORKSPACE_EMBEDDED) {
+    window.parent.postMessage(
+      { type: "fpos-branches-changed" },
+      location.origin,
+    );
+    return true;
+  }
+  return refreshBranchSwitcher({ force: true });
+}
+
+async function initBranchSwitcher() {
+  return refreshBranchSwitcher();
 }
 
 // ── INIT GLOBAL ──

@@ -966,8 +966,7 @@
       </div>
       <div>
         <label>Jumlah Transfer</label>
-        <input type="number" class="input-control tf-item-qty" min="1" value="1" inputmode="numeric" ${isDisabled}
-               oninput="if(this.max !== '' && parseFloat(this.value) > parseFloat(this.max)) this.value = this.max;">
+        <input type="text" class="input-control tf-item-qty" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" value="1" ${isDisabled}>
         <div style="height:16px; margin-top:4px;"></div>
       </div>
       <button class="btn" style="background:rgba(239,68,68,0.15);color:#ef4444;height:42px;padding:0;border:none;font-weight:bold;margin-bottom:20px;" onclick="removeTransferRow(${rowId})">✕</button>
@@ -998,7 +997,7 @@
           infoEl.textContent = "";
           itemSelect.disabled = true;
           qtyInput.disabled = true;
-          qtyInput.max = "";
+          qtyInput.dataset.max = "";
           return;
         }
 
@@ -1006,21 +1005,21 @@
         if (!itemId) {
           infoEl.textContent = "";
           qtyInput.disabled = true;
-          qtyInput.max = "";
+          qtyInput.dataset.max = "";
           return;
         }
 
         const stockItem = currentFromStock.find((s) => s.item_id == itemId);
         const stokTersedia = stockItem ? stockItem.stock : 0;
 
-        qtyInput.max = stokTersedia;
+        qtyInput.dataset.max = stokTersedia;
 
         if (stokTersedia === 0) {
           qtyInput.value = 0;
           qtyInput.disabled = true;
         } else {
           qtyInput.disabled = false;
-          let currentQty = parseFloat(qtyInput.value) || 0;
+          let currentQty = parseDesimal(qtyInput);
           if (currentQty > stokTersedia) {
             qtyInput.value = stokTersedia;
           } else if (currentQty === 0) {
@@ -1048,7 +1047,7 @@
         const transferItems = [];
         for (let row of rows) {
           const item_id = parseInt(row.querySelector(".tf-item-select").value);
-          const qty = parseFloat(row.querySelector(".tf-item-qty").value);
+          const qty = parseDesimal(row.querySelector(".tf-item-qty"));
           if (item_id && qty > 0) {
             transferItems.push({ item_id: item_id, qty: qty });
           }

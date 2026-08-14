@@ -189,6 +189,61 @@ class DashboardReportTests(unittest.TestCase):
         self.assertEqual(result["total_transactions_today"], 0)
         self.assertEqual(result["total_purchases_today"], 0)
 
+    def test_dashboard_returns_matching_low_stock_count_and_details(self):
+        warehouse = models.Warehouse(
+            code="DASH-WH",
+            name="Gudang Dashboard",
+            branch_id=self.branch.id,
+            is_default=True,
+        )
+        low_item = models.Item(
+            code="DASH-LOW",
+            name="Barang Dashboard Menipis",
+            stock=100,
+            min_stock=5,
+        )
+        safe_item = models.Item(
+            code="DASH-SAFE",
+            name="Barang Dashboard Aman",
+            stock=0,
+            min_stock=5,
+        )
+        self.db.add_all([warehouse, low_item, safe_item])
+        self.db.flush()
+        self.db.add_all(
+            [
+                models.WarehouseStock(
+                    warehouse_id=warehouse.id,
+                    item_id=low_item.id,
+                    stock=3,
+                ),
+                models.WarehouseStock(
+                    warehouse_id=warehouse.id,
+                    item_id=safe_item.id,
+                    stock=8,
+                ),
+            ]
+        )
+        self.db.commit()
+
+        with (
+            patch.object(reports, "get_local_date", return_value=date(2026, 8, 1)),
+            patch.object(
+                reports,
+                "get_income_statement",
+                return_value={"net_profit": 0},
+            ),
+        ):
+            result = reports.get_dashboard_data(
+                db=self.db,
+                current_user=self.admin,
+            )
+
+        self.assertEqual(result["low_stock_count"], 1)
+        self.assertEqual(len(result["low_stock_items"]), 1)
+        self.assertEqual(result["low_stock_items"][0]["id"], low_item.id)
+        self.assertEqual(result["low_stock_items"][0]["stock"], 3)
+
 
 if __name__ == "__main__":
     unittest.main()
