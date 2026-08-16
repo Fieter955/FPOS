@@ -10,9 +10,10 @@ Format barcode yang didukung:
 
 Output: PNG base64 yang bisa langsung ditampilkan & diprint
 """
-import io, base64, random, string
+import io, base64, hashlib, re
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from pydantic import BaseModel
 from typing import Optional
 
@@ -26,10 +27,13 @@ router = APIRouter()
 def _generate_barcode_value(item_code: str, barcode_type: str) -> str:
     """Generate nilai barcode unik berdasarkan kode item"""
     if barcode_type == "EAN13":
-        # EAN13: 12 digit + 1 check digit
-        # Prefix 899 = Indonesia
-        digits = "899" + item_code.replace("-","").replace(" ","")[:9].zfill(9)
-        digits = digits[:12]
+        # EAN13 membutuhkan 12 digit dasar. Kode item internal biasanya
+        # berbentuk ITM-ABC123, jadi tidak aman langsung menjalankan int(d)
+        # terhadap karakter kode tersebut. Gunakan token numerik deterministik
+        # dari seluruh kode agar kode tanpa angka tetap valid dan tidak mudah
+        # bertabrakan.
+        token = int(hashlib.sha256(str(item_code).encode("utf-8")).hexdigest()[:15], 16)
+        digits = "899" + str(token % 1_000_000_000).zfill(9)
         # Hitung check digit EAN13
         total = sum(int(d) * (1 if i % 2 == 0 else 3)
                    for i, d in enumerate(digits))
@@ -38,6 +42,71 @@ def _generate_barcode_value(item_code: str, barcode_type: str) -> str:
     else:
         # CODE128 / QR / CODE39: pakai prefix + kode item
         return f"IPS{item_code.upper().replace(' ','').replace('-','')}"
+
+
+def _normalize_barcode(value: str) -> str:
+    return str(value or "").strip().casefold()
+
+
+def assert_barcode_available(
+    db: Session,
+    value: str,
+    exclude_item_id: int | None = None,
+) -> None:
+    """Tolak barcode yang sudah menunjuk ke item lain.
+
+    Barcode supplier dan BarcodeLabel ikut diperiksa karena keduanya juga
+    dipakai sebagai identitas scan. Perbandingan dibuat case-insensitive dan
+    mengabaikan spasi tepi, sama seperti frontend.
+    """
+    normalized = _normalize_barcode(value)
+    if not normalized or normalized == "auto":
+        return
+
+    item_query = db.query(models.Item).filter(
+        func.lower(func.trim(models.Item.barcode)) == normalized,
+    )
+    supplier_query = db.query(models.ItemSupplier).join(
+        models.Item, models.Item.id == models.ItemSupplier.item_id
+    ).filter(
+        func.lower(func.trim(models.ItemSupplier.barcode)) == normalized,
+    )
+    label_query = db.query(models.BarcodeLabel).filter(
+        func.lower(func.trim(models.BarcodeLabel.barcode_value)) == normalized,
+    )
+
+    if exclude_item_id is not None:
+        item_query = item_query.filter(models.Item.id != exclude_item_id)
+        supplier_query = supplier_query.filter(models.Item.id != exclude_item_id)
+        label_query = label_query.filter(models.BarcodeLabel.item_id != exclude_item_id)
+
+    conflict = item_query.first()
+    if conflict:
+        raise HTTPException(400, f"Barcode '{value}' sudah digunakan oleh barang '{conflict.name}'.")
+
+    conflict_supplier = supplier_query.first()
+    if conflict_supplier:
+        raise HTTPException(
+            400,
+            f"Barcode '{value}' sudah digunakan sebagai barcode supplier oleh barang '{conflict_supplier.item.name}'.",
+        )
+
+    conflict_label = label_query.first()
+    if conflict_label:
+        conflict_item = db.query(models.Item).get(conflict_label.item_id)
+        name = conflict_item.name if conflict_item else str(conflict_label.item_id)
+        raise HTTPException(400, f"Barcode '{value}' sudah digunakan oleh barang '{name}'.")
+
+
+def _validate_ean13(value: str) -> None:
+    if not re.fullmatch(r"\d{13}", value):
+        raise HTTPException(400, "Barcode EAN13 harus terdiri dari tepat 13 digit.")
+
+    total = sum(int(digit) * (1 if index % 2 == 0 else 3)
+                for index, digit in enumerate(value[:12]))
+    check_digit = (10 - (total % 10)) % 10
+    if int(value[-1]) != check_digit:
+        raise HTTPException(400, "Digit pemeriksa barcode EAN13 tidak valid.")
 
 
 def _render_barcode(barcode_value: str, barcode_type: str,
@@ -122,24 +191,42 @@ def generate_barcode(
     if data.barcode_type not in valid_types:
         raise HTTPException(400, f"Tipe barcode harus: {valid_types}")
 
-    # Cek apakah item sudah punya barcode
-    barcode_value = data.custom_value
+    # Cek apakah item sudah punya barcode. Jika ada label lama, pertahankan
+    # tipe aslinya agar barcode CODE128 lama tidak dirender sebagai EAN13.
+    barcode_value = _normalize_barcode(data.custom_value)
+    if barcode_value == "auto":
+        barcode_value = ""
+    existing_item_label = None
+    render_type = data.barcode_type
     if not barcode_value:
         if item.barcode:
-            barcode_value = item.barcode
+            barcode_value = _normalize_barcode(item.barcode)
+            existing_item_label = db.query(models.BarcodeLabel).filter(
+                models.BarcodeLabel.item_id == data.item_id,
+                func.lower(func.trim(models.BarcodeLabel.barcode_value)) == barcode_value,
+            ).first()
+            if existing_item_label and existing_item_label.barcode_type in valid_types:
+                render_type = existing_item_label.barcode_type
         else:
             barcode_value = _generate_barcode_value(item.code, data.barcode_type)
+
+    if render_type == "EAN13":
+        _validate_ean13(barcode_value)
+
+    # Jangan biarkan barcode yang sama mengarah ke beberapa item. Pemeriksaan
+    # dilakukan sebelum render/commit supaya error menjadi pesan 400 yang jelas.
+    assert_barcode_available(db, barcode_value, exclude_item_id=data.item_id)
 
     # Label text default = nama item
     label_text = data.label_text or item.name[:30]
 
     # Render ke gambar
-    image_b64 = _render_barcode(barcode_value, data.barcode_type, label_text)
+    image_b64 = _render_barcode(barcode_value, render_type, label_text)
 
     # Simpan ke database jika belum ada
     existing = db.query(models.BarcodeLabel).filter(
         models.BarcodeLabel.item_id == data.item_id,
-        models.BarcodeLabel.barcode_value == barcode_value
+        func.lower(func.trim(models.BarcodeLabel.barcode_value)) == barcode_value,
     ).first()
 
     needs_commit = False
@@ -147,7 +234,7 @@ def generate_barcode(
         label_record = models.BarcodeLabel(
             item_id=data.item_id,
             barcode_value=barcode_value,
-            barcode_type=data.barcode_type,
+            barcode_type=render_type,
             label_text=label_text,
         )
         db.add(label_record)
@@ -167,7 +254,7 @@ def generate_barcode(
         "item_name": item.name,
         "item_code": item.code,
         "barcode_value": barcode_value,
-        "barcode_type": data.barcode_type,
+        "barcode_type": render_type,
         "label_text": label_text,
         "image_base64": image_b64,
         "print_qty": data.qty_labels,

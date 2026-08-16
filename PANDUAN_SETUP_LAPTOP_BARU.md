@@ -54,7 +54,8 @@ Buka PowerShell pada root proyek, lalu jalankan:
 ```powershell
 npm run build
 Set-Location backend
-pyinstaller --clean --noconfirm FPOS.spec
+conda run -n ipos python -m PyInstaller --clean --noconfirm FPOS.spec
+conda run -n ipos python -m PyInstaller --clean --noconfirm FPOS-Updater.spec
 Set-Location ..
 ```
 
@@ -73,6 +74,7 @@ if (Test-Path -LiteralPath $paketRilis) {
 New-Item -ItemType Directory -Path $paketRilis
 Copy-Item -LiteralPath "backend\dist\FPOS\FPOS.exe" -Destination $paketRilis
 Copy-Item -LiteralPath "backend\dist\FPOS\_internal" -Destination $paketRilis -Recurse
+Copy-Item -LiteralPath "backend\dist\FPOS-Updater.exe" -Destination $paketRilis
 Copy-Item -LiteralPath "frontend-dist" -Destination "$paketRilis\frontend-dist" -Recurse
 New-Item -ItemType Directory -Path "$paketRilis\uploads"
 Copy-Item -LiteralPath "backend\.env.example" -Destination "$paketRilis\.env"
@@ -83,6 +85,7 @@ Folder paket bersih hanya boleh berisi:
 ```text
 FPOS-rilis-baru/
 ├── FPOS.exe
+├── FPOS-Updater.exe
 ├── _internal/
 ├── frontend-dist/
 ├── uploads/

@@ -25,6 +25,7 @@
                 if (c.id === "popUpContainer") {
                   setupSupSearch();
                   setupItemFormKeyboardNavigation();
+                  setupAdvancedDeleteModal();
                   populateDiscountGroupSelect();
                   // Modal baru saja masuk DOM: isi fKat/fMerek/fSat yang belum
                   // sempat terisi saat refreshSelects() awal (pakai cache, tanpa request baru).
@@ -209,6 +210,8 @@
         sharedFieldNotified = false,
         currentSupplierContext = "",
         satuanRows = [],
+        advancedDeleteModalResolver = null,
+        advancedDeleteModalReturnFocus = null,
         masterUnits = [],
         groupDiscounts = [], // Potongan Harga Jual per grup: [{group_id, disc1..disc4}]
         lastPpnStatus = "none";
@@ -258,6 +261,8 @@
         "select:not([disabled])",
         "textarea:not([disabled])",
         "[contenteditable='true']",
+        "[data-item-photo-focus]:not([aria-disabled='true'])",
+        "[data-item-advanced-toggle]:not([disabled])",
         "button[type='submit']:not([disabled])",
       ].join(",");
 
@@ -286,6 +291,43 @@
         )
           control.select();
         return true;
+      }
+
+      function openItemPhotoPicker() {
+        document.getElementById("fFotoInput")?.click();
+      }
+
+      function isPrintableItemFormKey(event) {
+        return (
+          typeof event.key === "string" &&
+          event.key.length === 1 &&
+          !event.ctrlKey &&
+          !event.altKey &&
+          !event.metaKey
+        );
+      }
+
+      function openNativeSelectPicker(select) {
+        if (
+          !(select instanceof HTMLSelectElement) ||
+          select.disabled ||
+          select.getClientRects().length === 0
+        )
+          return;
+
+        try {
+          if (typeof select.showPicker === "function") {
+            select.showPicker();
+            return;
+          }
+        } catch (_) {
+          // Browser dapat menolak showPicker() pada kondisi tertentu. Lanjutkan
+          // ke fallback click() agar tetap berfungsi di browser lama/berbeda.
+        }
+
+        try {
+          select.click();
+        } catch (_) {}
       }
 
       function moveItemFormFocus(form, target, direction) {
@@ -331,26 +373,243 @@
         if (!form || form.dataset.keyboardNavigationReady === "true") return;
 
         form.dataset.keyboardNavigationReady = "true";
+        setupAdvancedGridKeyboardNavigation();
         form.addEventListener("keydown", handleItemFormKeyboardNavigation);
       }
 
-      function handleItemFormKeyboardNavigation(e) {
+      const ADVANCED_GRID_CONTROL_SELECTOR =
+        "input:not([type='hidden']):not([disabled]), select:not([disabled]), textarea:not([disabled])";
+
+      function getAdvancedGridBody(target) {
+        return target?.closest?.("#advancedContent tbody") || null;
+      }
+
+      function getAdvancedGridControls(row) {
+        return row
+          ? Array.from(row.querySelectorAll(ADVANCED_GRID_CONTROL_SELECTOR))
+          : [];
+      }
+
+      function getAdvancedGridControlLocation(control) {
+        const row = control?.closest?.(
+          "#advancedContent tbody tr[data-advanced-row]",
+        );
+        const cell = control?.closest?.("td");
+        if (!row || !cell) return null;
+
+        const cellControls = Array.from(
+          cell.querySelectorAll(ADVANCED_GRID_CONTROL_SELECTOR),
+        );
+        const cellIndex = Array.from(row.cells).indexOf(cell);
+        const controlIndex = cellControls.indexOf(control);
+        if (cellIndex < 0 || controlIndex < 0) return null;
+
+        const rows = Array.from(
+          row.parentElement?.querySelectorAll("tr[data-advanced-row]") || [],
+        );
+        return {
+          rowKey: row.dataset.advancedRow ?? "",
+          rowIndex: rows.indexOf(row),
+          cellIndex,
+          controlIndex,
+        };
+      }
+
+      function getAdvancedGridCellControl(row, cellIndex, controlIndex = 0) {
+        const cell = row?.cells?.[cellIndex];
+        if (!cell) return null;
+        return (
+          Array.from(
+            cell.querySelectorAll(ADVANCED_GRID_CONTROL_SELECTOR),
+          )[controlIndex] || null
+        );
+      }
+
+      function findAdvancedGridRow(body, location) {
+        const rows = Array.from(
+          body?.querySelectorAll("tr[data-advanced-row]") || [],
+        );
+        return (
+          rows.find((row) => row.dataset.advancedRow === location.rowKey) ||
+          rows[location.rowIndex] ||
+          null
+        );
+      }
+
+      function focusAdvancedGridLocation(body, location) {
+        const row = findAdvancedGridRow(body, location);
+        if (!row) return false;
+
+        const control = getAdvancedGridCellControl(
+          row,
+          location.cellIndex,
+          location.controlIndex,
+        );
+        if (!control) return false;
+        return focusItemFormControl(control);
+      }
+
+      function queueAdvancedGridFocus(body, target, destination) {
+        // Moving focus immediately can fire the current input's onchange. That
+        // callback rerenders the grid and detaches the destination element. Blur
+        // first, then resolve the destination from the freshly rendered row/cell.
+        if (document.activeElement === target) target.blur();
+
+        const restore = () => focusAdvancedGridLocation(body, destination);
+        if (typeof requestAnimationFrame === "function") requestAnimationFrame(restore);
+        else setTimeout(restore, 0);
+      }
+
+      function handleAdvancedGridKeyboardNavigation(event) {
+        if (event.defaultPrevented || event.isComposing) return;
+
+        const target = event.target;
         if (
-          !["Enter", "ArrowLeft", "ArrowRight"].includes(e.key) ||
+          !(target instanceof HTMLElement) ||
+          !target.matches(ADVANCED_GRID_CONTROL_SELECTOR)
+        )
+          return;
+
+        const body = getAdvancedGridBody(target);
+        const location = getAdvancedGridControlLocation(target);
+        if (!body || !location) return;
+
+        if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+          // Panah atas/bawah pada select tetap dipakai untuk memilih opsi satuan.
+          if (
+            target instanceof HTMLSelectElement ||
+            event.shiftKey ||
+            event.ctrlKey ||
+            event.altKey ||
+            event.metaKey
+          )
+            return;
+
+          const rows = Array.from(
+            body.querySelectorAll("tr[data-advanced-row]"),
+          );
+          const row = rows[location.rowIndex];
+          const destinationRow = rows[
+            location.rowIndex + (event.key === "ArrowDown" ? 1 : -1)
+          ];
+          const destination = destinationRow
+            ? getAdvancedGridCellControl(
+                destinationRow,
+                location.cellIndex,
+                location.controlIndex,
+              )
+            : null;
+          if (!row || !destination) return;
+
+          event.preventDefault();
+          event.stopPropagation();
+          queueAdvancedGridFocus(
+            body,
+            target,
+            getAdvancedGridControlLocation(destination),
+          );
+          return;
+        }
+
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        if (event.shiftKey || event.ctrlKey || event.altKey || event.metaKey)
+          return;
+
+        // In a text input, retain native caret movement until the caret reaches
+        // the edge. A select has no text caret, so its horizontal arrows always
+        // navigate to the adjacent grid field.
+        if (
+          target instanceof HTMLInputElement &&
+          !isCaretAtArrowBoundary(target, event.key)
+        )
+          return;
+
+        const controls = getAdvancedGridControls(
+          target.closest("tr[data-advanced-row]"),
+        );
+        const currentIndex = controls.indexOf(target);
+        const destination =
+          currentIndex < 0
+            ? null
+            : controls[currentIndex + (event.key === "ArrowRight" ? 1 : -1)];
+
+        // Keep the event inside the grid at its horizontal edge instead of
+        // falling through to the form-wide navigation and losing the grid focus.
+        event.preventDefault();
+        event.stopPropagation();
+        if (destination) {
+          queueAdvancedGridFocus(
+            body,
+            target,
+            getAdvancedGridControlLocation(destination),
+          );
+        }
+      }
+
+      function setupAdvancedGridKeyboardNavigation() {
+        const container = document.getElementById("advancedContent");
+        if (!container || container.dataset.keyboardNavigationReady === "true")
+          return;
+
+        container.dataset.keyboardNavigationReady = "true";
+        container.addEventListener(
+          "keydown",
+          handleAdvancedGridKeyboardNavigation,
+          true,
+        );
+      }
+
+      function handleItemFormKeyboardNavigation(e) {
+        const target = e.target;
+        const isPhotoFocus =
+          target instanceof HTMLElement &&
+          target.matches("[data-item-photo-focus]");
+        const isAdvancedToggle =
+          target instanceof HTMLElement &&
+          target.matches("[data-item-advanced-toggle]");
+        const isPrintableKey = isPrintableItemFormKey(e);
+
+        if (
+          (!["Enter", "ArrowLeft", "ArrowRight"].includes(e.key) &&
+            !(e.key === " " && isPhotoFocus) &&
+            !(isPrintableKey && (target instanceof HTMLSelectElement || isAdvancedToggle))) ||
           e.isComposing ||
           e.defaultPrevented
         )
           return;
 
-        const target = e.target;
         if (
           !(target instanceof HTMLElement) ||
-          !target.matches("input, select, textarea, [contenteditable='true']")
+          !target.matches(
+            "input, select, textarea, [contenteditable='true'], [data-item-photo-focus], [data-item-advanced-toggle]",
+          )
         )
           return;
 
         const form = target.closest("form");
         if (!form) return;
+
+        if (target instanceof HTMLSelectElement && isPrintableKey) {
+          openNativeSelectPicker(target);
+          return;
+        }
+
+        if (
+          isAdvancedToggle &&
+          (e.key === "Enter" || e.key === " " || (isPrintableKey && !e.repeat))
+        ) {
+          e.preventDefault();
+          e.stopPropagation();
+          target.click();
+          return;
+        }
+
+        if (isPhotoFocus && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          e.stopPropagation();
+          openItemPhotoPicker();
+          return;
+        }
 
         if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
           // Shift+panah tetap untuk menyeleksi teks; Alt/Meta tidak diambil alih.
@@ -359,8 +618,10 @@
           const direction = e.key === "ArrowRight" ? 1 : -1;
           const moved = e.ctrlKey
             ? jumpItemFormSection(form, target, direction)
-            : isCaretAtArrowBoundary(target, e.key) &&
-              moveItemFormFocus(form, target, direction);
+            : isPhotoFocus
+              ? moveItemFormFocus(form, target, direction)
+              : isCaretAtArrowBoundary(target, e.key) &&
+                moveItemFormFocus(form, target, direction);
           if (!moved) return;
 
           e.preventDefault();
@@ -889,12 +1150,13 @@
 
       let allSups = [];
       let selectedSups = new Map();
-      let supSearchTimeout;
       let cariSupTimeout;
       const SUPPLIER_CONTEXT_GENERAL_LABEL =
         "-- Harga Umum (Default Semua Supplier) --";
       let supplierContextOptions = [];
       let supplierContextHighlightedIndex = 0;
+      let supSearchHighlightedIndex = -1;
+      let cariSupHighlightedIndex = -1;
 
       async function loadSuppliers() {
         try {
@@ -1060,7 +1322,6 @@
         if (!input || !dropdown || !wrapper) return;
         if (input.dataset.comboboxReady === "true") return;
         input.dataset.comboboxReady = "true";
-
         input.addEventListener("focus", () => {
           input.select();
           renderSupplierContextDropdown("", true);
@@ -1075,12 +1336,16 @@
           renderSupplierContextDropdown(input.value, true);
         });
         input.addEventListener("keydown", (event) => {
-          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          const isNextKey =
+            event.key === "ArrowDown" || event.key === "ArrowRight";
+          const isPreviousKey =
+            event.key === "ArrowUp" || event.key === "ArrowLeft";
+          if (isNextKey || isPreviousKey) {
             event.preventDefault();
             event.stopPropagation();
             if (!dropdown.classList.contains("show"))
               renderSupplierContextDropdown(input.value, true);
-            const direction = event.key === "ArrowDown" ? 1 : -1;
+            const direction = isNextKey ? 1 : -1;
             updateSupplierContextHighlight(
               supplierContextHighlightedIndex + direction,
             );
@@ -1121,16 +1386,58 @@
         setupSupplierContextCombobox();
         const input = document.getElementById("supSearchInput");
         const dropdown = document.getElementById("supDropdown");
+        if (input?.dataset.keyboardReady === "true") return;
+        if (input) input.dataset.keyboardReady = "true";
         if (!input || !dropdown) return; // popUp.html belum termuat — dipanggil ulang setelah load
         input.addEventListener("focus", () => {
           renderSupDropdown(input.value);
           dropdown.classList.add("show");
         });
         input.addEventListener("input", () => {
-          clearTimeout(supSearchTimeout);
-          supSearchTimeout = setTimeout(() => {
-            renderSupDropdown(input.value);
-          }, 150);
+          renderSupDropdown(input.value);
+        });
+        input.addEventListener("keydown", (event) => {
+          const isNextKey =
+            event.key === "ArrowDown" || event.key === "ArrowRight";
+          const isPreviousKey =
+            event.key === "ArrowUp" || event.key === "ArrowLeft";
+          const isOpen = dropdown.classList.contains("show");
+
+          if (isNextKey || isPreviousKey) {
+            if (!isOpen) renderSupDropdown(input.value);
+            const options = getSupplierSearchDropdownOptions(dropdown);
+            if (!options.length) return;
+            event.preventDefault();
+            event.stopPropagation();
+            highlightSupplierSearchOption(
+              input,
+              dropdown,
+              supSearchHighlightedIndex + (isNextKey ? 1 : -1),
+            );
+            return;
+          }
+
+          if (event.key === "Enter") {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!dropdown.classList.contains("show"))
+              renderSupDropdown(input.value);
+            chooseSupplierSearchOption(input, dropdown, false);
+            return;
+          }
+
+          if (event.key === "Tab" && isOpen) {
+            chooseSupplierSearchOption(input, dropdown, true);
+            return;
+          }
+
+          if (event.key === "Escape" && isOpen) {
+            event.preventDefault();
+            event.stopPropagation();
+            dropdown.classList.remove("show");
+            supSearchHighlightedIndex = -1;
+            input.removeAttribute("aria-activedescendant");
+          }
         });
         document.addEventListener("click", (e) => {
           if (!input.contains(e.target) && !dropdown.contains(e.target))
@@ -1138,8 +1445,55 @@
         });
       }
 
+      function getSupplierSearchDropdownOptions(dropdown) {
+        return Array.from(
+          dropdown?.querySelectorAll(".sup-dropdown-item[data-id]") || [],
+        );
+      }
+
+      function highlightSupplierSearchOption(input, dropdown, nextIndex) {
+        const options = getSupplierSearchDropdownOptions(dropdown);
+        if (!options.length) {
+          supSearchHighlightedIndex = -1;
+          input.removeAttribute("aria-activedescendant");
+          return;
+        }
+
+        supSearchHighlightedIndex =
+          (nextIndex + options.length) % options.length;
+        options.forEach((option, index) => {
+          const active = index === supSearchHighlightedIndex;
+          option.classList.toggle("highlighted", active);
+          option.setAttribute("aria-selected", String(active));
+        });
+        const activeOption = options[supSearchHighlightedIndex];
+        input.setAttribute("aria-activedescendant", activeOption.id);
+        activeOption.scrollIntoView({ block: "nearest" });
+      }
+
+      function chooseSupplierSearchOption(input, dropdown, highlightedOnly) {
+        const options = getSupplierSearchDropdownOptions(dropdown);
+        const index = highlightedOnly
+          ? supSearchHighlightedIndex
+          : supSearchHighlightedIndex >= 0
+            ? supSearchHighlightedIndex
+            : 0;
+        const option = options[index];
+        if (!option) {
+          if (highlightedOnly) dropdown.classList.remove("show");
+          return false;
+        }
+        const addButton = option.querySelector(".sup-add-btn");
+        (addButton || option).click();
+        return true;
+      }
+
       function renderSupDropdown(searchText = "") {
         const dropdown = document.getElementById("supDropdown");
+        const input = document.getElementById("supSearchInput");
+        if (!dropdown) return;
+        supSearchHighlightedIndex = -1;
+        input?.removeAttribute("aria-activedescendant");
         const search = searchText.toLowerCase().trim();
         const available = allSups.filter(
           (s) =>
@@ -1156,7 +1510,7 @@
           .slice(0, 50)
           .map(
             (s) =>
-              `<div class="sup-dropdown-item" data-id="${s.id}"><span>${s.name}${s.code ? ` <small>[${s.code}]</small>` : ""}</span><button type="button" class="sup-add-btn" onclick="addSupToSelectionById(${s.id})">+</button></div>`,
+              `<div id="sup-option-${s.id}" role="option" aria-selected="false" class="sup-dropdown-item" data-id="${s.id}"><span>${s.name}${s.code ? ` <small>[${s.code}]</small>` : ""}</span><button type="button" class="sup-add-btn" onclick="addSupToSelectionById(${s.id})">+</button></div>`,
           )
           .join("");
         dropdown.classList.add("show");
@@ -1169,6 +1523,7 @@
           renderSelectedSups();
           document.getElementById("supSearchInput").value = "";
           document.getElementById("supDropdown").classList.remove("show");
+          supSearchHighlightedIndex = -1;
         }
       };
 
@@ -1349,6 +1704,11 @@
       function calcMarginFromHJual() {
         const hBeli = toAngka(document.getElementById("fHBeli").value) || 0;
         const hJual = toAngka(document.getElementById("fHJual").value) || 0;
+        if (hJual <= 0) {
+          updateDiscountPreview();
+          syncGroupPricesFromMain();
+          return;
+        }
         document.getElementById("fMargin").value = toPersen(
           hBeli > 0 ? ((hJual - hBeli) / hBeli) * 100 : 0,
         );
@@ -1362,6 +1722,11 @@
           document.getElementById("fMargin").value,
         );
         const hJual = toAngka(document.getElementById("fHJual").value) || 0;
+        if (hJual <= 0) {
+          updateDiscountPreview();
+          syncGroupPricesFromMain();
+          return;
+        }
         const hBeli =
           margin > -100 ? Math.round(hJual / (1 + margin / 100)) : 0;
         document.getElementById("fHBeli").value = toRibuan(hBeli);
@@ -2113,9 +2478,11 @@
             </button>
           </div>
         </div>
-      `;
+          `;
           openModal("mPilihSup");
           const input = document.getElementById("cariSupInput");
+          const results = document.getElementById("cariSupResults");
+          if (input && results) setupCariSupplierKeyboard(input, results);
           if (input) input.focus();
           cariSupplier(); // tampilkan daftar awal (semua supplier)
         } catch (e) {
@@ -2139,6 +2506,8 @@
               s.name.toLowerCase().includes(search) ||
               (s.code && s.code.toLowerCase().includes(search)),
           );
+          cariSupHighlightedIndex = -1;
+          inputEl?.removeAttribute("aria-activedescendant");
           if (matches.length === 0) {
             results.innerHTML = `<div class="sup-dropdown-empty">${
               search ? "Tidak ditemukan" : "Belum ada supplier"
@@ -2149,12 +2518,71 @@
             .slice(0, 50)
             .map(
               (s) =>
-                `<div class="sup-dropdown-item" style="cursor: pointer;" onclick="pilihSupplierKonteks(${s.id})"><span>${s.name}${
+                `<div id="cari-sup-option-${s.id}" role="option" aria-selected="false" class="sup-dropdown-item" data-id="${s.id}" style="cursor: pointer;" onclick="pilihSupplierKonteks(${s.id})"><span>${s.name}${
                   s.code ? ` <small>[${s.code}]</small>` : ""
                 }</span><span class="sup-add-btn">+</span></div>`,
             )
             .join("");
         }, 150);
+      }
+
+      function setupCariSupplierKeyboard(input, results) {
+        if (input.dataset.keyboardReady === "true") return;
+        input.dataset.keyboardReady = "true";
+        input.setAttribute("role", "combobox");
+        input.setAttribute("aria-autocomplete", "list");
+        input.setAttribute("aria-expanded", "true");
+        results.setAttribute("role", "listbox");
+
+        input.addEventListener("keydown", (event) => {
+          const options = getSupplierSearchDropdownOptions(results);
+          const isNextKey =
+            event.key === "ArrowDown" || event.key === "ArrowRight";
+          const isPreviousKey =
+            event.key === "ArrowUp" || event.key === "ArrowLeft";
+
+          if (isNextKey || isPreviousKey) {
+            if (!options.length) return;
+            event.preventDefault();
+            event.stopPropagation();
+            cariSupHighlightedIndex =
+              (cariSupHighlightedIndex + (isNextKey ? 1 : -1) + options.length) %
+              options.length;
+            options.forEach((option, index) => {
+              const active = index === cariSupHighlightedIndex;
+              option.classList.toggle("highlighted", active);
+              option.setAttribute("aria-selected", String(active));
+            });
+            const activeOption = options[cariSupHighlightedIndex];
+            input.setAttribute("aria-activedescendant", activeOption.id);
+            activeOption.scrollIntoView({ block: "nearest" });
+            return;
+          }
+
+          if (event.key === "Enter") {
+            const option =
+              options[cariSupHighlightedIndex >= 0 ? cariSupHighlightedIndex : 0];
+            if (!option) return;
+            event.preventDefault();
+            event.stopPropagation();
+            option.click();
+            return;
+          }
+
+          if (event.key === "Tab") {
+            const option = options[cariSupHighlightedIndex];
+            if (option) option.click();
+            return;
+          }
+
+          if (event.key === "Escape" && options.length) {
+            event.preventDefault();
+            event.stopPropagation();
+            results.replaceChildren();
+            cariSupHighlightedIndex = -1;
+            input.removeAttribute("aria-activedescendant");
+          }
+        });
       }
 
       // Saat hasil pencarian diklik: aktifkan supplier sebagai konteks setelan
@@ -2227,6 +2655,7 @@
           updateSupplierContextDropdown();
           select.value = newSup.id;
           onSupplierContextChange();
+          setTimeout(() => select?.focus({ preventScroll: true }), 0);
         } catch (ex) {
           showToast(ex.message, "error");
           if (btn) {
@@ -2316,9 +2745,226 @@
         }
       }
 
+      function removeSatuanRow(idx) {
+        satuanRows.splice(idx, 1);
+        ensureEmptySatuanRow();
+        if (currentAdvancedType) renderAdvancedGrid();
+      }
+
+      function finishAdvancedDeleteConfirmation(confirmed) {
+        const resolve = advancedDeleteModalResolver;
+        const returnFocus = advancedDeleteModalReturnFocus;
+        advancedDeleteModalResolver = null;
+        advancedDeleteModalReturnFocus = null;
+        closeModal("mHapusKonversi");
+
+        if (!confirmed && returnFocus?.isConnected) {
+          setTimeout(() => returnFocus.focus({ preventScroll: true }), 0);
+        }
+        resolve?.(confirmed);
+      }
+
+      function setupAdvancedDeleteModal() {
+        const modal = document.getElementById("mHapusKonversi");
+        if (!modal || modal.dataset.ready === "true") return;
+
+        const cancelButton = document.getElementById("btnBatalHapusKonversi");
+        const closeButton = document.getElementById("btnTutupHapusKonversi");
+        const confirmButton = document.getElementById(
+          "btnKonfirmasiHapusKonversi",
+        );
+        if (!cancelButton || !closeButton || !confirmButton) return;
+
+        modal.dataset.ready = "true";
+        cancelButton.addEventListener("click", () =>
+          finishAdvancedDeleteConfirmation(false),
+        );
+        closeButton.addEventListener("click", () =>
+          finishAdvancedDeleteConfirmation(false),
+        );
+        confirmButton.addEventListener("click", () =>
+          finishAdvancedDeleteConfirmation(true),
+        );
+        modal.addEventListener("click", (event) => {
+          if (event.target === modal) finishAdvancedDeleteConfirmation(false);
+        });
+        document.addEventListener(
+          "keydown",
+          (event) => {
+            if (
+              event.key !== "Escape" ||
+              !advancedDeleteModalResolver ||
+              modal.style.display !== "flex"
+            )
+              return;
+            event.preventDefault();
+            event.stopPropagation();
+            finishAdvancedDeleteConfirmation(false);
+          },
+          true,
+        );
+      }
+
+      function requestAdvancedDeleteConfirmation(row) {
+        setupAdvancedDeleteModal();
+        const modal = document.getElementById("mHapusKonversi");
+        const message = document.getElementById("mHapusKonversiMessage");
+        const name = document.getElementById("mHapusKonversiName");
+        const cancelButton = document.getElementById("btnBatalHapusKonversi");
+        if (!modal || !message || !name || !cancelButton) return Promise.resolve(false);
+        if (advancedDeleteModalResolver) return Promise.resolve(false);
+
+        const isSaved = !!row.conversion_id;
+        const rowName = String(
+          row.child_name || row.child_unit_name || "Baris konversi ini",
+        ).trim();
+        message.textContent = isSaved
+          ? "Baris ini beserta barang turunan terkait akan dinonaktifkan."
+          : "Baris konversi baru ini akan dihapus dari formulir.";
+        name.textContent = rowName || "Baris konversi ini";
+
+        return new Promise((resolve) => {
+          advancedDeleteModalResolver = resolve;
+          advancedDeleteModalReturnFocus = document.activeElement;
+          openModal("mHapusKonversi");
+          setTimeout(() => {
+            if (advancedDeleteModalResolver) {
+              cancelButton.focus({ preventScroll: true });
+            }
+          }, 0);
+        });
+      }
+
+      window.deleteAdvancedRow = async function (idx) {
+        const row = satuanRows[idx];
+        if (!row || row.is_base) return;
+
+        const isSaved = !!row.conversion_id;
+        if (!(await requestAdvancedDeleteConfirmation(row))) return;
+
+        if (!isSaved) {
+          removeSatuanRow(idx);
+          showToast("Baris konversi dihapus", "success");
+          return;
+        }
+
+        try {
+          await api("DELETE", `/unit-conversion/variant/${row.conversion_id}`);
+          removeSatuanRow(idx);
+          showToast("Baris konversi dihapus", "success");
+        } catch (e) {
+          console.error("Gagal menghapus baris konversi", e);
+          showToast(e?.message || "Gagal menghapus baris konversi", "error");
+        }
+      };
+
+      document.addEventListener("click", (event) => {
+        const target = event.target;
+        const row = target?.closest?.(
+          "#advancedContent tbody tr[data-advanced-row]",
+        );
+        if (!row) return;
+
+        const control = target.closest?.(
+          "input:not([disabled]), select:not([disabled]), textarea, button, a, [contenteditable='true']",
+        );
+        if (!control) row.focus({ preventScroll: true });
+      });
+
+      document.addEventListener(
+        "keydown",
+        (event) => {
+          if (
+            event.key !== "Delete" ||
+            event.defaultPrevented ||
+            event.ctrlKey ||
+            event.altKey ||
+            event.metaKey
+          )
+            return;
+
+          const target = event.target;
+          const row = target?.closest?.(
+            "#advancedContent tbody tr[data-advanced-row]",
+          );
+          if (!row || row.classList.contains("base-row")) return;
+
+          event.preventDefault();
+          event.stopPropagation();
+          void window.deleteAdvancedRow(Number(row.dataset.advancedRow));
+        },
+        true,
+      );
+
+      function captureAdvancedGridFocus(body) {
+        const active = document.activeElement;
+        if (!body || !active || !body.contains(active)) return null;
+
+        const row = active.closest("tr");
+        const cell = active.closest("td");
+        if (!row || !cell) return null;
+
+        const rows = Array.from(body.querySelectorAll("tr"));
+        const rowControls = getAdvancedGridControls(row);
+        const cellControls = Array.from(
+          cell.querySelectorAll(ADVANCED_GRID_CONTROL_SELECTOR),
+        );
+        const controlIndex = cellControls.indexOf(active);
+        if (controlIndex < 0) return null;
+
+        return {
+          rowKey: row.dataset.advancedRow ?? null,
+          rowIndex: rows.indexOf(row),
+          cellIndex: Array.from(row.cells).indexOf(cell),
+          controlIndex,
+          rowControlIndex: rowControls.indexOf(active),
+          selectionStart:
+            active instanceof HTMLInputElement ? active.selectionStart : null,
+          selectionEnd:
+            active instanceof HTMLInputElement ? active.selectionEnd : null,
+        };
+      }
+
+      function restoreAdvancedGridFocus(body, focusState) {
+        if (!body || !focusState || focusState.rowIndex < 0) return;
+
+        const rows = Array.from(body.querySelectorAll("tr"));
+        const row =
+          rows.find(
+            (candidate) =>
+              focusState.rowKey != null &&
+              candidate.dataset.advancedRow === focusState.rowKey,
+          ) || rows[focusState.rowIndex];
+        if (!row) return;
+
+        const cell = row.cells?.[focusState.cellIndex];
+        const cellControls = Array.from(
+          cell?.querySelectorAll(ADVANCED_GRID_CONTROL_SELECTOR) || [],
+        );
+        const control =
+          cellControls[focusState.controlIndex] ||
+          getAdvancedGridControls(row)[focusState.rowControlIndex];
+        if (!control) return;
+
+        control.focus();
+        if (
+          control instanceof HTMLInputElement &&
+          typeof focusState.selectionStart === "number" &&
+          typeof focusState.selectionEnd === "number"
+        ) {
+          const max = control.value.length;
+          control.setSelectionRange(
+            Math.min(focusState.selectionStart, max),
+            Math.min(focusState.selectionEnd, max),
+          );
+        }
+      }
+
       function renderAdvancedGrid() {
         const body = document.querySelector("#advancedContent tbody");
         if (!body) return;
+
+        const focusState = captureAdvancedGridFocus(body);
 
         // Render Header if levelHarga
         if (currentAdvancedType === "levelHarga") {
@@ -2327,6 +2973,7 @@
             let headHtml = `<tr>
                         <th colspan="5" class="header-spacer"></th>
                         ${allGroups.map((g, i) => `<th colspan="2" class="group-label ${i > 0 ? "sep" : ""}">${i + 1}. ${g.name}</th>`).join("")}
+                        <th rowspan="2" style="width: 44px">Aksi</th>
                       </tr>
                       <tr>
                         <th style="width: 30px"></th>
@@ -2351,6 +2998,7 @@
                         <th colspan="4" class="tier-label sep">Tier 2</th>
                         <th colspan="4" class="tier-label sep">Tier 3</th>
                         <th colspan="4" class="tier-label">Tier 4</th>
+                        <th rowspan="2" style="width: 44px">Aksi</th>
                       </tr>
                       <tr>
                         <th colspan="5"></th>
@@ -2366,6 +3014,7 @@
           .map((row, idx) => {
             const isBase = row.is_base,
               isDraft = row.is_draft;
+            const canDelete = !isBase && (!isDraft || row.conversion_id);
             const unitOptions = (masterUnits || [])
               .map(
                 (u) =>
@@ -2433,9 +3082,14 @@
                          <td class="${i < 3 ? "sep" : ""}"><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control" value="${priceVal}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'tier_price', this.value, ${i})" style="text-align:right; font-weight:700; color:var(--primary)" placeholder="Harga"></td>`;
               }
             }
-            return `<tr class="${isBase ? "base-row" : ""} ${isDraft ? "empty-row" : ""}"> ${cols} </tr>`;
+            cols += canDelete
+              ? `<td style="text-align:center; white-space:nowrap;"><button type="button" title="Hapus baris konversi" onclick="deleteAdvancedRow(${idx})" style="border:none; background:transparent; color:#ef4444; cursor:pointer; font-weight:700; font-size:16px; line-height:1; padding:4px 6px;">×</button></td>`
+              : `<td style="text-align:center; color:var(--text-muted); font-size:12px;">&nbsp;</td>`;
+            return `<tr class="${isBase ? "base-row" : ""} ${isDraft ? "empty-row" : ""}" data-advanced-row="${idx}" tabindex="-1"> ${cols} </tr>`;
           })
           .join("");
+
+        restoreAdvancedGridFocus(body, focusState);
       }
 
       window.reverseSyncToBase = function (idx) {
@@ -2905,6 +3559,7 @@
         // Kritis untuk tampilan awal: filter kategori + daftar barang.
         refreshSelects();
         loadItems();
+        subscribeItemMasterChanges(() => loadItems());
 
         // Non-kritis (komponen modal/tab + data supplier & grup): tunda sampai browser idle
         // agar tidak berebut bandwidth dengan daftar barang saat pertama buka (terasa di Tailscale).

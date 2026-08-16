@@ -381,6 +381,7 @@
       async function init() {
         allItems = await api("GET", "/items/?limit=2000");
         setupAutocomplete(document.getElementById("adjSearch"));
+        subscribeItemMasterChanges(refreshInventoryItems);
 
         // Tambahkan fungsi today() yang aman
         function today() {
@@ -398,6 +399,17 @@
             ? requestedTab
             : "mutasi",
         );
+      }
+
+      async function refreshInventoryItems() {
+        try {
+          allItems = await api("GET", "/items/?limit=2000");
+          // Autocomplete membaca allItems saat pengguna mengetik, sehingga
+          // daftar baru langsung tersedia tanpa mengganggu penyesuaian yang
+          // sudah ada di layar.
+        } catch (error) {
+          console.error("Gagal menyegarkan barang inventaris", error);
+        }
       }
 
       window.addEventListener("message", (event) => {
@@ -463,16 +475,24 @@
 
         inp.addEventListener("keydown", function (e) {
           let x = listContainer.getElementsByClassName("ac-item");
-          if (e.keyCode == 40) {
-            currentFocus++;
-            addActive(x);
-          } else if (e.keyCode == 38) {
-            currentFocus--;
-            addActive(x);
-          } else if (e.keyCode == 13) {
+          const isNextKey = e.key === "ArrowDown" || e.key === "ArrowRight";
+          const isPreviousKey =
+            e.key === "ArrowUp" || e.key === "ArrowLeft";
+          if (isNextKey || isPreviousKey) {
             e.preventDefault();
-            if (currentFocus > -1) {
-              if (x) x[currentFocus].click();
+            currentFocus += isNextKey ? 1 : -1;
+            addActive(x);
+          } else if (e.key === "Tab") {
+            if (currentFocus > -1 && x[currentFocus]) x[currentFocus].click();
+            closeAllLists();
+          } else if (e.key === "Escape") {
+            closeAllLists();
+            currentFocus = -1;
+          } else if (e.key === "Enter") {
+            e.preventDefault();
+            if (x.length) {
+              const selected = x[currentFocus > -1 ? currentFocus : 0];
+              if (selected) selected.click();
             } else {
               tambahKeDaftarManual();
             }

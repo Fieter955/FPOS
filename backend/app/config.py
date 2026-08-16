@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     # App
     APP_NAME: str = "iPos 5.0"
-    APP_VERSION: str = "5.0.0"
+    APP_VERSION: str = "5.0.1"
 
     # CORS
     ALLOWED_ORIGINS: str = "*"
@@ -60,7 +60,10 @@ class Settings(BaseSettings):
     TELEGRAM_CHAT_ID: str = "your_telegram_chat_id_here"
 
     # ── Update System ─────────────────────────────────────────────────────────
-    UPDATE_CHECK_URL: str = "https://raw.githubusercontent.com/YOURUSERNAME/ipos-releases/main/version.json"
+    UPDATE_CHECK_URL: str = "https://raw.githubusercontent.com/Fieter955/FPOS/main/version.json"
+    # HTTP is only useful for a controlled local test server. Production
+    # installations must fetch both the manifest and package over HTTPS.
+    UPDATE_ALLOW_HTTP: bool = False
 
     class Config:
         env_file = ".env"

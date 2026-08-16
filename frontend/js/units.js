@@ -48,6 +48,18 @@ function editSat(u) {
   openSatModal(u);
 }
 
+function closeSatModal() {
+  const returnToItemModal = fromItemModal;
+  closeModal("mSat");
+
+  // Jika satuan dibuka dari form barang, tampilkan kembali form yang sama
+  // tanpa menginisialisasi ulang atau menghapus input yang sudah diisi.
+  if (returnToItemModal) {
+    fromItemModal = false;
+    openModal("mBarang");
+  }
+}
+
 async function saveSat() {
   const name = document.getElementById("sNama").value.trim();
   if (!name) {
@@ -71,10 +83,17 @@ async function saveSat() {
     await refreshSelects();
     if (fromItemModal) {
       document.getElementById("fSat").value = saved.id;
+      // Tutup modal satuan lebih dulu agar modal barang menjadi modal terdepan.
+      // Jika dibuka sebelum mSat ditutup, fokus modal akan hilang dan Enter
+      // berikutnya kembali ke kontrol pertama (Nama Barang).
+      closeModal("mSat");
+      fromItemModal = false;
       openModal("mBarang");
+      const satuanInput = document.getElementById("fSat");
+      setTimeout(() => satuanInput?.focus({ preventScroll: true }), 0);
+    } else {
+      closeModal("mSat");
     }
-    closeModal("mSat");
-    fromItemModal = false;
     loadSat();
   } catch (ex) {
     showToast(ex.message, "error");

@@ -230,8 +230,28 @@
 
       async function init() {
         allItems = await api("GET", "/items/?limit=500");
+        subscribeItemMasterChanges(refreshDeliveryItems);
         document.getElementById("sjDate").value = today();
         load();
+      }
+
+      async function refreshDeliveryItems() {
+        try {
+          allItems = await api("GET", "/items/?limit=500");
+          document.querySelectorAll("#sjRows select").forEach((select) => {
+            const selected = select.value;
+            select.innerHTML =
+              "<option value=''>-- Pilih Barang --</option>" +
+              allItems
+                .map(
+                  (i) =>
+                    `<option value="${i.id}" ${String(i.id) === String(selected) ? "selected" : ""}>${i.name}</option>`,
+                )
+                .join("");
+          });
+        } catch (error) {
+          console.error("Gagal menyegarkan barang surat jalan", error);
+        }
       }
 
       async function load() {

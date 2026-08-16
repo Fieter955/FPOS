@@ -7,6 +7,10 @@ const sumber = readFileSync(
   new URL("../frontend/js/purchase-draft.js", import.meta.url),
   "utf8",
 );
+const sumberKomponen = readFileSync(
+  new URL("../frontend/js/components.js", import.meta.url),
+  "utf8",
+);
 
 class PenyimpananMemori {
   constructor() {
@@ -31,6 +35,17 @@ function muatHelper() {
   kotakPasir.globalThis = kotakPasir;
   vm.runInNewContext(sumber, kotakPasir);
   return kotakPasir.PurchaseDraftStore;
+}
+
+function muatKonversiHarga() {
+  const functionSource = sumberKomponen.match(
+    /function konversiHargaPpnPembelian\([\s\S]*?\n\}/,
+  )?.[0];
+  assert.ok(functionSource, "fungsi konversi harga PPN tidak ditemukan");
+  const kotakPasir = { console };
+  kotakPasir.globalThis = kotakPasir;
+  vm.runInNewContext(functionSource, kotakPasir);
+  return kotakPasir;
 }
 
 function salinKeRealmUtama(value) {
@@ -156,4 +171,68 @@ test("halaman pembelian memuat helper dan mengaitkan semua jalur keluar", () => 
   assert.match(html, /onclick="batalkanForm\(\)"/);
   assert.match(html, /window\.addEventListener\("pagehide", savePurchaseDraftNow\)/);
   assert.match(html, /getPurchaseDraftStore\(currentFormMode\)\?\.remove\(\)/);
+  assert.match(html, /ppn_percent: it\.ppn_percent/);
+  assert.match(html, /await formGrid\.addItem\(item\)/);
+});
+
+test("tipe PPN terkunci saat ada barang dan terbuka setelah semua barang dihapus", () => {
+  const html = readFileSync(
+    new URL("../frontend/purchase/purchases.html", import.meta.url),
+    "utf8",
+  );
+  const functionSource = html.match(
+    /    function updatePurchaseTaxTypeLock\(\) \{[\s\S]*?\n    \}/,
+  )?.[0];
+  assert.ok(functionSource, "fungsi pengunci tipe PPN tidak ditemukan");
+  assert.match(html, /onRowsChanged: updatePurchaseTaxTypeLock/);
+  assert.match(html, /aria-describedby="taxTypeLockHint"/);
+
+  const taxType = {
+    disabled: false,
+    attributes: {},
+    setAttribute(name, value) {
+      this.attributes[name] = value;
+    },
+  };
+  const hint = { textContent: "" };
+  let rows = [{ item_id: 17 }];
+  const sandbox = {
+    formGrid: { getData: () => rows },
+    document: {
+      getElementById(id) {
+        return id === "bTaxType" ? taxType : hint;
+      },
+    },
+  };
+
+  vm.runInNewContext(`${functionSource}; updatePurchaseTaxTypeLock();`, sandbox);
+  assert.equal(taxType.disabled, true);
+  assert.equal(taxType.attributes["aria-disabled"], "true");
+  assert.match(hint.textContent, /Hapus semua barang/);
+
+  rows = [];
+  sandbox.updatePurchaseTaxTypeLock();
+  assert.equal(taxType.disabled, false);
+  assert.equal(taxType.attributes["aria-disabled"], "false");
+  assert.equal(hint.textContent, "");
+});
+
+test("konversi tipe PPN menjaga nilai bruto yang dibayar", () => {
+  const helper = muatKonversiHarga();
+  assert.ok(
+    Math.abs(
+      helper.konversiHargaPpnPembelian(111_000, "include", "exclude", 11) -
+        100_000,
+    ) < 1e-6,
+  );
+  assert.ok(
+    Math.abs(
+      helper.konversiHargaPpnPembelian(100_000, "exclude", "include", 11) -
+        111_000,
+    ) < 1e-6,
+  );
+  assert.equal(
+    helper.konversiHargaPpnPembelian(111_000, "include", "include", 11),
+    111_000,
+  );
 });

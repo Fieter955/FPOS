@@ -9,7 +9,7 @@
     <meta name="theme-color" content="#0f172a" />
     <title>FPOS</title>
     <link rel="stylesheet" href="/css/style.css?v=20260814-account-menu" />
-    <link rel="stylesheet" href="/css/workspace.css?v=20260814-account-menu" />
+    <link rel="stylesheet" href="/css/workspace.css?v=20260816-account-menu-branch" />
   </head>
   <body class="workspace-page">
     <div class="workspace-shell">
@@ -23,6 +23,7 @@
             id="workspaceTabs"
             class="workspace-tabs"
             role="tablist"
+            aria-orientation="horizontal"
             aria-label="Fitur yang sedang dibuka"
           ></div>
         </div>
@@ -79,6 +80,29 @@
                 <span id="workspaceAccountUsername"></span>
               </span>
             </div>
+            <div
+              id="globalBranchSwitcher"
+              class="workspace-branch-switcher"
+              role="group"
+              aria-labelledby="globalBranchLabel"
+            >
+              <span id="globalBranchLabel" class="workspace-branch-label"
+                >Zona Kerja</span
+              >
+              <select
+                id="globalBranchSelect"
+                class="workspace-branch-select"
+                aria-label="Pilih zona kerja"
+                disabled
+              >
+                <option>Memuat zona kerja...</option>
+              </select>
+              <span
+                id="globalBranchCurrent"
+                class="workspace-branch-current"
+                hidden
+              ></span>
+            </div>
             <div class="workspace-account-divider" role="separator"></div>
             <button
               id="workspaceLogoutButton"
@@ -106,8 +130,8 @@
       </main>
     </div>
 
-    <script src="/js/api.js?v=20260814-account-menu"></script>
+    <script src="/js/api.js?v=20260816-account-menu-branch"></script>
     <script src="/js/theme.js"></script>
-    <script src="/js/workspace.js?v=20260814-account-menu"></script>
+    <script src="/js/workspace.js?v=20260816-account-menu-branch"></script>
   </body>
 </html>

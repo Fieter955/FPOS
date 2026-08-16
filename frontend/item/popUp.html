@@ -5,6 +5,82 @@
     /* Biar benar-benar menutup background */
   }
 
+  #mHapusKonversi {
+    z-index: 10001;
+  }
+
+  #mHapusKonversi .conversion-delete-box {
+    max-width: 440px;
+    padding: 28px;
+  }
+
+  #mHapusKonversi .conversion-delete-box .modal-hdr {
+    margin-bottom: 18px;
+  }
+
+  #mHapusKonversi .conversion-delete-box .modal-hdr h2 {
+    color: #ef4444;
+  }
+
+  #mHapusKonversi .conversion-delete-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    text-align: center;
+  }
+
+  #mHapusKonversi .conversion-delete-icon {
+    width: 48px;
+    height: 48px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: rgba(239, 68, 68, 0.12);
+    color: #ef4444;
+    font-size: 26px;
+    font-weight: 800;
+  }
+
+  #mHapusKonversi .conversion-delete-message {
+    margin: 0;
+    color: var(--text-main);
+    line-height: 1.55;
+  }
+
+  #mHapusKonversi .conversion-delete-name {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--bg-color);
+    color: var(--text-main);
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+
+  #mHapusKonversi .conversion-delete-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  #mHapusKonversi .conversion-delete-actions .btn-danger {
+    border: none;
+    background: #ef4444;
+    color: #fff;
+  }
+
+  #mHapusKonversi .conversion-delete-actions .btn-danger:hover {
+    background: #dc2626;
+  }
+
+  #advancedContent tbody tr[data-advanced-row]:focus {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+  }
+
   #mBarang .modal-box {
     width: 100vw !important;
     height: 100vh !important;
@@ -50,6 +126,11 @@
     overflow-y: auto;
     padding-right: 8px;
     /* For scrollbar space */
+  }
+
+  #fFotoBox:focus {
+    outline: 3px solid var(--primary);
+    outline-offset: 2px;
   }
 
   /* Ensure the footer buttons stay visible or are part of the scroll */
@@ -210,7 +291,8 @@
           <div class="input-group">
             <label>Foto Barang</label>
             <div style="display: flex; gap: 12px; align-items: flex-start">
-              <label for="fFotoInput" id="fFotoBox" style="
+              <label for="fFotoInput" id="fFotoBox" data-item-photo-focus tabindex="0" role="button"
+                aria-label="Pilih foto barang" style="
                   width: 96px;
                   height: 96px;
                   flex-shrink: 0;
@@ -509,21 +591,21 @@
               margin-bottom: 16px;
               flex-wrap: wrap;
             ">
-            <button type="button" class="btn adv-btn" id="btnAdvSatuan" style="
+            <button type="button" class="btn adv-btn" id="btnAdvSatuan" data-item-advanced-toggle style="
                 background: var(--card-bg);
                 color: var(--text-main);
                 border: 1px solid var(--border-color);
               " onclick="loadAdvancedContent('satuan')">
               Berdasarkan Satuan
             </button>
-            <button type="button" class="btn adv-btn" id="btnAdvHarga" style="
+            <button type="button" class="btn adv-btn" id="btnAdvHarga" data-item-advanced-toggle style="
                 background: var(--card-bg);
                 color: var(--text-main);
                 border: 1px solid var(--border-color);
               " onclick="loadAdvancedContent('levelHarga')">
               Level Harga
             </button>
-            <button type="button" class="btn adv-btn" id="btnAdvJumlah" style="
+            <button type="button" class="btn adv-btn" id="btnAdvJumlah" data-item-advanced-toggle style="
                 background: var(--card-bg);
                 color: var(--text-main);
                 border: 1px solid var(--border-color);
@@ -559,7 +641,7 @@
           border: 1px dashed var(--border-color);
           margin-bottom: 16px;
         ">
-        <button type="button" class="btn adv-btn" id="btnAdvPotonganHargaJual" style="
+        <button type="button" class="btn adv-btn" id="btnAdvPotonganHargaJual" data-item-advanced-toggle style="
             background: var(--card-bg);
             color: var(--text-main);
             border: 1px solid var(--border-color);
@@ -620,5 +702,29 @@
         <button type="submit" id="btnSimpanBarang" class="btn btn-primary">Simpan Barang</button>
       </div>
     </form>
+  </div>
+</div>
+
+<div class="modal-overlay" id="mHapusKonversi" aria-hidden="true">
+  <div class="modal-box conversion-delete-box" role="alertdialog" aria-modal="true"
+    aria-labelledby="mHapusKonversiTitle" aria-describedby="mHapusKonversiMessage">
+    <div class="modal-hdr">
+      <h2 id="mHapusKonversiTitle">Hapus Baris Konversi</h2>
+      <button type="button" class="btn-x" id="btnTutupHapusKonversi" aria-label="Tutup">×</button>
+    </div>
+    <div class="conversion-delete-content">
+      <div class="conversion-delete-icon" aria-hidden="true">!</div>
+      <p class="conversion-delete-message" id="mHapusKonversiMessage"></p>
+      <div class="conversion-delete-name" id="mHapusKonversiName"></div>
+    </div>
+    <div class="conversion-delete-actions">
+      <button type="button" class="btn" id="btnBatalHapusKonversi"
+        style="background: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-main);">
+        Batal
+      </button>
+      <button type="button" class="btn btn-danger" id="btnKonfirmasiHapusKonversi">
+        Hapus
+      </button>
+    </div>
   </div>
 </div>

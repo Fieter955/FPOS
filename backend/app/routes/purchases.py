@@ -297,10 +297,18 @@ def create_purchase(
 
     # Jika frontend mengirim status 'draft', simpan draft TANPA jurnal/stok.
     if data.status == "draft":
-        from ..services.purchase_flow import calculate_purchase_totals, add_purchase_items, validate_purchase_items
+        from ..services.purchase_flow import (
+            calculate_purchase_totals,
+            add_purchase_items,
+            validate_purchase_items,
+        )
+        from ..services.tax_context import normalize_purchase_tax_type
 
         validate_purchase_items(db, data)
         totals = calculate_purchase_totals(data, received=False)
+        tax_type = normalize_purchase_tax_type(
+            data.tax_type, is_tax_included=data.is_tax_included
+        )
         purchase = models.Purchase(
             number=number,
             date=tanggal,
@@ -312,7 +320,8 @@ def create_purchase(
             discount=totals["discount"],
             tax=totals["tax"],
             tax_percent=data.tax_percent or 0,
-            is_tax_included=data.is_tax_included if data.is_tax_included is not None else True,
+            is_tax_included=(tax_type == "include"),
+            tax_type=tax_type,
             total=totals["total"],
             paid=0,
             status="draft",
@@ -388,6 +397,7 @@ def split_fulfill_request(
             tax=0,
             tax_percent=0,
             is_tax_included=True,
+            tax_type=source.tax_type,
             total=subtotal,
             paid=0,
             status="draft",
@@ -663,6 +673,7 @@ def reorder_missing_items(
         supplier_id=source.supplier_id,
         status="draft",
         is_tax_included=source.is_tax_included,
+        tax_type=source.tax_type,
         tax_percent=source.tax_percent,
         notes=f"Pesanan kekurangan dari {source.number}",
         created_by=current_user.id,

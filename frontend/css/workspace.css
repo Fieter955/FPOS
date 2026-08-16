@@ -333,6 +333,63 @@
   background: var(--border-color);
 }
 
+.workspace-branch-switcher {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.25rem 0.35rem 0.15rem;
+}
+
+.workspace-branch-switcher[hidden],
+.workspace-branch-current[hidden],
+.workspace-branch-select[hidden] {
+  display: none;
+}
+
+.workspace-branch-label {
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.workspace-branch-select,
+.workspace-branch-current {
+  display: block;
+  width: 100%;
+  min-height: 2.35rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.65rem;
+  background: var(--bg-color);
+  color: var(--text-main);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.workspace-branch-select {
+  cursor: pointer;
+}
+
+.workspace-branch-select:focus-visible {
+  outline: 3px solid var(--primary-light);
+  outline-offset: 1px;
+}
+
+.workspace-branch-select:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+
+.workspace-branch-current {
+  overflow: hidden;
+  color: var(--primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .workspace-logout-button {
   display: flex;
   align-items: center;
@@ -378,6 +435,11 @@
   color: var(--text-muted);
   font-size: 0.65rem;
   font-weight: 500;
+}
+
+.dark-mode .workspace-branch-select,
+.dark-mode .workspace-branch-current {
+  background: #0f172a;
 }
 
 .workspace-frames {

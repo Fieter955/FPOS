@@ -33,6 +33,9 @@ class ElemenPalsu {
     this.value = "";
     this.textContent = "";
     this.selected = false;
+    this.hidden = false;
+    this.disabled = false;
+    this.listenersInitialized = false;
   }
 
   set id(value) {
@@ -84,6 +87,18 @@ function buatKotakPasir({ embedded = false } = {}) {
     },
   };
   document.body = new ElemenPalsu("body", document);
+  const accountMenu = new ElemenPalsu("div", document);
+  accountMenu.id = "workspaceAccountMenu";
+  document.body.append(accountMenu);
+  const switcher = new ElemenPalsu("div", document);
+  switcher.id = "globalBranchSwitcher";
+  accountMenu.append(switcher);
+  const select = new ElemenPalsu("select", document);
+  select.id = "globalBranchSelect";
+  switcher.append(select);
+  const current = new ElemenPalsu("span", document);
+  current.id = "globalBranchCurrent";
+  switcher.append(current);
 
   const cacheDihapus = [];
   const pesan = [];
@@ -135,6 +150,9 @@ function buatKotakPasir({ embedded = false } = {}) {
     ...kotakPasir,
     cacheDihapus,
     pesan,
+    setUser(value) {
+      kotakPasir.getUser = () => value;
+    },
     setDaftarCabang(value) {
       daftarCabang = value;
     },
@@ -152,10 +170,31 @@ test("refresh memperbarui dropdown yang sama tanpa membuat duplikat", async () =
   await sandbox.branchHelpers.refreshBranchSwitcher({ force: true });
 
   assert.equal(sandbox.document.body.children.length, 1);
+  assert.equal(
+    sandbox.document.getElementById("globalBranchSwitcher").parent,
+    sandbox.document.getElementById("workspaceAccountMenu"),
+  );
   const select = sandbox.document.getElementById("globalBranchSelect");
   assert.equal(select.children.length, 2);
   assert.equal(select.children[1].textContent, "📍 Cabang Baru");
+  assert.equal(select.disabled, false);
   assert.deepEqual(sandbox.cacheDihapus, ["/branches/"]);
+});
+
+test("staff melihat zona kerja aktif tanpa kontrol pindah cabang", async () => {
+  const sandbox = buatKotakPasir();
+  sandbox.setUser({ id: 2, role: "kasir", branch_id: 2 });
+  sandbox.setDaftarCabang([{ id: 2, name: "Cabang Selatan" }]);
+
+  await sandbox.branchHelpers.refreshBranchSwitcher();
+
+  const select = sandbox.document.getElementById("globalBranchSelect");
+  const current = sandbox.document.getElementById("globalBranchCurrent");
+  assert.equal(select.hidden, true);
+  assert.equal(select.disabled, true);
+  assert.equal(current.hidden, false);
+  assert.equal(current.textContent, "📍 Cabang Selatan");
+  assert.equal(sandbox.localStorage.getItem("active_branch_id"), "2");
 });
 
 test("halaman embedded menghapus cache dan memberi tahu workspace", async () => {

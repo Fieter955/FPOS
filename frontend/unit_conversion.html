@@ -798,19 +798,24 @@
       function handleSourceSearchKeydown(event) {
         if (!searchResults.length) return;
 
-        if (event.key === "ArrowDown") {
+        const isNextKey = event.key === "ArrowDown" || event.key === "ArrowRight";
+        const isPreviousKey = event.key === "ArrowUp" || event.key === "ArrowLeft";
+        if (isNextKey || isPreviousKey) {
           event.preventDefault();
-          searchIndex = Math.min(searchResults.length - 1, searchIndex + 1);
-          renderSearchResults();
-        } else if (event.key === "ArrowUp") {
-          event.preventDefault();
-          searchIndex = Math.max(0, searchIndex - 1);
+          searchIndex =
+            (searchIndex + (isNextKey ? 1 : -1) + searchResults.length) %
+            searchResults.length;
           renderSearchResults();
         } else if (event.key === "Enter") {
           event.preventDefault();
-          if (searchIndex >= 0 && searchResults[searchIndex]) {
-            selectSourceItem(searchResults[searchIndex].id);
-          }
+          selectSourceItem(
+            searchResults[searchIndex >= 0 ? searchIndex : 0].id,
+          );
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          searchResults = [];
+          searchIndex = -1;
+          renderSearchResults();
         }
       }
 

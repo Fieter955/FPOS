@@ -293,7 +293,21 @@ def get_supplier_purchased_items(
     ).distinct().all()
     
     return [
-        {"id": i.id, "code": i.code, "name": i.name, "barcode": i.barcode} 
+        {
+            "id": i.id,
+            "code": i.code,
+            "name": i.name,
+            # Untuk retur pembelian, barcode supplier adalah identitas yang
+            # paling tepat bila supplier tersebut memiliki barcode khusus.
+            "barcode": next(
+                (
+                    detail.barcode
+                    for detail in i.supplier_details
+                    if detail.supplier_id == sid and detail.barcode
+                ),
+                i.barcode,
+            ),
+        }
         for i in items
     ]
 

@@ -199,15 +199,30 @@
     } catch {}
 
     const restoredTabs = Array.isArray(restored?.tabs) ? restored.tabs : [];
+    const restoredActiveId = restored?.activeTabId;
+    const restoredByMenu = new Map();
     tabs = [dashboard];
     for (const saved of restoredTabs) {
-      if (tabs.length >= MAX_TABS || saved?.isDashboard || saved?.id === DASHBOARD_ID) {
+      if (saved?.isDashboard || saved?.id === DASHBOARD_ID) {
         continue;
       }
       const url = normalizeTabUrl(saved?.url);
-      if (!url || cleanPath(new URL(url, location.origin).pathname) === DASHBOARD_URL) {
+      if (!url) {
         continue;
       }
+      const path = cleanPath(new URL(url, location.origin).pathname);
+      if (path === DASHBOARD_URL) continue;
+
+      // Tab lama mungkin sudah menyimpan duplikat sebelum aturan satu-menu
+      // diterapkan. Pertahankan tab pertama dan arahkan state aktif ke sana.
+      const menuKey = path.toLowerCase();
+      const existing = restoredByMenu.get(menuKey);
+      if (existing) {
+        if (saved?.id === restoredActiveId) restoredActiveTabId = existing.id;
+        continue;
+      }
+      if (tabs.length >= MAX_TABS) continue;
+
       const restoredTab = {
         id: `tab-${nextTabNumber++}`,
         url,
@@ -220,7 +235,8 @@
         unsavedStateKnown: false,
       };
       tabs.push(restoredTab);
-      if (saved?.id === restored?.activeTabId) {
+      restoredByMenu.set(menuKey, restoredTab);
+      if (saved?.id === restoredActiveId) {
         restoredActiveTabId = restoredTab.id;
       }
     }
@@ -260,10 +276,31 @@
 
     element.addEventListener("click", () => activateTab(tab.id));
     element.addEventListener("keydown", (event) => {
+      if (event.target !== element) return;
+
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         activateTab(tab.id);
+        return;
       }
+
+      if (
+        !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(
+          event.key,
+        )
+      ) {
+        return;
+      }
+
+      const currentIndex = tabs.indexOf(tab);
+      if (currentIndex < 0) return;
+      const direction = event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 1;
+      const nextIndex = (currentIndex + direction + tabs.length) % tabs.length;
+      const nextTab = tabs[nextIndex];
+      if (!nextTab?.element) return;
+      event.preventDefault();
+      activateTab(nextTab.id);
+      nextTab.element.focus({ preventScroll: true });
     });
     tabsElement.appendChild(element);
     tab.element = element;
@@ -323,7 +360,7 @@
     saveState();
   }
 
-  function openTab(rawUrl, requestedTitle = "", { reuseExisting = false } = {}) {
+  function openTab(rawUrl, requestedTitle = "") {
     const url = normalizeTabUrl(rawUrl);
     if (!url) {
       showToast("Halaman tersebut tidak dapat dibuka di tab FPOS.", "error");
@@ -333,35 +370,20 @@
       activateTab(DASHBOARD_ID);
       return tabs[0];
     }
-    if (reuseExisting) {
-      const requestedPath = cleanPath(
-        new URL(url, location.origin).pathname,
-      ).toLowerCase();
-      const existing = tabs.find((tab) => {
-        if (tab.url === url) return true;
-        if (tab.isDashboard) return false;
-        return (
-          cleanPath(new URL(tab.url, location.origin).pathname).toLowerCase() ===
-          requestedPath
-        );
-      });
-      if (existing) {
-        const routeChanged = existing.url !== url;
-        const wasLoaded = existing.loaded;
-        if (routeChanged) {
-          existing.url = url;
-          existing.title = cleanDocumentTitle(requestedTitle, url);
-          updateTabPresentation(existing);
-        }
-        activateTab(existing.id);
-        if (routeChanged && wasLoaded && existing.frame?.contentWindow) {
-          existing.frame.contentWindow.postMessage(
-            { type: "fpos-route-state", url },
-            location.origin,
-          );
-        }
-        return existing;
-      }
+    const requestedPath = cleanPath(
+      new URL(url, location.origin).pathname,
+    ).toLowerCase();
+    const existing = tabs.find((tab) => {
+      if (tab.url === url) return true;
+      if (tab.isDashboard) return false;
+      return (
+        cleanPath(new URL(tab.url, location.origin).pathname).toLowerCase() ===
+        requestedPath
+      );
+    });
+    if (existing) {
+      activateTab(existing.id);
+      return existing;
     }
     if (tabs.length >= MAX_TABS) {
       showToast(
@@ -556,9 +578,7 @@
         tab.unsavedStateKnown = true;
       }
     } else if (message.type === "fpos-open-tab") {
-      openTab(message.url, message.title, {
-        reuseExisting: Boolean(message.reuseExisting),
-      });
+      openTab(message.url, message.title);
     } else if (message.type === "fpos-focus-dashboard") {
       activateTab(DASHBOARD_ID);
     } else if (message.type === "fpos-frame-location") {
@@ -650,13 +670,57 @@
     if (returnFocus) accountButton.focus();
   }
 
+  function getAccountMenuControls() {
+    return Array.from(
+      accountMenu.querySelectorAll(
+        "select:not([disabled]), button:not([disabled]), input:not([disabled])",
+      ),
+    ).filter((control) => {
+      const style = window.getComputedStyle(control);
+      return (
+        !control.hidden &&
+        style.display !== "none" &&
+        style.visibility !== "hidden" &&
+        control.getClientRects().length > 0
+      );
+    });
+  }
+
+  function focusAccountMenuControl(direction = 1) {
+    const controls = getAccountMenuControls();
+    if (!controls.length) return false;
+    const activeIndex = controls.indexOf(document.activeElement);
+    const startIndex =
+      activeIndex < 0
+        ? direction > 0
+          ? 0
+          : controls.length - 1
+        : activeIndex + direction;
+    const nextIndex = (startIndex + controls.length) % controls.length;
+    controls[nextIndex].focus({ preventScroll: true });
+    return true;
+  }
+
   function initializeAccountMenu() {
     populateAccountMenu();
 
     accountButton.addEventListener("click", () => {
       const shouldOpen = accountButton.getAttribute("aria-expanded") !== "true";
       setAccountMenuOpen(shouldOpen);
-      if (shouldOpen) logoutButton.focus();
+      if (shouldOpen) focusAccountMenuControl(1);
+    });
+
+    accountButton.addEventListener("keydown", (event) => {
+      const isNextKey =
+        event.key === "ArrowDown" || event.key === "ArrowRight";
+      const isPreviousKey =
+        event.key === "ArrowUp" || event.key === "ArrowLeft";
+      if (!isNextKey && !isPreviousKey) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      setAccountMenuOpen(true);
+      focusAccountMenuControl(isNextKey ? 1 : -1);
     });
 
     logoutButton.addEventListener("click", async () => {
@@ -675,6 +739,30 @@
       ) {
         event.preventDefault();
         setAccountMenuOpen(false, { returnFocus: true });
+        return;
+      }
+
+      if (
+        accountButton.getAttribute("aria-expanded") !== "true" ||
+        !accountElement.contains(event.target) ||
+        event.target === accountButton ||
+        event.target instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+
+      const isNextKey =
+        event.key === "ArrowDown" || event.key === "ArrowRight";
+      const isPreviousKey =
+        event.key === "ArrowUp" || event.key === "ArrowLeft";
+      if (isNextKey || isPreviousKey) {
+        event.preventDefault();
+        focusAccountMenuControl(isNextKey ? 1 : -1);
+      } else if (event.key === "Tab") {
+        setTimeout(() => {
+          if (!accountElement.contains(document.activeElement))
+            setAccountMenuOpen(false);
+        }, 0);
       }
     });
   }
@@ -691,7 +779,15 @@
       new URLSearchParams(location.search).get("start") || "",
     );
     if (requestedStart && requestedStart !== DASHBOARD_URL) {
-      const existing = tabs.find((tab) => tab.url === requestedStart);
+      const requestedPath = cleanPath(
+        new URL(requestedStart, location.origin).pathname,
+      ).toLowerCase();
+      const existing = tabs.find(
+        (tab) =>
+          !tab.isDashboard &&
+          cleanPath(new URL(tab.url, location.origin).pathname).toLowerCase() ===
+            requestedPath,
+      );
       if (existing) activeTabId = existing.id;
       else if (tabs.length < MAX_TABS) {
         tabs.push({

@@ -399,6 +399,7 @@
           api("GET", "/suppliers/?limit=200"),
           api("GET", "/customers/?limit=200"),
         ]);
+        subscribeItemMasterChanges(refreshConsignmentItems);
         const selSup = document.getElementById("inSup");
         allSuppliers.forEach((s) =>
           selSup.insertAdjacentHTML(
@@ -414,6 +415,21 @@
           ),
         );
         loadIn();
+      }
+
+      async function refreshConsignmentItems() {
+        try {
+          allItems = await api("GET", "/items/?limit=500");
+          document
+            .querySelectorAll("#inRows select, #outRows select")
+            .forEach((select) => {
+              const selected = select.value;
+              select.innerHTML = itemOpts();
+              select.value = selected;
+            });
+        } catch (error) {
+          console.error("Gagal menyegarkan barang konsinyasi", error);
+        }
       }
 
       function switchTab(t) {

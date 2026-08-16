@@ -15,6 +15,7 @@ from .journal_service import (
 )
 from .virtual_units import is_virtual_variant
 from .inventory_fifo import add_batch, reduce_batches_for_reversal
+from .tax_context import normalize_purchase_tax_type, purchase_line_ppn_rates
 
 
 PUSAT_BRANCH_ID = 1
@@ -54,17 +55,13 @@ def stempel_tarif_ppn_baris(db: Session, data: schemas.PurchaseCreate) -> None:
     Sumber tarif (meniru sisi jual, sales.py): tarif baris yang dikirim UI → Item.ppn_percent →
     tarif PPN standar toko (Branch Pusat). Baris yang sudah punya tarif (termasuk 0 eksplisit
     untuk barang non-PPN) TIDAK ditimpa."""
-    branch = (db.query(models.Branch).get(PUSAT_BRANCH_ID)
-              or db.query(models.Branch).order_by(models.Branch.id).first())
-    tarif_toko = float(getattr(branch, "tarif_ppn", 0) or 0) if branch else 0.0
-    ids = [l.item_id for l in data.items]
-    rows = db.query(models.Item.id, models.Item.ppn_percent).filter(models.Item.id.in_(ids)).all()
-    ppn_map = {rid: rppn for (rid, rppn) in rows}
-    for line in data.items:
-        if line.ppn_percent is not None:
-            continue
-        master = ppn_map.get(line.item_id)
-        line.ppn_percent = float(master) if master is not None else tarif_toko
+    try:
+        rates = purchase_line_ppn_rates(db, data)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    for line, rate in zip(data.items, rates):
+        if line.ppn_percent is None:
+            line.ppn_percent = rate
 
 
 def calculate_purchase_totals(data: schemas.PurchaseCreate, *, received: bool = False,
@@ -72,7 +69,24 @@ def calculate_purchase_totals(data: schemas.PurchaseCreate, *, received: bool = 
     # Mode Included + PKP (peel_included): harga sudah termasuk PPN → kupas mundur PER-BARIS
     # (tarif tiap baris boleh beda). Diskon header disebar proporsional. subtotal=NET, tax=PPN
     # tertanam → PKP bisa memisah PPN Masukan (1-1550). Rumus sejajar hitung_total_penjualan_per_baris.
-    if peel_included:
+    tax_type = normalize_purchase_tax_type(
+        getattr(data, "tax_type", None),
+        is_tax_included=getattr(data, "is_tax_included", True),
+    )
+
+    if tax_type == "none":
+        tax_type = "none"
+        subtotal = 0.0
+        for line in data.items:
+            qty = line.qty_received if received and line.qty_received > 0 else line.qty
+            subtotal += harga_neto_bertingkat(line) * qty
+        discount = subtotal * ((data.discount or 0) / 100)
+        return {"subtotal": subtotal, "discount": discount, "tax": 0.0,
+                "total": subtotal - discount}
+
+    # Include means the entered line prices already contain PPN.  PKP peels
+    # the tax into PPN Masukan; non-PKP keeps it inside inventory cost.
+    if tax_type == "include" and peel_included:
         dr = (data.discount or 0) / 100
         subtotal = discount = tax = total = 0.0
         for line in data.items:
@@ -94,7 +108,16 @@ def calculate_purchase_totals(data: schemas.PurchaseCreate, *, received: bool = 
                 total    += g - dg
         return {"subtotal": subtotal, "discount": discount, "tax": tax, "total": total}
 
-    # Mode Excluded / non-PKP (perilaku lama, tak berubah).
+    if tax_type == "include":
+        subtotal = 0.0
+        for line in data.items:
+            qty = line.qty_received if received and line.qty_received > 0 else line.qty
+            subtotal += harga_neto_bertingkat(line) * qty
+        discount = subtotal * ((data.discount or 0) / 100)
+        return {"subtotal": subtotal, "discount": discount, "tax": 0.0,
+                "total": subtotal - discount}
+
+    # Exclude: the header rate is added above the entered net prices.
     subtotal = 0.0
     for line in data.items:
         qty = line.qty_received if received and line.qty_received > 0 else line.qty
@@ -368,6 +391,7 @@ def create_branch_request(db: Session, *, data: schemas.PurchaseCreate,
         subtotal=totals["subtotal"],
         discount=totals["discount"],
         tax=totals["tax"],
+        tax_type=normalize_purchase_tax_type(data.tax_type, is_tax_included=data.is_tax_included),
         total=totals["total"],
         paid=0,
         status="pending",
@@ -394,9 +418,10 @@ def create_supplier_purchase(db: Session, *, data: schemas.PurchaseCreate,
     # Tetapkan tarif efektif tiap baris DULU agar total & biaya batch konsisten. Fulfillment
     # antar-cabang bukan pembelian supplier → tak ada pemisahan PPN.
     pkp = toko_pkp(db)
+    tax_type = normalize_purchase_tax_type(data.tax_type, is_tax_included=data.is_tax_included)
     is_fulfillment = (branch_id == PUSAT_BRANCH_ID and target_branch_id and
                       target_branch_id != PUSAT_BRANCH_ID)
-    peel_included = bool(pkp and data.is_tax_included and not is_fulfillment)
+    peel_included = bool(pkp and tax_type == "include" and not is_fulfillment)
     if peel_included:
         stempel_tarif_ppn_baris(db, data)
 
@@ -414,7 +439,8 @@ def create_supplier_purchase(db: Session, *, data: schemas.PurchaseCreate,
         discount=totals["discount"],
         tax=totals["tax"],
         tax_percent=data.tax_percent or 0,
-        is_tax_included=data.is_tax_included if data.is_tax_included is not None else True,
+        is_tax_included=(tax_type == "include"),
+        tax_type=tax_type,
         total=totals["total"],
         paid=data.paid or 0,
         status=status,
@@ -526,9 +552,10 @@ def update_draft_purchase(db: Session, *, purchase: models.Purchase,
     # Mode PKP + Included → kupas PPN tertanam per-baris (PPN Masukan dipisah ke 1-1550).
     # Tetapkan tarif efektif tiap baris dulu. Fulfillment antar-cabang → tak ada pemisahan PPN.
     pkp = toko_pkp(db)
+    tax_type = normalize_purchase_tax_type(data.tax_type, is_tax_included=data.is_tax_included)
     is_fulfillment = (purchase.branch_id == PUSAT_BRANCH_ID and final_target_branch_id and
                       final_target_branch_id != PUSAT_BRANCH_ID)
-    peel_included = bool(pkp and data.is_tax_included and not is_fulfillment)
+    peel_included = bool(pkp and tax_type == "include" and not is_fulfillment)
     if peel_included:
         stempel_tarif_ppn_baris(db, data)
 
@@ -542,7 +569,8 @@ def update_draft_purchase(db: Session, *, purchase: models.Purchase,
     purchase.discount = totals["discount"]
     purchase.tax = totals["tax"]
     purchase.tax_percent = data.tax_percent or 0
-    purchase.is_tax_included = data.is_tax_included if data.is_tax_included is not None else True
+    purchase.is_tax_included = (tax_type == "include")
+    purchase.tax_type = tax_type
     purchase.total = totals["total"]
     purchase.paid = data.paid or 0
     purchase.status = status

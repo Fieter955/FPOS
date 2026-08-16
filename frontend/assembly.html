@@ -187,8 +187,23 @@
           api("GET", "/items/?limit=500"), api("GET", "/assembly/bom"),
           api("GET", "/customers/?limit=500"), api("GET", "/warehouses/")
         ]);
+        subscribeItemMasterChanges(refreshAssemblyItems);
         renderBOMs();
       } catch (error) { showToast(error.message, "error"); }
+    }
+
+    async function refreshAssemblyItems() {
+      try {
+        allItems = await api("GET", "/items/?limit=500");
+        document
+          .querySelectorAll("#bomProduct, #bomLines .material-select")
+          .forEach((select) => {
+            const selected = select.value;
+            select.innerHTML = itemOptions(selected);
+          });
+      } catch (error) {
+        console.error("Gagal menyegarkan barang perakitan", error);
+      }
     }
 
     function switchTab(name) {

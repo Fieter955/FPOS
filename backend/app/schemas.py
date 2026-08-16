@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, field_validator
-from typing import Optional, List
+from typing import Optional, List, Literal
 from datetime import date, datetime
 
 # ─── Auth ─────────────────────────────────────────────────────────────────────
@@ -394,6 +394,7 @@ class PurchaseCreate(BaseModel):
     tax: float = 0
     tax_percent: float = 0
     is_tax_included: bool = True
+    tax_type: Optional[Literal["include", "exclude", "none"]] = None
     notes: Optional[str] = None
     items: List[PurchaseItemCreate]
     paid: float = 0
@@ -432,6 +433,7 @@ class PurchaseOut(BaseModel):
     tax: float
     tax_percent: float = 0
     is_tax_included: bool = True
+    tax_type: Optional[str] = None
     total: float
     paid: float
     status: str

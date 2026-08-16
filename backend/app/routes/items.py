@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from typing import Optional
 import pandas as pd
 from io import BytesIO
@@ -32,6 +33,44 @@ else:
     _ROOT_DIR = Path(__file__).resolve().parents[3]
 _ITEM_IMG_DIR = _ROOT_DIR / "uploads" / "items"
 MAKS_FOTO_BYTES = 3 * 1024 * 1024  # 3 MB (foto sudah dikecilkan di browser; ini hanya batas aman)
+
+
+def _normalize_item_name(value: str) -> str:
+    """Normalisasi nama hanya untuk validasi duplikat."""
+    return " ".join(str(value or "").split()).casefold()
+
+
+def _find_duplicate_item_name(db: Session, name: str, exclude_id: Optional[int] = None):
+    """Cari nama item yang sama tanpa membedakan kapitalisasi/spasi berlebih."""
+    query = db.query(models.Item)
+    if exclude_id is not None:
+        query = query.filter(models.Item.id != exclude_id)
+
+    target = _normalize_item_name(name)
+    for existing in query.yield_per(500):
+        if _normalize_item_name(existing.name) == target:
+            return existing
+    return None
+
+
+def _validate_supplier_barcodes(
+    db: Session,
+    supplier_settings,
+    exclude_item_id: Optional[int] = None,
+) -> None:
+    """Validasi barcode khusus supplier sebelum mengganti/simpan relasi."""
+    seen = set()
+    from .barcode_gen import assert_barcode_available, _normalize_barcode
+
+    for setting in supplier_settings or []:
+        value = str(getattr(setting, "barcode", None) or "").strip()
+        normalized = _normalize_barcode(value)
+        if not normalized or normalized == "auto":
+            continue
+        if normalized in seen:
+            raise HTTPException(400, f"Barcode supplier '{value}' dipakai lebih dari satu supplier pada barang yang sama.")
+        seen.add(normalized)
+        assert_barcode_available(db, value, exclude_item_id=exclude_item_id)
 
 
 def _serialize_item_for_user(item: models.Item, current_user: models.User, db: Session):
@@ -297,11 +336,18 @@ def get_items(
             q = q.filter(models.Item.id == -1)
 
     if active_only: q = q.filter(models.Item.is_active == True)
-    if search: q = q.filter(
-        models.Item.name.ilike(f"%{search}%") |
-        models.Item.code.ilike(f"%{search}%") |
-        models.Item.barcode.ilike(f"%{search}%")
-    )
+    if search:
+        search_pattern = f"%{search}%"
+        supplier_barcode_match = db.query(models.ItemSupplier.item_id).filter(
+            models.ItemSupplier.item_id == models.Item.id,
+            models.ItemSupplier.barcode.ilike(search_pattern),
+        ).exists()
+        q = q.filter(
+            models.Item.name.ilike(search_pattern) |
+            models.Item.code.ilike(search_pattern) |
+            models.Item.barcode.ilike(search_pattern) |
+            supplier_barcode_match
+        )
     if category_id: q = q.filter(models.Item.category_id == category_id)
 
     items = q.offset(skip).limit(limit).all()
@@ -333,9 +379,25 @@ def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db), current
     # Ambil data form, kecuali prices dan supplier_ids
     item_data = item.model_dump(exclude={"prices", "supplier_ids", "supplier_settings", "group_discounts"})
 
+    # Beri respons yang bisa ditampilkan sebagai popup di frontend, bukan error 500
+    # dari constraint UNIQUE ketika proses flush berlangsung.
+    duplicate = _find_duplicate_item_name(db, item_data["name"])
+    if duplicate:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Nama barang '{item_data['name']}' sudah ada. Silakan gunakan nama lain.",
+        )
+
     # 1. Pastikan Kode ter-generate otomatis dengan aman di backend
     if not item_data.get("code") or item_data["code"] == "AUTO":
         item_data["code"] = f"ITM-{uuid.uuid4().hex[:6].upper()}"
+
+    from .barcode_gen import assert_barcode_available, _normalize_barcode
+    item_barcode = str(item_data.get("barcode") or "").strip()
+    if item_barcode and _normalize_barcode(item_barcode) != "auto":
+        item_data["barcode"] = item_barcode
+        assert_barcode_available(db, item_barcode)
+    _validate_supplier_barcodes(db, item.supplier_settings)
 
     # 2. Paksa status Aktif agar PASTI terbaca di POS
     item_data["is_active"] = True
@@ -363,13 +425,24 @@ def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db), current
             ))
 
     db.add(obj)
-    db.flush() # Simpan sementara untuk dapatkan ID Resmi    
+    try:
+        db.flush() # Simpan sementara untuk dapatkan ID Resmi
+    except IntegrityError as exc:
+        # Tetap aman bila ada dua request bersamaan yang lolos pengecekan awal.
+        db.rollback()
+        if "items.name" in str(exc):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Nama barang '{item_data['name']}' sudah ada. Silakan gunakan nama lain.",
+            ) from exc
+        raise
     # 3. Auto-Generate Barcode
     need_barcode_gen = False
     if not obj.barcode or obj.barcode == "AUTO":
         need_barcode_gen = True
         from .barcode_gen import _generate_barcode_value
         obj.barcode = _generate_barcode_value(obj.code, "CODE128")
+        assert_barcode_available(db, obj.barcode, exclude_item_id=obj.id)
         
     # 4. Daftarkan Barcode ke Mesin Printer Label
     if need_barcode_gen:
@@ -431,19 +504,30 @@ def update_item(item_id: int, item: schemas.ItemUpdate, db: Session = Depends(ge
 
     # Cegah bentrok nama (Item.name unik) agar tidak jatuh ke error 500 yang membingungkan
     nama_baru = data.get("name")
-    if nama_baru and nama_baru != obj.name:
-        bentrok = db.query(models.Item).filter(
-            models.Item.name == nama_baru,
-            models.Item.id != item_id,
-        ).first()
+    if nama_baru:
+        bentrok = _find_duplicate_item_name(db, nama_baru, exclude_id=item_id)
         if bentrok:
-            raise HTTPException(400, f"Nama barang '{nama_baru}' sudah dipakai item lain.")
+            raise HTTPException(
+                400,
+                f"Nama barang '{nama_baru}' sudah ada. Silakan gunakan nama lain.",
+            )
 
     need_barcode_gen = False
     if data.get("barcode") == "AUTO":
         need_barcode_gen = True
         from .barcode_gen import _generate_barcode_value
         data["barcode"] = _generate_barcode_value(obj.code, "CODE128")
+
+    from .barcode_gen import assert_barcode_available, _normalize_barcode
+    if "barcode" in data and data["barcode"]:
+        data["barcode"] = str(data["barcode"]).strip()
+        if _normalize_barcode(data["barcode"]) != "auto":
+            assert_barcode_available(db, data["barcode"], exclude_item_id=item_id)
+    _validate_supplier_barcodes(
+        db,
+        item.supplier_settings,
+        exclude_item_id=item_id,
+    )
         
     old_sell_price = obj.sell_price
     if "sell_price" in data and data["sell_price"] is not None:

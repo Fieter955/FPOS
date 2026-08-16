@@ -4,6 +4,16 @@
  * reusable UI logic for standard components
  */
 
+// Harga Include = bruto (sudah mengandung PPN), Exclude = neto (sebelum PPN).
+// Dipakai saat user menyetujui penyamaan tipe PPN barang dengan transaksi.
+function konversiHargaPpnPembelian(harga, tipeAwal, tipeTujuan, persen) {
+  const nilai = Number(harga) || 0;
+  const rate = Number(persen) || 0;
+  if (!rate || tipeAwal === tipeTujuan) return nilai;
+  const faktor = 1 + rate / 100;
+  return tipeAwal === "include" ? nilai / faktor : nilai * faktor;
+}
+
 /**
  * createPremiumCombo
  * Creates a premium searchable dropdown with fixed positioning and high performance.
@@ -19,6 +29,7 @@ function createPremiumCombo(container, data, config = {}) {
     placeholder = "Cari...",
     isItem = false,
     onSelect = null,
+    onEnter = null,
   } = config;
 
   target.innerHTML = `
@@ -35,9 +46,16 @@ function createPremiumCombo(container, data, config = {}) {
   let currentData = data;
   let highlightedIndex = -1;
 
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-expanded", "false");
+  dropdown.setAttribute("role", "listbox");
+
   const closeDropdown = () => {
     dropdown.classList.remove("show");
     highlightedIndex = -1;
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
   };
 
   const selectItem = (el) => {
@@ -66,7 +84,11 @@ function createPremiumCombo(container, data, config = {}) {
 
     highlightedIndex = (nextIndex + items.length) % items.length;
     const activeItem = items[highlightedIndex];
+    items.forEach((el, index) => {
+      el.setAttribute("aria-selected", String(index === highlightedIndex));
+    });
     activeItem.classList.add("highlight");
+    input.setAttribute("aria-activedescendant", activeItem.id);
     activeItem.scrollIntoView({ block: "nearest" });
   };
 
@@ -106,8 +128,8 @@ function createPremiumCombo(container, data, config = {}) {
       dropdown.innerHTML = filtered
         .slice(0, 50)
         .map(
-          (d) => `
-                <div class="premium-dropdown-item" data-id="${d[valField]}" data-label="${d[labField]}">
+          (d, index) => `
+                <div id="${target.id || "premium-combo"}-option-${index}" role="option" aria-selected="false" tabindex="-1" class="premium-dropdown-item" data-id="${d[valField]}" data-label="${d[labField]}">
                     <span>${d[labField]} ${isItem ? `<small>[${d.code}]</small>` : ""}</span>
                 </div>
             `,
@@ -118,6 +140,8 @@ function createPremiumCombo(container, data, config = {}) {
     highlightedIndex = -1;
 
     dropdown.classList.add("show");
+    input.setAttribute("aria-expanded", "true");
+    input.removeAttribute("aria-activedescendant");
     positionDropdown();
 
     dropdown
@@ -131,15 +155,23 @@ function createPremiumCombo(container, data, config = {}) {
   };
 
   input.onfocus = () => render(input.value);
-  input.oninput = () => render(input.value);
+  input.oninput = () => {
+    // Ketikan baru membatalkan pilihan lama. Enter berikutnya akan memilih
+    // hasil pencarian terkini melalui handler di bawah.
+    hidden.value = "";
+    render(input.value);
+  };
   input.onkeydown = (e) => {
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    const isNextKey = e.key === "ArrowDown" || e.key === "ArrowRight";
+    const isPreviousKey = e.key === "ArrowUp" || e.key === "ArrowLeft";
+
+    if (isNextKey || isPreviousKey) {
       e.preventDefault();
       e.stopPropagation();
 
       if (!dropdown.classList.contains("show")) render(input.value);
 
-      if (e.key === "ArrowDown") {
+      if (isNextKey) {
         highlightItem(highlightedIndex < 0 ? 0 : highlightedIndex + 1);
       } else {
         const itemCount = dropdown.querySelectorAll(
@@ -152,16 +184,31 @@ function createPremiumCombo(container, data, config = {}) {
       return;
     }
 
-    if (e.key === "Enter" && dropdown.classList.contains("show")) {
+    if (e.key === "Tab" && dropdown.classList.contains("show")) {
       const items = dropdown.querySelectorAll(
         ".premium-dropdown-item[data-id]",
       );
       const activeItem = items[highlightedIndex];
+      if (activeItem) selectItem(activeItem);
+      else closeDropdown();
+      // Jangan cegah Tab: setelah dropdown dikunci, fokus tetap maju ke kontrol
+      // berikutnya secara alami.
+      return;
+    }
+
+    if (e.key === "Enter" && dropdown.classList.contains("show")) {
+      const items = dropdown.querySelectorAll(
+        ".premium-dropdown-item[data-id]",
+      );
+      // Enter langsung memilih hasil pertama bila pengguna belum menekan
+      // ArrowDown, sehingga alur keyboard tidak bergantung pada Tab/mouse.
+      const activeItem = items[highlightedIndex] || items[0];
       if (!activeItem) return;
 
       e.preventDefault();
       e.stopPropagation();
       selectItem(activeItem);
+      if (onEnter) onEnter();
       return;
     }
 
@@ -282,6 +329,12 @@ function createPurchaseGrid(container, config = {}) {
     }).format(n || 0);
   const toAngka = (s) => parseDesimal(s);
   const toRibuan = (n) => toDesimal(n);
+  const fokusInput = (input, pilihSemua = true) => {
+    if (!input || input.disabled) return false;
+    input.focus();
+    if (pilihSemua && typeof input.select === "function") input.select();
+    return true;
+  };
 
   const addRow = (item = null) => {
     const id = barisIdx++;
@@ -367,6 +420,72 @@ function createPurchaseGrid(container, config = {}) {
     const delBtn = row.querySelector(".btn-del-row");
     const discGroup = row.querySelector(".disc-group");
     const formBarangEdit = row.querySelector(".pg-name-edit");
+    const itemInput = row.querySelector(".item-selector .combobox-input");
+
+    const fokusNamaBarangBarisBerikutnya = () => {
+      const barisBerikutnya = addRow();
+      const inputNama = barisBerikutnya.querySelector(
+        ".item-selector .combobox-input, .pg-name-edit",
+      );
+      setTimeout(() => fokusInput(inputNama, false), 0);
+    };
+
+    const navigasiEnter = (event) => {
+      if (
+        !isFulfillment ||
+        event.key !== "Enter" ||
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      ) {
+        return;
+      }
+
+      const targetInput = event.target.closest?.("input");
+      if (!targetInput || !row.contains(targetInput)) return;
+
+      const namaBarangInput = targetInput.closest(".item-selector")
+        ? itemInput
+        : formBarangEdit;
+      if (namaBarangInput && targetInput === namaBarangInput) {
+        // Jangan meninggalkan nama barang yang belum dipilih dari combobox.
+        if (targetInput === itemInput && !combo.val()) return;
+        event.preventDefault();
+        event.stopPropagation();
+        fokusInput(ordInp);
+        return;
+      }
+
+      const diskonInputs = Array.from(row.querySelectorAll(".pg-disc"));
+      let inputBerikutnya = null;
+      if (targetInput === ordInp) {
+        inputBerikutnya = recInp || beliInp;
+      } else if (targetInput === recInp) {
+        inputBerikutnya = beliInp;
+      } else if (targetInput === beliInp) {
+        inputBerikutnya = marginInp;
+      } else if (targetInput === jualInp) {
+        inputBerikutnya = diskonInputs[0];
+      } else if (diskonInputs.includes(targetInput)) {
+        const index = diskonInputs.indexOf(targetInput);
+        inputBerikutnya = diskonInputs[index + 1] || null;
+        if (!inputBerikutnya) {
+          event.preventDefault();
+          event.stopPropagation();
+          fokusNamaBarangBarisBerikutnya();
+          return;
+        }
+      }
+
+      if (!inputBerikutnya) return;
+      event.preventDefault();
+      event.stopPropagation();
+      fokusInput(inputBerikutnya);
+    };
+
+    row.addEventListener("keydown", navigasiEnter, true);
 
     const calculateRow = ({ preserveMargin = false } = {}) => {
       if (isBranchRequest || showSupplierColumn) {
@@ -420,6 +539,11 @@ function createPurchaseGrid(container, config = {}) {
     const combo = createPremiumCombo(`pg-combo-${id}`, currentData, {
       isItem: true,
       placeholder: "Cari barang...",
+      onEnter: isFulfillment
+        ? () => {
+            if (combo.val()) fokusInput(ordInp);
+          }
+        : null,
       onSelect: (sel) => {
         if (!isBranchRequest && !showSupplierColumn) {
           beliInp.value = toRibuan(sel.buy_price);
@@ -680,6 +804,9 @@ function createPurchaseSummaryGrid(container, config = {}) {
     getTarifStandar = null,
     // Mode exclude: tulis persentase PPN ke field "Pajak" di ringkasan.
     setPajakRingkasan = null,
+    enableEnterNavigation = false,
+    // Beri tahu halaman ketika jumlah baris berisi barang berubah.
+    onRowsChanged = null,
   } = config;
 
   let currentData = [];
@@ -701,6 +828,15 @@ function createPurchaseSummaryGrid(container, config = {}) {
     }).format(n || 0);
   const toAngka = (s) => parseDesimal(s);
   const toRibuan = (n) => toDesimal(n);
+  const notifyRowsChanged = () => {
+    if (onRowsChanged) onRowsChanged();
+  };
+  const fokusInput = (input, pilihSemua = true) => {
+    if (!input || input.disabled) return false;
+    input.focus();
+    if (pilihSemua && typeof input.select === "function") input.select();
+    return true;
+  };
 
   const cariByName = (daftar, name) => {
     const t = (name || "").trim().toLowerCase();
@@ -815,6 +951,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
     if (row._combo) row._combo.clear();
     if (row._isi) row._isi();
     if (onChange) onChange();
+    notifyRowsChanged();
   };
 
   // Validasi PPN barang yang baru dipilih terhadap setelan transaksi.
@@ -836,10 +973,13 @@ function createPurchaseSummaryGrid(container, config = {}) {
     }
 
     let tipeBarang = sel.ppn_type === "excluded" ? "exclude" : "include";
+    const tipeBarangAwal = tipeBarang;
+    const hargaAwal = Number(row._detail.buy_price) || 0;
     let persen = sel.ppn_percent || 0;
     const tarifStandar =
       (typeof getTarifStandar === "function" ? getTarifStandar() : 11) || 11;
     let perluSimpan = false;
+    let tipeDiubah = false;
 
     // 1) Cek kecocokan tipe barang dengan tipe transaksi.
     if (tipeTransaksi && tipeBarang !== tipeTransaksi) {
@@ -855,6 +995,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
       if (!ya) return false; // batal menambah barang
       tipeBarang = tipeTransaksi;
       perluSimpan = true;
+      tipeDiubah = true;
     }
 
     // 2) Cek persentase PPN terhadap tarif standar toko.
@@ -866,6 +1007,18 @@ function createPurchaseSummaryGrid(container, config = {}) {
         persen = tarifStandar;
         perluSimpan = true;
       }
+    }
+
+    // Harga supplier mengikuti tipe PPN-nya. Jika pengguna menyetujui
+    // konversi tipe, ubah nominal harga juga agar nilai bayar tetap sama:
+    // Include = harga bruto, Exclude = harga neto sebelum PPN.
+    if (tipeDiubah) {
+      row._detail.buy_price = konversiHargaPpnPembelian(
+        hargaAwal,
+        tipeBarangAwal,
+        tipeBarang,
+        persen,
+      );
     }
 
     // Terapkan hasil ke baris.
@@ -880,12 +1033,15 @@ function createPurchaseSummaryGrid(container, config = {}) {
 
     // Simpan konversi ke setelan supplier + sinkronkan data combo (sesi ini tak menanya lagi).
     if (perluSimpan) {
-      simpanSupplier(row, {
+      const supplierPatch = {
         ppn_type: row._detail.ppn_type,
         ppn_percent: persen,
-      });
+      };
+      if (tipeDiubah) supplierPatch.harga_beli = row._detail.buy_price;
+      simpanSupplier(row, supplierPatch);
       sel.ppn_type = row._detail.ppn_type;
       sel.ppn_percent = persen;
+      if (tipeDiubah) sel.buy_price = row._detail.buy_price;
     }
 
     return true;
@@ -912,9 +1068,11 @@ function createPurchaseSummaryGrid(container, config = {}) {
       discs:
         item?.discs ||
         [item?.disc1 || 0, item?.disc2 || 0].filter((v, i) => i === 0 || v),
-      ppn: item?.ppn || 0,
+      // null berarti tarif belum disnapshot; jangan ubah menjadi 0 karena
+      // backend masih perlu memakai fallback tarif item/toko saat simpan.
+      ppn: item?.ppn ?? item?.ppn_percent ?? null,
       ppn_type: item?.ppn_type || "included",
-      ppn_percent: item?.ppn_percent || 0,
+      ppn_percent: item?.ppn_percent ?? null,
     };
 
     row.innerHTML = `
@@ -993,8 +1151,14 @@ function createPurchaseSummaryGrid(container, config = {}) {
       {
         isItem: true,
         placeholder: "Cari barang...",
+        onEnter: enableEnterNavigation
+          ? () => fokusInput(qtyInp)
+          : null,
         onSelect: async (sel) => {
           row._detail.item_id = sel.id;
+          // Kunci tipe PPN sejak barang dipilih, termasuk ketika proses
+          // konfirmasi PPN di bawah masih menunggu jawaban pengguna.
+          notifyRowsChanged();
           row._detail.name = sel.name || "";
           row._detail.code = sel.code || "";
           row._detail.category_id = sel.category_id || null;
@@ -1017,6 +1181,69 @@ function createPurchaseSummaryGrid(container, config = {}) {
       },
     );
     row._combo = combo;
+
+    const fokusNamaBarisBerikutnya = () => {
+      const barisBerikutnya = addRow();
+      const inputNama = barisBerikutnya.querySelector(
+        ".pg2-combo .combobox-input",
+      );
+      setTimeout(() => fokusInput(inputNama, false), 0);
+    };
+
+    const navigasiEnter = (event) => {
+      if (
+        !enableEnterNavigation ||
+        event.key !== "Enter" ||
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      ) {
+        return;
+      }
+
+      const targetInput = event.target.closest?.("input");
+      if (!targetInput || !row.contains(targetInput)) return;
+
+      const inputNama = row.querySelector(".pg2-combo .combobox-input");
+      if (targetInput === inputNama) {
+        // Saat dropdown terbuka, biarkan combobox memilih hasil pertama/hasil
+        // yang disorot. Callback onEnter kemudian langsung fokus ke Jumlah.
+        if (row.querySelector(".pg2-combo .premium-dropdown.show")) return;
+        if (!combo.val()) return;
+        event.preventDefault();
+        event.stopPropagation();
+        fokusInput(qtyInp);
+        return;
+      }
+
+      let inputBerikutnya = null;
+      if (targetInput === qtyInp) {
+        inputBerikutnya = beliInp;
+      } else if (targetInput === beliInp) {
+        inputBerikutnya = row.querySelector(".pg2-disc-inp");
+      } else if (targetInput.classList.contains("pg2-disc-inp")) {
+        const diskonInputs = Array.from(
+          row.querySelectorAll(".pg2-disc-inp"),
+        );
+        const index = diskonInputs.indexOf(targetInput);
+        inputBerikutnya = diskonInputs[index + 1] || null;
+        if (!inputBerikutnya) {
+          event.preventDefault();
+          event.stopPropagation();
+          fokusNamaBarisBerikutnya();
+          return;
+        }
+      }
+
+      if (!inputBerikutnya) return;
+      event.preventDefault();
+      event.stopPropagation();
+      fokusInput(inputBerikutnya);
+    };
+
+    row.addEventListener("keydown", navigasiEnter, true);
 
     // Combo Jenis (kategori) — ubah master barang
     const comboJenis = createPremiumCombo(
@@ -1125,6 +1352,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
       row.remove();
       renumber();
       if (onChange) onChange();
+      notifyRowsChanged();
     };
 
     if (row._detail.item_id) {
@@ -1132,6 +1360,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
     }
     isi();
     renumber();
+    if (row._detail.item_id) notifyRowsChanged();
     return row;
   };
 
@@ -1159,6 +1388,22 @@ function createPurchaseSummaryGrid(container, config = {}) {
 
   const methods = {
     addRow,
+    addItem: async (item) => {
+      const row = addRow(item);
+      if (!row?._detail?.item_id) return row;
+
+      const lanjut = await prosesPpnSaatPilih(row, item);
+      if (!lanjut) {
+        row.remove();
+        renumber();
+        if (onChange) onChange();
+        notifyRowsChanged();
+        return null;
+      }
+      if (row._isi) row._isi();
+      if (onChange) onChange();
+      return row;
+    },
     updateDataSource: (newData) => {
       currentData = newData;
       Array.from(body.children).forEach((row) => {
@@ -1205,17 +1450,20 @@ function createPurchaseSummaryGrid(container, config = {}) {
       if (detail.item_id && row._combo)
         row._combo.set(detail.item_id, detail.name);
       if (row._isi) row._isi();
+      notifyRowsChanged();
     },
     // bangun ulang seluruh baris dari snapshot (dipakai saat pulihkan form)
     loadRows: (rows) => {
       body.innerHTML = "";
       (rows || []).forEach((r) => addRow(r));
       if (body.children.length === 0) addRow();
+      notifyRowsChanged();
     },
     clear: () => {
       body.innerHTML = "";
       addRow();
       if (onChange) onChange();
+      notifyRowsChanged();
     },
   };
   target._grid = methods;
@@ -1612,6 +1860,34 @@ async function createOrderManager(containerId, config = {}) {
     itemsGrid.updateDataSource(allItems);
   }
 
+  // Sinkronkan pilihan barang pada PO/fulfillment yang masih terbuka. Token
+  // memastikan manager lama tidak ikut mengubah grid setelah form dibuat ulang.
+  const managerToken = {};
+  target._orderManagerToken = managerToken;
+  if (typeof subscribeItemMasterChanges === "function") {
+    subscribeItemMasterChanges(async () => {
+      if (target._orderManagerToken !== managerToken) return;
+      try {
+        let items;
+        if (isBranchRequest || isSplitFulfillment) {
+          items = await api("GET", "/items/?limit=1000");
+        } else {
+          const supplierId = supplierCombo?.val();
+          if (!supplierId) return;
+          items = await api(
+            "GET",
+            `/purchases/items/?supplier_id=${supplierId}`,
+          );
+        }
+        if (target._orderManagerToken === managerToken) {
+          itemsGrid.updateDataSource(items || []);
+        }
+      } catch (error) {
+        console.error("Gagal menyegarkan barang pada form PO", error);
+      }
+    });
+  }
+
   const btnAdd = document.getElementById("om-btn-add");
   if (btnAdd) {
     btnAdd.onclick = () => itemsGrid.addRow();
@@ -1849,57 +2125,106 @@ function createToggleButton(container, config = {}) {
 }
 
 /**
+ * Normalisasi nilai yang datang dari scanner maupun input manual.
+ * Barcode tidak boleh gagal hanya karena perbedaan kapitalisasi/spasi tepi.
+ */
+function normalizeBarcodeValue(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+/**
+ * Cari item berdasarkan barcode/kode secara exact, termasuk barcode khusus
+ * supplier. Return object juga membawa supplierId agar caller pembelian/POS
+ * dapat mempertahankan konteks supplier.
+ */
+function findItemByScanCode(items, value) {
+  const scanned = normalizeBarcodeValue(value);
+  if (!scanned) return null;
+
+  for (const item of items || []) {
+    if (
+      normalizeBarcodeValue(item?.barcode) === scanned ||
+      normalizeBarcodeValue(item?.code) === scanned
+    ) {
+      return { item, supplierId: null };
+    }
+
+    const supplier = (item?.supplier_details || []).find(
+      (detail) => normalizeBarcodeValue(detail?.barcode) === scanned,
+    );
+    if (supplier) {
+      return { item, supplierId: supplier.supplier_id ?? null };
+    }
+  }
+
+  return null;
+}
+
+/**
  * setupBarcodeScanner (Global Scanner Hook)
  * Mendeteksi ketikan cepat (khas scanner) dan memicu callback.
- * Memperbaiki bug perhitungan waktu dari today() menjadi Date.now().
+ *
+ * Scanner keyboard biasanya mengetik ke input yang sedang fokus. Listener
+ * lama justru mengabaikan input tersebut, sehingga PO/Retur tidak pernah
+ * menerima callback scanner. Listener dipasang pada fase capture agar Enter
+ * scanner diproses sebelum handler combobox/form, sementara Enter manual tetap
+ * diteruskan jika buffer tidak memenuhi pola scan.
  */
 function setupBarcodeScanner(onScan, config = {}) {
   const { minLength = 2, interval = 50 } = config;
   let buffer = "";
-  let lastKeyTime = Date.now();
+  let lastKeyTime = 0;
 
-  document.addEventListener("keydown", (e) => {
-    const target = e.target;
-    const isEditableTarget =
-      target instanceof HTMLElement &&
-      (target.matches("input, textarea, select") || target.isContentEditable);
+  const reset = () => {
+    buffer = "";
+    lastKeyTime = 0;
+  };
 
-    // Ketikan di form adalah input manual, bukan data scanner. Selain mencegah
-    // Enter diambil alih, reset buffer agar angka form tidak terbawa ke scan berikutnya.
-    if (isEditableTarget) {
-      buffer = "";
-      lastKeyTime = Date.now();
+  const handleKeydown = (e) => {
+    if (e.isComposing || e.ctrlKey || e.altKey || e.metaKey) return;
+
+    // Handler capture lain atau halaman mungkin sudah mengambil event ini.
+    // Tetap kosongkan buffer agar karakter scan sebelumnya tidak terbawa.
+    if (e.defaultPrevented) {
+      reset();
       return;
-    }
-
-    // Abaikan jika tombol fungsi atau navigasi
-    if (e.key.length > 1 && e.key !== "Enter") return;
-
-    const currentTime = Date.now();
-    const timeDiff = currentTime - lastKeyTime;
-    lastKeyTime = currentTime;
-
-    // Jika jeda terlalu lama, berarti input manual (manusia), reset buffer
-    if (timeDiff > interval) {
-      buffer = "";
     }
 
     if (e.key === "Enter") {
-      if (buffer.length >= minLength) {
-        e.preventDefault();
-        const scanned = buffer.trim();
-        buffer = "";
-        if (onScan) onScan(scanned);
-      } else {
-        buffer = ""; // Reset jika Enter ditekan tapi buffer pendek
+      const scanned = buffer.trim();
+      const scanFinishedQuickly =
+        lastKeyTime > 0 && Date.now() - lastKeyTime <= interval * 4;
+      reset();
+
+      // Enter yang ditekan jauh setelah ketikan adalah submit manual biasa,
+      // bukan terminator scanner.
+      if (scanned.length < minLength || !scanFinishedQuickly) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const target = e.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+        // Input scanner hanya menjadi buffer sementara; kosongkan agar query
+        // barcode lama tidak tertinggal setelah item berhasil ditambahkan.
+        target.value = "";
       }
+
+      if (onScan) onScan(scanned, e);
       return;
     }
 
-    if (e.key.length === 1) {
-      buffer += e.key;
-    }
-  });
+    // Abaikan tombol fungsi/navigasi, tetapi tetap tangkap karakter printable.
+    if (typeof e.key !== "string" || e.key.length !== 1) return;
+
+    const now = Date.now();
+    if (lastKeyTime === 0 || now - lastKeyTime > interval) buffer = "";
+    buffer += e.key;
+    lastKeyTime = now;
+  };
+
+  document.addEventListener("keydown", handleKeydown, true);
+  return () => document.removeEventListener("keydown", handleKeydown, true);
 }
 
 /**

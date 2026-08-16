@@ -129,6 +129,52 @@
         text-align: center;
         color: #64748b;
       }
+
+      #itemSearchResults {
+        overflow: hidden;
+      }
+      .barcode-picker-list {
+        max-height: 360px;
+        overflow-y: auto;
+      }
+      .barcode-picker-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 112px;
+        gap: 10px;
+        align-items: center;
+        padding: 9px 11px;
+        border-bottom: 1px solid var(--border-color);
+      }
+      .barcode-picker-row.is-highlighted {
+        background: var(--primary-light);
+      }
+      .barcode-picker-qty-wrap {
+        display: grid;
+        grid-template-columns: 30px 46px 30px;
+        gap: 3px;
+        align-items: center;
+      }
+      .barcode-picker-qty-wrap button,
+      .barcode-picker-qty {
+        height: 30px;
+        margin: 0;
+        padding: 0;
+        text-align: center;
+      }
+      .barcode-picker-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 10px 11px;
+        background: var(--bg-color);
+        border-top: 1px solid var(--border-color);
+      }
+      @media (max-width: 680px) {
+        .barcode-picker-row {
+          grid-template-columns: minmax(0, 1fr) 106px;
+        }
+      }
     </style>
   </head>
   <body class="dark-mode">
@@ -153,31 +199,84 @@
         </div>
 
         <div style="display: flex; gap: 8px; margin-bottom: 12px">
-          <input
-            type="text"
-            id="itemSearch"
-            class="input-control"
-            list="itemList"
-            placeholder="Cari barang lalu Enter / klik Tambah..."
-            autocomplete="off"
-            style="flex: 1; margin: 0"
-          />
-          <datalist id="itemList"></datalist>
+          <div style="position: relative; flex: 1">
+            <input
+              type="text"
+              id="itemSearch"
+              class="input-control"
+            placeholder="Ketik nama / kode / barcode lalu Enter..."
+              autocomplete="off"
+              style="width: 100%; margin: 0"
+            />
+            <div
+              id="itemSearchResults"
+              style="
+                display: none;
+                position: absolute;
+                z-index: 20;
+                top: calc(100% + 4px);
+                left: 0;
+                right: 0;
+                background: var(--card-bg);
+                border: 1px solid var(--border-color);
+                border-radius: 8px;
+                box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+              "
+            ></div>
+          </div>
           <button
             class="btn btn-primary"
             id="btnTambahBarang"
             onclick="tambahKeDaftar()"
             style="white-space: nowrap"
           >
-            + Tambah
+            Tambahkan Pilihan
           </button>
+        </div>
+
+        <div
+          class="slider-group"
+          style="padding: 12px 14px; margin-bottom: 16px"
+        >
+          <label
+            style="
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              font-size: 13px;
+              font-weight: 700;
+              color: var(--text-main);
+              cursor: pointer;
+            "
+          >
+            <input
+              type="checkbox"
+              id="showPriceDefault"
+              checked
+              onchange="ubahHargaGlobal(this.checked)"
+              style="width: 16px; height: 16px"
+            />
+            Tampilkan harga pada label
+          </label>
+          <div
+            style="
+              margin-top: 6px;
+              padding-left: 24px;
+              font-size: 11px;
+              line-height: 1.35;
+              color: var(--text-muted);
+            "
+          >
+            Ini menjadi pengaturan default. Harga tiap barang masih bisa
+            diatur sendiri pada daftar cetak.
+          </div>
         </div>
 
         <div class="slider-group" style="padding: 0; overflow: hidden">
           <div
             style="
               display: grid;
-              grid-template-columns: 1fr 70px 36px;
+              grid-template-columns: 1fr 84px 70px 36px;
               gap: 8px;
               padding: 10px 14px;
               background: var(--bg-color);
@@ -187,6 +286,7 @@
             "
           >
             <div>Barang</div>
+            <div style="text-align: center">Harga</div>
             <div style="text-align: center">Qty</div>
             <div></div>
           </div>
@@ -200,7 +300,7 @@
               font-size: 13px;
             "
           >
-            Belum ada barang. Cari lalu klik &quot;+ Tambah&quot;.
+            Belum ada barang. Cari produk, atur Qty, lalu tambahkan ke daftar.
           </div>
           <div
             style="
@@ -344,6 +444,7 @@
         </div>
 
         <button
+          id="btnCetakBarcode"
           class="btn btn-primary"
           style="width: 100%; margin-top: auto"
           onclick="printStiker()"
@@ -367,11 +468,15 @@
     <script>
       requireAuth();
       let allItems = [],
-        daftarCetak = [], // [{id,name,code,barcode,sell_price,kategori,qty}]
+        daftarCetak = [], // [{id,name,code,barcode,sell_price,kategori,qty,tampilkan_harga,harga_override}]
+        showPriceDefault = true,
         previewBlobUrl = "",
         previewRenderTimer = null,
         previewAbortController = null,
-        previewRenderSeq = 0;
+        previewRenderSeq = 0,
+        itemSearchHighlightedIndex = -1,
+        itemSelectionInProgress = false,
+        itemSearchDraftQty = new Map();
 
       function cleanupPreviewBlob() {
         if (previewBlobUrl) {
@@ -390,39 +495,42 @@
 
       async function loadItems() {
         try {
-          allItems = await api("GET", "/items/?limit=5000");
-          const list = document.getElementById("itemList");
-          allItems.forEach((i) => {
-            const opt = document.createElement("option");
-            opt.value = i.name;
-            list.appendChild(opt);
-          });
+          allItems = await api("GET", "/items/?lite=1&limit=5000");
+          sembunyikanHasilPencarian();
         } catch (e) {
           showToast("Gagal muat data", "error");
         }
       }
 
-      // Tambah barang dari kotak cari ke daftar cetak. Cocokkan by nama/kode/barcode.
-      // Bila sudah ada di daftar → qty +1. Pastikan barcode-nya tergenerate.
-      async function tambahKeDaftar() {
-        const inp = document.getElementById("itemSearch");
-        const keyword = (inp.value || "").trim();
-        if (!keyword) return;
+      function normalizeSearchValue(value) {
+        return String(value || "")
+          .trim()
+          .toLocaleLowerCase();
+      }
 
-        const item = allItems.find(
-          (i) =>
-            i.name === keyword || i.code === keyword || i.barcode === keyword,
+      function findExactScannableItem(keyword) {
+        const normalized = normalizeSearchValue(keyword);
+        if (!normalized) return null;
+        return allItems.find((item) =>
+          [item.code, item.barcode].some(
+            (value) => normalizeSearchValue(value) === normalized,
+          ),
         );
-        if (!item) {
-          showToast("Barang tidak ditemukan", "warning");
-          return;
-        }
+      }
 
-        const adaDiDaftar = daftarCetak.find((d) => d.id === item.id);
-        if (adaDiDaftar) {
-          adaDiDaftar.qty += 1;
+      function normalizePickerQty(value) {
+        return Math.min(9999, Math.max(0, parseInt(value, 10) || 0));
+      }
+
+      function addItemQuantity(item, quantity) {
+        const qty = normalizePickerQty(quantity);
+        if (!item || qty < 1) return false;
+        const existing = daftarCetak.find(
+          (entry) => Number(entry.id) === Number(item.id),
+        );
+        if (existing) {
+          existing.qty += qty;
         } else {
-          if (!item.barcode) await generateBarcode(item);
           daftarCetak.push({
             id: item.id,
             name: item.name,
@@ -430,37 +538,358 @@
             barcode: item.barcode || item.code || "",
             sell_price: item.sell_price || 0,
             kategori: getKategoriLabel(item),
-            qty: 1,
+            qty,
+            tampilkan_harga: showPriceDefault,
+            harga_override: false,
           });
         }
-
-        inp.value = "";
-        inp.focus();
-        renderDaftar();
-        schedulePreviewRender();
+        return true;
       }
 
-      // Enter di kotak cari = tambah ke daftar (tanpa submit form apa pun).
-      document
-        .getElementById("itemSearch")
-        .addEventListener("keydown", function (e) {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            tambahKeDaftar();
+      async function ensureItemBarcode(item) {
+        if (!item) return false;
+        if (item.barcode) return true;
+        return !!(await generateBarcode(item));
+      }
+
+      async function tambahItemTerpilih(item) {
+        if (!item || itemSelectionInProgress) return false;
+        itemSelectionInProgress = true;
+        const input = document.getElementById("itemSearch");
+        const addButton = document.getElementById("btnTambahBarang");
+        if (addButton) addButton.disabled = true;
+        try {
+          if (!(await ensureItemBarcode(item))) return false;
+          addItemQuantity(item, 1);
+          input.value = "";
+          sembunyikanHasilPencarian(true);
+          input.focus();
+          renderDaftar();
+          schedulePreviewRender();
+          return true;
+        } finally {
+          itemSelectionInProgress = false;
+          if (addButton) addButton.disabled = false;
+        }
+      }
+
+      function pilihItemById(itemId) {
+        const id = Number(itemId);
+        if (!Number.isFinite(id)) return Promise.resolve(false);
+        const item = allItems.find((candidate) => Number(candidate.id) === id);
+        return tambahItemTerpilih(item);
+      }
+
+      function setPickerQty(itemId, value, inputElement = null) {
+        const id = Number(itemId);
+        if (!Number.isFinite(id)) return 0;
+        const qty = normalizePickerQty(value);
+        if (qty > 0) itemSearchDraftQty.set(id, qty);
+        else itemSearchDraftQty.delete(id);
+        if (inputElement) inputElement.value = String(qty);
+        updatePickerSummary();
+        return qty;
+      }
+
+      function updatePickerSummary() {
+        const summary = document.getElementById("itemSearchSelectionSummary");
+        const button = document.getElementById("btnApplyItemSearch");
+        const productCount = itemSearchDraftQty.size;
+        const labelCount = Array.from(itemSearchDraftQty.values()).reduce(
+          (total, qty) => total + qty,
+          0,
+        );
+        if (summary) {
+          summary.textContent = `${productCount} produk · ${labelCount} label`;
+        }
+        if (button) button.disabled = labelCount < 1 || itemSelectionInProgress;
+        const mainButton = document.getElementById("btnTambahBarang");
+        if (mainButton) {
+          mainButton.textContent = labelCount
+            ? `Tambahkan (${labelCount})`
+            : "Tambahkan Pilihan";
+        }
+      }
+
+      async function applyPickerQuantities() {
+        if (itemSelectionInProgress) return false;
+        const selections = Array.from(itemSearchDraftQty.entries()).filter(
+          ([, qty]) => normalizePickerQty(qty) > 0,
+        );
+        if (!selections.length) {
+          showToast("Atur jumlah barcode minimal 1", "warning");
+          return false;
+        }
+
+        itemSelectionInProgress = true;
+        const addButton = document.getElementById("btnTambahBarang");
+        const applyButton = document.getElementById("btnApplyItemSearch");
+        if (addButton) addButton.disabled = true;
+        if (applyButton) {
+          applyButton.disabled = true;
+          applyButton.textContent = "Menambahkan...";
+        }
+
+        let addedProducts = 0;
+        let addedLabels = 0;
+        let failedProducts = 0;
+        try {
+          for (const [itemId, rawQty] of selections) {
+            const item = allItems.find(
+              (candidate) => Number(candidate.id) === Number(itemId),
+            );
+            const qty = normalizePickerQty(rawQty);
+            if (!item || qty < 1) continue;
+            if (!(await ensureItemBarcode(item))) {
+              failedProducts += 1;
+              continue;
+            }
+            addItemQuantity(item, qty);
+            addedProducts += 1;
+            addedLabels += qty;
           }
+
+          if (addedProducts) {
+            const input = document.getElementById("itemSearch");
+            input.value = "";
+            sembunyikanHasilPencarian(true);
+            input.focus();
+            renderDaftar();
+            schedulePreviewRender();
+            showToast(
+              `${addedProducts} produk (${addedLabels} label) ditambahkan`,
+              "success",
+            );
+          }
+          if (failedProducts) {
+            showToast(
+              `${failedProducts} produk gagal ditambahkan karena barcode bermasalah`,
+              "warning",
+            );
+          }
+          return addedProducts > 0;
+        } finally {
+          itemSelectionInProgress = false;
+          if (addButton) addButton.disabled = false;
+          if (applyButton) applyButton.textContent = "Tambahkan ke Daftar";
+          updatePickerSummary();
+        }
+      }
+
+      async function tambahKeDaftar() {
+        if (itemSearchDraftQty.size) return applyPickerQuantities();
+        const keyword = document.getElementById("itemSearch").value.trim();
+        const scannable = findExactScannableItem(keyword);
+        if (scannable) return tambahItemTerpilih(scannable);
+        if (!keyword) return false;
+        renderItemSearchResults(keyword);
+        showToast("Atur jumlah produk yang ingin dicetak", "warning");
+        return false;
+      }
+
+      function sembunyikanHasilPencarian(clearDraft = false) {
+        const results = document.getElementById("itemSearchResults");
+        if (!results) return;
+        itemSearchHighlightedIndex = -1;
+        results.style.display = "none";
+        results.innerHTML = "";
+        if (clearDraft) itemSearchDraftQty.clear();
+        updatePickerSummary();
+      }
+
+      function getItemSearchOptions() {
+        return Array.from(
+          document.querySelectorAll(
+            "#itemSearchResults [data-item-row-id]",
+          ),
+        );
+      }
+
+      function highlightItemSearchOption(nextIndex) {
+        const options = getItemSearchOptions();
+        if (!options.length) {
+          itemSearchHighlightedIndex = -1;
+          return;
+        }
+        itemSearchHighlightedIndex =
+          (nextIndex + options.length) % options.length;
+        options.forEach((option, index) => {
+          const active = index === itemSearchHighlightedIndex;
+          option.classList.toggle("is-highlighted", active);
+          option.setAttribute("aria-selected", String(active));
         });
-      // Memilih opsi dari datalist memicu "change" → tambah HANYA bila persis cocok,
-      // agar mengetik sebagian lalu pindah fokus tidak memunculkan toast "tidak ditemukan".
+        options[itemSearchHighlightedIndex].scrollIntoView({ block: "nearest" });
+      }
+
+      function renderItemSearchResults(keyword) {
+        const results = document.getElementById("itemSearchResults");
+        if (!results) return;
+        const normalized = normalizeSearchValue(keyword);
+        if (!normalized) {
+          sembunyikanHasilPencarian(true);
+          return;
+        }
+
+        const allMatches = allItems
+          .filter((item) =>
+            [item.name, item.code, item.barcode].some((value) =>
+              normalizeSearchValue(value).includes(normalized),
+            ),
+          )
+          .sort((a, b) => {
+            const aExact = [a.name, a.code, a.barcode].some(
+              (value) => normalizeSearchValue(value) === normalized,
+            );
+            const bExact = [b.name, b.code, b.barcode].some(
+              (value) => normalizeSearchValue(value) === normalized,
+            );
+            return Number(bExact) - Number(aExact) ||
+              String(a.name).localeCompare(String(b.name), "id");
+          });
+        const matches = allMatches.slice(0, 100);
+        if (!matches.length) {
+          sembunyikanHasilPencarian(false);
+          showToast("Barang tidak ditemukan", "warning");
+          return;
+        }
+
+        itemSearchHighlightedIndex = -1;
+        const limitHint =
+          allMatches.length > matches.length
+            ? `<div style="padding:7px 11px; color:var(--text-muted); font-size:11px">Menampilkan 100 dari ${allMatches.length} hasil. Persempit kata pencarian untuk melihat sisanya.</div>`
+            : "";
+        results.innerHTML = `
+          <div class="barcode-picker-list" role="listbox">
+            ${matches
+              .map((item) => {
+                const qty = itemSearchDraftQty.get(Number(item.id)) || 0;
+                return `
+                  <div class="barcode-picker-row" role="option" aria-selected="false" data-item-row-id="${item.id}">
+                    <div style="min-width:0; cursor:pointer" data-focus-qty="${item.id}">
+                      <span style="display:block; font-size:13px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(item.name)}</span>
+                      <small style="display:block; margin-top:2px; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml([item.code, item.barcode].filter(Boolean).join(" • ") || "Barcode akan dibuat otomatis")}</small>
+                    </div>
+                    <div class="barcode-picker-qty-wrap">
+                      <button type="button" class="btn" data-qty-action="minus" data-item-id="${item.id}" aria-label="Kurangi jumlah ${escapeHtml(item.name)}">−</button>
+                      <input type="number" min="0" max="9999" value="${qty}" class="input-control barcode-picker-qty" data-item-id="${item.id}" aria-label="Jumlah barcode ${escapeHtml(item.name)}" />
+                      <button type="button" class="btn" data-qty-action="plus" data-item-id="${item.id}" aria-label="Tambah jumlah ${escapeHtml(item.name)}">+</button>
+                    </div>
+                  </div>`;
+              })
+              .join("")}
+          </div>
+          ${limitHint}
+          <div class="barcode-picker-footer">
+            <span id="itemSearchSelectionSummary" style="font-size:12px; font-weight:700">0 produk · 0 label</span>
+            <button type="button" class="btn btn-primary" id="btnApplyItemSearch" data-action="apply-picker">Tambahkan ke Daftar</button>
+          </div>`;
+        results.style.display = "block";
+        updatePickerSummary();
+      }
+
+      const itemSearchResults = document.getElementById("itemSearchResults");
+      itemSearchResults.addEventListener("click", (event) => {
+        const applyButton = event.target.closest('[data-action="apply-picker"]');
+        if (applyButton) {
+          event.preventDefault();
+          applyPickerQuantities();
+          return;
+        }
+        const qtyButton = event.target.closest("button[data-qty-action]");
+        if (qtyButton) {
+          event.preventDefault();
+          const id = Number(qtyButton.dataset.itemId);
+          const current = itemSearchDraftQty.get(id) || 0;
+          const delta = qtyButton.dataset.qtyAction === "plus" ? 1 : -1;
+          const input = itemSearchResults.querySelector(
+            `.barcode-picker-qty[data-item-id="${id}"]`,
+          );
+          setPickerQty(id, current + delta, input);
+          return;
+        }
+        const focusTarget = event.target.closest("[data-focus-qty]");
+        if (focusTarget) {
+          itemSearchResults
+            .querySelector(
+              `.barcode-picker-qty[data-item-id="${focusTarget.dataset.focusQty}"]`,
+            )
+            ?.focus();
+        }
+      });
+      itemSearchResults.addEventListener("input", (event) => {
+        const input = event.target.closest(".barcode-picker-qty[data-item-id]");
+        if (!input) return;
+        setPickerQty(input.dataset.itemId, input.value);
+      });
+      itemSearchResults.addEventListener("change", (event) => {
+        const input = event.target.closest(".barcode-picker-qty[data-item-id]");
+        if (!input) return;
+        setPickerQty(input.dataset.itemId, input.value, input);
+      });
+
       document
         .getElementById("itemSearch")
-        .addEventListener("change", function () {
-          const v = (this.value || "").trim();
-          if (!v) return;
-          const cocok = allItems.find(
-            (i) => i.name === v || i.code === v || i.barcode === v,
-          );
-          if (cocok) tambahKeDaftar();
+        .addEventListener("keydown", function (event) {
+          const dropdownOpen = itemSearchResults.style.display === "block";
+          const next = event.key === "ArrowDown" || event.key === "ArrowRight";
+          const previous = event.key === "ArrowUp" || event.key === "ArrowLeft";
+          if (next || previous) {
+            if (!dropdownOpen) renderItemSearchResults(this.value);
+            if (!getItemSearchOptions().length) return;
+            event.preventDefault();
+            highlightItemSearchOption(
+              itemSearchHighlightedIndex + (next ? 1 : -1),
+            );
+            return;
+          }
+          if (event.key === "Escape" && dropdownOpen) {
+            event.preventDefault();
+            sembunyikanHasilPencarian(true);
+            return;
+          }
+          if (event.key !== "Enter") return;
+          event.preventDefault();
+          event.stopPropagation();
+          const scannable = findExactScannableItem(this.value);
+          if (scannable) {
+            pilihItemById(scannable.id);
+            return;
+          }
+          if (!dropdownOpen) renderItemSearchResults(this.value);
+          const options = getItemSearchOptions();
+          const target = options[
+            itemSearchHighlightedIndex >= 0 ? itemSearchHighlightedIndex : 0
+          ];
+          if (!target) return;
+          itemSearchResults
+            .querySelector(
+              `.barcode-picker-qty[data-item-id="${target.dataset.itemRowId}"]`,
+            )
+            ?.focus();
         });
+      document
+        .getElementById("itemSearch")
+        .addEventListener("input", function () {
+          renderItemSearchResults(this.value);
+        });
+      document.getElementById("itemSearch").addEventListener("blur", () => {
+        setTimeout(() => {
+          if (itemSearchResults.contains(document.activeElement)) return;
+          sembunyikanHasilPencarian(true);
+        }, 180);
+      });
+      itemSearchResults.addEventListener("focusout", () => {
+        setTimeout(() => {
+          const input = document.getElementById("itemSearch");
+          if (
+            itemSearchResults.contains(document.activeElement) ||
+            document.activeElement === input
+          ) {
+            return;
+          }
+          sembunyikanHasilPencarian(true);
+        }, 180);
+      });
 
       function ubahQty(id, nilai) {
         const d = daftarCetak.find((x) => x.id === id);
@@ -474,6 +903,42 @@
         daftarCetak = daftarCetak.filter((x) => x.id !== id);
         renderDaftar();
         schedulePreviewRender();
+      }
+
+      function ubahHargaGlobal(tampil) {
+        showPriceDefault = !!tampil;
+        daftarCetak.forEach((d) => {
+          if (!d.harga_override) d.tampilkan_harga = showPriceDefault;
+        });
+        renderDaftar();
+        schedulePreviewRender();
+      }
+
+      function ubahTampilanHarga(id, tampil) {
+        const d = daftarCetak.find((x) => x.id === id);
+        if (!d) return;
+        d.tampilkan_harga = !!tampil;
+        d.harga_override = true;
+        renderDaftar();
+        schedulePreviewRender();
+      }
+
+      function resetTampilanHarga(id) {
+        const d = daftarCetak.find((x) => x.id === id);
+        if (!d) return;
+        d.tampilkan_harga = showPriceDefault;
+        d.harga_override = false;
+        renderDaftar();
+        schedulePreviewRender();
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
       }
 
       function totalLabel() {
@@ -493,12 +958,23 @@
         body.innerHTML = daftarCetak
           .map(
             (d) => `
-            <div style="display:grid; grid-template-columns:1fr 70px 36px; gap:8px; padding:8px 14px; border-top:1px solid var(--border-color); align-items:center">
-              <div style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" title="${d.name}">${d.name}</div>
+            <div style="display:grid; grid-template-columns:1fr 84px 70px 36px; gap:8px; padding:8px 14px; border-top:1px solid var(--border-color); align-items:center">
+              <div style="min-width:0; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" title="${escapeHtml(d.name)}">
+                ${escapeHtml(d.name)}
+                <small style="display:block; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(d.code || d.barcode || "")}</small>
+              </div>
+              <label style="display:flex; align-items:center; justify-content:center; gap:4px; font-size:11px; cursor:pointer" title="${d.harga_override ? "Harga diatur khusus untuk barang ini" : "Mengikuti pengaturan harga umum"}">
+                <input type="checkbox" ${d.tampilkan_harga ? "checked" : ""} onchange="ubahTampilanHarga(${d.id}, this.checked)" style="width:15px; height:15px" />
+                <span>${d.harga_override ? "Khusus" : "Default"}</span>
+              </label>
               <input type="number" min="1" value="${d.qty}" class="input-control" style="margin:0; height:34px; text-align:center; padding:0 6px"
                 oninput="ubahQty(${d.id}, this.value)" />
+              <div style="display:flex; flex-direction:column; gap:3px; align-items:center">
+                <button class="btn" title="Kembalikan ke pengaturan harga umum" onclick="resetTampilanHarga(${d.id})"
+                  style="padding:0; width:34px; height:16px; line-height:14px; font-size:12px; background:var(--border-color); color:var(--text-main); border:none; border-radius:5px">↺</button>
               <button class="btn" title="Hapus" onclick="hapusItem(${d.id})"
                 style="padding:0; width:34px; height:34px; background:var(--danger,#ef4444); color:#fff; border:none; border-radius:8px">✕</button>
+              </div>
             </div>`,
           )
           .join("");
@@ -539,8 +1015,10 @@
           if (itemIndex >= 0) {
             allItems[itemIndex].barcode = req.barcode_value;
           }
+          return req.barcode_value;
         } catch (e) {
-          showToast("Gagal buat barcode", "error");
+          showToast("Gagal buat barcode: " + e.message, "error");
+          return "";
         }
       }
 
@@ -580,18 +1058,17 @@
               kategori: d.kategori || "UMUM",
               barcode: d.barcode || d.code || "",
               harga: d.sell_price || 0,
+              tampilkan_harga: d.tampilkan_harga !== false,
             });
           }
         });
 
-        const totalLabels = Math.max(1, data_produk.length);
-        const rows = Math.ceil(totalLabels / cols);
-        const sheetCols = rows > 1 ? cols : Math.min(cols, totalLabels);
-
         return {
           data_produk,
           jumlah_kolom: cols,
-          jumlah_kolom_sheet: sheetCols,
+          // Jumlah Lin adalah lebar fisik media. Jika qty belum memenuhi satu
+          // baris, kolom sisanya harus tetap ada sebagai ruang kosong.
+          jumlah_kolom_sheet: cols,
           gap_mm: gapX,
           gap_vertical_mm: gapY,
           lebar_mm: w,
@@ -625,31 +1102,20 @@
       }
 
       async function requestStickerSheet(payload, signal) {
-        const token = localStorage.getItem("token");
-        const res = await fetch("/api/sticker/render-sheet", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: "Bearer " + token } : {}),
-          },
-          body: JSON.stringify(payload),
+        const result = await apiBlob("POST", "/sticker/render-sheet", payload, {
           signal,
         });
-
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(errText || "Gagal render stiker");
-        }
+        if (!result) return null;
 
         const fallbackSize = getSheetSizeMm(payload);
         const widthMm =
-          parseFloat(res.headers.get("X-Sheet-Width-Mm")) || fallbackSize.width;
+          parseFloat(result.headers.get("X-Sheet-Width-Mm")) ||
+          fallbackSize.width;
         const heightMm =
-          parseFloat(res.headers.get("X-Sheet-Height-Mm")) ||
+          parseFloat(result.headers.get("X-Sheet-Height-Mm")) ||
           fallbackSize.height;
-        const blob = await res.blob();
 
-        return { blob, widthMm, heightMm };
+        return { blob: result.blob, widthMm, heightMm };
       }
 
       function blobToBase64(blob) {
@@ -691,10 +1157,12 @@
 
         try {
           const payload = getStickerPayload();
-          const { blob, widthMm, heightMm } = await requestStickerSheet(
+          const sheet = await requestStickerSheet(
             payload,
             previewAbortController.signal,
           );
+          if (!sheet) return;
+          const { blob, widthMm, heightMm } = sheet;
           if (renderSeq !== previewRenderSeq || !daftarCetak.length) {
             return;
           }
@@ -719,16 +1187,23 @@
           return;
         }
 
+        const printButton = document.getElementById("btnCetakBarcode");
+        const originalText = printButton?.textContent;
+        if (printButton) {
+          printButton.disabled = true;
+          printButton.textContent = "Menyiapkan cetak...";
+        }
         try {
           const payload = getStickerPayload();
           const rowCount = Math.ceil(
             payload.data_produk.length / payload.jumlah_kolom,
           );
-          const { blob, widthMm, heightMm } =
-            await requestStickerSheet(payload);
+          const sheet = await requestStickerSheet(payload);
+          if (!sheet) return;
+          const { blob, widthMm, heightMm } = sheet;
           const imageBase64 = await blobToBase64(blob);
 
-          await api("POST", "/print/", {
+          const printResult = await api("POST", "/print/", {
             content: JSON.stringify({
               image_base64: imageBase64,
               width_mm: widthMm,
@@ -743,16 +1218,27 @@
             branch_id: getActiveBranchId(),
           });
 
+          if (printResult === undefined) return;
+          if (!printResult.success) {
+            throw new Error("Antrean printer tidak menerima job barcode");
+          }
+
           showToast("Job barcode dikirim ke antrean printer", "success");
         } catch (e) {
           console.error(e);
           showToast("Kesalahan cetak: " + e.message, "error");
+        } finally {
+          if (printButton) {
+            printButton.disabled = false;
+            printButton.textContent = originalText;
+          }
         }
       }
       setPreviewPlaceholder("Tambah barang dulu");
       renderDaftar();
       updateSliderVars();
       loadItems();
+      subscribeItemMasterChanges(() => loadItems());
     </script>
   </body>
 </html>

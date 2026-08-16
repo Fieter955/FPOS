@@ -28,6 +28,7 @@ env/
 build/
 dist/
 *.spec
+!backend/FPOS-Updater.spec
 
 # ── Log & runtime ────────────────────────────────────────────────────────────
 error_log.txt

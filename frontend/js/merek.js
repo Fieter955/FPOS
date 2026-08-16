@@ -70,6 +70,7 @@ function closeMerekModal() {
   if (returnToItemModal) {
     fromItemModal = false;
     openModal("mBarang");
+    setTimeout(() => document.getElementById("fMerek")?.focus({ preventScroll: true }), 0);
   }
 }
 

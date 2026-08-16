@@ -21,6 +21,7 @@ class ProdukItem(BaseModel):
     barcode: str
     harga: float = 0
     kategori: Optional[str] = None
+    tampilkan_harga: bool = True
 
 
 class StikerBatchRequest(BaseModel):
@@ -260,10 +261,10 @@ def render_stiker_sheet(req: StikerBatchRequest):
     h_px = mm_to_px(req.tinggi_mm, dpi)
     cols = req.jumlah_kolom
     rows = math.ceil(len(req.data_produk) / cols)
-    sheet_cols = req.jumlah_kolom_sheet or cols
-    sheet_cols = max(1, min(cols, sheet_cols))
-    if rows > 1:
-        sheet_cols = cols
+    # `jumlah_kolom` adalah jumlah jalur fisik media label. Field
+    # `jumlah_kolom_sheet` tetap diterima untuk kompatibilitas payload lama,
+    # tetapi tidak boleh mengecilkan 2/3 Lin menjadi satu kolom saat qty sedikit.
+    sheet_cols = cols
     gap_x_mm = req.gap_mm
     gap_y_mm = req.gap_vertical_mm
     gap_x_px = mm_to_px(gap_x_mm, dpi) if sheet_cols > 1 and gap_x_mm > 0 else 0
@@ -290,6 +291,7 @@ def render_stiker_sheet(req: StikerBatchRequest):
         y = row * (h_px + gap_y_px)
 
         is_two_col = cols == 2
+        show_price = bool(item.tampilkan_harga)
         side_padding = max(6, mm_to_px(1.0, dpi))
         name_min_size = max(css_px_to_print_px(5, dpi), 8)
         price_font_size = price_base_size
@@ -316,25 +318,34 @@ def render_stiker_sheet(req: StikerBatchRequest):
             bottom_text_ratio = 0.30
             name_max_lines = 3 if req.tinggi_mm >= 18 else 2
 
+        if not show_price:
+            top_padding = max(2, mm_to_px(0.35, dpi))
+
         content_left = x + side_padding
         content_w = max(8, w_px - (side_padding * 2))
         content_center_x = content_left + (content_w // 2)
 
         nama = (item.nama or "-").strip()
         barcode_val = (item.barcode or "").strip()
-        harga = format_rp(item.harga)
+        harga = format_rp(item.harga) if show_price else ""
 
         price_text_max_h = max(min_font_size, int(h_px * price_text_ratio))
         bottom_text_max_h = max(min_font_size * 2, int(h_px * bottom_text_ratio))
-        font_price = fit_font(
-            draw,
-            harga,
-            max_w=content_w,
-            max_h=price_text_max_h,
-            base_size=price_font_size,
-            font_name="arialbd.ttf",
-            min_size=min_font_size,
-        )
+        price_w = 0
+        price_h = 0
+        if show_price:
+            font_price = fit_font(
+                draw,
+                harga,
+                max_w=content_w,
+                max_h=price_text_max_h,
+                base_size=price_font_size,
+                font_name="arialbd.ttf",
+                min_size=min_font_size,
+            )
+            price_bbox = draw.textbbox((0, 0), harga, font=font_price)
+            price_w = price_bbox[2] - price_bbox[0]
+            price_h = price_bbox[3] - price_bbox[1]
 
         font_name, name_lines, name_line_gap, name_line_h = fit_wrapped_text(
             draw,
@@ -347,10 +358,6 @@ def render_stiker_sheet(req: StikerBatchRequest):
             max_lines=name_max_lines,
         )
 
-        price_bbox = draw.textbbox((0, 0), harga, font=font_price)
-        price_w = price_bbox[2] - price_bbox[0]
-        price_h = price_bbox[3] - price_bbox[1]
-
         name_block_h = (name_line_h * len(name_lines)) + (
             name_line_gap * max(0, len(name_lines) - 1)
         )
@@ -362,14 +369,15 @@ def render_stiker_sheet(req: StikerBatchRequest):
         available_barcode_h = barcode_bottom_y - barcode_top_y
         barcode_band_h = max(1, available_barcode_h) if is_two_col else max(18, available_barcode_h)
 
-        # Top center: harga
-        price_x = content_center_x - price_w // 2
-        draw.text(
-            (price_x, y + top_padding),
-            harga,
-            fill="black",
-            font=font_price,
-        )
+        # Top center: harga (opsional per label)
+        if show_price:
+            price_x = content_center_x - price_w // 2
+            draw.text(
+                (price_x, y + top_padding),
+                harga,
+                fill="black",
+                font=font_price,
+            )
 
         # Tengah: barcode
         bc_img = render_code128_fit(

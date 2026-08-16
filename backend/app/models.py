@@ -355,6 +355,7 @@ class Purchase(Base):
     tax = Column(Float, default=0)
     tax_percent = Column(Float, default=0)
     is_tax_included = Column(Boolean, default=True)
+    tax_type = Column(String(10), nullable=True)  # include | exclude | none; NULL = legacy fallback
     ppn_dipisah = Column(Boolean, default=False)  # PPN dicatat terpisah ke 1-1550 saat dibeli (mode PKP)? → batal/retur mengikuti mode ini, bukan saklar saat ini
     total = Column(Float, default=0)
     paid = Column(Float, default=0)

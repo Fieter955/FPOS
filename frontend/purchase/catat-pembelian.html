@@ -177,9 +177,13 @@
 
         try {
           // Cari item berdasarkan barcode/kode
-          const items = await api("GET", "/items/?limit=1&search=" + scode);
-          if (items && items.length > 0) {
-            const item = items[0];
+          const items = await api(
+            "GET",
+            "/items/?limit=20000&search=" + encodeURIComponent(scode),
+          );
+          const match = findItemByScanCode(items, scode);
+          if (match) {
+            const item = match.item;
             orderManager.itemsGrid.addRow(item);
             showToast("Berhasil menambah: " + item.name);
           } else {

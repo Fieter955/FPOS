@@ -387,6 +387,7 @@
           api("GET", "/items/?limit=2000"),
           api("GET", "/customers/?limit=2000"),
         ]);
+        subscribeItemMasterChanges(refreshTradeInItems);
 
         custCombo = createPremiumCombo("custComboContainer", allCusts, {
           placeholder: "Pilih Pelanggan (Wajib)...",
@@ -396,6 +397,20 @@
         });
 
         load();
+      }
+
+      async function refreshTradeInItems() {
+        try {
+          allItems = await api("GET", "/items/?limit=2000");
+          document
+            .querySelectorAll("#returnRows select, #newRows select")
+            .forEach((select) => {
+              const selected = select.value;
+              select.innerHTML = makeItemOpts(selected);
+            });
+        } catch (error) {
+          console.error("Gagal menyegarkan barang tukar tambah", error);
+        }
       }
 
       async function load() {

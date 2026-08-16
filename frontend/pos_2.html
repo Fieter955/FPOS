@@ -809,6 +809,7 @@
     let currentFilteredItems = [];
     let kbFocusIndex = -1;
     let activeModal = null;
+    let unsubscribeItemMasterChanges = null;
     let pendingItemId = null,
       pendingSupplierId = null; // 🚚 Supplier ID dari barcode khusus
     let qtyIdx = 0;
@@ -960,18 +961,10 @@
             .toLowerCase();
 
           // CEK 1: Apakah input manual cocok 100% dengan kode/barcode?
-          const ex = allItems.find(
-            (i) =>
-              String(i.barcode || "")
-                .toLowerCase()
-                .trim() === q ||
-              String(i.code || "")
-                .toLowerCase()
-                .trim() === q,
-          );
+          const exactMatch = findItemByScanCode(allItems, q);
 
-          if (ex && q !== "") {
-            promptQty(ex.id);
+          if (exactMatch && q !== "") {
+            promptQty(exactMatch.item.id, exactMatch.supplierId);
             document.getElementById("searchInp").value = "";
             filterItems();
             return;
@@ -1154,33 +1147,24 @@
         });
         filterItems();
 
+        unsubscribeItemMasterChanges = subscribeItemMasterChanges(async () => {
+          try {
+            allItems = await api("GET", "/items/?limit=20000");
+            filterItems();
+          } catch (error) {
+            console.error("Gagal menyegarkan barang POS", error);
+          }
+        });
+
         // Setup Global Barcode Scanner
         setupBarcodeScanner((scode) => {
           if (activeModal !== null) return;
           scode = String(scode).toLowerCase().trim();
 
-          let matchedSupplierId = null;
-          const matchedItem = allItems.find((i) => {
-            const bCode = String(i.barcode || "").toLowerCase().trim();
-            const iCode = String(i.code || "").toLowerCase().trim();
+          const match = findItemByScanCode(allItems, scode);
 
-            if (bCode === scode) return true;
-            if (iCode === scode) return true;
-
-            if (i.supplier_details && i.supplier_details.length > 0) {
-              const sd = i.supplier_details.find(
-                (s) => String(s.barcode || "").toLowerCase().trim() === scode,
-              );
-              if (sd) {
-                matchedSupplierId = sd.supplier_id;
-                return true;
-              }
-            }
-            return false;
-          });
-
-          if (matchedItem) {
-            promptQty(matchedItem.id, matchedSupplierId);
+          if (match) {
+            promptQty(match.item.id, match.supplierId, false);
             document.getElementById("searchInp").value = "";
             filterItems();
           } else {

@@ -62,7 +62,9 @@
     }
 
     const dropdown = form.querySelector("#itemDropdown");
-    const firstResult = dropdown?.querySelector(".item-dropdown-item");
+    const firstResult = dropdown?.querySelector(
+      ".item-dropdown-item.keyboard-highlight, .item-dropdown-item",
+    );
     if (!dropdown?.classList.contains("show") || !firstResult) return false;
 
     const addButton = firstResult.querySelector(
@@ -75,6 +77,94 @@
     focusSubmitButton(form);
     return true;
   }
+
+  function getItemDropdownOptions(form) {
+    return Array.from(
+      form?.querySelectorAll(
+        "#itemDropdown.item-dropdown.show .item-dropdown-item",
+      ) || [],
+    );
+  }
+
+  function highlightItemDropdownOption(input, options, nextIndex) {
+    if (!options.length) {
+      input.dataset.itemDropdownIndex = "-1";
+      return;
+    }
+
+    const index = (nextIndex + options.length) % options.length;
+    input.dataset.itemDropdownIndex = String(index);
+    options.forEach((option, optionIndex) => {
+      const active = optionIndex === index;
+      option.classList.toggle("keyboard-highlight", active);
+      option.classList.toggle("highlight", active);
+      option.setAttribute("aria-selected", String(active));
+    });
+    options[index].scrollIntoView({ block: "nearest" });
+  }
+
+  function handleSupplierItemDropdownKeys(event, form, input) {
+    const dropdown = form.querySelector("#itemDropdown");
+    if (!dropdown) return false;
+
+    const isNextKey = event.key === "ArrowDown" || event.key === "ArrowRight";
+    const isPreviousKey =
+      event.key === "ArrowUp" || event.key === "ArrowLeft";
+    const isDropdownOpen = dropdown.classList.contains("show");
+
+    if (isNextKey || isPreviousKey) {
+      if (!isDropdownOpen && typeof window.renderItemDropdown === "function") {
+        window.renderItemDropdown(input.value);
+      }
+      const options = getItemDropdownOptions(form);
+      if (!options.length) return false;
+      event.preventDefault();
+      event.stopPropagation();
+      const currentIndex = Number(input.dataset.itemDropdownIndex || -1);
+      highlightItemDropdownOption(
+        input,
+        options,
+        currentIndex + (isNextKey ? 1 : -1),
+      );
+      return true;
+    }
+
+    if (event.key === "Tab" && isDropdownOpen) {
+      const options = getItemDropdownOptions(form);
+      const currentIndex = Number(input.dataset.itemDropdownIndex || -1);
+      const selected = options[currentIndex];
+      if (selected) {
+        const addButton = selected.querySelector(
+          ".item-add-btn, button[type='button']",
+        );
+        (addButton || selected).click();
+      } else {
+        dropdown.classList.remove("show");
+      }
+      return false;
+    }
+
+    if (event.key === "Escape" && isDropdownOpen) {
+      event.preventDefault();
+      dropdown.classList.remove("show");
+      input.dataset.itemDropdownIndex = "-1";
+      return true;
+    }
+
+    return false;
+  }
+
+  document.addEventListener("keydown", (event) => {
+    const target = event.target;
+    if (
+      !(target instanceof HTMLElement) ||
+      target.id !== "itemSearchInput"
+    ) {
+      return;
+    }
+    const form = target.closest(SUPPLIER_FORM_SELECTOR);
+    if (form) handleSupplierItemDropdownKeys(event, form, target);
+  });
 
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" || event.isComposing || event.defaultPrevented) {

@@ -706,6 +706,7 @@
           const gudangUntukTransfer = allGudang;
 
           allItems = await api("GET", "/items/?limit=1000");
+          subscribeItemMasterChanges(refreshWarehouseItems);
           allBranches = await api("GET", "/branches/");
 
           // Inisialisasi dropdown Transfer Stok (Asal & Tujuan)
@@ -945,6 +946,15 @@
           const idStr = row.id.replace("tfRow_", "");
           updateStokInfoRowLocal(idStr);
         });
+      }
+
+      async function refreshWarehouseItems() {
+        try {
+          allItems = await api("GET", "/items/?limit=1000");
+          rebuildAllDropdowns();
+        } catch (error) {
+          console.error("Gagal menyegarkan barang gudang", error);
+        }
       }
 
       // 👇 FITUR BARU: onchange memanggil cegahBarangGanda(this) 👇

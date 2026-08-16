@@ -505,12 +505,13 @@
           </div>
           <div class="input-group">
             <label style="margin-bottom: 6px">Tipe PPN *</label>
-            <select id="bTaxType" class="input-control" onchange="handleTaxTypeChange()">
+            <select id="bTaxType" class="input-control" aria-describedby="taxTypeLockHint" onchange="handleTaxTypeChange()">
               <option value="" disabled selected>-- Pilih --</option>
               <option value="include">Include</option>
               <option value="exclude">Exclude</option>
               <option value="none">Tanpa PPN</option>
             </select>
+            <small id="taxTypeLockHint" style="display:block;min-height:16px;margin-top:4px;color:var(--text-muted);font-size:11px" aria-live="polite"></small>
           </div>
         </div>
         <!-- Removed Diskon & PPN top block, moved to summary box below -->
@@ -525,9 +526,15 @@
                 margin-bottom: 16px;
               ">
               <h3>Daftar Barang</h3>
-              <button class="btn btn-primary" id="btnAddRow" onclick="tambahBarisPembelian()">
-                + Tambah Baris
-              </button>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+                <span id="itemSyncStatus" style="font-size:12px;color:var(--text-muted)" aria-live="polite"></span>
+                <button class="btn" id="btnRefreshPurchaseItems" type="button" onclick="refreshPurchaseItems({ notify: true })" title="Muat ulang daftar barang supplier">
+                  ↻ Muat Ulang Barang
+                </button>
+                <button class="btn btn-primary" id="btnAddRow" onclick="tambahBarisPembelian()">
+                  + Tambah Baris
+                </button>
+              </div>
             </div>
             <div id="formGridContainer"></div>
           </div>
@@ -841,6 +848,8 @@
     let lastPersistedSnapshot = null;
     let isRestoringPurchaseDraft = false;
     let draftStorageWarningShown = false;
+    let purchaseItemsRefreshSequence = 0;
+    let unsubscribeItemMasterChanges = null;
 
     function getPurchaseDraftStore(mode = currentFormMode) {
       if (typeof PurchaseDraftStore === "undefined") return null;
@@ -932,14 +941,73 @@
     }
 
     function handlePurchaseGridChange() {
+      updatePurchaseTaxTypeLock();
       hitungGrandTotal();
       schedulePurchaseDraftSave();
     }
 
     function tambahBarisPembelian() {
       formGrid?.addRow();
+      updatePurchaseTaxTypeLock();
       schedulePurchaseDraftSave();
     }
+
+    async function refreshPurchaseItems({ notify = false } = {}) {
+      const supplierId = document.querySelector(
+        "#supplierCombobox .combobox-value",
+      )?.value;
+      if (!supplierId || !formGrid) {
+        if (notify && !supplierId) showToast("Pilih supplier dulu", "warning");
+        return false;
+      }
+
+      const sequence = ++purchaseItemsRefreshSequence;
+      // Simpan perubahan yang sedang diketik sebelum daftar pilihan diperbarui.
+      // updateDataSource sendiri tidak menyentuh baris maupun nilai input.
+      savePurchaseDraftNow();
+      const refreshButton = document.getElementById("btnRefreshPurchaseItems");
+      const status = document.getElementById("itemSyncStatus");
+      if (refreshButton) refreshButton.disabled = true;
+      try {
+        const items = await api(
+          "GET",
+          `/purchases/items/?supplier_id=${supplierId}`,
+        );
+        if (sequence !== purchaseItemsRefreshSequence) return false;
+        formGrid.updateDataSource(items || []);
+        if (status) {
+          status.textContent = "Daftar barang terbaru";
+          window.setTimeout(() => {
+            if (status.textContent === "Daftar barang terbaru") {
+              status.textContent = "";
+            }
+          }, 3000);
+        }
+        if (notify) showToast("Daftar barang supplier diperbarui", "info");
+        return true;
+      } catch (error) {
+        console.error("Gagal menyegarkan daftar barang pembelian", error);
+        if (notify) showToast("Gagal memuat ulang barang: " + error.message, "error");
+        return false;
+      } finally {
+        if (sequence === purchaseItemsRefreshSequence && refreshButton) {
+          refreshButton.disabled = false;
+        }
+      }
+    }
+
+    function setupItemMasterSynchronization() {
+      if (typeof subscribeItemMasterChanges !== "function") return;
+      unsubscribeItemMasterChanges = subscribeItemMasterChanges(() => {
+        if (currentTab !== "po" && currentTab !== "purchase") return;
+        refreshPurchaseItems();
+      });
+      window.addEventListener("pagehide", () => {
+        unsubscribeItemMasterChanges?.();
+      }, { once: true });
+    }
+
+    setupItemMasterSynchronization();
 
     function kembaliKeDashboard() {
       savePurchaseDraftNow();
@@ -961,6 +1029,20 @@
         } else {
           overlay.style.display = "flex";
         }
+      }
+    }
+
+    function updatePurchaseTaxTypeLock() {
+      const taxType = document.getElementById("bTaxType");
+      if (!taxType) return;
+      const hasItems = Boolean(formGrid?.getData?.().some((item) => item?.item_id));
+      const hint = document.getElementById("taxTypeLockHint");
+      taxType.disabled = hasItems;
+      taxType.setAttribute("aria-disabled", String(hasItems));
+      if (hint) {
+        hint.textContent = hasItems
+          ? "Hapus semua barang terlebih dahulu untuk mengganti tipe PPN."
+          : "";
       }
     }
 
@@ -995,6 +1077,7 @@
       }
 
       checkRequiredSelection();
+      updatePurchaseTaxTypeLock();
       if (typeof hitungGrandTotal === "function") hitungGrandTotal();
       schedulePurchaseDraftSave();
     }
@@ -1006,11 +1089,19 @@
 
       try {
         // Cari item berdasarkan barcode/kode
-        const items = await api("GET", "/items/?limit=1&search=" + scode);
-        if (items && items.length > 0) {
-          const item = items[0];
+        const items = await api(
+          "GET",
+          "/items/?limit=20000&search=" + encodeURIComponent(scode),
+        );
+        const match = findItemByScanCode(items, scode);
+        if (match) {
+          const item = match.item;
           if (formGrid) {
-            formGrid.addRow(item);
+            const row = formGrid.addItem
+              ? await formGrid.addItem(item)
+              : formGrid.addRow(item);
+            if (!row) return;
+            updatePurchaseTaxTypeLock();
             schedulePurchaseDraftSave();
             showToast("Berhasil menambah: " + item.name);
           }
@@ -1133,6 +1224,7 @@
         }
 
         if (Array.isArray(draft.rows)) formGrid.loadRows(draft.rows);
+        updatePurchaseTaxTypeLock();
         hitungGrandTotal();
         checkRequiredSelection();
         lastPersistedSnapshot = comparablePurchaseDraft(
@@ -1255,7 +1347,10 @@
         // Pulihkan Tipe PPN dari data tersimpan agar buka draft tidak mereset ke default.
         const elTaxType = document.getElementById("bTaxType");
         if (elTaxType) {
-          elTaxType.value = existing.is_tax_included ? "include" : "exclude";
+          // tax_type membedakan Exclude dari Tanpa PPN. Fallback menjaga draft
+          // lama yang hanya menyimpan is_tax_included tetap dapat dibuka.
+          elTaxType.value = existing.tax_type ||
+            (existing.is_tax_included ? "include" : "exclude");
           handleTaxTypeChange();
         }
         const items = existing.items.map((it) => ({
@@ -1266,6 +1361,7 @@
           buy_price: it.buy_price,
           sell_price: it.item?.sell_price || 0,
           profit_margin: it.item?.profit_margin || 0,
+          ppn_percent: it.ppn_percent,
           // Bawa potongan bertingkat (maks 4) agar tidak hilang saat edit pembelian.
           // Tingkat 1 selalu ada; tingkat 2-4 hanya bila terisi.
           discs: [
@@ -1278,18 +1374,23 @@
         formGrid = createPurchaseSummaryGrid("gridTarget", {
           initialItems: items,
           onChange: handlePurchaseGridChange,
+          onRowsChanged: updatePurchaseTaxTypeLock,
           onDetail: bukaDetailItem,
           getSupplierId: ambilSupplierIdTerpilih,
+          enableEnterNavigation: currentFormMode === "purchase",
           ...konfigPpnGrid(),
         });
       } else {
         formGrid = createPurchaseSummaryGrid("gridTarget", {
           onChange: handlePurchaseGridChange,
+          onRowsChanged: updatePurchaseTaxTypeLock,
           onDetail: bukaDetailItem,
           getSupplierId: ambilSupplierIdTerpilih,
+          enableEnterNavigation: currentFormMode === "purchase",
           ...konfigPpnGrid(),
         });
       }
+      updatePurchaseTaxTypeLock();
       hitungGrandTotal();
       isRestoringPurchaseDraft = false;
       draftBaselineSnapshot = comparablePurchaseDraft(serializePurchaseForm());
@@ -1393,7 +1494,16 @@
         taxAmt = (grand * tax) / 100;
         grand = grand + taxAmt;
       } else {
-        taxAmt = grand - (grand / (1 + tax / 100));
+        // Include: harga baris sudah termasuk PPN. Hitung porsi pajak per
+        // baris agar tarif barang yang berbeda tidak dirata-ratakan oleh
+        // field header (yang memang dikunci 0 pada mode Include).
+        taxAmt = items.reduce((sum, it) => {
+          const rate = Number(it.ppn_percent ?? 0) || 0;
+          const lineGrossAfterDiscount = (it.total || 0) * (1 - disc / 100);
+          return rate > 0
+            ? sum + lineGrossAfterDiscount - lineGrossAfterDiscount / (1 + rate / 100)
+            : sum;
+        }, 0);
       }
 
       const elQty = document.getElementById("sumQty");
@@ -1423,6 +1533,7 @@
       try {
         showLoading();
         const taxValue = parseDesimal(document.getElementById("bTax"));
+        const taxType = document.getElementById("bTaxType")?.value || "include";
         const payload = {
           date: document.getElementById("bDate").value,
           due_date: document.getElementById("bDueDate").value || null,
@@ -1430,7 +1541,8 @@
           discount: parseDesimal(document.getElementById("bDisc")),
           tax: taxValue,
           tax_percent: taxValue,
-          is_tax_included: document.getElementById("bTaxType")?.value === "include",
+          tax_type: taxType,
+          is_tax_included: taxType === "include",
           notes: document.getElementById("bNotes").value || null,
           items: items,
           paid: 0,
@@ -1549,24 +1661,15 @@
 
     // Render lembar barcode di backend → blob PNG + ukuran kertas (mm).
     async function mintaLembarBarcode(payload, signal) {
-      const token = localStorage.getItem("token");
-      const res = await fetch("/api/sticker/render-sheet", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: "Bearer " + token } : {}),
-        },
-        body: JSON.stringify(payload),
+      const result = await apiBlob("POST", "/sticker/render-sheet", payload, {
         signal,
       });
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(errText || "Gagal render stiker");
-      }
-      const widthMm = parseFloat(res.headers.get("X-Sheet-Width-Mm")) || 0;
-      const heightMm = parseFloat(res.headers.get("X-Sheet-Height-Mm")) || 0;
-      const blob = await res.blob();
-      return { blob, widthMm, heightMm };
+      if (!result) return null;
+      const widthMm =
+        parseFloat(result.headers.get("X-Sheet-Width-Mm")) || 0;
+      const heightMm =
+        parseFloat(result.headers.get("X-Sheet-Height-Mm")) || 0;
+      return { blob: result.blob, widthMm, heightMm };
     }
 
     // Modal cetak: daftar barang + kotak jumlah per barang di kiri, pratinjau
@@ -1647,10 +1750,12 @@
         const seq = ++renderSeq;
         area.innerHTML = `<div style="padding:40px;color:#64748b">Menyiapkan pratinjau...</div>`;
         try {
-          const { blob } = await mintaLembarBarcode(
+          const sheet = await mintaLembarBarcode(
             susunPayloadBarcode(daftar),
             abortCtrl.signal,
           );
+          if (!sheet) return;
+          const { blob } = sheet;
           if (seq !== renderSeq) return;
           if (blobUrl) URL.revokeObjectURL(blobUrl);
           blobUrl = URL.createObjectURL(blob);
@@ -1685,13 +1790,17 @@
             showLoading();
             // Render ulang sesuai jumlah terkini agar selalu sinkron.
             const payload = susunPayloadBarcode(daftar);
-            const { blob, widthMm, heightMm } =
-              await mintaLembarBarcode(payload);
+            const sheet = await mintaLembarBarcode(payload);
+            if (!sheet) {
+              hideLoading();
+              return;
+            }
+            const { blob, widthMm, heightMm } = sheet;
             const imageBase64 = await blobToBase64(blob);
             const rowCount = Math.ceil(
               payload.data_produk.length / payload.jumlah_kolom,
             );
-            await api("POST", "/print/", {
+            const printResult = await api("POST", "/print/", {
               content: JSON.stringify({
                 image_base64: imageBase64,
                 width_mm: widthMm,
@@ -1705,6 +1814,10 @@
               content_type: "label_image",
               branch_id: getActiveBranchId(),
             });
+            if (printResult === undefined) {
+              hideLoading();
+              return;
+            }
             hideLoading();
             tutup();
             showToast("Job barcode dikirim ke antrean printer", "success");

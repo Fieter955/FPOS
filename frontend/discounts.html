@@ -202,6 +202,7 @@
           api("GET", "/items/?limit=500"),
           api("GET", "/items/categories"),
         ]);
+        subscribeItemMasterChanges(refreshDiscountItems);
         const si = document.getElementById("dItem"),
           sc = document.getElementById("dKat");
         items.forEach((i) =>
@@ -217,6 +218,25 @@
           ),
         );
         load();
+      }
+
+      async function refreshDiscountItems() {
+        try {
+          const items = await api("GET", "/items/?limit=500");
+          const select = document.getElementById("dItem");
+          if (!select) return;
+          const selected = select.value;
+          select.innerHTML = '<option value="">-- Pilih Barang --</option>';
+          items.forEach((item) =>
+            select.insertAdjacentHTML(
+              "beforeend",
+              `<option value="${item.id}">${item.name}</option>`,
+            ),
+          );
+          select.value = selected;
+        } catch (error) {
+          console.error("Gagal menyegarkan barang diskon", error);
+        }
       }
 
       async function load() {

@@ -3,6 +3,102 @@ const SESSION_EXPIRED_NOTICE_KEY = "fpos_session_expired_notice";
 let fposUnsavedChangesGuard = null;
 let fposSuppressNextUnloadWarning = false;
 
+// Perubahan master barang perlu diketahui oleh halaman lain yang masih hidup
+// (terutama tab Pembelian yang dibuka di workspace iframe). BroadcastChannel
+// menjadi jalur utama; event storage dipakai sebagai fallback untuk browser
+// yang belum mendukung BroadcastChannel.
+const FPOS_ITEM_MASTER_EVENT = "fpos-item-master-changed";
+const FPOS_ITEM_MASTER_CHANNEL = "fpos-item-master-v1";
+const FPOS_ITEM_MASTER_STORAGE_KEY = "__fpos_item_master_changed__";
+let fposItemMasterChannel = null;
+let fposItemMasterTransportReady = false;
+const fposItemMasterSubscribers = new Set();
+const fposItemMasterSeenEvents = new Set();
+
+function fposItemMasterEventId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}-${
+    ++fposItemMasterEventId.sequence
+  }`;
+}
+fposItemMasterEventId.sequence = 0;
+
+function emitItemMasterChange(message) {
+  if (!message || message.entity !== "items") return;
+  if (message.eventId && fposItemMasterSeenEvents.has(message.eventId)) return;
+  if (message.eventId) {
+    fposItemMasterSeenEvents.add(message.eventId);
+    // Hindari Set tumbuh tanpa batas selama aplikasi dibiarkan terbuka lama.
+    if (fposItemMasterSeenEvents.size > 100) {
+      const first = fposItemMasterSeenEvents.values().next().value;
+      fposItemMasterSeenEvents.delete(first);
+    }
+  }
+
+  window.dispatchEvent(
+    new CustomEvent(FPOS_ITEM_MASTER_EVENT, { detail: message }),
+  );
+  fposItemMasterSubscribers.forEach((subscriber) => {
+    try {
+      subscriber(message);
+    } catch (error) {
+      console.error("Gagal memproses sinkronisasi barang", error);
+    }
+  });
+}
+
+function ensureItemMasterTransport() {
+  if (fposItemMasterTransportReady) return;
+  fposItemMasterTransportReady = true;
+
+  if (typeof BroadcastChannel !== "undefined") {
+    try {
+      fposItemMasterChannel = new BroadcastChannel(FPOS_ITEM_MASTER_CHANNEL);
+      fposItemMasterChannel.addEventListener("message", (event) => {
+        emitItemMasterChange(event.data);
+      });
+    } catch (error) {
+      fposItemMasterChannel = null;
+      console.warn("BroadcastChannel barang tidak tersedia", error);
+    }
+  }
+
+  window.addEventListener("storage", (event) => {
+    if (event.key !== FPOS_ITEM_MASTER_STORAGE_KEY || !event.newValue) return;
+    try {
+      emitItemMasterChange(JSON.parse(event.newValue));
+    } catch {}
+  });
+}
+
+function publishItemMasterChange({ action = "changed", itemId = null } = {}) {
+  const message = {
+    entity: "items",
+    action,
+    itemId: itemId == null ? null : Number(itemId),
+    eventId: fposItemMasterEventId(),
+    at: Date.now(),
+  };
+  ensureItemMasterTransport();
+  // Halaman asal juga diperbarui, sehingga daftar Barang tidak menunggu
+  // refresh manual setelah menyimpan modal.
+  emitItemMasterChange(message);
+
+  try {
+    fposItemMasterChannel?.postMessage(message);
+  } catch {}
+  try {
+    localStorage.setItem(FPOS_ITEM_MASTER_STORAGE_KEY, JSON.stringify(message));
+    localStorage.removeItem(FPOS_ITEM_MASTER_STORAGE_KEY);
+  } catch {}
+}
+
+function subscribeItemMasterChanges(handler) {
+  if (typeof handler !== "function") return () => {};
+  ensureItemMasterTransport();
+  fposItemMasterSubscribers.add(handler);
+  return () => fposItemMasterSubscribers.delete(handler);
+}
+
 const FPOS_WORKSPACE_EMBEDDED = (() => {
   if (window.self === window.top) return false;
   try {
@@ -53,7 +149,7 @@ function handleUnauthorized(path) {
   return true;
 }
 
-function openWorkspaceTab(url, title = "", reuseExisting = false) {
+function openWorkspaceTab(url, title = "") {
   const resolved = new URL(url, location.href);
   if (FPOS_WORKSPACE_EMBEDDED) {
     window.parent.postMessage(
@@ -61,7 +157,7 @@ function openWorkspaceTab(url, title = "", reuseExisting = false) {
         type: "fpos-open-tab",
         url: resolved.href,
         title,
-        reuseExisting: Boolean(reuseExisting),
+        reuseExisting: true,
       },
       location.origin,
     );
@@ -101,11 +197,15 @@ function getToken() {
 
 function setToken(t) {
   localStorage.setItem("ipos_token", t);
+  // Key ini pernah dipakai beberapa request blob lama. Hapus agar token
+  // kedaluwarsa tidak mengalahkan sesi ipos_token yang sedang aktif.
+  localStorage.removeItem("token");
   sessionStorage.removeItem("fpos_effective_permissions");
 }
 
 function clearToken() {
   localStorage.removeItem("ipos_token");
+  localStorage.removeItem("token");
   localStorage.removeItem("ipos_user");
   // Bersihkan juga sesi cabang saat logout
   localStorage.removeItem("active_branch_id");
@@ -281,6 +381,20 @@ async function api(method, path, body = null) {
     throw new Error(msg || `HTTP ${r.status}`);
   }
 
+  // Semua perubahan pada endpoint master barang (buat, edit, aktif/nonaktif,
+  // termasuk harga supplier) diberitakan ke halaman lain yang sedang terbuka.
+  if (method !== "GET" && /^\/items(?:\/|$)/.test(path) && d !== undefined) {
+    publishItemMasterChange({
+      action:
+        method === "POST"
+          ? "created"
+          : method === "DELETE"
+            ? "deleted"
+            : "updated",
+      itemId: d?.id || path.match(/^\/items\/(\d+)/)?.[1] || null,
+    });
+  }
+
   return d;
 }
 
@@ -321,6 +435,62 @@ async function apiForm(path, fd) {
   }
 
   return d;
+}
+
+// Request API yang respons suksesnya berupa file/blob. Autentikasi dan
+// penanganan sesi harus tetap sama dengan api(), termasuk saat halaman dibuka
+// di dalam workspace iframe.
+async function apiBlob(method, path, body = null, options = {}) {
+  const headers = {};
+  const token = getToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+    const activeBranch = localStorage.getItem("active_branch_id");
+    if (activeBranch) headers["X-Branch-ID"] = activeBranch;
+  }
+  if (body !== null) headers["Content-Type"] = "application/json";
+
+  const requestOptions = {
+    method,
+    headers,
+    signal: options.signal,
+  };
+  if (body !== null) requestOptions.body = JSON.stringify(body);
+
+  let response;
+  try {
+    response = await fetch(API_BASE + path, requestOptions);
+  } catch (error) {
+    if (error?.name === "AbortError") throw error;
+    throw new Error("Tidak bisa terhubung ke server.");
+  }
+
+  if (response.status === 401 && handleUnauthorized(path)) {
+    return;
+  }
+  if (response.status === 403) {
+    sessionStorage.removeItem(PERMISSION_CACHE_KEY);
+  }
+
+  if (!response.ok) {
+    const raw = await response.text();
+    let message = raw;
+    try {
+      const parsed = JSON.parse(raw);
+      message = parsed.detail || parsed.message || raw;
+      if (Array.isArray(message)) {
+        message = message.map((item) => item.msg || JSON.stringify(item)).join("; ");
+      } else if (message && typeof message === "object") {
+        message = JSON.stringify(message);
+      }
+    } catch {}
+    throw new Error(message || `HTTP ${response.status}`);
+  }
+
+  return {
+    blob: await response.blob(),
+    headers: response.headers,
+  };
 }
 
 // GET dengan cache di sessionStorage untuk data master yang jarang berubah
@@ -1074,10 +1244,52 @@ document.addEventListener("keydown", (event) => {
   if (input.selectionStart !== input.selectionEnd) return;
   const posisiKoma = input.value.indexOf(",");
   const posisiKursor = input.selectionStart ?? 0;
-  const menghapusKoma =
-    (event.key === "Delete" && posisiKursor === posisiKoma) ||
-    (event.key === "Backspace" && posisiKursor === posisiKoma + 1);
-  if (menghapusKoma) event.preventDefault();
+  const tepatSetelahKoma = posisiKoma >= 0 && posisiKursor === posisiKoma + 1;
+
+  // Saat nilai masih berupa placeholder nol (0,00), digit pertama yang
+  // diketik tepat setelah koma harus menjadi angka bulat, bukan desimal.
+  // Contoh: 0,|00 + 1 -> 1,|00. Nilai bulat non-nol seperti 12,00 tetap
+  // menerima digit di bagian desimal.
+  const bulat = input.value.slice(0, Math.max(0, posisiKoma)).replace(/\D/g, "");
+  const desimal = input.value.slice(posisiKoma + 1).replace(/\D/g, "");
+  const placeholderNol =
+    tepatSetelahKoma && /^0+$/.test(bulat || "0") && /^0+$/.test(desimal);
+  if (placeholderNol && /^[0-9]$/.test(event.key)) {
+    try {
+      input.setSelectionRange(posisiKoma, posisiKoma);
+    } catch (_) {}
+    return;
+  }
+
+  // Di posisi tepat setelah koma, Backspace/Delete harus menghapus digit
+  // bulat terakhir. Koma dan digit desimal tidak ikut terhapus dari posisi ini.
+  if (
+    tepatSetelahKoma &&
+    (event.key === "Backspace" || event.key === "Delete")
+  ) {
+    event.preventDefault();
+    let indeksDigit = posisiKoma - 1;
+    while (indeksDigit >= 0 && !/\d/.test(input.value[indeksDigit])) {
+      indeksDigit -= 1;
+    }
+    if (indeksDigit < 0) return;
+
+    input.value =
+      input.value.slice(0, indeksDigit) + input.value.slice(indeksDigit + 1);
+    // Digit yang dihapus berada sebelum koma, sehingga posisi setelah koma
+    // berkurang satu karakter sebelum format ulang.
+    try {
+      input.setSelectionRange(posisiKoma, posisiKoma);
+    } catch (_) {}
+    formatDesimal(input);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    return;
+  }
+
+  // Koma tidak boleh dihapus dari sisi kiri dengan Delete.
+  if (event.key === "Delete" && posisiKursor === posisiKoma) {
+    event.preventDefault();
+  }
 });
 
 document.addEventListener("input", (event) => {
@@ -1457,6 +1669,7 @@ function bukaModalUploadBukti() {
 // ==============================================================================
 const GLOBAL_BRANCH_SWITCHER_ID = "globalBranchSwitcher";
 const GLOBAL_BRANCH_SELECT_ID = "globalBranchSelect";
+const GLOBAL_BRANCH_CURRENT_ID = "globalBranchCurrent";
 
 async function handleGlobalBranchChange(event) {
   const select = event.currentTarget;
@@ -1484,22 +1697,46 @@ function renderBranchOptions(select, branches, activeId) {
   select.replaceChildren(...options);
 }
 
+function setBranchSwitcherMode({ admin, branchName = "Kasir Cabang" } = {}) {
+  const switcher = document.getElementById(GLOBAL_BRANCH_SWITCHER_ID);
+  const select = document.getElementById(GLOBAL_BRANCH_SELECT_ID);
+  const current = document.getElementById(GLOBAL_BRANCH_CURRENT_ID);
+  if (!switcher || !select || !current) return null;
+
+  switcher.hidden = false;
+  select.hidden = !admin;
+  select.disabled = !admin;
+  current.hidden = Boolean(admin);
+  current.textContent = `📍 ${branchName}`;
+  return { switcher, select, current };
+}
+
 async function refreshBranchSwitcher({ force = false } = {}) {
   if (FPOS_WORKSPACE_EMBEDDED) return;
   const user = getUser();
   if (!user || !user.id) return; // Abaikan jika belum login
 
-  // Jika Kasir/Staff biasa, paksa ID Cabangnya sendiri dan tampilkan badge statis
-  if (!user.role.includes("admin")) {
-    localStorage.setItem("active_branch_id", user.branch_id || 1);
-    if (document.getElementById(GLOBAL_BRANCH_SWITCHER_ID)) return;
-    const badge = document.createElement("div");
-    badge.id = GLOBAL_BRANCH_SWITCHER_ID;
-    badge.style.cssText =
-      "position:fixed; bottom:20px; left:20px; z-index:9999; background:var(--card-bg, #1e293b); padding:8px 16px; border-radius:12px; border:1px solid var(--border-color); box-shadow:0 10px 25px rgba(0,0,0,0.3); color:var(--text-muted); font-size:13px; font-weight:bold;";
-    badge.innerHTML = "📍 Kasir Cabang";
-    document.body.appendChild(badge);
-    return;
+  const isAdmin = String(user.role || "").includes("admin");
+
+  // Jika Kasir/Staff biasa, paksa ID cabangnya sendiri dan tampilkan nama
+  // zona tersebut sebagai informasi di menu akun.
+  if (!isAdmin) {
+    const branchId = user.branch_id || user.active_branch_id || 1;
+    localStorage.setItem("active_branch_id", branchId);
+    let branchName = user.branch_name || "Kasir Cabang";
+
+    try {
+      const branches = await cachedApi("/branches/");
+      const branch = Array.isArray(branches)
+        ? branches.find((item) => String(item.id) === String(branchId))
+        : null;
+      if (branch?.name) branchName = branch.name;
+    } catch (e) {
+      console.warn("Gagal memuat nama zona kerja", e);
+    }
+
+    setBranchSwitcherMode({ admin: false, branchName });
+    return true;
   }
 
   // Jika Admin, load daftar cabang dan buat Dropdown
@@ -1528,28 +1765,12 @@ async function refreshBranchSwitcher({ force = false } = {}) {
       }
     }
 
-    let switcher = document.getElementById(GLOBAL_BRANCH_SWITCHER_ID);
-    let select = document.getElementById(GLOBAL_BRANCH_SELECT_ID);
-    if (!switcher || !select) {
-      switcher?.remove();
-      switcher = document.createElement("div");
-      switcher.id = GLOBAL_BRANCH_SWITCHER_ID;
-      switcher.style.cssText =
-        "position:fixed; bottom:20px; left:20px; z-index:9999; background:var(--card-bg, #1e293b); padding:8px 12px; border-radius:12px; border:2px solid var(--primary); box-shadow:0 10px 25px rgba(0,0,0,0.5); display:flex; align-items:center; gap:10px; transition:0.3s;";
-
-      const label = document.createElement("span");
-      label.style.cssText =
-        "font-size:11px; color:var(--text-muted); font-weight:bold; letter-spacing:0.5px;";
-      label.textContent = "ZONA KERJA:";
-
-      select = document.createElement("select");
-      select.id = GLOBAL_BRANCH_SELECT_ID;
-      select.style.cssText =
-        "background:transparent; color:var(--primary); font-weight:900; border:none; outline:none; cursor:pointer; font-size:14px; width:auto; min-width:150px; max-width:min(24rem, calc(100vw - 9rem));";
+    const controls = setBranchSwitcherMode({ admin: true });
+    if (!controls) return false;
+    const { select } = controls;
+    if (!select.listenersInitialized) {
       select.addEventListener("change", handleGlobalBranchChange);
-
-      switcher.append(label, select);
-      document.body.appendChild(switcher);
+      select.listenersInitialized = true;
     }
 
     renderBranchOptions(select, branches, activeId);

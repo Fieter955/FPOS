@@ -854,27 +854,38 @@
           const options = Array.from(
             dropdown.querySelectorAll(".supplier-option"),
           );
-          if (e.key === "ArrowDown") {
+          const isNextKey = e.key === "ArrowDown" || e.key === "ArrowRight";
+          const isPreviousKey = e.key === "ArrowUp" || e.key === "ArrowLeft";
+          if (isNextKey || isPreviousKey) {
+            if (!options.length) return;
             e.preventDefault();
-            highlightedIndex = Math.min(
-              highlightedIndex + 1,
-              options.length - 1,
-            );
-            renderDropdown(input.value);
-          } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            highlightedIndex = Math.max(highlightedIndex - 1, -1);
+            highlightedIndex =
+              (highlightedIndex + (isNextKey ? 1 : -1) + options.length) %
+              options.length;
             renderDropdown(input.value);
           } else if (e.key === "Enter") {
             e.preventDefault();
-            if (highlightedIndex >= 0 && options[highlightedIndex]) {
-              options[highlightedIndex].dispatchEvent(
+            const selectedOption =
+              options[highlightedIndex >= 0 ? highlightedIndex : 0];
+            if (selectedOption) {
+              selectedOption.dispatchEvent(
                 new MouseEvent("mousedown", { bubbles: true }),
               );
             } else {
               commitTypedSupplier();
             }
+          } else if (e.key === "Tab") {
+            const selectedOption = options[highlightedIndex];
+            if (selectedOption) {
+              selectedOption.dispatchEvent(
+                new MouseEvent("mousedown", { bubbles: true }),
+              );
+            } else {
+              commitTypedSupplier();
+              dropdown.classList.remove("show");
+            }
           } else if (e.key === "Escape") {
+            e.preventDefault();
             dropdown.classList.remove("show");
           }
         });

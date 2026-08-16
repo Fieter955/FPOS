@@ -1,0 +1,10 @@
+{
+    "version":  "5.0.1",
+    "minimum_version":  "0.0.0",
+    "release_date":  "2026-08-15",
+    "notes":  "Updater otomatis, perbaikan stabilitas, dan pembaruan sistem",
+    "download_url":  "https://github.com/Fieter955/FPOS/releases/download/v5.0.1/FPOS-5.0.1-Windows.zip",
+    "sha256":  "c147ecb9ae1817d0e8233bfe1252e8a6f93840c1fee79091be45f6b50416427b",
+    "size_bytes":  94251556,
+    "mandatory":  false
+}
