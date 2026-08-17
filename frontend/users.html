@@ -39,6 +39,141 @@
         font-size: 14px;
         cursor: pointer;
       }
+      .permission-shell {
+        display: grid;
+        grid-template-columns: 230px minmax(0, 1fr);
+        min-height: 560px;
+        overflow: hidden;
+        padding: 0;
+      }
+      .permission-categories {
+        padding: 14px;
+        background: var(--bg-color);
+        border-right: 1px solid var(--border-color);
+      }
+      .permission-category {
+        width: 100%;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--text-muted);
+        padding: 11px 12px;
+        border-radius: 10px;
+        text-align: left;
+        cursor: pointer;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      .permission-category.active {
+        color: var(--primary);
+        background: var(--primary-light);
+        border-color: rgba(249, 115, 22, 0.28);
+      }
+      .permission-main {
+        min-width: 0;
+        padding: 20px;
+      }
+      .permission-toolbar {
+        display: flex;
+        align-items: end;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+      }
+      .permission-toolbar .input-group {
+        min-width: min(320px, 100%);
+        margin: 0;
+      }
+      .permission-table-wrap {
+        overflow: auto;
+        max-height: 520px;
+        border: 1px solid var(--border-color);
+        border-radius: 14px;
+      }
+      .permission-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        min-width: 680px;
+      }
+      .permission-table th,
+      .permission-table td {
+        border-bottom: 1px solid var(--border-color);
+        padding: 10px 12px;
+        font-size: 13px;
+        text-align: center;
+        background: var(--card-bg);
+      }
+      .permission-table th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: var(--bg-color);
+        color: var(--text-muted);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .permission-table th:first-child,
+      .permission-table td:first-child {
+        text-align: left;
+        min-width: 330px;
+      }
+      .permission-table input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--primary);
+        cursor: pointer;
+      }
+      .permission-table input:disabled {
+        cursor: not-allowed;
+        opacity: 0.48;
+      }
+      .permission-unavailable {
+        display: inline-flex;
+        margin-left: 8px;
+        padding: 3px 7px;
+        border-radius: 999px;
+        background: var(--bg-color);
+        color: var(--text-muted);
+        font-size: 10px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .permission-savebar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-top: 16px;
+      }
+      .permission-dirty {
+        color: var(--primary);
+        font-size: 13px;
+        font-weight: 700;
+      }
+      @media (max-width: 760px) {
+        .permission-shell {
+          display: block;
+        }
+        .permission-categories {
+          display: flex;
+          gap: 6px;
+          overflow-x: auto;
+          border-right: 0;
+          border-bottom: 1px solid var(--border-color);
+          padding: 10px;
+        }
+        .permission-category {
+          width: auto;
+          min-width: max-content;
+          margin: 0;
+        }
+        .permission-main {
+          padding: 14px;
+        }
+      }
     </style>
   </head>
   <body>
@@ -132,6 +267,23 @@
             ⚙️ Manajemen Role
           </button>
           <button
+            id="tbPermission"
+            onclick="switchTab('permission')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+              white-space: nowrap;
+            "
+          >
+            🔐 Hak Akses
+          </button>
+          <button
             id="tbLog"
             onclick="switchTab('log')"
             style="
@@ -196,6 +348,66 @@
               </thead>
               <tbody id="tblRoles"></tbody>
             </table>
+          </div>
+        </div>
+
+        <div id="pnlPermission" style="display: none">
+          <div class="permission-toolbar card" style="padding: 18px">
+            <div class="input-group">
+              <label>Kelompok User / Role</label>
+              <select
+                id="permissionRoleSelect"
+                class="input-control"
+                onchange="loadRolePermissions()"
+              ></select>
+            </div>
+            <button class="btn" onclick="switchTab('role')">
+              ⚙️ Kelola Role
+            </button>
+            <span
+              id="permissionLockInfo"
+              style="color: var(--text-muted); font-size: 13px"
+            ></span>
+          </div>
+
+          <div class="card permission-shell">
+            <nav
+              id="permissionCategories"
+              class="permission-categories"
+              aria-label="Kategori hak akses"
+            ></nav>
+            <section class="permission-main">
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  gap: 12px;
+                  align-items: center;
+                  margin-bottom: 14px;
+                "
+              >
+                <div>
+                  <h3 id="permissionCategoryTitle" style="margin: 0">
+                    Hak Akses
+                  </h3>
+                  <small style="color: var(--text-muted)"
+                    >Centang aksi yang boleh dilakukan oleh role terpilih.</small
+                  >
+                </div>
+              </div>
+              <div id="permissionMatrix" class="permission-table-wrap"></div>
+              <div class="permission-savebar">
+                <span id="permissionDirty" class="permission-dirty"></span>
+                <button
+                  id="btnSavePermissions"
+                  class="btn btn-primary"
+                  onclick="saveRolePermissions()"
+                  disabled
+                >
+                  💾 Simpan Hak Akses
+                </button>
+              </div>
+            </section>
           </div>
         </div>
 
@@ -352,6 +564,12 @@
       let editUserId = null;
       let allBranches = [];
       let allRoles = [];
+      let canManageUsers = false;
+      let permissionCatalog = null;
+      let activePermissionCategory = null;
+      let activeRolePermissionData = null;
+      let permissionGrants = {};
+      let permissionDirty = false;
 
       const ON =
         "padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;";
@@ -359,18 +577,14 @@
         "padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;";
 
       const me = getUser();
-      if (!me.role || !me.role.includes("admin")) {
-        document.getElementById("adminOnly").style.display = "block";
-        document.querySelector(".pg-header button").style.display = "none";
-        document.getElementById("pnlUser").style.display = "none";
-        document.getElementById("tbRole").style.display = "none";
-      }
 
       function switchTab(t) {
         document.getElementById("pnlUser").style.display =
           t === "user" ? "block" : "none";
         document.getElementById("pnlRole").style.display =
           t === "role" ? "block" : "none";
+        document.getElementById("pnlPermission").style.display =
+          t === "permission" ? "block" : "none";
         document.getElementById("pnlLog").style.display =
           t === "log" ? "block" : "none";
 
@@ -378,6 +592,8 @@
           t === "user" ? ON : OFF;
         document.getElementById("tbRole").style.cssText =
           t === "role" ? ON : OFF;
+        document.getElementById("tbPermission").style.cssText =
+          t === "permission" ? ON : OFF;
         document.getElementById("tbLog").style.cssText = t === "log" ? ON : OFF;
 
         if (t === "user")
@@ -385,15 +601,16 @@
         else document.getElementById("btnTambahUtama").style.display = "none";
 
         if (t === "log") loadLog();
+        if (t === "permission") initPermissions();
       }
 
       // === LOAD INIT DATA ===
       async function initData() {
         try {
-          if (!me.role.includes("admin")) return;
+          if (!canManageUsers) return;
 
           // 1. Load Cabang
-          allBranches = await api("GET", "/branches/");
+          allBranches = await api("GET", "/employees/branches");
           let bHtml =
             '<option value="">-- Super Admin (Semua Pusat) --</option>';
           allBranches.forEach((b) => {
@@ -413,14 +630,7 @@
 
       async function reloadRoles() {
         try {
-          const customRoles = await api("GET", "/employees/roles");
-
-          // Gabungkan role bawaan dengan role kustom
-          allRoles = [
-            { id: "sys_admin", name: "admin" },
-            { id: "sys_kasir", name: "kasir" },
-            ...customRoles,
-          ];
+          allRoles = await api("GET", "/employees/roles");
 
           // Render ke form Checkbox Modal
           document.getElementById("roleCheckboxes").innerHTML = allRoles
@@ -441,15 +651,29 @@
           <tr>
             <td style="font-weight:bold;">
                 ${r.name === "admin" ? "👑 " : ""} ${r.name}
-                ${r.id.toString().startsWith("sys_") ? ' <span style="font-size:10px; color:var(--text-muted);">(Bawaan Sistem)</span>' : ""}
+                ${["admin", "kasir"].includes(r.name) ? ' <span style="font-size:10px; color:var(--text-muted);">(Bawaan Sistem)</span>' : ""}
             </td>
             <td style="text-align:right;">
-                ${r.id.toString().startsWith("sys_") ? "-" : `<button class="btn" style="color:#ef4444; background:transparent; padding:0;" onclick="hapusRole(${r.id})">Hapus</button>`}
+                ${
+                  ["admin", "kasir"].includes(r.name)
+                    ? "-"
+                    : `<button class="bsm be" onclick="ubahNamaRole(${r.id}, '${r.name.replace(/'/g, "\\'")}')">Ubah</button>
+                       <button class="btn" style="color:#ef4444; background:transparent; padding:0 0 0 8px;" onclick="hapusRole(${r.id})">Hapus</button>`
+                }
             </td>
           </tr>
         `,
             )
             .join("");
+
+          const roleSelect = document.getElementById("permissionRoleSelect");
+          const selected = roleSelect.value;
+          roleSelect.innerHTML = allRoles
+            .map((r) => `<option value="${r.id}">${r.name}</option>`)
+            .join("");
+          if (allRoles.some((r) => String(r.id) === selected)) {
+            roleSelect.value = selected;
+          }
         } catch (e) {
           console.warn("Gagal load roles:", e.message);
         }
@@ -477,7 +701,7 @@
       async function hapusRole(id) {
         if (
           !(await showConfirm(
-            "Hapus role ini? Pegawai yang memakai role ini akan kehilangan aksesnya.",
+            "Hapus role ini? Role yang masih dipakai pegawai tidak dapat dihapus.",
           ))
         )
           return;
@@ -489,6 +713,223 @@
         } catch (e) {
           hideLoading();
           showToast(e.message, "error");
+        }
+      }
+
+      async function ubahNamaRole(id, oldName) {
+        const newName = prompt("Nama role baru:", oldName);
+        if (!newName || newName.trim().toLowerCase() === oldName) return;
+        try {
+          showLoading();
+          await api("PUT", `/employees/roles/${id}`, {
+            name: newName.trim().toLowerCase(),
+          });
+          await reloadRoles();
+          loadUsers();
+          hideLoading();
+          showToast("Nama role diperbarui ✓");
+        } catch (e) {
+          hideLoading();
+          showToast(e.message, "error");
+        }
+      }
+
+      // === MATRIKS HAK AKSES ===
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      async function initPermissions() {
+        if (!permissionCatalog) {
+          permissionCatalog = await api("GET", "/employees/permission-catalog");
+          activePermissionCategory =
+            activePermissionCategory || permissionCatalog.categories[0]?.key;
+          renderPermissionCategories();
+        }
+        if (!document.getElementById("permissionRoleSelect").value && allRoles.length) {
+          document.getElementById("permissionRoleSelect").value = allRoles[0].id;
+        }
+        await loadRolePermissions();
+      }
+
+      function renderPermissionCategories() {
+        document.getElementById("permissionCategories").innerHTML =
+          permissionCatalog.categories
+            .map(
+              (category) => `
+                <button
+                  class="permission-category ${category.key === activePermissionCategory ? "active" : ""}"
+                  onclick="selectPermissionCategory('${category.key}')"
+                >${escapeHtml(category.label)}</button>`,
+            )
+            .join("");
+      }
+
+      function selectPermissionCategory(categoryKey) {
+        activePermissionCategory = categoryKey;
+        renderPermissionCategories();
+        renderPermissionMatrix();
+      }
+
+      async function loadRolePermissions() {
+        if (!permissionCatalog) return;
+        const roleId = document.getElementById("permissionRoleSelect").value;
+        if (!roleId) return;
+        try {
+          activeRolePermissionData = await api(
+            "GET",
+            `/employees/roles/${roleId}/permissions`,
+          );
+          permissionGrants = {};
+          Object.entries(activeRolePermissionData.grants || {}).forEach(
+            ([key, actions]) => (permissionGrants[key] = new Set(actions)),
+          );
+          permissionDirty = false;
+          updatePermissionDirtyState();
+          renderPermissionMatrix();
+        } catch (error) {
+          showToast(error.message, "error");
+        }
+      }
+
+      function renderPermissionMatrix() {
+        if (!permissionCatalog || !activeRolePermissionData) return;
+        const category = permissionCatalog.categories.find(
+          (item) => item.key === activePermissionCategory,
+        );
+        if (!category) return;
+        document.getElementById("permissionCategoryTitle").textContent =
+          category.label;
+
+        const actions = [];
+        category.permissions.forEach((permission) =>
+          permission.actions.forEach((action) => {
+            if (!actions.includes(action)) actions.push(action);
+          }),
+        );
+        const locked = activeRolePermissionData.locked;
+        document.getElementById("permissionLockInfo").textContent = locked
+          ? "🔒 Administrator selalu memiliki akses penuh."
+          : "Perubahan berlaku pada request berikutnya.";
+
+        const header = actions
+          .map(
+            (action) => `
+              <th>
+                <label style="display:grid;gap:5px;justify-items:center;cursor:${locked ? "default" : "pointer"}">
+                  ${escapeHtml(permissionCatalog.actions[action] || action)}
+                  <input
+                    type="checkbox"
+                    aria-label="Pilih semua ${escapeHtml(action)}"
+                    onchange="togglePermissionColumn('${action}', this.checked)"
+                    ${locked ? "disabled" : ""}
+                  />
+                </label>
+              </th>`,
+          )
+          .join("");
+
+        const rows = category.permissions
+          .map((permission) => {
+            const cells = actions
+              .map((action) => {
+                if (!permission.actions.includes(action)) {
+                  return '<td style="color:var(--border-color)">—</td>';
+                }
+                const checked =
+                  permissionGrants[permission.key]?.has(action) || false;
+                const disabled = locked || !permission.available;
+                return `
+                  <td>
+                    <input
+                      type="checkbox"
+                      data-permission-key="${escapeHtml(permission.key)}"
+                      data-permission-action="${escapeHtml(action)}"
+                      ${checked ? "checked" : ""}
+                      ${disabled ? "disabled" : ""}
+                      onchange="togglePermission('${permission.key}', '${action}', this.checked)"
+                    />
+                  </td>`;
+              })
+              .join("");
+            return `
+              <tr style="${permission.available ? "" : "opacity:.72"}">
+                <td>
+                  <b>${escapeHtml(permission.label)}</b>
+                  ${permission.available ? "" : '<span class="permission-unavailable">Belum tersedia</span>'}
+                </td>
+                ${cells}
+              </tr>`;
+          })
+          .join("");
+
+        document.getElementById("permissionMatrix").innerHTML = `
+          <table class="permission-table">
+            <thead><tr><th>Modul</th>${header}</tr></thead>
+            <tbody>${rows}</tbody>
+          </table>`;
+      }
+
+      function togglePermission(permissionKey, action, checked) {
+        permissionGrants[permissionKey] ||= new Set();
+        if (checked) permissionGrants[permissionKey].add(action);
+        else permissionGrants[permissionKey].delete(action);
+        permissionDirty = true;
+        updatePermissionDirtyState();
+      }
+
+      function togglePermissionColumn(action, checked) {
+        if (activeRolePermissionData?.locked) return;
+        const category = permissionCatalog.categories.find(
+          (item) => item.key === activePermissionCategory,
+        );
+        category.permissions
+          .filter(
+            (permission) =>
+              permission.available && permission.actions.includes(action),
+          )
+          .forEach((permission) => {
+            permissionGrants[permission.key] ||= new Set();
+            if (checked) permissionGrants[permission.key].add(action);
+            else permissionGrants[permission.key].delete(action);
+          });
+        permissionDirty = true;
+        updatePermissionDirtyState();
+        renderPermissionMatrix();
+      }
+
+      function updatePermissionDirtyState() {
+        const locked = activeRolePermissionData?.locked;
+        document.getElementById("permissionDirty").textContent = permissionDirty
+          ? "● Ada perubahan yang belum disimpan"
+          : "";
+        document.getElementById("btnSavePermissions").disabled =
+          !permissionDirty || locked;
+      }
+
+      async function saveRolePermissions() {
+        if (!activeRolePermissionData || activeRolePermissionData.locked) return;
+        const roleId = activeRolePermissionData.role.id;
+        const grants = {};
+        Object.entries(permissionGrants).forEach(([key, actions]) => {
+          if (actions.size) grants[key] = Array.from(actions);
+        });
+        try {
+          showLoading();
+          await api("PUT", `/employees/roles/${roleId}/permissions`, { grants });
+          permissionDirty = false;
+          updatePermissionDirtyState();
+          sessionStorage.removeItem(PERMISSION_CACHE_KEY);
+          hideLoading();
+          showToast("Hak akses berhasil disimpan ✓");
+        } catch (error) {
+          hideLoading();
+          showToast(error.message, "error");
         }
       }
 
@@ -708,8 +1149,29 @@
         .slice(0, 10);
       document.getElementById("logEnd").value = today();
 
-      // Jalankan init
-      initData();
+      // Jalankan init setelah izin efektif tersedia.
+      async function bootstrapUsersPage() {
+        try {
+          const permissionState = await loadMyPermissions();
+          canManageUsers = hasPermission(
+            "settings.user_management",
+            "access",
+            permissionState,
+          );
+          if (!canManageUsers) {
+            document.getElementById("adminOnly").style.display = "block";
+            document.querySelector(".pg-header button").style.display = "none";
+            document.getElementById("pnlUser").style.display = "none";
+            document.getElementById("tbRole").style.display = "none";
+            document.getElementById("tbPermission").style.display = "none";
+            return;
+          }
+          await initData();
+        } catch (error) {
+          showToast("Gagal memuat hak akses: " + error.message, "error");
+        }
+      }
+      bootstrapUsersPage();
     </script>
   </body>
 </html>

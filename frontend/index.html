@@ -15,11 +15,8 @@
     />
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Login - FPOS</title>
     <link rel="stylesheet" href="/css/style.css" />
-    <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#3b82f6" />
   </head>
   <body
     style="
@@ -55,6 +52,23 @@
         </div>
         <h1 style="font-size: 28px; margin: 0 0 6px">FPOS</h1>
         <p style="margin: 0">Sistem kasir toko bangunan</p>
+      </div>
+      <div
+        id="sessionExpiredMsg"
+        role="alert"
+        style="
+          display: none;
+          color: #b45309;
+          background: rgba(245, 158, 11, 0.14);
+          border: 1px solid rgba(245, 158, 11, 0.35);
+          padding: 12px;
+          border-radius: 10px;
+          margin-bottom: 20px;
+          font-weight: 600;
+          font-size: 14px;
+        "
+      >
+        Sesi Anda telah berakhir. Silakan masuk kembali.
       </div>
       <div
         id="errMsg"
@@ -107,7 +121,63 @@
     <script src="/js/api.js"></script>
     <script src="/js/theme.js"></script>
     <script>
-      if (getToken()) window.location.href = "/dashboard";
+      if (consumeSessionExpiredNotice()) {
+        document.getElementById("sessionExpiredMsg").style.display = "block";
+      }
+
+      function getLoginRoleNames(user) {
+        return String(user?.role || "")
+          .split(",")
+          .map((role) => role.trim().toLowerCase())
+          .filter(Boolean);
+      }
+
+      async function redirectAfterLogin(user = null) {
+        let currentUser = user;
+        if (!currentUser?.id) {
+          currentUser = await api("GET", "/auth/me");
+          if (!currentUser || !getToken()) return;
+          localStorage.setItem("ipos_user", JSON.stringify(currentUser));
+        }
+
+        const roles = getLoginRoleNames(currentUser);
+        const isCashier = roles.includes("kasir");
+        const isAdmin = roles.includes("admin");
+        if (!isCashier || isAdmin) {
+          window.location.href = "/workspace";
+          return;
+        }
+
+        const branchId =
+          currentUser.branch_id || currentUser.active_branch_id || 1;
+        localStorage.setItem("active_branch_id", branchId);
+
+        try {
+          const shift = await api("GET", "/shifts/current");
+          if (!getToken()) return;
+          const startPage = shift && !shift.has_conflict ? "/pos" : "/shifts";
+          window.location.href =
+            "/workspace?start=" + encodeURIComponent(startPage);
+        } catch (_error) {
+          // Jalur aman: jangan masukkan kasir ke POS jika status shift gagal dicek.
+          if (getToken()) {
+            window.location.href =
+              "/workspace?start=" + encodeURIComponent("/shifts");
+          }
+        }
+      }
+
+      if (getToken()) {
+        const btn = document.getElementById("btnLogin");
+        btn.disabled = true;
+        btn.textContent = "Memeriksa shift...";
+        redirectAfterLogin().catch(() => {
+          if (getToken()) {
+            window.location.href =
+              "/workspace?start=" + encodeURIComponent("/shifts");
+          }
+        });
+      }
       document
         .getElementById("loginForm")
         .addEventListener("submit", async (e) => {
@@ -127,7 +197,9 @@
             const r = await apiForm("/auth/login", fd);
             setToken(r.access_token);
             localStorage.setItem("ipos_user", JSON.stringify(r.user));
-            window.location.href = "/dashboard";
+            const branchId = r.user.branch_id || r.user.active_branch_id;
+            if (branchId) localStorage.setItem("active_branch_id", branchId);
+            await redirectAfterLogin(r.user);
           } catch (ex) {
             err.textContent = ex.message || "Username atau password salah.";
             err.style.display = "block";

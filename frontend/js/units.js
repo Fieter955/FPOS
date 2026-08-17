@@ -19,21 +19,45 @@ async function loadSat() {
 }
 
 function openSatModal(item = null) {
+  const nama = document.getElementById("sNama");
   editSatId = null;
   document.getElementById("mSatTitle").textContent = "Tambah Satuan";
-  document.getElementById("sNama").value = "";
+  nama.value = "";
   document.getElementById("sAbr").value = "";
   if (item) {
     editSatId = item.id;
     document.getElementById("mSatTitle").textContent = "Edit Satuan";
-    document.getElementById("sNama").value = item.name;
+    nama.value = item.name;
     document.getElementById("sAbr").value = item.abbreviation || "";
   }
   openModal("mSat");
+
+  // Fokus eksplisit ke Nama Satuan. Jalankan lagi sesudah event klik/layout selesai
+  // karena WebView dapat mengembalikan fokus ke tombol "+" setelah handler onclick.
+  const focusNama = () => {
+    if (document.getElementById("mSat")?.style.display === "flex") {
+      nama.focus({ preventScroll: true });
+    }
+  };
+  focusNama();
+  requestAnimationFrame(focusNama);
+  setTimeout(focusNama, 0);
 }
 
 function editSat(u) {
   openSatModal(u);
+}
+
+function closeSatModal() {
+  const returnToItemModal = fromItemModal;
+  closeModal("mSat");
+
+  // Jika satuan dibuka dari form barang, tampilkan kembali form yang sama
+  // tanpa menginisialisasi ulang atau menghapus input yang sudah diisi.
+  if (returnToItemModal) {
+    fromItemModal = false;
+    openModal("mBarang");
+  }
 }
 
 async function saveSat() {
@@ -59,10 +83,17 @@ async function saveSat() {
     await refreshSelects();
     if (fromItemModal) {
       document.getElementById("fSat").value = saved.id;
+      // Tutup modal satuan lebih dulu agar modal barang menjadi modal terdepan.
+      // Jika dibuka sebelum mSat ditutup, fokus modal akan hilang dan Enter
+      // berikutnya kembali ke kontrol pertama (Nama Barang).
+      closeModal("mSat");
+      fromItemModal = false;
       openModal("mBarang");
+      const satuanInput = document.getElementById("fSat");
+      setTimeout(() => satuanInput?.focus({ preventScroll: true }), 0);
+    } else {
+      closeModal("mSat");
     }
-    closeModal("mSat");
-    fromItemModal = false;
     loadSat();
   } catch (ex) {
     showToast(ex.message, "error");

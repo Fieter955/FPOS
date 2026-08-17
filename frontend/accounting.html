@@ -450,6 +450,68 @@
             </div>
             <div id="reconResult" style="margin-top: 16px; color: var(--text-muted); font-size: 14px"></div>
           </div>
+
+          <div
+            style="
+              padding: 24px;
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              border-radius: 12px;
+              margin-top: 16px;
+            "
+          >
+            <h3 style="margin: 0 0 8px">🧾 Status Pajak Toko (PKP)</h3>
+            <p style="color: var(--text-muted); margin: 0 0 16px; font-size: 14px; line-height: 1.6">
+              Nyalakan <b>hanya jika toko sudah resmi PKP</b> (memungut & menyetor PPN ke negara,
+              serta menerima Faktur Pajak dari supplier). Saat menyala, PPN pada pembelian
+              <b>dipisah otomatis</b> dari harga modal barang — dicatat sebagai pajak yang bisa
+              dikreditkan, bukan dilebur jadi modal. Jika belum PKP, biarkan mati: PPN otomatis
+              menjadi bagian harga modal. <b>Perubahan ini hanya berlaku untuk pembelian baru</b>;
+              pembelian yang sudah tercatat tidak berubah. Saat mode PKP aktif, tarif diterapkan
+              sesuai Data Barang; barang berstatus <b>Tanpa PPN</b> tetap tidak dipungut PPN.
+            </p>
+            <label style="display: flex; align-items: center; gap: 10px; font-weight: 600; cursor: pointer">
+              <input type="checkbox" id="chkPkp" style="width: 18px; height: 18px" />
+              Toko sudah PKP (pisahkan PPN pembelian & pungut PPN penjualan)
+            </label>
+            <div style="margin-top: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+              <label style="font-weight: 600">Tarif PPN penjualan (%)</label>
+              <input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" id="inpTarifPpn" class="input-control" style="width: 90px" value="11,00" />
+              <span style="color: var(--text-muted); font-size: 13px">harga jual dianggap sudah termasuk PPN ini</span>
+              <button class="btn btn-primary" onclick="simpanStatusPkp()">Simpan</button>
+            </div>
+            <div id="pkpInfo" style="margin-top: 10px; color: var(--text-muted); font-size: 13px"></div>
+          </div>
+
+          <div
+            style="
+              padding: 24px;
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              border-radius: 12px;
+              margin-top: 16px;
+            "
+          >
+            <h3 style="margin: 0 0 8px">📊 Laporan PPN (untuk Lapor Pajak)</h3>
+            <p style="color: var(--text-muted); margin: 0 0 16px; font-size: 14px; line-height: 1.6">
+              Ringkasan PPN satu periode: <b>PPN Keluaran</b> (dipungut saat menjual) dikurangi
+              <b>PPN Masukan</b> (dibayar saat membeli). Selisihnya = jumlah yang harus
+              <b>disetor ke negara</b> (atau lebih bayar). Hanya relevan bila toko sudah PKP.
+            </p>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end">
+              <div class="input-group" style="margin: 0">
+                <label>Dari Tanggal</label>
+                <input id="ppnStart" type="date" class="input-control" />
+              </div>
+              <div class="input-group" style="margin: 0">
+                <label>Sampai Tanggal</label>
+                <input id="ppnEnd" type="date" class="input-control" />
+              </div>
+              <button class="btn btn-primary" onclick="loadPpnReport()">🔍 Tampilkan</button>
+              <button id="btnCetakPpn" class="btn" style="display: none" onclick="cetakPpnReport()">🖨️ Cetak</button>
+            </div>
+            <div id="ppnResult" style="margin-top: 16px; color: var(--text-muted); font-size: 14px"></div>
+          </div>
         </div>
       </main>
     </div>
@@ -616,10 +678,11 @@
             <label>Jumlah (Rp) *</label>
             <input
               id="kJumlah"
-              type="number"
+              type="text"
+              data-input-desimal
               class="input-control"
               min="0"
-              inputmode="numeric"
+              inputmode="decimal"
               placeholder="0"
               style="font-size: 20px; font-weight: 700"
             />
@@ -720,7 +783,11 @@
         if (t === "coa") loadCoa();
         if (t === "cashflow") loadCashFlow();
         if (t === "neraca") loadNeraca();
-        if (t === "tutup") loadBookClose();
+        if (t === "tutup") {
+          loadBookClose();
+          loadStatusPkp();
+          _initPpnDates();
+        }
       }
 
       // Preload Data Akun (Global)
@@ -771,7 +838,9 @@
         }
 
         const amount = parseFloat(params.get("amount") || 0) || 0;
-        document.getElementById("kJumlah").value = amount > 0 ? amount : "";
+        document.getElementById("kJumlah").value = toDesimal(
+          amount > 0 ? amount : 0,
+        );
         openModal("mKas");
       }
 
@@ -806,7 +875,7 @@
                     <option value="credit" ${defaultPos === "credit" ? "selected" : ""}>Kredit</option>
                 </select>
             </td>
-            <td><input type="number" min="0" class="input-control j-amt" value="0" style="font-weight:bold; color:var(--primary); text-align:right" oninput="calcJurnal()" /></td>
+            <td><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control j-amt" value="0,00" style="font-weight:bold; color:var(--primary); text-align:right" oninput="calcJurnal()" /></td>
             <td style="text-align:center;"><button class="btn" style="background:#ef4444; color:white; border:none; padding:4px 8px;" onclick="this.closest('tr').remove(); calcJurnal()">X</button></td>
         `;
         document.getElementById("tblJurnalInput").appendChild(tr);
@@ -819,7 +888,7 @@
 
         rows.forEach((r) => {
           const pos = r.querySelector(".j-pos").value;
-          const amt = parseFloat(r.querySelector(".j-amt").value) || 0;
+          const amt = parseDesimal(r.querySelector(".j-amt"));
           if (pos === "debit") tDebit += amt;
           else tKredit += amt;
         });
@@ -862,7 +931,7 @@
         rows.forEach((r) => {
           const accId = r.querySelector(".j-akun").value;
           const pos = r.querySelector(".j-pos").value;
-          const amt = parseFloat(r.querySelector(".j-amt").value) || 0;
+          const amt = parseDesimal(r.querySelector(".j-amt"));
 
           if (!accId || amt <= 0) {
             if (amt > 0 && !accId) hasError = true;
@@ -946,7 +1015,7 @@
 
       async function saveKas() {
         const ket = document.getElementById("kKet").value.trim(),
-          jml = parseFloat(document.getElementById("kJumlah").value) || 0,
+          jml = parseDesimal(document.getElementById("kJumlah")),
           akunId = document.getElementById("kAkun").value;
         if (!ket || !jml || !akunId) {
           showToast("Data wajib diisi lengkap", "error");
@@ -1303,6 +1372,116 @@
           if (typeof hideLoading === "function") hideLoading();
           showToast(e.message, "error");
         }
+      }
+
+      // ── Status PKP toko (pisah/lebur PPN pembelian) ──────────────────────────
+      async function loadStatusPkp() {
+        try {
+          const res = await api("GET", "/accounting/pkp-status");
+          const chk = document.getElementById("chkPkp");
+          if (chk) chk.checked = !!res.is_pkp;
+          const tar = document.getElementById("inpTarifPpn");
+          if (tar)
+            tar.value = toDesimal(
+              res.tarif_ppn != null ? res.tarif_ppn : 11,
+            );
+          const info = document.getElementById("pkpInfo");
+          if (info)
+            info.textContent = res.is_pkp
+              ? `Mode PKP AKTIF — barang kena pajak memakai tarif ${res.tarif_ppn}% (harga termasuk PPN); barang Tanpa PPN tetap bebas PPN.`
+              : "Mode non-PKP — PPN melebur jadi modal; kasir tidak memungut PPN.";
+        } catch (e) {
+          /* abaikan diam-diam (mis. belum punya akses) */
+        }
+      }
+
+      async function simpanStatusPkp() {
+        const chk = document.getElementById("chkPkp");
+        const nilai = !!chk.checked;
+        const tarif = parseDesimal(document.getElementById("inpTarifPpn"));
+        const ok = await showConfirm(
+          (nilai
+            ? `Nyalakan mode PKP (tarif PPN ${tarif}%)?\n\nMulai sekarang, pembelian BARU memisah PPN dari modal, dan kasir memungut PPN ${tarif}% untuk barang kena pajak. Barang berstatus Tanpa PPN tetap bebas PPN.`
+            : "Matikan mode PKP?\n\nPPN pembelian kembali dilebur ke modal & kasir tidak memungut PPN.") +
+            "\n\nTransaksi yang sudah tercatat tidak berubah.",
+        );
+        if (!ok) {
+          loadStatusPkp();
+          return;
+        }
+        try {
+          const res = await api("POST", "/accounting/pkp-status", { is_pkp: nilai, tarif_ppn: tarif });
+          showToast("Status PKP disimpan ✓", "success");
+          loadStatusPkp();
+        } catch (e) {
+          loadStatusPkp();
+          showToast(e.message, "error");
+        }
+      }
+
+      // ── Laporan PPN (Keluaran vs Masukan → setor) ────────────────────────────
+      let _ppnData = null;
+      function _bulanIni() {
+        const now = new Date();
+        const y = now.getFullYear(), m = now.getMonth();
+        const p = (n) => String(n).padStart(2, "0");
+        const first = `${y}-${p(m + 1)}-01`;
+        const last = new Date(y, m + 1, 0);
+        const lastStr = `${last.getFullYear()}-${p(last.getMonth() + 1)}-${p(last.getDate())}`;
+        return [first, lastStr];
+      }
+      function _initPpnDates() {
+        const s = document.getElementById("ppnStart"), e = document.getElementById("ppnEnd");
+        if (s && !s.value) { const [a, b] = _bulanIni(); s.value = a; e.value = b; }
+      }
+      async function loadPpnReport() {
+        const s = document.getElementById("ppnStart").value;
+        const e = document.getElementById("ppnEnd").value;
+        const box = document.getElementById("ppnResult");
+        if (!s || !e) return showToast("Isi rentang tanggal dulu", "error");
+        box.innerHTML = "Memuat...";
+        try {
+          const r = await api("GET", `/accounting/ppn-report?start=${s}&end=${e}`);
+          _ppnData = r;
+          const setor = r.kurang_bayar > 0;
+          box.innerHTML =
+            '<table class="tbl" style="max-width:480px"><tbody>' +
+            `<tr><td>PPN Keluaran (dari penjualan)</td><td style="text-align:right">${fmtRp(r.ppn_keluaran)}</td></tr>` +
+            `<tr><td>PPN Masukan (dari pembelian)</td><td style="text-align:right">− ${fmtRp(r.ppn_masukan)}</td></tr>` +
+            `<tr style="font-weight:700;border-top:2px solid var(--border-color)"><td>${setor ? "Kurang Bayar (setor ke negara)" : "Lebih Bayar (bisa dikompensasi)"}</td>` +
+            `<td style="text-align:right">${fmtRp(setor ? r.kurang_bayar : r.lebih_bayar)}</td></tr>` +
+            "</tbody></table>";
+          document.getElementById("btnCetakPpn").style.display = "inline-block";
+        } catch (err) {
+          box.innerHTML = `<span style="color:#ef4444">${err.message}</span>`;
+        }
+      }
+      function cetakPpnReport() {
+        if (!_ppnData) return;
+        const r = _ppnData;
+        const setor = r.kurang_bayar > 0;
+        const w = window.open("", "_blank", "width=620,height=640");
+        w.document.write(
+          `<html><head><title>Laporan PPN ${r.start} s/d ${r.end}</title>` +
+          "<style>body{font-family:Arial,sans-serif;padding:32px;color:#111}" +
+          "h2{margin:0 0 4px}.muted{color:#666;font-size:13px;margin:0 0 20px}" +
+          "table{width:100%;border-collapse:collapse;max-width:480px}" +
+          "td{padding:8px 4px}.tot{font-weight:700;border-top:2px solid #111}" +
+          ".r{text-align:right}</style></head><body>" +
+          "<h2>Laporan PPN</h2>" +
+          `<p class="muted">Periode ${r.start} s/d ${r.end}</p>` +
+          "<table><tbody>" +
+          `<tr><td>PPN Keluaran (penjualan)</td><td class="r">${fmtRp(r.ppn_keluaran)}</td></tr>` +
+          `<tr><td>PPN Masukan (pembelian)</td><td class="r">− ${fmtRp(r.ppn_masukan)}</td></tr>` +
+          `<tr class="tot"><td>${setor ? "Kurang Bayar (disetor)" : "Lebih Bayar"}</td>` +
+          `<td class="r">${fmtRp(setor ? r.kurang_bayar : r.lebih_bayar)}</td></tr>` +
+          "</tbody></table>" +
+          '<p class="muted" style="margin-top:24px">Dokumen internal untuk pencocokan. Faktur Pajak resmi dibuat lewat e-Faktur / Coretax.</p>' +
+          "</body></html>",
+        );
+        w.document.close();
+        w.focus();
+        w.print();
       }
 
       function openCoaModal() {

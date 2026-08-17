@@ -2,14 +2,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from typing import Optional
 import pandas as pd
 from io import BytesIO
 import uuid
+import sys
+from pathlib import Path
 
 from ..database import get_db
 from .. import models, schemas
 from ..auth import get_current_user
+from ..permissions import has_permission
 from ..services.virtual_units import (
     get_conversion_factor,
     get_effective_buy_price,
@@ -20,24 +24,68 @@ from ..services.virtual_units import (
 
 router = APIRouter()
 
+# Folder foto barang = SAMA dengan yang di-serve mount "/uploads" (main.py: ROOT_DIR/uploads).
+# Dihitung ulang di sini (BUKAN import main.py → cegah circular import), mencerminkan logika
+# ROOT_DIR yang sama termasuk mode frozen (.exe). items.py = backend/app/routes → parents[3] = root proyek.
+if getattr(sys, "frozen", False):
+    _ROOT_DIR = Path(sys.executable).parent
+else:
+    _ROOT_DIR = Path(__file__).resolve().parents[3]
+_ITEM_IMG_DIR = _ROOT_DIR / "uploads" / "items"
+MAKS_FOTO_BYTES = 3 * 1024 * 1024  # 3 MB (foto sudah dikecilkan di browser; ini hanya batas aman)
 
-def _is_admin_user(user: models.User) -> bool:
-    return (user.role or "") == "admin"
+
+def _normalize_item_name(value: str) -> str:
+    """Normalisasi nama hanya untuk validasi duplikat."""
+    return " ".join(str(value or "").split()).casefold()
 
 
-def _serialize_item_for_user(item: models.Item, current_user: models.User):
+def _find_duplicate_item_name(db: Session, name: str, exclude_id: Optional[int] = None):
+    """Cari nama item yang sama tanpa membedakan kapitalisasi/spasi berlebih."""
+    query = db.query(models.Item)
+    if exclude_id is not None:
+        query = query.filter(models.Item.id != exclude_id)
+
+    target = _normalize_item_name(name)
+    for existing in query.yield_per(500):
+        if _normalize_item_name(existing.name) == target:
+            return existing
+    return None
+
+
+def _validate_supplier_barcodes(
+    db: Session,
+    supplier_settings,
+    exclude_item_id: Optional[int] = None,
+) -> None:
+    """Validasi barcode khusus supplier sebelum mengganti/simpan relasi."""
+    seen = set()
+    from .barcode_gen import assert_barcode_available, _normalize_barcode
+
+    for setting in supplier_settings or []:
+        value = str(getattr(setting, "barcode", None) or "").strip()
+        normalized = _normalize_barcode(value)
+        if not normalized or normalized == "auto":
+            continue
+        if normalized in seen:
+            raise HTTPException(400, f"Barcode supplier '{value}' dipakai lebih dari satu supplier pada barang yang sama.")
+        seen.add(normalized)
+        assert_barcode_available(db, value, exclude_item_id=exclude_item_id)
+
+
+def _serialize_item_for_user(item: models.Item, current_user: models.User, db: Session):
     data = schemas.ItemOut.model_validate(item).model_dump()
     # Lantai harga modal (HPP) untuk penjaga anti-rugi diskon grup di POS.
     # Dikirim ke semua role agar harga grup konsisten antara admin & kasir,
     # tanpa pernah menampilkan harga modal di UI mana pun.
     _fifo_min = getattr(item, "_fifo_min_price", None)
     data["min_price"] = float(_fifo_min if _fifo_min is not None else (item.buy_price or 0))
-    if not _is_admin_user(current_user):
+    if not has_permission(db, current_user, "master.show_cost_item", "view"):
         data["buy_price"] = 0
     return data
 
 
-def _serialize_item_lite(item: models.Item, current_user: models.User):
+def _serialize_item_lite(item: models.Item, current_user: models.User, db: Session):
     """Serialisasi RINGAN untuk daftar/tabel barang. TANPA suppliers, supplier_details,
     group_discounts, dan brand — field-field itu hanya dipakai POS & menu pembelian (yang
     memanggil tanpa lite). Dengan begitu eager-load + hidrasi ORM jauh lebih ringan
@@ -58,13 +106,15 @@ def _serialize_item_lite(item: models.Item, current_user: models.User):
         "unit": {
             "id": unit.id, "name": unit.name, "abbreviation": unit.abbreviation,
         } if unit else None,
-        "buy_price": buy if _is_admin_user(current_user) else 0,
+        "buy_price": buy if has_permission(db, current_user, "master.show_cost_item", "view") else 0,
         "min_price": min_price,
         "sell_price": float(item.sell_price or 0),
+        "ppn_percent": item.ppn_percent,
         "stock": float(item.stock or 0),
         "min_stock": float(item.min_stock or 0),
         "is_active": bool(item.is_active),
         "is_discountable": bool(item.is_discountable),
+        "image_path": item.image_path,
         "is_virtual_variant": bool(getattr(item, "is_virtual_variant", False)),
         "parent_item_id": item.parent_item_id,
         "prices": [
@@ -286,18 +336,25 @@ def get_items(
             q = q.filter(models.Item.id == -1)
 
     if active_only: q = q.filter(models.Item.is_active == True)
-    if search: q = q.filter(
-        models.Item.name.ilike(f"%{search}%") |
-        models.Item.code.ilike(f"%{search}%") |
-        models.Item.barcode.ilike(f"%{search}%")
-    )
+    if search:
+        search_pattern = f"%{search}%"
+        supplier_barcode_match = db.query(models.ItemSupplier.item_id).filter(
+            models.ItemSupplier.item_id == models.Item.id,
+            models.ItemSupplier.barcode.ilike(search_pattern),
+        ).exists()
+        q = q.filter(
+            models.Item.name.ilike(search_pattern) |
+            models.Item.code.ilike(search_pattern) |
+            models.Item.barcode.ilike(search_pattern) |
+            supplier_barcode_match
+        )
     if category_id: q = q.filter(models.Item.category_id == category_id)
 
     items = q.offset(skip).limit(limit).all()
     items = _apply_virtual_item_metrics(items, db, current_user)
     if lite:
-        return [_serialize_item_lite(item, current_user) for item in items]
-    return [_serialize_item_for_user(item, current_user) for item in items]
+        return [_serialize_item_lite(item, current_user, db) for item in items]
+    return [_serialize_item_for_user(item, current_user, db) for item in items]
 
 @router.get("/{item_id}", response_model=schemas.ItemOut)
 def get_item(item_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
@@ -313,7 +370,7 @@ def get_item(item_id: int, db: Session = Depends(get_db), current_user: models.U
     ).filter(models.Item.id == item_id).first()
     if not obj: raise HTTPException(404, "Item tidak ditemukan")
     obj = _apply_virtual_item_metrics([obj], db, current_user)[0]
-    return _serialize_item_for_user(obj, current_user)
+    return _serialize_item_for_user(obj, current_user, db)
 
 @router.post("/", response_model=schemas.ItemOut)
 def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
@@ -322,9 +379,25 @@ def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db), current
     # Ambil data form, kecuali prices dan supplier_ids
     item_data = item.model_dump(exclude={"prices", "supplier_ids", "supplier_settings", "group_discounts"})
 
+    # Beri respons yang bisa ditampilkan sebagai popup di frontend, bukan error 500
+    # dari constraint UNIQUE ketika proses flush berlangsung.
+    duplicate = _find_duplicate_item_name(db, item_data["name"])
+    if duplicate:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Nama barang '{item_data['name']}' sudah ada. Silakan gunakan nama lain.",
+        )
+
     # 1. Pastikan Kode ter-generate otomatis dengan aman di backend
     if not item_data.get("code") or item_data["code"] == "AUTO":
         item_data["code"] = f"ITM-{uuid.uuid4().hex[:6].upper()}"
+
+    from .barcode_gen import assert_barcode_available, _normalize_barcode
+    item_barcode = str(item_data.get("barcode") or "").strip()
+    if item_barcode and _normalize_barcode(item_barcode) != "auto":
+        item_data["barcode"] = item_barcode
+        assert_barcode_available(db, item_barcode)
+    _validate_supplier_barcodes(db, item.supplier_settings)
 
     # 2. Paksa status Aktif agar PASTI terbaca di POS
     item_data["is_active"] = True
@@ -352,13 +425,24 @@ def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db), current
             ))
 
     db.add(obj)
-    db.flush() # Simpan sementara untuk dapatkan ID Resmi    
+    try:
+        db.flush() # Simpan sementara untuk dapatkan ID Resmi
+    except IntegrityError as exc:
+        # Tetap aman bila ada dua request bersamaan yang lolos pengecekan awal.
+        db.rollback()
+        if "items.name" in str(exc):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Nama barang '{item_data['name']}' sudah ada. Silakan gunakan nama lain.",
+            ) from exc
+        raise
     # 3. Auto-Generate Barcode
     need_barcode_gen = False
     if not obj.barcode or obj.barcode == "AUTO":
         need_barcode_gen = True
         from .barcode_gen import _generate_barcode_value
         obj.barcode = _generate_barcode_value(obj.code, "CODE128")
+        assert_barcode_available(db, obj.barcode, exclude_item_id=obj.id)
         
     # 4. Daftarkan Barcode ke Mesin Printer Label
     if need_barcode_gen:
@@ -420,20 +504,42 @@ def update_item(item_id: int, item: schemas.ItemUpdate, db: Session = Depends(ge
 
     # Cegah bentrok nama (Item.name unik) agar tidak jatuh ke error 500 yang membingungkan
     nama_baru = data.get("name")
-    if nama_baru and nama_baru != obj.name:
-        bentrok = db.query(models.Item).filter(
-            models.Item.name == nama_baru,
-            models.Item.id != item_id,
-        ).first()
+    if nama_baru:
+        bentrok = _find_duplicate_item_name(db, nama_baru, exclude_id=item_id)
         if bentrok:
-            raise HTTPException(400, f"Nama barang '{nama_baru}' sudah dipakai item lain.")
+            raise HTTPException(
+                400,
+                f"Nama barang '{nama_baru}' sudah ada. Silakan gunakan nama lain.",
+            )
 
     need_barcode_gen = False
     if data.get("barcode") == "AUTO":
         need_barcode_gen = True
         from .barcode_gen import _generate_barcode_value
         data["barcode"] = _generate_barcode_value(obj.code, "CODE128")
+
+    from .barcode_gen import assert_barcode_available, _normalize_barcode
+    if "barcode" in data and data["barcode"]:
+        data["barcode"] = str(data["barcode"]).strip()
+        if _normalize_barcode(data["barcode"]) != "auto":
+            assert_barcode_available(db, data["barcode"], exclude_item_id=item_id)
+    _validate_supplier_barcodes(
+        db,
+        item.supplier_settings,
+        exclude_item_id=item_id,
+    )
         
+    old_sell_price = obj.sell_price
+    if "sell_price" in data and data["sell_price"] is not None:
+        if abs(data["sell_price"] - (old_sell_price or 0)) > 0.01:
+            db.add(models.ItemPriceChange(
+                item_id=obj.id,
+                change_type="sell_price",
+                old_price=old_sell_price or 0,
+                new_price=data["sell_price"],
+                changed_by=current_user.id
+            ))
+
     for k, v in data.items(): 
         setattr(obj, k, v)
         
@@ -491,7 +597,7 @@ def ubah_harga_beli_supplier(
     item_id: int,
     data: schemas.HargaSupplierUpdate,
     db: Session = Depends(get_db),
-    _=Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),
 ):
     """Set harga beli dan/atau PPN item ini khusus untuk satu supplier (upsert ItemSupplier).
     Hanya field yang dikirim yang di-update — tidak mengubah Item.buy_price global maupun
@@ -503,7 +609,10 @@ def ubah_harga_beli_supplier(
         models.ItemSupplier.item_id == item_id,
         models.ItemSupplier.supplier_id == data.supplier_id,
     ).first()
+    
+    old_buy_price = 0
     if spec:
+        old_buy_price = spec.buy_price or 0
         if data.harga_beli is not None and data.harga_beli > 0:
             spec.buy_price = data.harga_beli
         if data.ppn_type is not None:
@@ -519,6 +628,19 @@ def ubah_harga_beli_supplier(
             ppn_type=(data.ppn_type if data.ppn_type is not None else "included"),
             ppn_percent=(data.ppn_percent if data.ppn_percent is not None else 0),
         ))
+        
+    new_buy_price = spec.buy_price if spec else (data.harga_beli if data.harga_beli and data.harga_beli > 0 else item.buy_price)
+    
+    if abs(new_buy_price - old_buy_price) > 0.01:
+        db.add(models.ItemPriceChange(
+            item_id=item_id,
+            supplier_id=data.supplier_id,
+            change_type="buy_price",
+            old_price=old_buy_price,
+            new_price=new_buy_price,
+            changed_by=current_user.id
+        ))
+
     db.commit()
     return {"message": "Data supplier untuk item diperbarui"}
 
@@ -534,6 +656,55 @@ def delete_item(item_id: int, db: Session = Depends(get_db), _=Depends(get_curre
     obj.is_active = False
     db.commit()
     return {"message": "Item dinonaktifkan"}
+
+
+# ─── FOTO BARANG (disimpan sebagai FILE di uploads/items, BUKAN di DB) ───────────
+@router.post("/{item_id}/image")
+async def upload_item_image(
+    item_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """Simpan / ganti foto barang. Foto sudah dikecilkan ke WebP di browser; di sini hanya
+    validasi ringan + tulis file ke disk. image_path memuat `?v=` (cache-buster) supaya foto
+    baru langsung tampil di semua cabang meski browser meng-cache /uploads selama 7 hari."""
+    obj = db.query(models.Item).get(item_id)
+    if not obj:
+        raise HTTPException(404, "Item tidak ditemukan")
+    if not (file.content_type or "").startswith("image/"):
+        raise HTTPException(400, "File harus berupa gambar")
+    contents = await file.read()
+    if len(contents) > MAKS_FOTO_BYTES:
+        raise HTTPException(400, "Ukuran foto maksimal 3 MB")
+
+    _ITEM_IMG_DIR.mkdir(parents=True, exist_ok=True)
+    # Nama file deterministik (tanpa nama dari user → aman path traversal). Ganti foto = timpa file yg sama.
+    (_ITEM_IMG_DIR / f"item_{item_id}.webp").write_bytes(contents)
+    obj.image_path = f"/uploads/items/item_{item_id}.webp?v={uuid.uuid4().hex[:8]}"
+    db.commit()
+    return {"image_path": obj.image_path}
+
+
+@router.delete("/{item_id}/image")
+def delete_item_image(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """Hapus foto barang (file + kolom image_path)."""
+    obj = db.query(models.Item).get(item_id)
+    if not obj:
+        raise HTTPException(404, "Item tidak ditemukan")
+    try:
+        f = _ITEM_IMG_DIR / f"item_{item_id}.webp"
+        if f.exists():
+            f.unlink()
+    except Exception:
+        pass
+    obj.image_path = None
+    db.commit()
+    return {"message": "Foto dihapus"}
 
 
 # ─── IMPORT EXCEL (TETAP SAMA) ───────────────
@@ -790,3 +961,21 @@ def _import_items_sync(contents: bytes, filename: str, db: Session, current_user
     except Exception as e:
         db.rollback()
         raise HTTPException(500, f"Gagal import: {str(e)}")
+
+@router.get("/{item_id}/price-history", response_model=list[schemas.ItemPriceChangeOut])
+def get_item_price_history(
+    item_id: int,
+    change_type: Optional[str] = None,
+    supplier_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user)
+):
+    query = db.query(models.ItemPriceChange).filter(models.ItemPriceChange.item_id == item_id)
+    if change_type:
+        query = query.filter(models.ItemPriceChange.change_type == change_type)
+    if supplier_id:
+        query = query.filter(models.ItemPriceChange.supplier_id == supplier_id)
+        
+    query = query.order_by(models.ItemPriceChange.changed_at.desc()).limit(50)
+    return query.all()
+

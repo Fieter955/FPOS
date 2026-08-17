@@ -4,6 +4,16 @@
  * reusable UI logic for standard components
  */
 
+// Harga Include = bruto (sudah mengandung PPN), Exclude = neto (sebelum PPN).
+// Dipakai saat user menyetujui penyamaan tipe PPN barang dengan transaksi.
+function konversiHargaPpnPembelian(harga, tipeAwal, tipeTujuan, persen) {
+  const nilai = Number(harga) || 0;
+  const rate = Number(persen) || 0;
+  if (!rate || tipeAwal === tipeTujuan) return nilai;
+  const faktor = 1 + rate / 100;
+  return tipeAwal === "include" ? nilai / faktor : nilai * faktor;
+}
+
 /**
  * createPremiumCombo
  * Creates a premium searchable dropdown with fixed positioning and high performance.
@@ -19,6 +29,7 @@ function createPremiumCombo(container, data, config = {}) {
     placeholder = "Cari...",
     isItem = false,
     onSelect = null,
+    onEnter = null,
   } = config;
 
   target.innerHTML = `
@@ -33,13 +44,73 @@ function createPremiumCombo(container, data, config = {}) {
   const dropdown = target.querySelector(".premium-dropdown");
   const hidden = target.querySelector(".combobox-value");
   let currentData = data;
+  let highlightedIndex = -1;
+
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-expanded", "false");
+  dropdown.setAttribute("role", "listbox");
+
+  const closeDropdown = () => {
+    dropdown.classList.remove("show");
+    highlightedIndex = -1;
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
+  };
+
+  const selectItem = (el) => {
+    if (!el) return;
+
+    hidden.value = el.dataset.id;
+    input.value = el.dataset.label;
+    closeDropdown();
+
+    if (onSelect) {
+      const obj = currentData.find((d) => d[valField] == el.dataset.id);
+      onSelect(obj);
+    }
+  };
+
+  const highlightItem = (nextIndex) => {
+    const items = Array.from(
+      dropdown.querySelectorAll(".premium-dropdown-item[data-id]"),
+    );
+    items.forEach((el) => el.classList.remove("highlight"));
+
+    if (items.length === 0) {
+      highlightedIndex = -1;
+      return;
+    }
+
+    highlightedIndex = (nextIndex + items.length) % items.length;
+    const activeItem = items[highlightedIndex];
+    items.forEach((el, index) => {
+      el.setAttribute("aria-selected", String(index === highlightedIndex));
+    });
+    activeItem.classList.add("highlight");
+    input.setAttribute("aria-activedescendant", activeItem.id);
+    activeItem.scrollIntoView({ block: "nearest" });
+  };
 
   const positionDropdown = () => {
     const rect = input.getBoundingClientRect();
-    dropdown.style.setProperty("top", `${rect.bottom + 2}px`, "important");
-    dropdown.style.setProperty("left", `${rect.left}px`, "important");
-    dropdown.style.setProperty("width", `${rect.width}px`, "important");
-    dropdown.style.setProperty("bottom", "auto", "important");
+    const lebarLayar = document.documentElement.clientWidth;
+    const tinggiLayar = document.documentElement.clientHeight;
+    // Lebar dropdown tidak boleh melebihi layar (penting di HP)
+    const lebar = Math.min(rect.width, lebarLayar - 16);
+    // Geser kiri agar tepi kanan dropdown tetap di dalam layar
+    let kiri = Math.max(8, Math.min(rect.left, lebarLayar - lebar - 8));
+    dropdown.style.setProperty("width", `${lebar}px`, "important");
+    dropdown.style.setProperty("left", `${kiri}px`, "important");
+    // Kalau ruang di bawah input sempit & ruang di atas lebih lega → buka ke ATAS
+    const ruangBawah = tinggiLayar - rect.bottom;
+    if (ruangBawah < 260 && rect.top > ruangBawah) {
+      dropdown.style.setProperty("bottom", `${tinggiLayar - rect.top + 2}px`, "important");
+      dropdown.style.setProperty("top", "auto", "important");
+    } else {
+      dropdown.style.setProperty("top", `${rect.bottom + 2}px`, "important");
+      dropdown.style.setProperty("bottom", "auto", "important");
+    }
   };
 
   const render = (q = "") => {
@@ -57,8 +128,8 @@ function createPremiumCombo(container, data, config = {}) {
       dropdown.innerHTML = filtered
         .slice(0, 50)
         .map(
-          (d) => `
-                <div class="premium-dropdown-item" data-id="${d[valField]}" data-label="${d[labField]}">
+          (d, index) => `
+                <div id="${target.id || "premium-combo"}-option-${index}" role="option" aria-selected="false" tabindex="-1" class="premium-dropdown-item" data-id="${d[valField]}" data-label="${d[labField]}">
                     <span>${d[labField]} ${isItem ? `<small>[${d.code}]</small>` : ""}</span>
                 </div>
             `,
@@ -66,7 +137,11 @@ function createPremiumCombo(container, data, config = {}) {
         .join("");
     }
 
+    highlightedIndex = -1;
+
     dropdown.classList.add("show");
+    input.setAttribute("aria-expanded", "true");
+    input.removeAttribute("aria-activedescendant");
     positionDropdown();
 
     dropdown
@@ -74,23 +149,79 @@ function createPremiumCombo(container, data, config = {}) {
       .forEach((el) => {
         el.onclick = (e) => {
           e.stopPropagation();
-          hidden.value = el.dataset.id;
-          input.value = el.dataset.label;
-          dropdown.classList.remove("show");
-          if (onSelect) {
-            const obj = currentData.find((d) => d[valField] == el.dataset.id);
-            onSelect(obj);
-          }
+          selectItem(el);
         };
       });
   };
 
   input.onfocus = () => render(input.value);
-  input.oninput = () => render(input.value);
+  input.oninput = () => {
+    // Ketikan baru membatalkan pilihan lama. Enter berikutnya akan memilih
+    // hasil pencarian terkini melalui handler di bawah.
+    hidden.value = "";
+    render(input.value);
+  };
+  input.onkeydown = (e) => {
+    const isNextKey = e.key === "ArrowDown" || e.key === "ArrowRight";
+    const isPreviousKey = e.key === "ArrowUp" || e.key === "ArrowLeft";
+
+    if (isNextKey || isPreviousKey) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (!dropdown.classList.contains("show")) render(input.value);
+
+      if (isNextKey) {
+        highlightItem(highlightedIndex < 0 ? 0 : highlightedIndex + 1);
+      } else {
+        const itemCount = dropdown.querySelectorAll(
+          ".premium-dropdown-item[data-id]",
+        ).length;
+        highlightItem(
+          highlightedIndex < 0 ? itemCount - 1 : highlightedIndex - 1,
+        );
+      }
+      return;
+    }
+
+    if (e.key === "Tab" && dropdown.classList.contains("show")) {
+      const items = dropdown.querySelectorAll(
+        ".premium-dropdown-item[data-id]",
+      );
+      const activeItem = items[highlightedIndex];
+      if (activeItem) selectItem(activeItem);
+      else closeDropdown();
+      // Jangan cegah Tab: setelah dropdown dikunci, fokus tetap maju ke kontrol
+      // berikutnya secara alami.
+      return;
+    }
+
+    if (e.key === "Enter" && dropdown.classList.contains("show")) {
+      const items = dropdown.querySelectorAll(
+        ".premium-dropdown-item[data-id]",
+      );
+      // Enter langsung memilih hasil pertama bila pengguna belum menekan
+      // ArrowDown, sehingga alur keyboard tidak bergantung pada Tab/mouse.
+      const activeItem = items[highlightedIndex] || items[0];
+      if (!activeItem) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      selectItem(activeItem);
+      if (onEnter) onEnter();
+      return;
+    }
+
+    if (e.key === "Escape" && dropdown.classList.contains("show")) {
+      e.preventDefault();
+      e.stopPropagation();
+      closeDropdown();
+    }
+  };
 
   const handleOutsideClick = (e) => {
     if (!target.contains(e.target)) {
-      dropdown.classList.remove("show");
+      closeDropdown();
     }
   };
   document.addEventListener("click", handleOutsideClick);
@@ -196,9 +327,14 @@ function createPurchaseGrid(container, config = {}) {
       currency: "IDR",
       minimumFractionDigits: 0,
     }).format(n || 0);
-  const toAngka = (s) =>
-    parseFloat(String(s).replace(/\./g, "").replace(",", ".")) || 0;
-  const toRibuan = (n) => (n || 0).toLocaleString("id-ID");
+  const toAngka = (s) => parseDesimal(s);
+  const toRibuan = (n) => toDesimal(n);
+  const fokusInput = (input, pilihSemua = true) => {
+    if (!input || input.disabled) return false;
+    input.focus();
+    if (pilihSemua && typeof input.select === "function") input.select();
+    return true;
+  };
 
   const addRow = (item = null) => {
     const id = barisIdx++;
@@ -223,19 +359,21 @@ function createPurchaseGrid(container, config = {}) {
              
                 ${allowNameEdit ? `<input type="text" class="input-control pg-name-edit" value="${item?.name || ""}" placeholder="Nama barang (bisa diubah)..." style="font-size:11px; margin-top:4px; border-color:var(--primary)" />` : ""}
             </div>
-            <input type="number" class="combobox-input pg-ordered" value="${qtyOrdered}" style="text-align:center" />
+            <input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" class="combobox-input pg-ordered" value="${qtyOrdered}" style="text-align:center" />
             ${
               showSupplierColumn
                 ? '<div id="pg-supp-' + id + '"></div>'
                 : !isBranchRequest
                   ? `
-                ${isFulfillment ? `<input type="number" class="combobox-input pg-received" value="${qtyReceived}" style="text-align:center; border-color:var(--primary)" />` : ""}
-                <input type="text" class="combobox-input pg-beli" value="${toRibuan(item?.buy_price || 0)}" style="text-align:left" />
-                <input type="number" step="0.01" class="combobox-input pg-margin" value="${item?.profit_margin || 0}" style="text-align:center" />
-                <input type="text" class="combobox-input pg-jual" value="${toRibuan(item?.sell_price || 0)}" style="text-align:left" />
+                ${isFulfillment ? `<input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" class="combobox-input pg-received" value="${qtyReceived}" style="text-align:center; border-color:var(--primary)" />` : ""}
+                <input type="text" inputmode="decimal" data-input-desimal class="combobox-input pg-beli" value="${toRibuan(item?.buy_price || 0)}" style="text-align:left" />
+                <input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" class="combobox-input pg-margin" value="${item?.profit_margin || 0}" style="text-align:center" />
+                <input type="text" inputmode="decimal" data-input-desimal class="combobox-input pg-jual" value="${toRibuan(item?.sell_price || 0)}" style="text-align:left" />
                 <div class="disc-group">
-                    <input type="number" class="combobox-input pg-disc" value="${item?.disc1 || 0}" placeholder="0" style="text-align:center" />
-                    ${item?.disc2 ? `<input type="number" class="combobox-input pg-disc" value="${item.disc2}" placeholder="0" style="text-align:center" />` : ""}
+                    <input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" class="combobox-input pg-disc" value="${item?.disc1 || 0}" placeholder="0,00" style="text-align:center" />
+                    ${item?.disc2 ? `<input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" class="combobox-input pg-disc" value="${item.disc2}" placeholder="0,00" style="text-align:center" />` : ""}
+                    ${item?.disc3 ? `<input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" class="combobox-input pg-disc" value="${item.disc3}" placeholder="0,00" style="text-align:center" />` : ""}
+                    ${item?.disc4 ? `<input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" class="combobox-input pg-disc" value="${item.disc4}" placeholder="0,00" style="text-align:center" />` : ""}
                     <button class="btn-plus-disc" title="Diskon Bertingkat">+</button>
                 </div>
                 <div class="purchase-grid-netto">Rp 0</div>
@@ -246,6 +384,28 @@ function createPurchaseGrid(container, config = {}) {
         `;
 
     body.appendChild(row);
+
+    // === Tampilan KARTU di HP (<=640px): beri nama kolom (data-label) ke
+    // tiap sel. Input "telanjang" dibungkus <label class="pg-cell"> agar
+    // bisa menampilkan label lewat ::before. Tidak mengubah tampilan desktop. ===
+    if (!isBranchRequest && !showSupplierColumn) {
+      const labelKolom = isFulfillment
+        ? ["", "Pesan", "Terima", "Harga Beli", "Margin (%)", "Harga Jual", "Diskon (%)", "Total", ""]
+        : ["", "Pesan", "Harga Beli", "Margin (%)", "Harga Jual", "Diskon (%)", "Total", ""];
+      Array.from(row.children).forEach((sel, i) => {
+        const teks = labelKolom[i];
+        if (!teks) return;
+        if (sel.tagName === "INPUT") {
+          const bungkus = document.createElement("label");
+          bungkus.className = "pg-cell";
+          bungkus.setAttribute("data-label", teks);
+          sel.replaceWith(bungkus);
+          bungkus.appendChild(sel);
+        } else {
+          sel.setAttribute("data-label", teks);
+        }
+      });
+    }
 
     const ordInp = row.querySelector(".pg-ordered");
     const recInp = row.querySelector(".pg-received");
@@ -260,15 +420,81 @@ function createPurchaseGrid(container, config = {}) {
     const delBtn = row.querySelector(".btn-del-row");
     const discGroup = row.querySelector(".disc-group");
     const formBarangEdit = row.querySelector(".pg-name-edit");
+    const itemInput = row.querySelector(".item-selector .combobox-input");
 
-    const calculateRow = () => {
+    const fokusNamaBarangBarisBerikutnya = () => {
+      const barisBerikutnya = addRow();
+      const inputNama = barisBerikutnya.querySelector(
+        ".item-selector .combobox-input, .pg-name-edit",
+      );
+      setTimeout(() => fokusInput(inputNama, false), 0);
+    };
+
+    const navigasiEnter = (event) => {
+      if (
+        !isFulfillment ||
+        event.key !== "Enter" ||
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      ) {
+        return;
+      }
+
+      const targetInput = event.target.closest?.("input");
+      if (!targetInput || !row.contains(targetInput)) return;
+
+      const namaBarangInput = targetInput.closest(".item-selector")
+        ? itemInput
+        : formBarangEdit;
+      if (namaBarangInput && targetInput === namaBarangInput) {
+        // Jangan meninggalkan nama barang yang belum dipilih dari combobox.
+        if (targetInput === itemInput && !combo.val()) return;
+        event.preventDefault();
+        event.stopPropagation();
+        fokusInput(ordInp);
+        return;
+      }
+
+      const diskonInputs = Array.from(row.querySelectorAll(".pg-disc"));
+      let inputBerikutnya = null;
+      if (targetInput === ordInp) {
+        inputBerikutnya = recInp || beliInp;
+      } else if (targetInput === recInp) {
+        inputBerikutnya = beliInp;
+      } else if (targetInput === beliInp) {
+        inputBerikutnya = marginInp;
+      } else if (targetInput === jualInp) {
+        inputBerikutnya = diskonInputs[0];
+      } else if (diskonInputs.includes(targetInput)) {
+        const index = diskonInputs.indexOf(targetInput);
+        inputBerikutnya = diskonInputs[index + 1] || null;
+        if (!inputBerikutnya) {
+          event.preventDefault();
+          event.stopPropagation();
+          fokusNamaBarangBarisBerikutnya();
+          return;
+        }
+      }
+
+      if (!inputBerikutnya) return;
+      event.preventDefault();
+      event.stopPropagation();
+      fokusInput(inputBerikutnya);
+    };
+
+    row.addEventListener("keydown", navigasiEnter, true);
+
+    const calculateRow = ({ preserveMargin = false } = {}) => {
       if (isBranchRequest || showSupplierColumn) {
         if (onChange) onChange();
         return;
       }
       // Total based on received qty in fulfillment mode, otherwise ordered qty
-      const qOrd = parseFloat(ordInp.value) || 0;
-      const qRec = recInp ? parseFloat(recInp.value) || 0 : 0;
+      const qOrd = parseDesimal(ordInp);
+      const qRec = recInp ? parseDesimal(recInp) : 0;
       const qty = isFulfillment ? qRec : qOrd;
 
       // Visual feedback for mismatch in fulfillment mode
@@ -285,12 +511,12 @@ function createPurchaseGrid(container, config = {}) {
       const hb = toAngka(beliInp.value);
       let hargaNeto = hb;
       row.querySelectorAll(".pg-disc").forEach((inp) => {
-        const d = parseFloat(inp.value) || 0;
+        const d = parseDesimal(inp);
         hargaNeto = hargaNeto * (1 - d / 100);
       });
       nettoDiv.textContent = fmtRp(qty * hargaNeto);
       const hj = toAngka(jualInp.value);
-      if (hargaNeto > 0 && hj > 0) {
+      if (!preserveMargin && hargaNeto > 0 && hj > 0) {
         const margin = ((hj - hargaNeto) / hargaNeto) * 100;
         marginInp.value = margin.toFixed(2).replace(/\.00$/, "");
       }
@@ -304,13 +530,20 @@ function createPurchaseGrid(container, config = {}) {
         1,
         ...groups.map((g) => g.querySelectorAll(".pg-disc").length),
       );
-      const w = Math.max(100, maxInputs * 60 + 30);
+      // Batasi lebar kolom diskon di HP agar grid tidak melebar tak terkendali
+      const batasAtas = window.innerWidth < 640 ? 160 : 99999;
+      const w = Math.min(batasAtas, Math.max(100, maxInputs * 60 + 30));
       target.style.setProperty("--disc-col-width", `${w}px`);
     };
 
     const combo = createPremiumCombo(`pg-combo-${id}`, currentData, {
       isItem: true,
       placeholder: "Cari barang...",
+      onEnter: isFulfillment
+        ? () => {
+            if (combo.val()) fokusInput(ordInp);
+          }
+        : null,
       onSelect: (sel) => {
         if (!isBranchRequest && !showSupplierColumn) {
           beliInp.value = toRibuan(sel.buy_price);
@@ -358,7 +591,11 @@ function createPurchaseGrid(container, config = {}) {
         if (inputs.length >= 4)
           return showToast("Maksimal 4 tingkat diskon", "warning");
         const newInp = document.createElement("input");
-        newInp.type = "number";
+        newInp.type = "text";
+        newInp.inputMode = "decimal";
+        newInp.dataset.inputDesimal = "";
+        newInp.dataset.min = "0";
+        newInp.dataset.max = "100";
         newInp.className = "combobox-input pg-disc";
         newInp.placeholder = "0";
         newInp.style.textAlign = "center";
@@ -372,12 +609,12 @@ function createPurchaseGrid(container, config = {}) {
       // If fulfillment, auto-update received if it was the same as ordered (synced)
       if (isFulfillment && recInp) {
         const prevOrd = ordInp._prevVal || 0;
-        const currentRec = parseFloat(recInp.value) || 0;
+        const currentRec = parseDesimal(recInp);
         if (currentRec === prevOrd || currentRec === 0) {
           recInp.value = ordInp.value;
         }
       }
-      ordInp._prevVal = parseFloat(ordInp.value) || 0;
+      ordInp._prevVal = parseDesimal(ordInp);
       calculateRow();
     };
     if (recInp) recInp.oninput = calculateRow;
@@ -398,18 +635,29 @@ function createPurchaseGrid(container, config = {}) {
       .querySelectorAll(".pg-disc")
       .forEach((inp) => (inp.oninput = calculateRow));
     if (marginInp) {
-      marginInp.oninput = () => {
+      const applyMarginToSellPrice = () => {
         const hb = toAngka(beliInp.value);
         let hargaNeto = hb;
         row.querySelectorAll(".pg-disc").forEach((inp) => {
-          const d = parseFloat(inp.value) || 0;
+          const d = parseDesimal(inp);
           hargaNeto = hargaNeto * (1 - d / 100);
         });
-        const margin = parseFloat(marginInp.value) || 0;
+        const margin = parseDesimal(marginInp);
         const hj = hargaNeto + (hargaNeto * margin) / 100;
         jualInp.value = toRibuan(Math.round(hj));
-        calculateRow();
+        // Harga jual dibulatkan ke rupiah. Jangan hitung balik margin dari hasil
+        // pembulatan karena akan menimpa persentase yang baru saja diketik.
+        calculateRow({ preserveMargin: true });
       };
+      marginInp.oninput = applyMarginToSellPrice;
+      marginInp.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        event.stopPropagation();
+        applyMarginToSellPrice();
+        jualInp.focus();
+        jualInp.select();
+      });
     }
     if (delBtn) {
       delBtn.onclick = () => {
@@ -461,7 +709,7 @@ function createPurchaseGrid(container, config = {}) {
           const discInputs = row.querySelectorAll(".pg-disc");
           const discs =
             discInputs.length > 0
-              ? Array.from(discInputs).map((inp) => parseFloat(inp.value) || 0)
+              ? Array.from(discInputs).map((inp) => parseDesimal(inp))
               : [0, 0];
 
           let hargaNeto = hb;
@@ -469,12 +717,12 @@ function createPurchaseGrid(container, config = {}) {
             hargaNeto = hargaNeto * (1 - d / 100);
           });
 
-          const qOrd = parseFloat(row.querySelector(".pg-ordered").value) || 0;
+          const qOrd = parseDesimal(row.querySelector(".pg-ordered"));
           const recInp = row.querySelector(".pg-received");
           // Kolom "Terima" hanya muncul pada mode fulfillment. Bila tidak ada
           // (pembelian biasa, request cabang, atau pilih-supplier), jumlah yang
           // diterima dianggap sama dengan "Pesan" — bukan 0.
-          const qRec = recInp ? parseFloat(recInp.value) || 0 : qOrd;
+          const qRec = recInp ? parseDesimal(recInp) : qOrd;
 
           const hjInp = row.querySelector(".pg-jual");
           const hj = hjInp
@@ -483,7 +731,7 @@ function createPurchaseGrid(container, config = {}) {
 
           const margInp = row.querySelector(".pg-margin");
           const margin = margInp
-            ? parseFloat(margInp.value) || 0
+            ? parseDesimal(margInp)
             : row._itemData?.profit_margin || 0;
 
           const nameEditInp = row.querySelector(".pg-name-edit");
@@ -503,9 +751,14 @@ function createPurchaseGrid(container, config = {}) {
             discount: hb - hargaNeto,
             disc1: discs[0] || 0,
             disc2: discs[1] || 0,
+            disc3: discs[2] || 0,
+            disc4: discs[3] || 0,
             sell_price: hj,
             profit_margin: margin,
             total: (showSupplierColumn ? qOrd : qRec) * hargaNeto,
+            // Tarif PPN baris → dari master barang (grid ini tak punya kolom PPN).
+            // null aman: backend mundur ke Item.ppn_percent / tarif toko.
+            ppn_percent: row._itemData?.ppn_percent ?? null,
           });
         }
       });
@@ -545,13 +798,23 @@ function createPurchaseSummaryGrid(container, config = {}) {
     onChange = null,
     onDetail = null,
     getSupplierId = null,
+    // Tipe PPN transaksi saat ini ("include" | "exclude" | ""), dari dropdown form.
+    getTipePpn = null,
+    // Tarif PPN standar toko (angka), dipakai untuk popup "ubah ke X%".
+    getTarifStandar = null,
+    // Mode exclude: tulis persentase PPN ke field "Pajak" di ringkasan.
+    setPajakRingkasan = null,
+    enableEnterNavigation = false,
+    // Beri tahu halaman ketika jumlah baris berisi barang berubah.
+    onRowsChanged = null,
   } = config;
 
   let currentData = [];
   // Lebar kolom tetap (px) + Nama Barang dilebarkan. Tabel boleh scroll horizontal.
+  // Kolom Diskon 210px agar muat 4 input potongan bertingkat tanpa meluber ke kolom Total.
   const kolom =
-    "40px minmax(260px, 1fr) 130px 70px 110px 120px 170px 150px 90px 120px";
-  const lebarMin = "1300px";
+    "40px minmax(260px, 1fr) 130px 70px 110px 120px 210px 150px 90px 120px";
+  const lebarMin = "1340px";
 
   // Daftar Jenis & Satuan (untuk combo per baris). Dimuat sekali saat init.
   let daftarJenis = [];
@@ -563,9 +826,17 @@ function createPurchaseSummaryGrid(container, config = {}) {
       currency: "IDR",
       minimumFractionDigits: 0,
     }).format(n || 0);
-  const toAngka = (s) =>
-    parseFloat(String(s).replace(/\./g, "").replace(",", ".")) || 0;
-  const toRibuan = (n) => (n || 0).toLocaleString("id-ID");
+  const toAngka = (s) => parseDesimal(s);
+  const toRibuan = (n) => toDesimal(n);
+  const notifyRowsChanged = () => {
+    if (onRowsChanged) onRowsChanged();
+  };
+  const fokusInput = (input, pilihSemua = true) => {
+    if (!input || input.disabled) return false;
+    input.focus();
+    if (pilihSemua && typeof input.select === "function") input.select();
+    return true;
+  };
 
   const cariByName = (daftar, name) => {
     const t = (name || "").trim().toLowerCase();
@@ -664,6 +935,118 @@ function createPurchaseSummaryGrid(container, config = {}) {
     }
   };
 
+  // Kosongkan satu baris (dipakai saat user menolak konversi tipe PPN → barang batal masuk).
+  const kosongkanBaris = (row) => {
+    const d = row._detail;
+    d.item_id = null;
+    d.name = "";
+    d.code = "";
+    d.buy_price = 0;
+    d.sell_price = 0;
+    d.profit_margin = 0;
+    d.discs = [0];
+    d.ppn = 0;
+    d.ppn_type = "included";
+    d.ppn_percent = 0;
+    if (row._combo) row._combo.clear();
+    if (row._isi) row._isi();
+    if (onChange) onChange();
+    notifyRowsChanged();
+  };
+
+  // Validasi PPN barang yang baru dipilih terhadap setelan transaksi.
+  //  1) Tipe barang (include/exclude) harus sama dengan Tipe PPN transaksi.
+  //     Bila beda → tanya "ubah jadi <tipe transaksi>?". Tolak = barang batal masuk.
+  //  2) Persentase PPN harus sama dengan tarif standar toko.
+  //     Bila beda → tanya "ubah ke <tarif>% sesuai faktur?". Tolak = pakai apa adanya.
+  // Return true bila barang boleh masuk tabel, false bila dibatalkan.
+  const prosesPpnSaatPilih = async (row, sel) => {
+    const tipeTransaksi =
+      (typeof getTipePpn === "function" ? getTipePpn() : "") || "";
+
+    // Tipe transaksi "none" (Tanpa PPN): barang bebas PPN → tarif 0, tanpa konfirmasi.
+    if (tipeTransaksi === "none") {
+      row._detail.ppn_type = "none";
+      row._detail.ppn_percent = 0;
+      row._detail.ppn = 0;
+      return true;
+    }
+
+    let tipeBarang = sel.ppn_type === "excluded" ? "exclude" : "include";
+    const tipeBarangAwal = tipeBarang;
+    const hargaAwal = Number(row._detail.buy_price) || 0;
+    let persen = sel.ppn_percent || 0;
+    const tarifStandar =
+      (typeof getTarifStandar === "function" ? getTarifStandar() : 11) || 11;
+    let perluSimpan = false;
+    let tipeDiubah = false;
+
+    // 1) Cek kecocokan tipe barang dengan tipe transaksi.
+    if (tipeTransaksi && tipeBarang !== tipeTransaksi) {
+      const labelBarang = tipeBarang === "include" ? "Include" : "Exclude";
+      const labelTransaksi =
+        tipeTransaksi === "include" ? "Include" : "Exclude";
+      const ya =
+        typeof showConfirm === "function"
+          ? await showConfirm(
+              `Barang "${sel.name}" untuk supplier ini tercatat PPN ${labelBarang}, padahal pembelian ini bertipe ${labelTransaksi}.\n\nUbah barang ini menjadi ${labelTransaksi}?`,
+            )
+          : true;
+      if (!ya) return false; // batal menambah barang
+      tipeBarang = tipeTransaksi;
+      perluSimpan = true;
+      tipeDiubah = true;
+    }
+
+    // 2) Cek persentase PPN terhadap tarif standar toko.
+    if (persen !== tarifStandar && typeof showConfirm === "function") {
+      const ya = await showConfirm(
+        `PPN barang "${sel.name}" tercatat ${persen}%, bukan ${tarifStandar}%.\n\nUbah ke ${tarifStandar}% sesuai faktur?`,
+      );
+      if (ya) {
+        persen = tarifStandar;
+        perluSimpan = true;
+      }
+    }
+
+    // Harga supplier mengikuti tipe PPN-nya. Jika pengguna menyetujui
+    // konversi tipe, ubah nominal harga juga agar nilai bayar tetap sama:
+    // Include = harga bruto, Exclude = harga neto sebelum PPN.
+    if (tipeDiubah) {
+      row._detail.buy_price = konversiHargaPpnPembelian(
+        hargaAwal,
+        tipeBarangAwal,
+        tipeBarang,
+        persen,
+      );
+    }
+
+    // Terapkan hasil ke baris.
+    row._detail.ppn_type = tipeBarang === "exclude" ? "excluded" : "included";
+    row._detail.ppn_percent = persen;
+    row._detail.ppn = persen; // tampil di kolom (mode include); kolom tersembunyi saat exclude
+
+    // Mode exclude: kolom per-baris hilang → persentase ditulis ke ringkasan "Pajak".
+    if (tipeBarang === "exclude" && typeof setPajakRingkasan === "function") {
+      setPajakRingkasan(persen);
+    }
+
+    // Simpan konversi ke setelan supplier + sinkronkan data combo (sesi ini tak menanya lagi).
+    if (perluSimpan) {
+      const supplierPatch = {
+        ppn_type: row._detail.ppn_type,
+        ppn_percent: persen,
+      };
+      if (tipeDiubah) supplierPatch.harga_beli = row._detail.buy_price;
+      simpanSupplier(row, supplierPatch);
+      sel.ppn_type = row._detail.ppn_type;
+      sel.ppn_percent = persen;
+      if (tipeDiubah) sel.buy_price = row._detail.buy_price;
+    }
+
+    return true;
+  };
+
   const addRow = (item = null) => {
     const row = document.createElement("div");
     row.className = "purchase-grid-row";
@@ -685,21 +1068,23 @@ function createPurchaseSummaryGrid(container, config = {}) {
       discs:
         item?.discs ||
         [item?.disc1 || 0, item?.disc2 || 0].filter((v, i) => i === 0 || v),
-      ppn: item?.ppn || 0,
+      // null berarti tarif belum disnapshot; jangan ubah menjadi 0 karena
+      // backend masih perlu memakai fallback tarif item/toko saat simpan.
+      ppn: item?.ppn ?? item?.ppn_percent ?? null,
       ppn_type: item?.ppn_type || "included",
-      ppn_percent: item?.ppn_percent || 0,
+      ppn_percent: item?.ppn_percent ?? null,
     };
 
     row.innerHTML = `
             <div class="pg2-no" style="text-align:center; color:var(--text-muted); font-weight:600"></div>
             <div class="pg2-combo"></div>
             <div class="pg2-jenis"></div>
-            <input type="number" class="combobox-input pg2-qty" value="${row._detail.qty}" min="0" style="text-align:center" />
+            <input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0" class="combobox-input pg2-qty" value="${row._detail.qty}" style="text-align:center" />
             <div class="pg2-satuan"></div>
-            <input type="text" class="combobox-input pg2-beli" value="0" style="text-align:right" />
+            <input type="text" inputmode="decimal" data-input-desimal data-min="0" class="combobox-input pg2-beli" value="0" style="text-align:right" />
             <div class="pg2-disc disc-group"></div>
             <div class="pg2-total purchase-grid-netto" style="text-align:right">Rp 0</div>
-            <input type="number" class="combobox-input pg2-tax" value="0" min="0" step="0.01" style="text-align:center" />
+            <input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" class="combobox-input pg2-tax" value="0" style="text-align:center" />
             <div style="display:flex; gap:6px; justify-content:flex-end; align-items:center">
                 <button class="btn btn-primary pg2-detail" style="padding:6px 10px; font-size:12px; border-radius:8px" title="Detail Item">Detail</button>
                 <button class="btn pg2-del" style="color:var(--danger); background:transparent; padding:0; justify-content:center" title="Hapus baris">✕</button>
@@ -719,7 +1104,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
     const bacaDiskon = () => {
       row._detail.discs = Array.from(
         discCell.querySelectorAll(".pg2-disc-inp"),
-      ).map((inp) => parseFloat(inp.value) || 0);
+      ).map((inp) => parseDesimal(inp));
     };
     const bangunDiskon = () => {
       const discs =
@@ -727,8 +1112,11 @@ function createPurchaseSummaryGrid(container, config = {}) {
       discCell.innerHTML = "";
       discs.forEach((d) => {
         const inp = document.createElement("input");
-        inp.type = "number";
-        inp.min = "0";
+        inp.type = "text";
+        inp.inputMode = "decimal";
+        inp.dataset.inputDesimal = "";
+        inp.dataset.min = "0";
+        inp.dataset.max = "100";
         inp.className = "combobox-input pg2-disc-inp";
         inp.value = d || 0;
         inp.style.textAlign = "center";
@@ -763,8 +1151,14 @@ function createPurchaseSummaryGrid(container, config = {}) {
       {
         isItem: true,
         placeholder: "Cari barang...",
-        onSelect: (sel) => {
+        onEnter: enableEnterNavigation
+          ? () => fokusInput(qtyInp)
+          : null,
+        onSelect: async (sel) => {
           row._detail.item_id = sel.id;
+          // Kunci tipe PPN sejak barang dipilih, termasuk ketika proses
+          // konfirmasi PPN di bawah masih menunggu jawaban pengguna.
+          notifyRowsChanged();
           row._detail.name = sel.name || "";
           row._detail.code = sel.code || "";
           row._detail.category_id = sel.category_id || null;
@@ -774,17 +1168,82 @@ function createPurchaseSummaryGrid(container, config = {}) {
           row._detail.buy_price = sel.buy_price || 0;
           row._detail.sell_price = sel.sell_price || 0;
           row._detail.profit_margin = sel.profit_margin || 0;
-          // Tax = PPN dari setelan supplier: ambil bila "excluded", 0 bila "included".
-          row._detail.ppn_type = sel.ppn_type || "included";
-          row._detail.ppn_percent = sel.ppn_percent || 0;
-          row._detail.ppn =
-            row._detail.ppn_type === "excluded" ? row._detail.ppn_percent : 0;
+          // Validasi tipe & persentase PPN terhadap setelan transaksi.
+          // Bila user menolak konversi tipe, barang batal ditambahkan.
+          const lanjut = await prosesPpnSaatPilih(row, sel);
+          if (!lanjut) {
+            kosongkanBaris(row);
+            return;
+          }
           isi();
           if (onChange) onChange();
         },
       },
     );
     row._combo = combo;
+
+    const fokusNamaBarisBerikutnya = () => {
+      const barisBerikutnya = addRow();
+      const inputNama = barisBerikutnya.querySelector(
+        ".pg2-combo .combobox-input",
+      );
+      setTimeout(() => fokusInput(inputNama, false), 0);
+    };
+
+    const navigasiEnter = (event) => {
+      if (
+        !enableEnterNavigation ||
+        event.key !== "Enter" ||
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      ) {
+        return;
+      }
+
+      const targetInput = event.target.closest?.("input");
+      if (!targetInput || !row.contains(targetInput)) return;
+
+      const inputNama = row.querySelector(".pg2-combo .combobox-input");
+      if (targetInput === inputNama) {
+        // Saat dropdown terbuka, biarkan combobox memilih hasil pertama/hasil
+        // yang disorot. Callback onEnter kemudian langsung fokus ke Jumlah.
+        if (row.querySelector(".pg2-combo .premium-dropdown.show")) return;
+        if (!combo.val()) return;
+        event.preventDefault();
+        event.stopPropagation();
+        fokusInput(qtyInp);
+        return;
+      }
+
+      let inputBerikutnya = null;
+      if (targetInput === qtyInp) {
+        inputBerikutnya = beliInp;
+      } else if (targetInput === beliInp) {
+        inputBerikutnya = row.querySelector(".pg2-disc-inp");
+      } else if (targetInput.classList.contains("pg2-disc-inp")) {
+        const diskonInputs = Array.from(
+          row.querySelectorAll(".pg2-disc-inp"),
+        );
+        const index = diskonInputs.indexOf(targetInput);
+        inputBerikutnya = diskonInputs[index + 1] || null;
+        if (!inputBerikutnya) {
+          event.preventDefault();
+          event.stopPropagation();
+          fokusNamaBarisBerikutnya();
+          return;
+        }
+      }
+
+      if (!inputBerikutnya) return;
+      event.preventDefault();
+      event.stopPropagation();
+      fokusInput(inputBerikutnya);
+    };
+
+    row.addEventListener("keydown", navigasiEnter, true);
 
     // Combo Jenis (kategori) — ubah master barang
     const comboJenis = createPremiumCombo(
@@ -843,7 +1302,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
 
     // ── Jumlah ──
     qtyInp.oninput = () => {
-      row._detail.qty = parseFloat(qtyInp.value) || 0;
+      row._detail.qty = parseDesimal(qtyInp);
       hitungTotal(row);
       if (onChange) onChange();
     };
@@ -860,11 +1319,15 @@ function createPurchaseSummaryGrid(container, config = {}) {
       simpanSupplier(row, { harga_beli: row._detail.buy_price });
     });
 
-    // ── Tax / PPN (simpan ke supplier saat blur) ──
+    // ── Kolom "PPN Included (%)" — hanya tampil saat transaksi Include.
+    //    Nilai disimpan ke setelan supplier saat blur; tipe ikut tipe transaksi.
     taxInp.addEventListener("blur", () => {
-      const val = parseFloat(taxInp.value) || 0;
+      const val = parseDesimal(taxInp);
+      const tipeTransaksi =
+        (typeof getTipePpn === "function" ? getTipePpn() : "") || "";
       row._detail.ppn = val;
-      row._detail.ppn_type = val > 0 ? "excluded" : "included";
+      row._detail.ppn_type =
+        tipeTransaksi === "exclude" ? "excluded" : "included";
       row._detail.ppn_percent = val;
       simpanSupplier(row, {
         ppn_type: row._detail.ppn_type,
@@ -879,7 +1342,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
         return;
       }
       // sinkronkan qty & diskon terbaru dari input
-      row._detail.qty = parseFloat(qtyInp.value) || 0;
+      row._detail.qty = parseDesimal(qtyInp);
       bacaDiskon();
       const idx = Array.from(body.children).indexOf(row);
       if (onDetail) onDetail(idx, row._detail);
@@ -889,6 +1352,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
       row.remove();
       renumber();
       if (onChange) onChange();
+      notifyRowsChanged();
     };
 
     if (row._detail.item_id) {
@@ -896,6 +1360,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
     }
     isi();
     renumber();
+    if (row._detail.item_id) notifyRowsChanged();
     return row;
   };
 
@@ -923,6 +1388,22 @@ function createPurchaseSummaryGrid(container, config = {}) {
 
   const methods = {
     addRow,
+    addItem: async (item) => {
+      const row = addRow(item);
+      if (!row?._detail?.item_id) return row;
+
+      const lanjut = await prosesPpnSaatPilih(row, item);
+      if (!lanjut) {
+        row.remove();
+        renumber();
+        if (onChange) onChange();
+        notifyRowsChanged();
+        return null;
+      }
+      if (row._isi) row._isi();
+      if (onChange) onChange();
+      return row;
+    },
     updateDataSource: (newData) => {
       currentData = newData;
       Array.from(body.children).forEach((row) => {
@@ -951,6 +1432,9 @@ function createPurchaseSummaryGrid(container, config = {}) {
           sell_price: d.sell_price || 0,
           profit_margin: d.profit_margin || 0,
           total: (d.qty || 0) * neto,
+          // Tarif PPN baris (kolom "PPN Include" mode Included). null → backend mundur
+          // ke Item.ppn_percent / tarif toko.
+          ppn_percent: d.ppn_percent ?? d.ppn ?? null,
         });
       });
       return data;
@@ -966,17 +1450,20 @@ function createPurchaseSummaryGrid(container, config = {}) {
       if (detail.item_id && row._combo)
         row._combo.set(detail.item_id, detail.name);
       if (row._isi) row._isi();
+      notifyRowsChanged();
     },
     // bangun ulang seluruh baris dari snapshot (dipakai saat pulihkan form)
     loadRows: (rows) => {
       body.innerHTML = "";
       (rows || []).forEach((r) => addRow(r));
       if (body.children.length === 0) addRow();
+      notifyRowsChanged();
     },
     clear: () => {
       body.innerHTML = "";
       addRow();
       if (onChange) onChange();
+      notifyRowsChanged();
     },
   };
   target._grid = methods;
@@ -1113,7 +1600,7 @@ function createPaymentModal(config = {}) {
   const title =
     type === "ap" ? "Bayar Hutang Supplier" : "Terima Pembayaran Piutang";
   const apiPath = type === "ap" ? "/purchases" : "/sales";
-  overlay.innerHTML = `<div class="modal-box" style="max-width:480px; width:calc(100% - 32px)"><div class="modal-hdr"><h2>💸 ${title}</h2><button class="btn-x">×</button></div><input type="hidden" class="p-id" /><input type="hidden" class="p-remaining" /><div class="p-info" style="background:var(--bg-color); border-radius:12px; padding:14px; margin-bottom:16px; font-size:15px;"></div><div class="input-group" style="margin-bottom:16px"><label>Metode Pembayaran *</label><select class="input-control p-method"><option value="cash">Kas</option><option value="bank">Bank</option><option value="mix">Gabungan</option></select></div><div class="p-balances" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;"><div style="background:var(--bg-color); border-radius:10px; padding:12px"><div>Saldo Kas</div><div class="p-cash-balance" style="font-weight:800">Rp 0</div></div><div style="background:var(--bg-color); border-radius:10px; padding:12px"><div>Saldo Bank</div><div class="p-bank-balance" style="font-weight:800">Rp 0</div></div></div><div class="row2" style="margin-bottom:16px"><div class="input-group p-cash-group"><label>Dari Kas</label><input type="text" class="input-control p-cash-amt" placeholder="0" /></div><div class="input-group p-bank-group"><label>Dari Bank</label><input type="text" class="input-control p-bank-amt" placeholder="0" /></div></div><div style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2); border-radius:12px; padding:14px; margin-bottom:16px;"><div style="display:flex; justify-content:space-between;"><span>Total Bayar</span><b class="p-total-label" style="font-size:18px; color:#10b981">Rp 0</b></div></div><div class="input-group"><label>Catatan</label><input type="text" class="input-control p-note" /></div><div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px;"><button class="btn p-cancel">Batal</button><button class="btn btn-primary p-submit">✓ Konfirmasi</button></div></div>`;
+  overlay.innerHTML = `<div class="modal-box" style="width:min(92vw, 480px)"><div class="modal-hdr"><h2>💸 ${title}</h2><button class="btn-x">×</button></div><input type="hidden" class="p-id" /><input type="hidden" class="p-remaining" /><div class="p-info" style="background:var(--bg-color); border-radius:var(--radius-sm); padding:0.875rem; margin-bottom:var(--space-md); font-size:0.9375rem;"></div><div class="input-group" style="margin-bottom:16px"><label>Metode Pembayaran *</label><select class="input-control p-method"><option value="cash">Kas</option><option value="bank">Bank</option><option value="mix">Gabungan</option></select></div><div class="p-balances" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;"><div style="background:var(--bg-color); border-radius:10px; padding:12px"><div>Saldo Kas</div><div class="p-cash-balance" style="font-weight:800">Rp 0</div></div><div style="background:var(--bg-color); border-radius:10px; padding:12px"><div>Saldo Bank</div><div class="p-bank-balance" style="font-weight:800">Rp 0</div></div></div><div class="row2" style="margin-bottom:16px"><div class="input-group p-cash-group"><label>Dari Kas</label><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control p-cash-amt" placeholder="0,00" /></div><div class="input-group p-bank-group"><label>Dari Bank</label><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control p-bank-amt" placeholder="0,00" /></div></div><div style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2); border-radius:12px; padding:14px; margin-bottom:16px;"><div style="display:flex; justify-content:space-between;"><span>Total Bayar</span><b class="p-total-label" style="font-size:1.125rem; color:#10b981">Rp 0</b></div></div><div class="input-group"><label>Catatan</label><input type="text" class="input-control p-note" /></div><div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px;"><button class="btn p-cancel">Batal</button><button class="btn btn-primary p-submit">✓ Konfirmasi</button></div></div>`;
   const idInp = overlay.querySelector(".p-id"),
     remInp = overlay.querySelector(".p-remaining"),
     infoDiv = overlay.querySelector(".p-info"),
@@ -1130,12 +1617,11 @@ function createPaymentModal(config = {}) {
     cancelBtn = overlay.querySelector(".p-cancel"),
     closeBtn = overlay.querySelector(".btn-x");
   const fmtRp = (n) => "Rp " + Math.round(n).toLocaleString("id-ID");
-  const parseNum = (s) =>
-    parseFloat(String(s).replace(/\./g, "").replace(",", ".")) || 0;
-  const formatNum = (n) => (n || 0).toLocaleString("id-ID");
+  const parseNum = (s) => parseDesimal(s);
+  const formatNum = (n) => toDesimal(n);
   const syncTotal = () => {
     totalLabel.textContent = fmtRp(
-      parseNum(cashInp.value) + parseNum(bankInp.value),
+      parseNum(cashInp) + parseNum(bankInp),
     );
   };
   const applyMethod = (reset = false) => {
@@ -1158,11 +1644,11 @@ function createPaymentModal(config = {}) {
     syncTotal();
   };
   cashInp.oninput = (e) => {
-    e.target.value = formatNum(parseNum(e.target.value));
+    formatDesimal(e.target);
     syncTotal();
   };
   bankInp.oninput = (e) => {
-    e.target.value = formatNum(parseNum(e.target.value));
+    formatDesimal(e.target);
     syncTotal();
   };
   methodSel.onchange = () => applyMethod(true);
@@ -1174,8 +1660,8 @@ function createPaymentModal(config = {}) {
   closeBtn.onclick = close;
   submitBtn.onclick = async () => {
     const id = idInp.value;
-    const cash = parseNum(cashInp.value);
-    const bank = parseNum(bankInp.value);
+    const cash = parseNum(cashInp);
+    const bank = parseNum(bankInp);
     if (cash + bank <= 0) return showToast("Masukkan nominal", "error");
     try {
       showLoading("Memproses...");
@@ -1238,7 +1724,7 @@ async function createOrderManager(containerId, config = {}) {
   let supplierCombo = null;
 
   target.innerHTML = `
-        <div class="order-manager-wrap" style="display:${type === "po" ? "none" : "grid"}; grid-template-columns: ${isBranchRequest ? "1fr" : "1.5fr 1fr"}; gap: 24px; margin-bottom: 24px">
+        <div class="order-manager-wrap ${isBranchRequest ? "" : "om-grid"}" style="${type === "po" ? "display:none;" : ""} margin-bottom: 24px">
             <div class="card" style="padding:24px">
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px">
                     <div class="input-group" style="${isBranchRequest || isSplitFulfillment || (from_po && readonlySelector) ? "display:none" : ""}">
@@ -1278,19 +1764,19 @@ async function createOrderManager(containerId, config = {}) {
                             <label style="margin:0">Diskon Global (%)</label>
                             <div id="om-toggle-disc" style="width:80px"></div>
                         </div>
-                        <input type="number" id="om-global-disc" class="input-control" value="0" />
+                        <input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" id="om-global-disc" class="input-control" value="0,00" />
                     </div>
                     <div class="input-group">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px">
                             <label style="margin:0">PPN (%)</label>
                             <div id="om-toggle-tax" style="width:80px"></div>
                         </div>
-                        <input type="number" id="om-global-tax" class="input-control" value="0" />
+                        <input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" id="om-global-tax" class="input-control" value="0,00" />
                     </div>
                 </div>
                 <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(0,0,0,0.1); padding-top:16px">
-                    <span style="font-weight:700; color:var(--text-main)">GRAND TOTAL</span>
-                    <span id="om-total-label" style="font-size:28px; font-weight:900; color:var(--primary)">Rp 0</span>
+                    <span style="font-weight:700; color:var(--text-main); flex-shrink:0">GRAND TOTAL</span>
+                    <span id="om-total-label" style="font-size:clamp(1.25rem,6vw,1.75rem); font-weight:900; color:var(--primary); min-width:0; text-align:right; overflow-wrap:anywhere">Rp 0</span>
                 </div>
             </div>
         </div>
@@ -1313,14 +1799,17 @@ async function createOrderManager(containerId, config = {}) {
     if (!itemsGrid) return;
     const items = itemsGrid.getData();
     const subtotal = items.reduce((acc, it) => {
-      let hargaNeto =
-        it.buy_price * (1 - it.disc1 / 100) * (1 - it.disc2 / 100);
+      // Potongan bertingkat (maks 4): tiap potongan memotong harga hasil potongan sebelumnya.
+      let hargaNeto = it.buy_price || 0;
+      [it.disc1, it.disc2, it.disc3, it.disc4].forEach((d) => {
+        hargaNeto = hargaNeto * (1 - (parseFloat(d) || 0) / 100);
+      });
       return acc + it.qty * hargaNeto;
     }, 0);
     const discInput = document.getElementById("om-global-disc");
     const taxInput = document.getElementById("om-global-tax");
-    const disc = discInput ? parseFloat(discInput.value) || 0 : 0;
-    const tax = taxInput ? parseFloat(taxInput.value) || 0 : 0;
+    const disc = discInput ? parseDesimal(discInput) : 0;
+    const tax = taxInput ? parseDesimal(taxInput) : 0;
     const grand = subtotal * (1 - disc / 100) * (1 + tax / 100);
     const totalLabel = document.getElementById("om-total-label");
     if (totalLabel) totalLabel.textContent = fmtRp(grand);
@@ -1356,6 +1845,8 @@ async function createOrderManager(containerId, config = {}) {
         profit_margin: it.item?.profit_margin,
         disc1: it.disc1,
         disc2: it.disc2,
+        disc3: it.disc3,
+        disc4: it.disc4,
         supplier_id: it.item?.suppliers?.[0]?.id, // Default to first supplier if available
         suppliers: it.item?.suppliers || [],
         supplier_details: it.item?.supplier_details || [],
@@ -1367,6 +1858,34 @@ async function createOrderManager(containerId, config = {}) {
   if (isBranchRequest || isSplitFulfillment) {
     const allItems = await api("GET", "/items/?limit=1000");
     itemsGrid.updateDataSource(allItems);
+  }
+
+  // Sinkronkan pilihan barang pada PO/fulfillment yang masih terbuka. Token
+  // memastikan manager lama tidak ikut mengubah grid setelah form dibuat ulang.
+  const managerToken = {};
+  target._orderManagerToken = managerToken;
+  if (typeof subscribeItemMasterChanges === "function") {
+    subscribeItemMasterChanges(async () => {
+      if (target._orderManagerToken !== managerToken) return;
+      try {
+        let items;
+        if (isBranchRequest || isSplitFulfillment) {
+          items = await api("GET", "/items/?limit=1000");
+        } else {
+          const supplierId = supplierCombo?.val();
+          if (!supplierId) return;
+          items = await api(
+            "GET",
+            `/purchases/items/?supplier_id=${supplierId}`,
+          );
+        }
+        if (target._orderManagerToken === managerToken) {
+          itemsGrid.updateDataSource(items || []);
+        }
+      } catch (error) {
+        console.error("Gagal menyegarkan barang pada form PO", error);
+      }
+    });
   }
 
   const btnAdd = document.getElementById("om-btn-add");
@@ -1413,8 +1932,8 @@ async function createOrderManager(containerId, config = {}) {
     const fmtPct = (v) =>
       v % 1 === 0 ? v.toString() : parseFloat(v.toFixed(2)).toString();
 
-    if (discInput) discInput.value = fmtPct(discPct);
-    if (taxInput) taxInput.value = fmtPct(taxPct);
+    if (discInput) discInput.value = toDesimal(fmtPct(discPct));
+    if (taxInput) taxInput.value = toDesimal(fmtPct(taxPct));
 
     if (initialData.supplier_id && supplierCombo)
       supplierCombo.set(
@@ -1440,16 +1959,15 @@ async function createOrderManager(containerId, config = {}) {
       is_tax_included:
         document.querySelector('input[name="om-tax-type"]:checked').value ===
         "include",
-      tax_percent:
-        parseFloat(document.getElementById("om-global-tax").value) || 0,
+      tax_percent: parseDesimal(document.getElementById("om-global-tax")),
       discount:
         isBranchRequest || isSplitFulfillment
           ? 0
-          : parseFloat(document.getElementById("om-global-disc").value) || 0,
+          : parseDesimal(document.getElementById("om-global-disc")),
       tax:
         isBranchRequest || isSplitFulfillment
           ? 0
-          : parseFloat(document.getElementById("om-global-tax").value) || 0,
+          : parseDesimal(document.getElementById("om-global-tax")),
       items: itemsGrid.getData(),
     }),
     itemsGrid,
@@ -1607,42 +2125,167 @@ function createToggleButton(container, config = {}) {
 }
 
 /**
+ * Normalisasi nilai yang datang dari scanner maupun input manual.
+ * Barcode tidak boleh gagal hanya karena perbedaan kapitalisasi/spasi tepi.
+ */
+function normalizeBarcodeValue(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+/**
+ * Cari item berdasarkan barcode/kode secara exact, termasuk barcode khusus
+ * supplier. Return object juga membawa supplierId agar caller pembelian/POS
+ * dapat mempertahankan konteks supplier.
+ */
+function findItemByScanCode(items, value) {
+  const scanned = normalizeBarcodeValue(value);
+  if (!scanned) return null;
+
+  for (const item of items || []) {
+    if (
+      normalizeBarcodeValue(item?.barcode) === scanned ||
+      normalizeBarcodeValue(item?.code) === scanned
+    ) {
+      return { item, supplierId: null };
+    }
+
+    const supplier = (item?.supplier_details || []).find(
+      (detail) => normalizeBarcodeValue(detail?.barcode) === scanned,
+    );
+    if (supplier) {
+      return { item, supplierId: supplier.supplier_id ?? null };
+    }
+  }
+
+  return null;
+}
+
+/**
  * setupBarcodeScanner (Global Scanner Hook)
  * Mendeteksi ketikan cepat (khas scanner) dan memicu callback.
- * Memperbaiki bug perhitungan waktu dari today() menjadi Date.now().
+ *
+ * Scanner keyboard biasanya mengetik ke input yang sedang fokus. Listener
+ * lama justru mengabaikan input tersebut, sehingga PO/Retur tidak pernah
+ * menerima callback scanner. Listener dipasang pada fase capture agar Enter
+ * scanner diproses sebelum handler combobox/form, sementara Enter manual tetap
+ * diteruskan jika buffer tidak memenuhi pola scan.
  */
 function setupBarcodeScanner(onScan, config = {}) {
   const { minLength = 2, interval = 50 } = config;
   let buffer = "";
-  let lastKeyTime = Date.now();
+  let lastKeyTime = 0;
 
-  document.addEventListener("keydown", (e) => {
-    // Abaikan jika tombol fungsi atau navigasi
-    if (e.key.length > 1 && e.key !== "Enter") return;
+  const reset = () => {
+    buffer = "";
+    lastKeyTime = 0;
+  };
 
-    const currentTime = Date.now();
-    const timeDiff = currentTime - lastKeyTime;
-    lastKeyTime = currentTime;
+  const handleKeydown = (e) => {
+    if (e.isComposing || e.ctrlKey || e.altKey || e.metaKey) return;
 
-    // Jika jeda terlalu lama, berarti input manual (manusia), reset buffer
-    if (timeDiff > interval) {
-      buffer = "";
-    }
-
-    if (e.key === "Enter") {
-      if (buffer.length >= minLength) {
-        e.preventDefault();
-        const scanned = buffer.trim();
-        buffer = "";
-        if (onScan) onScan(scanned);
-      } else {
-        buffer = ""; // Reset jika Enter ditekan tapi buffer pendek
-      }
+    // Handler capture lain atau halaman mungkin sudah mengambil event ini.
+    // Tetap kosongkan buffer agar karakter scan sebelumnya tidak terbawa.
+    if (e.defaultPrevented) {
+      reset();
       return;
     }
 
-    if (e.key.length === 1) {
-      buffer += e.key;
+    if (e.key === "Enter") {
+      const scanned = buffer.trim();
+      const scanFinishedQuickly =
+        lastKeyTime > 0 && Date.now() - lastKeyTime <= interval * 4;
+      reset();
+
+      // Enter yang ditekan jauh setelah ketikan adalah submit manual biasa,
+      // bukan terminator scanner.
+      if (scanned.length < minLength || !scanFinishedQuickly) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const target = e.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+        // Input scanner hanya menjadi buffer sementara; kosongkan agar query
+        // barcode lama tidak tertinggal setelah item berhasil ditambahkan.
+        target.value = "";
+      }
+
+      if (onScan) onScan(scanned, e);
+      return;
     }
+
+    // Abaikan tombol fungsi/navigasi, tetapi tetap tangkap karakter printable.
+    if (typeof e.key !== "string" || e.key.length !== 1) return;
+
+    const now = Date.now();
+    if (lastKeyTime === 0 || now - lastKeyTime > interval) buffer = "";
+    buffer += e.key;
+    lastKeyTime = now;
+  };
+
+  document.addEventListener("keydown", handleKeydown, true);
+  return () => document.removeEventListener("keydown", handleKeydown, true);
+}
+
+/**
+ * aktifkanTabelResponsif (Tabel → Kartu di HP)
+ * --------------------------------------------
+ * Membuat tabel data (.tbl / .tbl-input) bisa tampil sebagai KARTU bertumpuk
+ * di layar kecil (<=640px). Caranya: menyalin teks judul kolom dari <thead>
+ * ke atribut data-label pada tiap <td> di kolom yang sama. CSS-lah yang
+ * menampilkan label itu (lewat td::before) hanya di layar HP — tampilan
+ * desktop tidak berubah sama sekali.
+ *
+ * Fungsi ini:
+ *  - Berjalan OTOMATIS di setiap halaman yang memuat components.js.
+ *  - Memantau isi <tbody> yang dimuat belakangan (async) lewat MutationObserver,
+ *    jadi tidak perlu dipanggil ulang manual tiap kali data dimuat.
+ */
+function aktifkanTabelResponsif() {
+  // Beri data-label ke semua sel <td> dalam satu tabel sesuai judul kolomnya.
+  const beriLabelTabel = (tabel) => {
+    const header = tabel.tHead && tabel.tHead.rows[0];
+    if (!header || !header.cells.length) return;
+    const judul = Array.from(header.cells).map((th) => th.textContent.trim());
+    Array.from(tabel.tBodies).forEach((tbody) => {
+      Array.from(tbody.rows).forEach((baris) => {
+        Array.from(baris.cells).forEach((sel, i) => {
+          // Hanya isi kalau belum ada label & ada judul kolomnya
+          if (judul[i] && !sel.hasAttribute("data-label")) {
+            sel.setAttribute("data-label", judul[i]);
+          }
+        });
+      });
+    });
+  };
+
+  const SELEKTOR = "table.tbl, table.tbl-input";
+
+  // Telusuri node yang baru ditambahkan dan beri label tabel yang relevan.
+  const prosesNode = (node) => {
+    if (node.nodeType !== 1) return; // hanya Element
+    if (node.matches && node.matches(SELEKTOR)) beriLabelTabel(node);
+    if (node.querySelectorAll)
+      node.querySelectorAll(SELEKTOR).forEach(beriLabelTabel);
+    // Baris/sel yang ditambahkan ke tabel yang SUDAH ada (kasus paling umum:
+    // <tbody> diisi JS setelah halaman jalan).
+    const tabelInduk = node.closest && node.closest(SELEKTOR);
+    if (tabelInduk) beriLabelTabel(tabelInduk);
+  };
+
+  // 1) Label tabel yang sudah ada saat halaman dimuat.
+  document.querySelectorAll(SELEKTOR).forEach(beriLabelTabel);
+
+  // 2) Pantau penambahan node berikutnya (data async, tab di-switch, dll).
+  const pengamat = new MutationObserver((daftarMutasi) => {
+    daftarMutasi.forEach((m) => m.addedNodes.forEach(prosesNode));
   });
+  pengamat.observe(document.body, { childList: true, subtree: true });
+}
+
+// Jalankan otomatis di setiap halaman yang memuat components.js.
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", aktifkanTabelResponsif);
+} else {
+  aktifkanTabelResponsif();
 }

@@ -44,6 +44,12 @@ from app.database import Base, engine, SessionLocal
 from app.auth import get_password_hash, verify_password
 from app.config import settings
 from app import models
+from app.permissions import (
+    has_permission,
+    request_permission,
+    seed_roles_and_permissions,
+    user_from_bearer,
+)
 from app.routes import (
     auth, items, customers, suppliers, purchases, sales,
     inventory, reports, accounting, consignment,
@@ -92,6 +98,12 @@ def seed_admin():
 
 seed_admin()
 
+with SessionLocal() as _permission_seed_db:
+    try:
+        seed_roles_and_permissions(_permission_seed_db)
+    except Exception as _permission_seed_error:
+        print(f"⚠ Gagal menyiapkan hak akses: {_permission_seed_error}")
+
 # ─── Safe Migration ───────────────────────────────────────────────────────────
 def run_migrations():
     import sqlite3
@@ -127,6 +139,7 @@ def run_migrations():
     add_col("items", "parent_item_id", "INTEGER")
     add_col("items", "conversion_factor_to_parent", "REAL DEFAULT 1")
     add_col("items", "is_virtual_variant", "INTEGER DEFAULT 0")
+    add_col("items", "image_path", "TEXT")
     add_col("sales", "created_by", "INTEGER")
     add_col("sales", "change",     "REAL DEFAULT 0")
     add_col("sales", "salesperson_id",  "INTEGER")
@@ -158,11 +171,23 @@ def run_migrations():
     add_col("purchases", "target_branch_id", "INTEGER")
     add_col("purchase_items", "qty_ordered", "FLOAT DEFAULT 0")
     add_col("purchase_items", "qty_received", "FLOAT DEFAULT 0")
+    add_col("purchase_items", "ppn_percent", "REAL")  # tarif PPN per-baris beli; NULL → ikut tarif barang/toko (Included/PKP)
     add_col("shifts", "branch_id", "INTEGER DEFAULT 1")
     add_col("warehouses", "branch_id", "INTEGER DEFAULT 1")
     add_col("print_jobs", "content_type", "TEXT DEFAULT 'text'")
     add_col("item_supplier", "ppn_type", "TEXT DEFAULT 'included'")
     add_col("item_supplier", "ppn_percent", "REAL DEFAULT 0")
+    add_col("items", "ppn_percent", "REAL")               # tarif PPN per-barang; NULL → ikut tarif toko (data lama tak berubah)
+    add_col("sale_items", "ppn_percent", "REAL DEFAULT 0")  # tarif PPN baris penjualan → untuk balik PPN per-baris saat retur
+    add_col("sales", "other_cost", "REAL DEFAULT 0")  # biaya lain ditagihkan ke pelanggan → Pendapatan Lain-lain (4-1500)
+    add_col("suppliers", "ppn_type", "TEXT")
+    add_col("branches", "is_pkp", "INTEGER DEFAULT 0")
+    add_col("branches", "tarif_ppn", "REAL DEFAULT 11")
+    add_col("purchases", "ppn_dipisah", "INTEGER DEFAULT 0")
+    add_col("purchases", "tax_type", "TEXT")  # include | exclude | none; NULL = legacy fallback
+    add_col("purchases", "due_date", "DATE")  # tanggal jatuh tempo pembayaran (data lama tetap NULL)
+    add_col("purchase_returns", "total_carrying", "REAL DEFAULT 0")
+    add_col("purchase_returns", "selisih", "REAL DEFAULT 0")
 
     # ─── Index performa (idempotent; aman dijalankan berulang) ─────────────────
     # SQLite TIDAK meng-index foreign key otomatis → tanpa ini, filter/join jadi
@@ -233,6 +258,16 @@ def run_migrations():
     # Shift, audit, lisensi, print
     add_index("ix_shifts_user_id", "shifts", "user_id")
     add_index("ix_shifts_branch_id", "shifts", "branch_id")
+    # Satu cabang hanya boleh mempunyai satu shift aktif. Jika instalasi lama
+    # masih memiliki konflik, index dilewati tanpa mengubah data; konflik dapat
+    # ditutup manual dari halaman Shift dan index akan dibuat pada startup berikutnya.
+    try:
+        c.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_shifts_one_open_per_branch "
+            "ON shifts (branch_id) WHERE status = 'open'"
+        )
+    except Exception as e:
+        print(f"  ⚠ Skip unique shift aktif per cabang: {e}")
     add_index("ix_audit_logs_user_id", "audit_logs", "user_id")
     add_index("ix_users_branch_id", "users", "branch_id")
     add_index("ix_login_attempts_username", "login_attempts", "username")
@@ -257,6 +292,16 @@ def run_migrations():
     conn.close()
 
 run_migrations()
+
+# Migrasi histori perakitan lama bersifat idempotent dan tidak mem-posting stok.
+with SessionLocal() as _assembly_migration_db:
+    try:
+        _assembly_migrated = assembly.migrate_legacy_assemblies(_assembly_migration_db)
+        if _assembly_migrated:
+            print(f"  Migration: {_assembly_migrated} histori perakitan dipindahkan")
+    except Exception as _assembly_migration_error:
+        _assembly_migration_db.rollback()
+        print(f"  Migration perakitan dilewati: {_assembly_migration_error}")
 
 
 # ─── Seed Batch Pembukaan FIFO (idempotent) ────────────────────────────────────
@@ -476,6 +521,48 @@ app.add_middleware(
 # minimum_size=1024 agar respons kecil tidak ikut dikompres (overhead tak sepadan).
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
+
+@app.middleware("http")
+async def enforce_role_permissions(request: Request, call_next):
+    """Gerbang RBAC untuk seluruh API bisnis.
+
+    Endpoint publik dan antrean agen printer dikecualikan oleh
+    ``request_permission``. Dependency auth lama tetap berjalan sebagai lapisan
+    kedua dan memakai flag ini untuk menggantikan pemeriksaan admin hard-coded.
+    """
+    request.state.permission_authorized = False
+    required = request_permission(request.url.path, request.method)
+    if not required:
+        return await call_next(request)
+
+    db = SessionLocal()
+    try:
+        user = user_from_bearer(request, db)
+        if not user:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Token tidak valid atau sudah expired"},
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        permission_key, action = required
+        if not has_permission(db, user, permission_key, action):
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "detail": (
+                        "Akses ditolak: Anda tidak memiliki izin "
+                        f"{action} untuk {permission_key}"
+                    )
+                },
+            )
+        request.state.permission_authorized = True
+        request.state.permission_key = permission_key
+        request.state.permission_action = action
+    finally:
+        db.close()
+
+    return await call_next(request)
+
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(items.router, prefix="/api/items", tags=["Items"])
 app.include_router(customers.router, prefix="/api/customers", tags=["Customers"])
@@ -524,28 +611,41 @@ _USE_BUILT = _BUILT_FRONTEND.exists() and (
     getattr(sys, "frozen", False) or os.getenv("FPOS_USE_BUILD") == "1"
 )
 FRONTEND_DIR = _BUILT_FRONTEND if _USE_BUILT else (ROOT_DIR / "frontend")
-# Aset di frontend-dist ber-hash (immutable) → boleh cache 1 tahun; sumber dev cache pendek (1 jam).
+# Aset di frontend-dist ber-hash (immutable) → boleh cache 1 tahun. Aset source
+# development tidak boleh disimpan agar HTML terbaru tidak pernah bertemu JS lama.
 _ASSET_MAX_AGE = 31536000 if _USE_BUILT else 3600
 _ASSET_IMMUTABLE = _USE_BUILT
+_ASSET_NO_STORE = not _USE_BUILT
 MANIFEST_PATH = FRONTEND_DIR / "manifest.json"
 
 class CachedStaticFiles(StaticFiles):
     """StaticFiles + header Cache-Control agar aset (js/css/gambar) tidak di-download ulang
     setiap kunjungan. Hemat round-trip — terasa banget via Tailscale.
     Catatan: bila disajikan dari frontend-dist, nama file sudah ber-hash → aman pakai
-    max_age panjang + immutable. Dari sumber (dev) max_age moderat agar update cepat kebaca."""
-    def __init__(self, *args, max_age: int = 3600, immutable: bool = False, **kwargs):
+    max_age panjang + immutable. Aset source development memakai ``no-store``."""
+    def __init__(
+        self,
+        *args,
+        max_age: int = 3600,
+        immutable: bool = False,
+        no_store: bool = False,
+        **kwargs,
+    ):
         self.max_age = max_age
         self.immutable = immutable
+        self.no_store = no_store
         super().__init__(*args, **kwargs)
 
     async def get_response(self, path, scope):
         response = await super().get_response(path, scope)
         # Hanya cache respons sukses (200/304) — jangan cache error seperti 404.
         if response.status_code < 400:
-            cc = f"public, max-age={self.max_age}"
-            if self.immutable:
-                cc += ", immutable"
+            if self.no_store:
+                cc = "no-store"
+            else:
+                cc = f"public, max-age={self.max_age}"
+                if self.immutable:
+                    cc += ", immutable"
             response.headers["Cache-Control"] = cc
         return response
 
@@ -567,16 +667,26 @@ def health():
 
 if FRONTEND_DIR.exists():
     if (FRONTEND_DIR / "js").exists():
-        app.mount("/js", CachedStaticFiles(directory=str(FRONTEND_DIR / "js"), max_age=_ASSET_MAX_AGE, immutable=_ASSET_IMMUTABLE), name="js")
+        app.mount("/js", CachedStaticFiles(directory=str(FRONTEND_DIR / "js"), max_age=_ASSET_MAX_AGE, immutable=_ASSET_IMMUTABLE, no_store=_ASSET_NO_STORE), name="js")
     if (FRONTEND_DIR / "css").exists():
-        app.mount("/css", CachedStaticFiles(directory=str(FRONTEND_DIR / "css"), max_age=_ASSET_MAX_AGE, immutable=_ASSET_IMMUTABLE), name="css")
+        app.mount("/css", CachedStaticFiles(directory=str(FRONTEND_DIR / "css"), max_age=_ASSET_MAX_AGE, immutable=_ASSET_IMMUTABLE, no_store=_ASSET_NO_STORE), name="css")
+
+    # Halaman HTML harus selalu divalidasi ulang ke server (ETag tetap → 304 bila tak berubah),
+    # supaya hasil edit frontend tidak tertutup cache lama webview/browser.
+    _HTML_NO_CACHE = {"Cache-Control": "no-cache"}
 
     @app.get("/")
     async def root():
-        return FileResponse(str(FRONTEND_DIR / "index.html"))
+        return FileResponse(str(FRONTEND_DIR / "index.html"), headers=_HTML_NO_CACHE)
+
+    @app.get("/login", include_in_schema=False)
+    @app.get("/login.html", include_in_schema=False)
+    async def login_page():
+        """Sajikan halaman login melalui URL GET yang eksplisit."""
+        return FileResponse(str(FRONTEND_DIR / "index.html"), headers=_HTML_NO_CACHE)
 
     HTML_PAGES = [
-        "index", "dashboard", "pos", "sales", "returns",
+        "index", "workspace", "dashboard", "pos", "pos_2", "sales", "returns",
         "customers", "suppliers", "inventory", "reports",
         "accounting", "shifts", "konsinyasi", "ai_advisor",
         "settings", "warehouse", "assembly", "discounts", "onboarding",
@@ -588,7 +698,7 @@ if FRONTEND_DIR.exists():
         if html_file.exists():
             def make_handler(p):
                 async def handler():
-                    return FileResponse(str(FRONTEND_DIR / f"{p}.html"))
+                    return FileResponse(str(FRONTEND_DIR / f"{p}.html"), headers=_HTML_NO_CACHE)
                 handler.__name__ = f"page_{p}"
                 return handler
             app.add_api_route(f"/{page}", make_handler(page), methods=["GET"])
@@ -601,7 +711,7 @@ if FRONTEND_DIR.exists():
         if html_file.exists():
             def make_item_handler(p):
                 async def handler():
-                    return FileResponse(str(FRONTEND_DIR / "item" / f"{p}.html"))
+                    return FileResponse(str(FRONTEND_DIR / "item" / f"{p}.html"), headers=_HTML_NO_CACHE)
                 handler.__name__ = f"page_item_{p}"
                 return handler
             app.add_api_route(f"/item/{page}", make_item_handler(page), methods=["GET"])
@@ -614,7 +724,7 @@ if FRONTEND_DIR.exists():
         if html_file.exists():
             def make_purchase_handler(p):
                 async def handler():
-                    return FileResponse(str(FRONTEND_DIR / "purchase" / f"{p}.html"))
+                    return FileResponse(str(FRONTEND_DIR / "purchase" / f"{p}.html"), headers=_HTML_NO_CACHE)
                 handler.__name__ = f"page_purchase_{p}"
                 return handler
             app.add_api_route(f"/purchase/{page}", make_purchase_handler(page), methods=["GET"])
@@ -630,7 +740,7 @@ if FRONTEND_DIR.exists():
         if html_file.exists():
             def make_supplier_handler(p):
                 async def handler():
-                    return FileResponse(str(FRONTEND_DIR / "supplier" / f"{p}.html"))
+                    return FileResponse(str(FRONTEND_DIR / "supplier" / f"{p}.html"), headers=_HTML_NO_CACHE)
                 handler.__name__ = f"page_supplier_{p}"
                 return handler
             app.add_api_route(f"/supplier/{page}", make_supplier_handler(page), methods=["GET"])
@@ -668,6 +778,9 @@ def reset_serve(publik: bool):
     run_cmd(["tailscale", "funnel" if publik else "serve", "reset"])
 
 def jalankan_tailscale(port: int, publik: bool) -> bool:
+    if os.environ.get("FPOS_SKIP_TAILSCALE") == "1":
+        return True  # Digunakan oleh smoke test build otomatis.
+
     ts_exe = cari_tailscale_exe()
     if not ts_exe:
         return False
@@ -729,8 +842,7 @@ def cek_dan_tanya_autostart():
 if __name__ == "__main__":
     import multiprocessing
     import socket
-    import webview
-    import ctypes
+    import webbrowser
 
     multiprocessing.freeze_support()
 
@@ -743,7 +855,12 @@ if __name__ == "__main__":
     # Jalankan sensor pop-up autostart sebelum server menyala
     cek_dan_tanya_autostart()
 
-    PORT = 8010
+    # Produksi selalu memakai 8010. Override hanya untuk smoke test build agar
+    # tidak mengganggu server FPOS lain yang sedang berjalan di komputer build.
+    try:
+        PORT = int(os.environ.get("FPOS_PORT", "8010"))
+    except ValueError:
+        PORT = 8010
     # AMAN secara default: tailscale "serve" (hanya tailnet). Set TAILSCALE_PUBLIC=true
     # di .env HANYA jika cabang berada di luar tailnet dan benar-benar butuh akses publik.
     PUBLIK = settings.TAILSCALE_PUBLIC
@@ -754,7 +871,7 @@ if __name__ == "__main__":
 
     def jalankan_server():
         jalankan_tailscale(PORT, PUBLIK)
-        # Bind ke localhost saja. Tailscale serve/funnel & WebView lokal mengakses
+        # Bind ke localhost saja. Tailscale serve/funnel & browser lokal mengakses
         # lewat 127.0.0.1, jadi app tidak perlu terekspos di seluruh interface (0.0.0.0).
         #
         # ⚠️ JANGAN tambahkan workers=N / gunicorn fork. SQLite = penulis tunggal,
@@ -764,35 +881,54 @@ if __name__ == "__main__":
         # untuk ≤15 user konkuren tanpa membekukan event loop.
         uvicorn.run(app, host="127.0.0.1", port=PORT)
 
-    def maximize_benar(window):
-        time.sleep(0.5) 
-        hwnd = ctypes.windll.user32.FindWindowW(None, "Eva Store")
-        if hwnd:
-            ctypes.windll.user32.ShowWindow(hwnd, 3)
+    def cari_browser_windows() -> str | None:
+        """Cari Edge/Chrome tanpa bergantung pada pywebview/pythonnet/.NET."""
+        kandidat = [
+            os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"),
+            os.path.expandvars(r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"),
+            os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe"),
+            os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
+            os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
+            os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+        ]
+        for path in kandidat:
+            if path and os.path.isfile(path):
+                return path
+        return None
+
+    def buka_tampilan_fpos(port: int) -> bool:
+        """Buka FPOS sebagai jendela aplikasi Edge/Chrome, lalu fallback browser bawaan."""
+        if os.environ.get("FPOS_SKIP_BROWSER") == "1":
+            return True  # Digunakan oleh smoke test build otomatis.
+
+        url = f"http://127.0.0.1:{port}"
+        browser = cari_browser_windows()
+        try:
+            if browser:
+                subprocess.Popen(
+                    [browser, f"--app={url}", "--start-maximized"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                return True
+            return bool(webbrowser.open(url, new=1, autoraise=True))
+        except Exception as e:
+            print(f"⚠️ Gagal membuka browser otomatis: {e}")
+            print(f"   Buka manual: {url}")
+            return False
+
+    def buka_setelah_server_siap(port: int):
+        for _ in range(120):  # Maksimal 30 detik, termasuk waktu setup Tailscale.
+            if is_server_running(port):
+                buka_tampilan_fpos(port)
+                return
+            time.sleep(0.25)
+        print(f"⚠️ Server tidak aktif di port {port} setelah 30 detik.")
 
     if is_server_running(PORT):
-        window = webview.create_window(
-            title="Eva Store",
-            url=f"http://127.0.0.1:{PORT}",
-            fullscreen=False, 
-            text_select=False,
-            confirm_close=True,
-        )
-        webview.start(maximize_benar, window)
+        buka_tampilan_fpos(PORT)
     else:
-        server_thread = threading.Thread(target=jalankan_server, daemon=True)
-        server_thread.start()
-
-        for _ in range(20):  
-            if is_server_running(PORT):
-                break
-            time.sleep(0.5)
-
-        window = webview.create_window(
-            title="Eva Store",
-            url=f"http://127.0.0.1:{PORT}",
-            fullscreen=False, 
-            text_select=False,
-            confirm_close=True,
-        )
-        webview.start(maximize_benar, window)
+        # Browser dibuka setelah server siap. Uvicorn berjalan di thread utama agar
+        # tetap hidup meski jendela browser ditutup dan Funnel masih bisa diakses.
+        threading.Thread(target=buka_setelah_server_siap, args=(PORT,), daemon=True).start()
+        jalankan_server()

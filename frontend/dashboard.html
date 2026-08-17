@@ -46,6 +46,11 @@
         border-color: var(--primary);
         box-shadow: var(--shadow-lg);
       }
+      .menu-card:focus-visible {
+        outline: 3px solid var(--primary-light);
+        outline-offset: 3px;
+        border-color: var(--primary);
+      }
       .menu-card h3 {
         font-size: 18px;
         margin: 14px 0 6px;
@@ -84,16 +89,96 @@
         padding: 24px;
         box-shadow: var(--shadow-sm);
       }
+      .kpi-card.is-clickable {
+        cursor: pointer;
+        transition: var(--transition);
+      }
+      .kpi-card.is-clickable:hover,
+      .kpi-card.is-clickable:focus-visible {
+        transform: translateY(-4px);
+        border-color: var(--primary);
+        box-shadow: var(--shadow-lg);
+        outline: none;
+      }
+      .kpi-card[aria-disabled="true"] {
+        cursor: default;
+      }
       .kpi-val {
-        font-size: 28px;
+        font-size: clamp(1.25rem, 6vw, 1.75rem);
         font-weight: 700;
         color: var(--primary);
-        margin: 8px 0 4px;
+        margin: 0.5rem 0 0.25rem;
+        overflow-wrap: anywhere;
       }
       .kpi-lbl {
         font-size: 14px;
         font-weight: 500;
         color: var(--text-muted);
+      }
+      .low-stock-preview {
+        display: grid;
+        gap: 8px;
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border-color);
+      }
+      .low-stock-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-width: 0;
+      }
+      .low-stock-info {
+        min-width: 0;
+      }
+      .low-stock-name {
+        display: block;
+        overflow: hidden;
+        color: var(--text-main);
+        font-size: 13px;
+        font-weight: 700;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .low-stock-code,
+      .low-stock-qty,
+      .low-stock-safe {
+        color: var(--text-muted);
+        font-size: 11px;
+      }
+      .low-stock-qty {
+        flex: 0 0 auto;
+        text-align: right;
+      }
+      .low-stock-status {
+        display: block;
+        color: #f59e0b;
+        font-weight: 800;
+      }
+      .low-stock-status.is-empty {
+        color: #ef4444;
+      }
+      .low-stock-safe {
+        color: #10b981;
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .low-stock-all {
+        width: 100%;
+        margin-top: 12px;
+        padding: 8px 10px;
+        border: 1px solid rgba(239, 68, 68, 0.35);
+        border-radius: 8px;
+        background: rgba(239, 68, 68, 0.08);
+        color: #ef4444;
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .low-stock-all:hover {
+        background: rgba(239, 68, 68, 0.15);
       }
       .topbar {
         display: flex;
@@ -134,29 +219,43 @@
         </div>
 
         <div class="kpi-grid" id="kpiGrid">
-          <div class="kpi-card">
+          <div class="kpi-card" data-kpi-target="sales">
             <div class="kpi-lbl">Omzet Hari Ini</div>
             <div class="kpi-val" id="kSales">—</div>
           </div>
-          <div class="kpi-card">
+          <div class="kpi-card" data-kpi-target="sales">
             <div class="kpi-lbl">Jumlah Transaksi</div>
             <div class="kpi-val" id="kTx">—</div>
           </div>
-          <div class="kpi-card">
+          <div class="kpi-card" data-kpi-target="purchases">
             <div class="kpi-lbl">Pembelian Hari Ini</div>
             <div class="kpi-val" id="kPur">—</div>
           </div>
-          <div class="kpi-card">
+          <div class="kpi-card" data-kpi-target="customers">
             <div class="kpi-lbl">Deposit Pelanggan</div>
             <div class="kpi-val" id="kCustDep">—</div>
           </div>
-          <div class="kpi-card">
+          <div class="kpi-card" data-kpi-target="suppliers">
             <div class="kpi-lbl">Deposit ke Supplier</div>
             <div class="kpi-val" id="kSuppDep">—</div>
           </div>
-          <div class="kpi-card">
+          <div class="kpi-card" id="lowStockCard" data-kpi-target="low-stock">
             <div class="kpi-lbl">Stok Menipis</div>
             <div class="kpi-val" id="kLow" style="color: #ef4444">—</div>
+            <div
+              class="low-stock-preview"
+              id="kLowItems"
+              aria-live="polite"
+            ></div>
+            <button
+              class="low-stock-all"
+              id="kLowAll"
+              type="button"
+              onclick="event.stopPropagation(); openLowStockList()"
+              hidden
+            >
+              Lihat semua stok menipis →
+            </button>
           </div>
         </div>
 
@@ -249,11 +348,6 @@
             <h3>Konsinyasi</h3>
             <p>Barang titipan supplier</p>
           </div>
-          <div class="menu-card" onclick="location.href = '/item/dashboard'">
-            <div class="icon-w">💰</div>
-            <h3>Pengaturan Harga</h3>
-            <p>Level harga & grosir</p>
-          </div>
         </div>
 
         <h2 class="section-title">💼 Keuangan & Relasi</h2>
@@ -315,6 +409,226 @@
     <script>
       requireAuth();
 
+      const kpiDestinations = {
+        sales: {
+          title: "Riwayat Penjualan",
+          rule: ["sales.transaction", "view", "menu.sales"],
+          url: () => {
+            const date = today();
+            return `/sales?start_date=${date}&end_date=${date}`;
+          },
+        },
+        purchases: {
+          title: "Pembelian",
+          rule: ["purchase.transaction", "view", "menu.purchase"],
+          url: () => {
+            const date = today();
+            return `/purchases?start_date=${date}&end_date=${date}`;
+          },
+        },
+        customers: {
+          title: "Data Pelanggan",
+          rule: ["master.customer", "view", "menu.master"],
+          url: () => "/customers?sort=deposit_desc",
+        },
+        suppliers: {
+          title: "Data Supplier",
+          rule: ["master.supplier", "view", "menu.master"],
+          url: () => "/supplier/dashboard?sort=deposit_desc",
+        },
+        "low-stock": {
+          title: "Mutasi Stok",
+          rule: ["inventory.item_in", "view", "menu.inventory"],
+          url: () => "/inventory?tab=low",
+        },
+      };
+
+      function openKpiData(card) {
+        if (!card?.classList.contains("is-clickable")) return;
+        const destination = kpiDestinations[card.dataset.kpiTarget];
+        if (!destination) return;
+        openWorkspaceTab(destination.url(), destination.title);
+      }
+
+      function isKeyboardVisible(element) {
+        if (!element || element.style.display === "none") return false;
+        const style = window.getComputedStyle(element);
+        return style.display !== "none" && style.visibility !== "hidden";
+      }
+
+      function moveDashboardCard(card, key, event) {
+        const container = card.closest(".grid-cards, .kpi-grid");
+        if (!container) return;
+        const selector = container.classList.contains("kpi-grid")
+          ? ".kpi-card.is-clickable"
+          : ".menu-card";
+        const cards = Array.from(container.querySelectorAll(selector)).filter(
+          isKeyboardVisible,
+        );
+        if (!cards.length) return;
+
+        const currentRect = card.getBoundingClientRect();
+        const currentCenterX = currentRect.left + currentRect.width / 2;
+        const currentCenterY = currentRect.top + currentRect.height / 2;
+        const isHorizontal = key === "ArrowLeft" || key === "ArrowRight";
+        const direction = key === "ArrowLeft" || key === "ArrowUp" ? -1 : 1;
+        const candidates = cards
+          .filter((candidate) => candidate !== card)
+          .map((candidate) => {
+            const rect = candidate.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            const delta = isHorizontal
+              ? (centerX - currentCenterX) * direction
+              : (centerY - currentCenterY) * direction;
+            if (delta <= 0) return null;
+            const crossDistance = isHorizontal
+              ? Math.abs(centerY - currentCenterY)
+              : Math.abs(centerX - currentCenterX);
+            return { candidate, score: delta + crossDistance * 0.35 };
+          })
+          .filter(Boolean)
+          .sort((a, b) => a.score - b.score);
+
+        const next = candidates[0]?.candidate;
+        if (!next) return;
+        event.preventDefault();
+        next.focus({ preventScroll: true });
+        next.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+
+      function configureMenuCardsKeyboard() {
+        document.querySelectorAll(".menu-card").forEach((card) => {
+          card.setAttribute("role", "link");
+          card.tabIndex = isKeyboardVisible(card) ? 0 : -1;
+        });
+      }
+
+      document.addEventListener("keydown", (event) => {
+        if (event.defaultPrevented) return;
+        const card = event.target.closest?.(".menu-card, .kpi-card");
+        if (!card || event.target !== card) return;
+
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          card.click();
+          return;
+        }
+
+        if (
+          ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(
+            event.key,
+          )
+        ) {
+          moveDashboardCard(card, event.key, event);
+        }
+      });
+
+      function configureKpiCards(state) {
+        document.querySelectorAll(".kpi-card[data-kpi-target]").forEach((card) => {
+          const destination = kpiDestinations[card.dataset.kpiTarget];
+          const rule = destination?.rule;
+          const allowed = Boolean(
+            rule &&
+              hasPermission(rule[0], rule[1], state) &&
+              hasPermission(rule[2], "show", state),
+          );
+
+          card.classList.toggle("is-clickable", allowed);
+          card.setAttribute("aria-disabled", String(!allowed));
+          if (allowed) {
+            card.setAttribute("role", "link");
+            card.tabIndex = 0;
+            card.title = `Buka ${destination.title}`;
+          } else {
+            card.removeAttribute("role");
+            card.removeAttribute("title");
+            card.tabIndex = -1;
+          }
+        });
+      }
+
+      document.getElementById("kpiGrid").addEventListener("click", (event) => {
+        const card = event.target.closest(".kpi-card[data-kpi-target]");
+        if (card) openKpiData(card);
+      });
+
+      document.getElementById("kpiGrid").addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        const card = event.target.closest(".kpi-card[data-kpi-target]");
+        if (!card || event.target !== card) return;
+        event.preventDefault();
+        openKpiData(card);
+      });
+
+      function formatStockQty(value) {
+        return new Intl.NumberFormat("id-ID", {
+          maximumFractionDigits: 4,
+        }).format(Number(value) || 0);
+      }
+
+      function canOpenLowStockList() {
+        const state = getPermissionState();
+        return (
+          hasPermission("inventory.item_in", "view", state) &&
+          hasPermission("menu.inventory", "show", state)
+        );
+      }
+
+      function renderLowStockItems(items) {
+        const preview = document.getElementById("kLowItems");
+        const viewAll = document.getElementById("kLowAll");
+        const rows = Array.isArray(items) ? items : [];
+        preview.replaceChildren();
+
+        if (!rows.length) {
+          const safe = document.createElement("div");
+          safe.className = "low-stock-safe";
+          safe.textContent = "✓ Semua stok aman";
+          preview.appendChild(safe);
+          viewAll.hidden = true;
+          return;
+        }
+
+        rows.slice(0, 3).forEach((item) => {
+          const row = document.createElement("div");
+          row.className = "low-stock-row";
+
+          const info = document.createElement("div");
+          info.className = "low-stock-info";
+
+          const name = document.createElement("span");
+          name.className = "low-stock-name";
+          name.textContent = item.name || "Barang tanpa nama";
+          name.title = item.name || "Barang tanpa nama";
+
+          const code = document.createElement("span");
+          code.className = "low-stock-code";
+          code.textContent = item.code || "Tanpa kode";
+
+          const qty = document.createElement("div");
+          qty.className = "low-stock-qty";
+          qty.textContent = `${formatStockQty(item.stock)} / min ${formatStockQty(item.min_stock)}`;
+
+          const status = document.createElement("span");
+          const isEmpty = Number(item.stock) <= 0;
+          status.className = `low-stock-status${isEmpty ? " is-empty" : ""}`;
+          status.textContent = isEmpty ? "Habis" : "Menipis";
+
+          info.append(name, code);
+          qty.appendChild(status);
+          row.append(info, qty);
+          preview.appendChild(row);
+        });
+
+        viewAll.hidden = !canOpenLowStockList();
+      }
+
+      function openLowStockList() {
+        if (!canOpenLowStockList()) return;
+        openWorkspaceTab("/inventory?tab=low", "Mutasi Stok");
+      }
+
       async function loadKPI() {
         try {
           console.log("1. Mulai memanggil API Dashboard...");
@@ -347,16 +661,25 @@
           );
           document.getElementById("kLow").textContent =
             (d.low_stock_count || 0) + " item";
+          renderLowStockItems(d.low_stock_items);
 
           console.log("3. Berhasil menempelkan data ke layar!");
         } catch (e) {
           console.error("❌ ERROR di loadKPI:", e);
+          ["kSales", "kTx", "kPur", "kCustDep", "kSuppDep", "kLow"].forEach(
+            (id) => {
+              const element = document.getElementById(id);
+              if (element) {
+                element.textContent = "Gagal dimuat";
+                element.title = e?.message || "Data dashboard tidak tersedia";
+              }
+            },
+          );
+          const preview = document.getElementById("kLowItems");
+          preview.textContent = "Rincian stok tidak tersedia";
+          document.getElementById("kLowAll").hidden = true;
         }
       }
-
-      // Panggilan pertama saat halaman dimuat
-      loadKPI();
-      loadPOCount();
 
       async function loadPOCount() {
           const badge = document.getElementById("poBadge");
@@ -378,23 +701,89 @@
           // Asumsi prefix untuk accounting.py di main.py Anda adalah /accounting
           const res = await api("GET", "/accounting/setup-status");
           if (res.is_setup_completed === false) {
-            // Belum setup? Tendang ke halaman onboarding!
-            window.location.replace("/onboarding.html");
+            // Di workspace, onboarding dibuka sebagai tab tanpa mengganti Dashboard.
+            openWorkspaceTab("/onboarding.html", "Onboarding", true);
           }
         } catch (e) {
           console.error("Gagal mengecek status setup", e);
         }
       }
 
-      // Jalankan pengecekan
-      checkGatekeeper();
+      const dashboardPermissions = {
+        "/pos": ["sales.cashier", "view", "menu.sales"],
+        "/shifts": ["sales.cashier", "view", "menu.sales"],
+        "/sales": ["sales.transaction", "view", "menu.sales"],
+        "/delivery": ["sales.transaction", "view", "menu.sales"],
+        "/returns": ["sales.return", "view", "menu.sales"],
+        "/trade_in": ["sales.trade_in", "view", "menu.sales"],
+        "/po": ["purchase.order", "view", "menu.purchase"],
+        "/setoran": ["accounting.cash_in", "view", "menu.accounting"],
+        "/item/items": ["master.item", "view", "menu.master"],
+        "/purchases": ["purchase.transaction", "view", "menu.purchase"],
+        "/inventory": ["inventory.item_in", "view", "menu.inventory"],
+        "/warehouse": ["inventory.transfer", "view", "menu.inventory"],
+        "/assembly": ["assembly.transaction", "view", "menu.assembly"],
+        "/unit_conversion": ["master.unit", "view", "menu.master"],
+        "/konsinyasi": ["inventory.item_in", "view", "menu.inventory"],
+        "/reports": ["report.sales", "view", "menu.report"],
+        "/accounting": ["accounting.journal", "view", "menu.accounting"],
+        "/customers": ["master.customer", "view", "menu.master"],
+        "/supplier/dashboard": ["master.supplier", "view", "menu.master"],
+        "/supplier/tambahSuplier": ["master.supplier", "create", "menu.master"],
+        "/discounts": ["master.discount_period", "view", "menu.master"],
+        "/branches": ["master.warehouse", "view", "menu.settings"],
+        "/users": ["settings.user_management", "access", "menu.settings"],
+        "/barcode": ["master.barcode", "view", "menu.master"],
+      };
+
+      async function initializeDashboardPermissions() {
+        const state = await loadMyPermissions();
+        configureKpiCards(state);
+        document.querySelectorAll(".menu-card").forEach((card) => {
+          const match = (card.getAttribute("onclick") || "").match(/['"](\/[^'"]+)['"]/);
+          if (!match) return;
+          const rule = dashboardPermissions[match[1]];
+          if (!rule) return;
+          const moduleAllowed = hasPermission(rule[0], rule[1], state);
+          const menuAllowed = hasPermission(rule[2], "show", state);
+          card.style.display = moduleAllowed && menuAllowed ? "" : "none";
+        });
+        configureMenuCardsKeyboard();
+
+        document.querySelectorAll(".section-title").forEach((title) => {
+          const grid = title.nextElementSibling;
+          if (grid && !Array.from(grid.querySelectorAll(".menu-card")).some((card) => card.style.display !== "none")) {
+            title.style.display = "none";
+            grid.style.display = "none";
+          }
+        });
+
+        const settingsButton = document.querySelector(".topbar button[onclick*='/settings']");
+        if (settingsButton) {
+          settingsButton.style.display =
+            hasPermission("settings.general", "access", state) &&
+            hasPermission("menu.settings", "show", state)
+              ? ""
+              : "none";
+        }
+
+        if (hasPermission("report.sales", "view", state)) loadKPI();
+        else document.getElementById("kpiGrid").style.display = "none";
+        if (hasPermission("purchase.order", "view", state)) loadPOCount();
+        if (hasPermission("accounting.journal", "view", state)) checkGatekeeper();
+      }
+
+      configureMenuCardsKeyboard();
+      initializeDashboardPermissions().catch((error) =>
+        console.error("Gagal menerapkan hak akses dashboard", error),
+      );
 
       // ==========================================
       // TAMBAHKAN KODE INI DI BAWAHNYA
       // ==========================================
       window.addEventListener("focus", () => {
-        console.log("Tab aktif kembali, memperbarui data dashboard...");
-        loadKPI();
+        const state = getPermissionState();
+        if (hasPermission("report.sales", "view", state)) loadKPI();
       });
     </script>
   </body>

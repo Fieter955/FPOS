@@ -123,7 +123,7 @@
             padding: 0;
             margin-bottom: 16px;
           "
-          onclick="history.back()"
+          onclick="requestSupplierNavigation('/supplier/dashboard')"
         >
           ← Kembali
         </button>
@@ -180,13 +180,24 @@
                 <label>PPN Supplier</label>
                 <input
                   id="PpnSupplier"
+                  type="text"
+                  inputmode="decimal"
+                  data-input-desimal
+                  data-min="0"
+                  data-max="100"
                   class="input-control"
                   placeholder="PPN Supplier"
+                  min="0"
+                  step="any"
+                  value="0"
                 />
               </div>
               <div class="input-group">
-                <select class="input-control">
-                  <option value=""
+                <label>Jenis PPN</label>
+                <select id="sPpnType" class="input-control">
+                  <option value="">Non PPN</option>
+                  <option value="included">Include (PPN sudah termasuk harga)</option>
+                  <option value="excluded">Exclude (PPN dipisah)</option>
                 </select>
               </div>
             </div>
@@ -196,7 +207,10 @@
                 <label>Limit Kredit (Rp)</label>
                 <input
                   id="sCredit"
-                  type="number"
+                  type="text"
+                  inputmode="decimal"
+                  data-input-desimal
+                  data-min="0"
                   class="input-control"
                   placeholder="0"
                   value="0"
@@ -256,7 +270,8 @@
             >
               <button
                 type="button"
-                onclick="history.back()"
+                data-supplier-cancel
+                onclick="requestSupplierNavigation('/supplier/dashboard')"
                 class="btn"
                 style="
                   background: var(--bg-color);
@@ -277,11 +292,54 @@
 
     <script src="/js/api.js"></script>
     <script src="/js/theme.js"></script>
+    <script src="/js/supplier-form-keyboard.js?v=20260814-enter-nav"></script>
     <script>
       requireAuth();
       let allItems = [];
       let selectedItems = new Map();
       let itemSearchTimeout = null;
+      let supplierFormBaseline = null;
+      let supplierSaveInProgress = false;
+
+      function serializeSupplierForm() {
+        const value = (id) => document.getElementById(id)?.value ?? "";
+        return JSON.stringify({
+          name: value("sNama"),
+          phone: value("sPhone"),
+          email: value("sEmail"),
+          address: value("sAlamat"),
+          ppn: value("PpnSupplier"),
+          ppnType: value("sPpnType"),
+          creditLimit: value("sCredit"),
+          dueDate: value("sDueDate"),
+          notes: value("sNotes"),
+          itemIds: Array.from(selectedItems.keys()).sort((a, b) => a - b),
+        });
+      }
+
+      function hasDirtySupplierForm() {
+        return (
+          supplierFormBaseline !== null &&
+          serializeSupplierForm() !== supplierFormBaseline
+        );
+      }
+
+      function discardSupplierChanges() {
+        supplierFormBaseline = null;
+        notifyUnsavedChangesChanged();
+      }
+
+      async function requestSupplierNavigation(target) {
+        const canLeave = await resolveUnsavedChangesBeforeExit(
+          "Perubahan Supplier belum disimpan. Apa yang ingin dilakukan sebelum meninggalkan halaman?",
+          {
+            saveText: "Simpan & Keluar",
+            discardText: "Keluar Tanpa Simpan",
+          },
+        );
+        if (!canLeave) return;
+        window.location.href = target;
+      }
 
       async function loadAllItems() {
         try {
@@ -330,6 +388,7 @@
         if (item) {
           selectedItems.set(item.id, item);
           renderSelectedItems();
+          notifyUnsavedChangesChanged();
           document.getElementById("itemSearchInput").value = "";
           document.getElementById("itemDropdown").classList.remove("show");
         }
@@ -356,36 +415,56 @@
       window.removeItem = function (id) {
         selectedItems.delete(id);
         renderSelectedItems();
+        notifyUnsavedChangesChanged();
       };
 
-      async function save(e) {
-        e.preventDefault();
+      async function save(e, { navigateAfterSave = Boolean(e) } = {}) {
+        if (e?.preventDefault) e.preventDefault();
+        if (supplierSaveInProgress) return false;
+        const form = document.getElementById("supForm");
+        if (!form.reportValidity()) return false;
         const btn = document.getElementById("btnSimpan");
-        btn.disabled = true;
-        btn.textContent = "Menyimpan...";
 
+        const ppnType = document.getElementById("sPpnType").value || null;
         const data = {
-          name: document.getElementById("sNama").value,
+          name: document.getElementById("sNama").value.trim(),
           phone: document.getElementById("sPhone").value || null,
           email: document.getElementById("sEmail").value || null,
           address: document.getElementById("sAlamat").value || null,
-          PpnSupplier: document.getElementById("PpnSupplier").value || null,
-          credit_limit:
-            parseFloat(document.getElementById("sCredit").value) || 0,
+          PpnSupplier: ppnType
+            ? parseDesimal(document.getElementById("PpnSupplier"))
+            : 0,
+          ppn_type: ppnType,
+          credit_limit: parseDesimal(document.getElementById("sCredit")),
           due_date: parseInt(document.getElementById("sDueDate").value) || 0,
           notes: document.getElementById("sNotes").value || null,
           item_ids: Array.from(selectedItems.keys()),
         };
 
+        let saved = false;
         try {
+          supplierSaveInProgress = true;
+          btn.disabled = true;
+          btn.textContent = "Menyimpan...";
           await api("POST", "/suppliers/", data);
           showToast("Supplier berhasil ditambahkan!");
-          setTimeout(() => (location.href = "/suppliers"), 1000);
+          supplierFormBaseline = serializeSupplierForm();
+          notifyUnsavedChangesChanged();
+          saved = true;
+          if (navigateAfterSave) {
+            setTimeout(
+              () => requestSupplierNavigation("/supplier/dashboard"),
+              1000,
+            );
+          }
         } catch (ex) {
           showToast(ex.message, "error");
+        } finally {
+          supplierSaveInProgress = false;
           btn.disabled = false;
           btn.textContent = "✓ Simpan Supplier";
         }
+        return saved;
       }
 
       document
@@ -402,6 +481,28 @@
           document.getElementById("itemDropdown").classList.remove("show");
         }
       });
+
+      supplierFormBaseline = serializeSupplierForm();
+
+      if (
+        typeof registerUnsavedChangesGuard === "function" &&
+        typeof notifyUnsavedChangesChanged === "function"
+      ) {
+        document
+          .getElementById("supForm")
+          .addEventListener("input", notifyUnsavedChangesChanged);
+        document
+          .getElementById("supForm")
+          .addEventListener("change", notifyUnsavedChangesChanged);
+
+        registerUnsavedChangesGuard({
+          label: "Tambah Supplier",
+          isDirty: hasDirtySupplierForm,
+          save: () => save(),
+          discard: discardSupplierChanges,
+        });
+        notifyUnsavedChangesChanged();
+      }
 
       loadAllItems();
     </script>

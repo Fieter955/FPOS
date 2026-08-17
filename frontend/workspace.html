@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0f172a" />
+    <title>FPOS</title>
+    <link rel="stylesheet" href="/css/style.css?v=20260814-account-menu" />
+    <link rel="stylesheet" href="/css/workspace.css?v=20260816-account-menu-branch" />
+  </head>
+  <body class="workspace-page">
+    <div class="workspace-shell">
+      <header class="workspace-chrome" aria-label="Tab kerja FPOS">
+        <div class="workspace-brand" aria-label="FPOS">
+          <span class="workspace-brand-mark" aria-hidden="true">▦</span>
+          <span>FPOS</span>
+        </div>
+        <div class="workspace-tabs-viewport">
+          <div
+            id="workspaceTabs"
+            class="workspace-tabs"
+            role="tablist"
+            aria-orientation="horizontal"
+            aria-label="Fitur yang sedang dibuka"
+          ></div>
+        </div>
+        <div
+          id="workspaceTabCount"
+          class="workspace-tab-count"
+          aria-live="polite"
+        ></div>
+        <div id="workspaceAccount" class="workspace-account">
+          <button
+            id="workspaceAccountButton"
+            class="workspace-account-button"
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded="false"
+            aria-controls="workspaceAccountMenu"
+          >
+            <span
+              id="workspaceAccountAvatar"
+              class="workspace-account-avatar"
+              aria-hidden="true"
+            >A</span>
+            <span class="workspace-account-summary">
+              <span class="workspace-account-caption">Akun</span>
+              <span id="workspaceAccountName" class="workspace-account-name"
+                >Pengguna</span
+              >
+            </span>
+            <svg
+              class="workspace-account-chevron"
+              viewBox="0 0 20 20"
+              aria-hidden="true"
+            >
+              <path d="m6 8 4 4 4-4" />
+            </svg>
+          </button>
+
+          <div
+            id="workspaceAccountMenu"
+            class="workspace-account-menu"
+            role="menu"
+            aria-label="Menu akun"
+            hidden
+          >
+            <div class="workspace-account-identity" role="presentation">
+              <span
+                id="workspaceAccountMenuAvatar"
+                class="workspace-account-avatar workspace-account-avatar-large"
+                aria-hidden="true"
+                >A</span
+              >
+              <span class="workspace-account-details">
+                <strong id="workspaceAccountMenuName">Pengguna</strong>
+                <span id="workspaceAccountUsername"></span>
+              </span>
+            </div>
+            <div
+              id="globalBranchSwitcher"
+              class="workspace-branch-switcher"
+              role="group"
+              aria-labelledby="globalBranchLabel"
+            >
+              <span id="globalBranchLabel" class="workspace-branch-label"
+                >Zona Kerja</span
+              >
+              <select
+                id="globalBranchSelect"
+                class="workspace-branch-select"
+                aria-label="Pilih zona kerja"
+                disabled
+              >
+                <option>Memuat zona kerja...</option>
+              </select>
+              <span
+                id="globalBranchCurrent"
+                class="workspace-branch-current"
+                hidden
+              ></span>
+            </div>
+            <div class="workspace-account-divider" role="separator"></div>
+            <button
+              id="workspaceLogoutButton"
+              class="workspace-logout-button"
+              type="button"
+              role="menuitem"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M10 17l5-5-5-5M15 12H3M14 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+              </svg>
+              <span>
+                <strong>Keluar</strong>
+                <small>Akhiri sesi akun ini</small>
+              </span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main id="workspaceFrames" class="workspace-frames">
+        <div id="workspaceBoot" class="workspace-boot" role="status">
+          <span class="workspace-spinner" aria-hidden="true"></span>
+          <span>Menyiapkan ruang kerja…</span>
+        </div>
+      </main>
+    </div>
+
+    <script src="/js/api.js?v=20260816-account-menu-branch"></script>
+    <script src="/js/theme.js"></script>
+    <script src="/js/workspace.js?v=20260816-account-menu-branch"></script>
+  </body>
+</html>

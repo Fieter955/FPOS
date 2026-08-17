@@ -108,11 +108,12 @@
         <div class="input-group">
           <label>Jumlah Bayar (Rp)</label
           ><input
-            type="number"
+            type="text"
+            data-input-desimal
             id="bayarAmt"
             class="input-control"
             min="0"
-            inputmode="numeric"
+            inputmode="decimal"
           />
         </div>
         <div class="input-group">
@@ -284,14 +285,14 @@
     <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Total</span><b>${fmtRp(total)}</b></div>
     <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Sudah Bayar</span><b style="color:#10b981">${fmtRp(paid || 0)}</b></div>
     <div style="display:flex;justify-content:space-between;font-size:18px;font-weight:800;border-top:1px solid var(--border-color);padding-top:8px"><span>Sisa</span><b style="color:#ef4444">${fmtRp(sisa)}</b></div>`;
-        document.getElementById("bayarAmt").value = sisa;
+        document.getElementById("bayarAmt").value = toDesimal(sisa);
         document.getElementById("bayarNote").value = "";
         openModal("mBayar");
       }
 
       async function doBayar() {
         const id = document.getElementById("bayarId").value,
-          amt = parseFloat(document.getElementById("bayarAmt").value) || 0;
+          amt = parseDesimal(document.getElementById("bayarAmt"));
         if (!amt) {
           showToast("Jumlah harus diisi", "error");
           return;
@@ -332,10 +333,16 @@
         }
       }
 
-      document.getElementById("fStart").value = new Date(new Date().setDate(1))
-        .toISOString()
-        .slice(0, 10);
-      document.getElementById("fEnd").value = today();
+      const salesParams = new URLSearchParams(location.search);
+      const validDateParam = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || "");
+      const requestedStart = salesParams.get("start_date");
+      const requestedEnd = salesParams.get("end_date");
+      document.getElementById("fStart").value = validDateParam(requestedStart)
+        ? requestedStart
+        : today().slice(0, 7) + "-01";
+      document.getElementById("fEnd").value = validDateParam(requestedEnd)
+        ? requestedEnd
+        : today();
       load();
     </script>
   </body>

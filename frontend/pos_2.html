@@ -1,0 +1,1812 @@
+<!doctype html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8" />
+  <!-- PWA & Mobile App Behavior -->
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#1a1a1a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="iPos 5.0" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <title>Kasir - iPos 5.0</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    * {
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #rcptBox h2,
+    #rcptBox p {
+      color: #222 !important;
+    }
+
+    #rcptBox p b {
+      color: #111 !important;
+    }
+
+    body {
+      overflow: hidden;
+    }
+
+    .pos-layout {
+      display: flex;
+      height: 100vh;
+    }
+
+    .pos-left {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    .pos-right {
+      width: 340px;
+      flex-shrink: 0;
+      background: var(--card-bg);
+      border-left: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    @media (max-width: 900px) {
+      .pos-right {
+        display: none;
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        z-index: 500;
+        background: var(--card-bg);
+      }
+
+      .pos-right.show {
+        display: flex;
+      }
+    }
+
+    /* --- FAB Keranjang Mobile --- */
+    .cart-fab {
+      display: none;
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 64px;
+      height: 64px;
+      border-radius: 32px;
+      background: var(--primary, #f97316);
+      color: white;
+      border: none;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+      font-size: 28px;
+      cursor: pointer;
+      z-index: 400;
+      align-items: center;
+      justify-content: center;
+      transition: 0.2s;
+    }
+
+    .cart-fab:active {
+      transform: scale(0.92);
+      background: #ea580c;
+    }
+
+    .cart-fab .badge {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      background: #ef4444;
+      color: white;
+      font-size: 14px;
+      font-weight: bold;
+      min-width: 24px;
+      height: 24px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 6px;
+      border: 2px solid white;
+    }
+
+    @media (max-width: 900px) {
+      .cart-fab {
+        display: flex;
+      }
+    }
+
+    /* --- Footer Khusus Mobile di dalam Panel Keranjang --- */
+    .mobile-cart-actions {
+      display: none;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border-color);
+      background: var(--card-bg);
+      gap: 12px;
+    }
+
+    @media (max-width: 900px) {
+      .mobile-cart-actions {
+        display: flex;
+      }
+
+      /* Sembunyikan footer desktop jika perlu, atau biarkan saja karena panel akan penuh */
+      .cart-footer {
+        display: none;
+      }
+
+      /* Tampilkan footer mobile */
+      .pos-right.show .mobile-cart-actions {
+        display: flex;
+      }
+    }
+
+    .mobile-cart-actions button {
+      flex: 1;
+      padding: 14px 0;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .mobile-cart-actions .btn-back {
+      background: transparent;
+      border: 2px solid var(--border-color);
+      color: var(--text-muted);
+    }
+
+    .mobile-cart-actions .btn-pay {
+      background: var(--primary);
+      color: white;
+    }
+
+    .search-bar {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-color);
+      background: var(--card-bg);
+      flex-shrink: 0;
+    }
+
+    .search-inp {
+      width: 100%;
+      padding: 12px 18px;
+      border-radius: 100px;
+      border: 2px solid var(--border-color);
+      background: var(--bg-color);
+      color: var(--text-main);
+      font-size: 16px;
+      outline: none;
+      font-family: inherit;
+      box-sizing: border-box;
+    }
+
+    .search-inp:focus {
+      border-color: var(--primary);
+    }
+
+    .cat-scroll {
+      display: flex;
+      gap: 8px;
+      padding: 8px 16px;
+      overflow-x: auto;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .cat-scroll::-webkit-scrollbar {
+      display: none;
+    }
+
+    .cat-btn {
+      flex-shrink: 0;
+      padding: 6px 14px;
+      border-radius: 100px;
+      border: 2px solid var(--border-color);
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+
+    .cat-btn.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+
+    .item-grid-wrap {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+    }
+
+    .item-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+      gap: 10px;
+    }
+
+    .item-card {
+      background: var(--card-bg);
+      border: 2px solid var(--border-color);
+      border-radius: 14px;
+      padding: 12px;
+      cursor: pointer;
+      transition: 0.15s;
+      user-select: none;
+    }
+
+    .item-card:hover {
+      border-color: var(--primary);
+      transform: translateY(-2px);
+    }
+
+    /* --- GLOW EFEK KEYBOARD UTAMA --- */
+    .item-card.kb-focus {
+      border-color: var(--primary);
+      background: rgba(16, 185, 129, 0.08);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+
+    .item-card:active {
+      transform: scale(0.95);
+    }
+
+    .item-name {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: var(--text-main);
+      line-height: 1.3;
+      /* nama produk panjang maks 2 baris + "…" → tinggi kartu tetap rata */
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      overflow-wrap: anywhere;
+    }
+
+    .item-price {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .item-stock {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .stock-low {
+      color: #f59e0b !important;
+      font-weight: 700;
+    }
+
+    .stock-empty {
+      color: #ef4444 !important;
+      font-weight: 700;
+    }
+
+    /* --- Styling Tombol Pop-up Keyboard --- */
+    .pay-btn.kb-focus,
+    .rcpt-btn.kb-focus {
+      outline: 3px solid var(--primary);
+      outline-offset: 2px;
+      transform: scale(1.05);
+      background: var(--primary) !important;
+      color: #fff !important;
+      border-color: var(--primary) !important;
+    }
+
+    #btnPayCancel.kb-focus,
+    #btnRcptTutup.kb-focus,
+    #btnQtyBatal.kb-focus {
+      outline-color: #ef4444 !important;
+      background: #ef4444 !important;
+      border-color: #ef4444 !important;
+      color: #fff !important;
+    }
+
+    #qtyInp.kb-focus {
+      outline: 3px solid var(--primary);
+      outline-offset: 2px;
+    }
+
+    .rcpt-btn {
+      padding: 11px;
+      border-radius: 9px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    .cart-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .cart-items {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .cart-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .ci-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .ci-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-main);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .ci-price {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .qty-ctrl {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+
+    .qty-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: 7px;
+      border: none;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--border-color);
+      color: var(--text-main);
+    }
+
+    .qty-btn:hover {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .ci-sub {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--primary);
+      width: 70px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .ci-del {
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+      border: none;
+      border-radius: 5px;
+      width: 20px;
+      height: 20px;
+      font-size: 12px;
+      cursor: pointer;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .cart-footer {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border-color);
+      flex-shrink: 0;
+    }
+
+    .ttl-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .pay-btns {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .pay-btn {
+      padding: 9px 4px;
+      border-radius: 9px;
+      border: 2px solid var(--border-color);
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+      text-align: center;
+      transition: 0.1s;
+    }
+
+    .pay-btn.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+
+    .bayar-btn {
+      width: 100%;
+      height: 48px;
+      font-size: 16px;
+      font-weight: 700;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .bayar-btn:active {
+      transform: scale(0.97);
+    }
+  </style>
+</head>
+
+<body>
+  <!-- FAB Keranjang Mobile -->
+  <button class="cart-fab" id="cartFab" onclick="toggleCartPanel()">
+    🛒
+    <span class="badge" id="cartFabBadge">0</span>
+  </button>
+
+  <div class="pos-layout">
+    <div class="pos-left">
+      <div class="search-bar">
+        <div style="
+              display: flex;
+              gap: 8px;
+              align-items: center;
+              margin-bottom: 8px;
+            ">
+          <button class="btn" style="
+                padding: 10px 14px;
+                background: rgba(255, 255, 255, 0.1);
+                color: var(--text-main);
+                border: 1px solid var(--border-color);
+                flex-shrink: 0;
+                font-size: 13px;
+                font-weight: bold;
+              " onclick="location.href = '/dashboard'">
+            ← Kembali
+          </button>
+          <input type="text" id="searchInp" class="search-inp"
+            placeholder="🔍 Cari barang... (Tekan F8/Insert untuk Bayar)" autofocus autocomplete="off"
+            oninput="filterItems()" />
+        </div>
+        <div class="cat-scroll" id="catBar">
+          <button class="cat-btn active" onclick="setCat('')" id="cat_all">
+            Semua
+          </button>
+        </div>
+      </div>
+
+      <div class="item-grid-wrap" id="scrollWrap">
+        <div class="item-grid" id="itemGrid"></div>
+        <div id="emptyItems" style="
+              display: none;
+              text-align: center;
+              padding: 60px 20px;
+              color: var(--text-muted);
+            ">
+          <div style="font-size: 48px; margin-bottom: 12px">📦</div>
+          <p>Tidak ada barang</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="pos-right" id="cartPanel">
+      <div class="cart-header">
+        <div style="font-size: 16px; font-weight: 800">
+          🛒 Tagihan &nbsp;<span id="cartCount" style="
+                background: var(--primary-light);
+                color: var(--primary);
+                padding: 2px 10px;
+                border-radius: 99px;
+                font-size: 13px;
+              ">0</span>
+        </div>
+        <button onclick="clearCart()" style="
+              font-size: 12px;
+              color: var(--text-muted);
+              background: none;
+              border: none;
+              cursor: pointer;
+            ">
+          Kosongkan
+        </button>
+      </div>
+
+      <div style="
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border-color);
+            display: grid;
+            gap: 8px;
+          ">
+        <select id="custSel" class="input-control" style="margin: 0; padding: 9px 12px; font-size: 13px"
+          onchange="handleCustomerChange()">
+          <option value="">👤 Pelanggan Umum</option>
+        </select>
+        <select id="groupSel" class="input-control" style="margin: 0; padding: 9px 12px; font-size: 13px"
+          onchange="handleDiscountGroupChange()">
+          <option value="">Grup Diskon: Umum</option>
+        </select>
+      </div>
+
+      <div class="cart-items" id="cartList">
+        <div style="
+              padding: 32px;
+              text-align: center;
+              color: var(--text-muted);
+              font-size: 14px;
+            ">
+          Belum ada barang
+        </div>
+      </div>
+
+      <!-- Footer Desktop -->
+      <div class="cart-footer">
+        <div class="ttl-row">
+          <span style="color: var(--text-muted)">Subtotal</span><span id="subtotalEl">Rp 0</span>
+        </div>
+        <div class="ttl-row" id="ppnRow" style="display: none">
+          <span style="color: var(--text-muted)" id="ppnLabel">Termasuk PPN</span><span id="ppnEl">Rp 0</span>
+        </div>
+        <div class="ttl-row" style="
+              font-size: clamp(1.25rem, 6vw, 1.75rem);
+              font-weight: 900;
+              border-top: 2px solid var(--border-color);
+              padding-top: 0.5rem;
+              margin-bottom: 0.625rem;
+            ">
+          <span>TOTAL</span><span id="totalEl"
+            style="color: var(--primary); min-width: 0; text-align: right; overflow-wrap: anywhere">Rp 0</span>
+        </div>
+        <input type="hidden" id="discPct" value="0" />
+        <input type="hidden" id="taxPct" value="0" />
+        <input type="hidden" id="paidInp" value="0" />
+
+        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px">
+          <button onclick="clearCart()" style="
+                padding: 12px;
+                border-radius: 10px;
+                border: 2px solid var(--border-color);
+                background: transparent;
+                color: var(--text-muted);
+                font-size: 14px;
+                font-weight: 700;
+                cursor: pointer;
+              ">
+            ✕
+          </button>
+          <button class="bayar-btn" onclick="openPayModal()">
+            ✓ BAYAR (F8)
+          </button>
+        </div>
+      </div>
+
+      <!-- Footer Mobile: Tombol Kembali & Bayar -->
+      <div class="mobile-cart-actions">
+        <button class="btn-back" onclick="closeCartPanel()">← Kembali</button>
+        <button class="btn-pay" onclick="handleMobilePay()">💳 Bayar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Qty -->
+  <div class="modal-overlay" id="modalQty" style="display: none; z-index: 9999">
+    <div class="modal-box" style="max-width: 320px; text-align: center">
+      <h3 id="qtyItemName" style="margin-top: 0; margin-bottom: 15px; color: var(--text-main)">
+        Nama Barang
+      </h3>
+      <label style="color: var(--text-muted)">Masukkan Jumlah (Qty):</label>
+
+      <input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" id="qtyInp" class="input-control kb-focus" value="1" style="
+            font-size: 2rem;
+            font-weight: 900;
+            text-align: center;
+            margin: 0.9375rem 0;
+            padding: 0.9375rem;
+            border-radius: 0.9375rem;
+            color: var(--primary);
+          " />
+      <div id="priceSelectorBox" style="
+            display: none;
+            margin-bottom: 15px;
+            background: rgba(0, 0, 0, 0.05);
+            padding: 10px;
+            border-radius: 10px;
+            text-align: left;
+          ">
+        <div style="
+              font-size: 12px;
+              color: var(--text-muted);
+              margin-bottom: 8px;
+              text-align: center;
+              font-weight: bold;
+            ">
+          Pilih Harga Jual:
+        </div>
+        <div style="display: flex; justify-content: center; gap: 20px">
+          <label style="
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                font-weight: bold;
+                color: var(--primary);
+              ">
+            <input type="radio" name="rdoPrice" id="rdoNormal" value="normal" checked />
+            Normal (<span id="lblNormal">0</span>)
+          </label>
+          <label style="
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                font-weight: bold;
+                color: #f59e0b;
+              ">
+            <input type="radio" name="rdoPrice" id="rdoDiskon" value="diskon" />
+            Diskon (<span id="lblDiskon">0</span>)
+          </label>
+        </div>
+      </div>
+
+      <div style="
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 15px;
+          ">
+        <button id="btnQtyBatal" class="rcpt-btn" style="
+              flex: 1;
+              background: transparent;
+              color: #ef4444;
+              border: 2px solid #ef4444;
+            " onclick="closeModals()">
+          ✕ Batal
+        </button>
+        <button id="btnQtySimpan" class="rcpt-btn" style="flex: 1; background: #10b981; color: white; border: none"
+          onclick="confirmQty()">
+          ✓ Simpan
+        </button>
+      </div>
+
+      <div style="
+            font-size: 12px;
+            color: gray;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 10px;
+            border-radius: 8px;
+          ">
+        ( ↓ ) Pindah Menu &nbsp; | &nbsp; ( → ) Geser
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Pembayaran -->
+  <div class="modal-overlay" id="modalPay" style="display: none; z-index: 9999">
+    <div class="modal-box" style="max-width: 26.25rem">
+      <h2 style="margin-top: 0; text-align: center">💳 Pembayaran</h2>
+      <div style="
+            font-size: clamp(1.875rem, 10vw, 3rem);
+            font-weight: 900;
+            color: var(--primary);
+            margin: 0.9375rem 0;
+            text-align: center;
+            overflow-wrap: anywhere;
+          " id="payTotalDisplay">
+        Rp 0
+      </div>
+
+      <label style="color: var(--text-muted); font-size: 0.8125rem">Uang Diterima dari Pelanggan:</label>
+      <input type="text" inputmode="decimal" data-input-desimal data-min="0" id="payInpModal" class="input-control" value="0" style="
+            font-size: 1.5rem;
+            font-weight: bold;
+            text-align: right;
+            margin-bottom: 0.9375rem;
+            padding: 0.75rem;
+          " />
+
+      <label style="
+            color: var(--text-muted);
+            font-size: 13px;
+            margin-bottom: 5px;
+            display: block;
+          ">Pilih Metode (Kiri/Kanan):</label>
+      <div class="pay-btns" id="payModalBtns" style="grid-template-columns: repeat(4, 1fr)">
+        <button class="pay-btn" id="btnPayCancel" style="color: #ef4444; border-color: #ef4444" onclick="closeModals()">
+          ✕ Batal
+        </button>
+        <button class="pay-btn" id="btnPayCash" onclick="setPayMethodAndConfirm('cash')">
+          💵 Cash
+        </button>
+        <button class="pay-btn" id="btnPayTrans" onclick="setPayMethodAndConfirm('transfer')">
+          🏦 Trf
+        </button>
+        <button class="pay-btn" id="btnPayCard" onclick="setPayMethodAndConfirm('card')">
+          💳 Kartu
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Struk -->
+  <div class="modal-overlay" id="rcptModal" style="display: none; z-index: 9999">
+    <div id="rcptBox" style="
+          background: #fff;
+          color: #222;
+          width: 100%;
+          max-width: 360px;
+          border-radius: 20px;
+          padding: 24px;
+          font-family: &quot;Courier New&quot;, monospace;
+          max-height: 90vh;
+          overflow-y: auto;
+        "></div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/theme.js"></script>
+  <script src="/js/components.js"></script>
+  <script>
+    requireAuth();
+
+    // =======================================================================
+    // 📋 VARIABEL GLOBAL & STATE
+    // =======================================================================
+    let allItems = [],
+      cart = [],
+      allCusts = [],
+      allGroups = [],
+      payMethod = "cash",
+      activeCat = "";
+    let currentFilteredItems = [];
+    let kbFocusIndex = -1;
+    let activeModal = null;
+    let unsubscribeItemMasterChanges = null;
+    let pendingItemId = null,
+      pendingSupplierId = null; // 🚚 Supplier ID dari barcode khusus
+    let qtyIdx = 0;
+
+    let payModalMethods = ["cancel", "cash", "transfer", "card"];
+    let payModalIdx = 1;
+    let rcptIdx = 2;
+
+    // =======================================================================
+    // 📡 MASTER CONTROLLER: SENSOR KEYBOARD & SCANNER (PENGATUR LALU LINTAS)
+    // =======================================================================
+    document.addEventListener("keydown", function (e) {
+      // 1. KONTROL MODAL QTY (JUMLAH BARANG)
+      if (activeModal === "qty") {
+        if (e.key === "Escape") {
+          closeModals();
+          return;
+        }
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          changeQtyIdx(1);
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          changeQtyIdx(0);
+          return;
+        }
+        if (e.key === "ArrowRight" && qtyIdx > 0) {
+          e.preventDefault();
+          changeQtyIdx(2);
+          return;
+        }
+        if (e.key === "ArrowLeft" && qtyIdx > 0) {
+          e.preventDefault();
+          changeQtyIdx(1);
+          return;
+        }
+        if (e.key === "Enter") {
+          e.preventDefault();
+          if (qtyIdx === 1) closeModals();
+          else confirmQty();
+        }
+        return;
+      }
+
+      // 3. KONTROL MODAL PAY (PEMBAYARAN)
+      if (activeModal === "pay") {
+        if (e.key === "Escape") {
+          closeModals();
+          return;
+        }
+        if (e.key === "ArrowRight") {
+          e.preventDefault();
+          changePayIdx(1);
+          return;
+        }
+        if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          changePayIdx(-1);
+          return;
+        }
+        if (e.key === "Enter") {
+          e.preventDefault();
+          if (payModalIdx === 0) closeModals();
+          else confirmPayModal();
+        }
+        return;
+      }
+
+      // 4. KONTROL MODAL RCPT (STRUK)
+      if (activeModal === "rcpt") {
+        if (e.key === "Escape") {
+          closeModals();
+          return;
+        }
+        if (e.key === "ArrowRight") {
+          e.preventDefault();
+          changeRcptIdx(1);
+          return;
+        }
+        if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          changeRcptIdx(-1);
+          return;
+        }
+        if (e.key === "Enter") {
+          e.preventDefault();
+          if (rcptIdx === 0) closeModals();
+          else if (rcptIdx === 1)
+            document.getElementById("btnRcptCetak").click();
+          else document.getElementById("btnRcptSelesai").click();
+        }
+        return;
+      }
+
+      // 5. KONTROL LAYAR UTAMA POS
+      if (activeModal === null) {
+        // B. SHORTCUT TOMBOL BAYAR (F8 / INSERT)
+        if (e.key === "F8" || e.key === "Insert" || e.key === "End") {
+          e.preventDefault();
+          openPayModal();
+          return;
+        }
+
+        // C. NAVIGASI PANAH (KIRI, KANAN, ATAS, BAWAH)
+        if (
+          ["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"].includes(e.key)
+        ) {
+          e.preventDefault();
+          if (currentFilteredItems.length === 0) return;
+
+          const grid = document.getElementById("itemGrid");
+          const cols = window
+            .getComputedStyle(grid)
+            .getPropertyValue("grid-template-columns")
+            .split(" ").length;
+
+          if (kbFocusIndex === -1) kbFocusIndex = 0;
+          else {
+            if (e.key === "ArrowRight") kbFocusIndex++;
+            if (e.key === "ArrowLeft") kbFocusIndex--;
+            if (e.key === "ArrowDown") kbFocusIndex += cols;
+            if (e.key === "ArrowUp") kbFocusIndex -= cols;
+          }
+
+          if (kbFocusIndex < 0) kbFocusIndex = 0;
+          if (kbFocusIndex >= currentFilteredItems.length)
+            kbFocusIndex = currentFilteredItems.length - 1;
+
+          const cards = document.querySelectorAll("#itemGrid .item-card");
+          cards.forEach((c) => c.classList.remove("kb-focus"));
+          if (cards[kbFocusIndex]) {
+            cards[kbFocusIndex].classList.add("kb-focus");
+            cards[kbFocusIndex].scrollIntoView({
+              block: "nearest",
+              behavior: "smooth",
+            });
+          }
+          return;
+        }
+
+        // D. ENTER MANUAL (Input Box)
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const q = document
+            .getElementById("searchInp")
+            .value.trim()
+            .toLowerCase();
+
+          // CEK 1: Apakah input manual cocok 100% dengan kode/barcode?
+          const exactMatch = findItemByScanCode(allItems, q);
+
+          if (exactMatch && q !== "") {
+            promptQty(exactMatch.item.id, exactMatch.supplierId);
+            document.getElementById("searchInp").value = "";
+            filterItems();
+            return;
+          }
+
+          // CEK 2: Jika tidak ada yang cocok 100%, ambil yang sedang di-highlight (kbFocus) atau item pertama
+          if (currentFilteredItems.length > 0) {
+            let targetIndex = kbFocusIndex > -1 ? kbFocusIndex : 0;
+            if (currentFilteredItems[targetIndex]) {
+              promptQty(currentFilteredItems[targetIndex].id);
+              document.getElementById("searchInp").value = "";
+              filterItems();
+            }
+          }
+        }
+      }
+    });
+
+    // =======================================================================
+    // 🛠️ FUNGSI PENDUKUNG (CORE LOGIC)
+    // =======================================================================
+
+    // Fungsi Helper Format Rupiah (Berjaga-jaga jika di theme.js belum ada)
+    if (typeof fmtRp !== "function") {
+      window.fmtRp = function (n) {
+        return new Intl.NumberFormat("id-ID", {
+          style: "currency",
+          currency: "IDR",
+          minimumFractionDigits: 0,
+        }).format(n || 0);
+      };
+    }
+
+    // Fungsi Mengambil Tanggal WITA (Sesuai Request Sebelumnya)
+    function today() {
+      return new Date().toLocaleDateString("en-CA", {
+        timeZone: "Asia/Makassar",
+      });
+    }
+
+    function roundQty(val) {
+      return (
+        Math.round((parseFloat(val || 0) + Number.EPSILON) * 10000) / 10000
+      );
+    }
+
+    function fmtQty(val) {
+      const num = roundQty(val);
+      return Number.isInteger(num)
+        ? String(num)
+        : String(num).replace(/\.?0+$/, "");
+    }
+
+    function getSourceItem(item) {
+      if (!item) return null;
+      if (item.is_virtual_variant && item.parent_item_id) {
+        return allItems.find((x) => x.id === item.parent_item_id) || item;
+      }
+      return item;
+    }
+
+    function qtyToSourceUnits(item, qty) {
+      const numQty = parseFloat(qty || 0) || 0;
+      if (item?.is_virtual_variant) {
+        const factor = parseFloat(item.conversion_factor_to_parent || 1) || 1;
+        return numQty * factor;
+      }
+      return numQty;
+    }
+
+    function getReservedSourceQty(sourceId, excludeIndex = -1) {
+      return roundQty(
+        cart.reduce((sum, line, idx) => {
+          if (idx === excludeIndex) return sum;
+          const item = allItems.find((x) => x.id === line.id);
+          const sourceItem = getSourceItem(item);
+          if (!item || !sourceItem || sourceItem.id !== sourceId) return sum;
+          return sum + qtyToSourceUnits(item, line.qty);
+        }, 0),
+      );
+    }
+
+    function getAvailableCartStock(item, excludeIndex = -1) {
+      const sourceItem = getSourceItem(item);
+      if (!sourceItem) return 0;
+      const sourceStock = parseFloat(sourceItem.stock || 0) || 0;
+      const remainingSource = Math.max(
+        0,
+        roundQty(
+          sourceStock - getReservedSourceQty(sourceItem.id, excludeIndex),
+        ),
+      );
+      if (item?.is_virtual_variant) {
+        const factor = parseFloat(item.conversion_factor_to_parent || 1) || 1;
+        return roundQty(remainingSource / factor);
+      }
+      return remainingSource;
+    }
+
+    function syncDerivedStocksFromSource(sourceId) {
+      const sourceItem = allItems.find((x) => x.id === sourceId);
+      if (!sourceItem) return;
+      allItems.forEach((item) => {
+        if (item.is_virtual_variant && item.parent_item_id === sourceId) {
+          const factor =
+            parseFloat(item.conversion_factor_to_parent || 1) || 1;
+          item.stock = roundQty(
+            (parseFloat(sourceItem.stock || 0) || 0) / factor,
+          );
+        }
+      });
+    }
+
+    function applyLocalStockConsumption(lines) {
+      const affectedSourceIds = new Set();
+      lines.forEach((line) => {
+        const item = allItems.find((x) => x.id === line.id);
+        const sourceItem = getSourceItem(item);
+        if (!item || !sourceItem) return;
+
+        sourceItem.stock = roundQty(
+          (parseFloat(sourceItem.stock || 0) || 0) -
+          qtyToSourceUnits(item, line.qty),
+        );
+        affectedSourceIds.add(sourceItem.id);
+      });
+
+      affectedSourceIds.forEach((sourceId) => {
+        syncDerivedStocksFromSource(sourceId);
+      });
+    }
+
+    // Status PKP toko: bila ON, harga jual dianggap SUDAH termasuk PPN (tarif dari setelan).
+    var PKP = { is_pkp: false, tarif: 0 };
+
+    async function init() {
+      try {
+        const [items, cats, custs, groups] = await Promise.all([
+          api("GET", "/items/?limit=20000"), // Limit dibesarkan agar tidak gaib
+          api("GET", "/items/categories"),
+          api("GET", "/customers/?limit=500"),
+          api("GET", "/customers/groups"),
+        ]);
+        allItems = items;
+        allCusts = custs;
+        allGroups = groups;
+        try {
+          const st = await api("GET", "/accounting/pkp-status");
+          PKP.is_pkp = !!st.is_pkp;
+          PKP.tarif = parseFloat(st.tarif_ppn) || 0;
+        } catch (e) {
+          /* abaikan bila tak ada akses */
+        }
+        const bar = document.getElementById("catBar");
+        cats.forEach((c) => {
+          const b = document.createElement("button");
+          b.className = "cat-btn";
+          b.textContent = c.name;
+          b.id = "cat_" + c.id;
+          b.onclick = () => setCat(c.id);
+          bar.appendChild(b);
+        });
+        const s = document.getElementById("custSel");
+        custs.forEach((c) => {
+          const o = document.createElement("option");
+          o.value = c.id;
+          // Hapus persentase dari nama pelanggan di dropdown
+          o.textContent = c.group
+            ? `${c.name} [${c.group.name}]`
+            : c.name;
+          s.appendChild(o);
+        });
+        const groupSelect = document.getElementById("groupSel");
+        groups.forEach((g) => {
+          const o = document.createElement("option");
+          o.value = g.id;
+          // Tulis nama grup saja tanpa persentase
+          o.textContent = g.name;
+          groupSelect.appendChild(o);
+        });
+        filterItems();
+
+        unsubscribeItemMasterChanges = subscribeItemMasterChanges(async () => {
+          try {
+            allItems = await api("GET", "/items/?limit=20000");
+            filterItems();
+          } catch (error) {
+            console.error("Gagal menyegarkan barang POS", error);
+          }
+        });
+
+        // Setup Global Barcode Scanner
+        setupBarcodeScanner((scode) => {
+          if (activeModal !== null) return;
+          scode = String(scode).toLowerCase().trim();
+
+          const match = findItemByScanCode(allItems, scode);
+
+          if (match) {
+            promptQty(match.item.id, match.supplierId, false);
+            document.getElementById("searchInp").value = "";
+            filterItems();
+          } else {
+            showToast("Barcode " + scode + " tidak terdaftar!", "error");
+          }
+        });
+      } catch (e) {
+        showToast("Gagal memuat data!", "error");
+      }
+    }
+
+    function setCat(id) {
+      activeCat = id;
+      document
+        .querySelectorAll(".cat-btn")
+        .forEach((b) =>
+          b.classList.toggle(
+            "active",
+            b.id === "cat_" + id || (id === "" && b.id === "cat_all"),
+          ),
+        );
+      filterItems();
+    }
+
+    function filterItems() {
+      const q = document
+        .getElementById("searchInp")
+        .value.toLowerCase()
+        .trim();
+      currentFilteredItems = allItems.filter((i) => {
+        const mc = !activeCat || i.category_id == activeCat;
+
+        // 🛡️ PERBAIKAN: Paksa semua field menjadi String dan Lowercase agar kebal error
+        const mq =
+          !q ||
+          String(i.name || "")
+            .toLowerCase()
+            .includes(q) ||
+          String(i.code || "")
+            .toLowerCase()
+            .includes(q) ||
+          String(i.barcode || "")
+            .toLowerCase()
+            .includes(q);
+
+        return mc && mq;
+      });
+      kbFocusIndex = -1;
+      // Filter di atas sinkron → currentFilteredItems selalu fresh (untuk Enter & navigasi panah).
+      // Render grid (DOM berat) di-debounce agar tidak rebuild ratusan kartu tiap ketukan huruf.
+      debouncedRenderItems(currentFilteredItems);
+    }
+
+    function renderItems(items) {
+      const g = document.getElementById("itemGrid");
+      document.getElementById("emptyItems").style.display = items.length
+        ? "none"
+        : "block";
+      g.innerHTML = items
+        .map(
+          (i, idx) => `
+            <div class="item-card ${idx === kbFocusIndex ? "kb-focus" : ""}" onclick="promptQty(${i.id})">
+              <div class="item-name">${i.name}</div>
+              <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">
+                ${i.unit?.abbreviation || i.unit?.name || "pcs"}${i.is_virtual_variant ? " | virtual" : ""}
+              </div>
+              <div class="item-price">${fmtRp(i.sell_price)}</div>
+              <div class="item-stock ${i.stock <= i.min_stock ? "stock-low" : ""}">${i.stock <= 0 ? "Habis" : "Stok " + fmtQty(i.stock)}</div>
+            </div>`,
+        )
+        .join("");
+    }
+
+    const debouncedRenderItems = debounce(renderItems, 120);
+
+    let pendingPriceNormal = 0;
+    let pendingPriceDiskon = 0;
+    let hasDiskon = false;
+    // Barang yang harga grupnya dibatalkan karena di bawah modal (untuk peringatan)
+    let groupPriceBlockedItems = [];
+
+    function getActiveDiscountGroup() {
+      const groupId = document.getElementById("groupSel")?.value;
+      if (!groupId) return null;
+      return allGroups.find((g) => String(g.id) === String(groupId)) || null;
+    }
+
+    function applyDiscountGroupPrice(item, basePrice, supplierId = null) {
+      // 1. Jika barang tidak di-ceklis "Dapat Diskon Member", abaikan diskon grup
+      if (!item.is_discountable) return basePrice;
+
+      const group = getActiveDiscountGroup();
+      if (!group) return basePrice;
+
+      const groupName = String(group.name || "").toLowerCase().trim();
+      let hasGroupSetting = false;
+
+      // (1) LEVEL HARGA dulu: harga grup absolut dipakai sebagai harga DASAR.
+      let levelPrice = basePrice;
+      const specPrice = (item.prices || []).find(
+        (p) => String(p.name || "").toLowerCase().trim() === groupName,
+      );
+      if (specPrice && parseFloat(specPrice.price) > 0) {
+        levelPrice = parseFloat(specPrice.price);
+        hasGroupSetting = true;
+      }
+
+      // (2) Lalu DILANJUT "Potongan Harga Jual": diskon bertingkat di ATAS
+      //     harga Level Harga — bukan pengganti, tapi lanjutan.
+      let discountedPrice = levelPrice;
+      const gd = (item.group_discounts || []).find(
+        (d) => String(d.group_id) === String(group.id),
+      );
+      if (gd) {
+        let price = levelPrice;
+        [gd.disc1, gd.disc2, gd.disc3, gd.disc4].forEach((d) => {
+          const pct = parseFloat(d) || 0;
+          if (pct > 0) price = price * (1 - pct / 100);
+        });
+        if (price < levelPrice) {
+          discountedPrice = price;
+          hasGroupSetting = true;
+        }
+      }
+
+      // Tidak ada setelan grup pada barang ini -> tidak ada diskon.
+      // (Persen di data grup pelanggan HANYA referensi, bukan auto-diskon.)
+      if (!hasGroupSetting) return basePrice;
+
+      // (3) Penjaga anti-rugi (di bawah HPP) — BERTINGKAT:
+      //   a) harga diskon penuh masih >= HPP -> pakai harga diskon.
+      //   b) Potongan bikin < HPP, tapi harga Level Harga >= HPP
+      //      -> lewati diskon Potongan, pakai harga Level Harga.
+      //   c) harga Level Harga pun < HPP -> peringatan + pakai harga normal.
+      // Pakai min_price (dikirim backend ke SEMUA role) agar konsisten admin & kasir.
+      let hpp = parseFloat(item.min_price ?? item.buy_price) || 0;
+      if (supplierId) {
+        const sd = (item.supplier_details || []).find(
+          (s) => s.supplier_id === supplierId,
+        );
+        if (sd && parseFloat(sd.buy_price) > 0) hpp = parseFloat(sd.buy_price);
+      }
+
+      // Mode PKP harga-include: harga jual masih mengandung PPN, sedangkan modal (hpp)
+      // sudah BERSIH PPN → naikkan lantai sebesar PPN agar perbandingan adil (harga
+      // label vs modal+PPN). Tarif PER BARANG (item.ppn_percent), fallback tarif toko.
+      // PKP mati / tarif 0 (barang non-PPN) → faktor 1 (perilaku lama, nol berubah).
+      const tarifItem = PKP.is_pkp
+        ? (item.ppn_percent != null ? item.ppn_percent : PKP.tarif) || 0
+        : 0;
+      const pkpFactor = tarifItem > 0 ? 1 + tarifItem / 100 : 1;
+      const hppFloor = hpp * pkpFactor;
+
+      if (hpp <= 0) return Math.round(discountedPrice); // HPP tak diketahui
+      if (discountedPrice >= hppFloor - 0.01) return Math.round(discountedPrice); // (a)
+      if (levelPrice >= hppFloor - 0.01) return Math.round(levelPrice); // (b)
+
+      // (c) Level Harga pun di bawah HPP -> catat untuk peringatan, pakai harga normal.
+      groupPriceBlockedItems.push(item.name);
+      return basePrice;
+    }
+
+    // Harga grosir/tiering berdasarkan JUMLAH beli. Tier disimpan sebagai
+    // ItemPrice bernama "Grosir" dengan min_qty (lihat tab "Level Jumlah").
+    // Mengembalikan harga satuan terbaik (terendah) bila qty memenuhi tier.
+    function applyTierPrice(item, qty, basePrice) {
+      const q = parseFloat(qty) || 0;
+      const tiers = (item.prices || [])
+        .filter(
+          (p) =>
+            String(p.name || "").toLowerCase().trim() === "grosir" &&
+            parseFloat(p.min_qty) > 0 &&
+            parseFloat(p.price) > 0,
+        )
+        .sort((a, b) => parseFloat(b.min_qty) - parseFloat(a.min_qty));
+      // tier dgn min_qty terbesar yang masih <= qty
+      const tier = tiers.find((t) => q >= parseFloat(t.min_qty));
+      if (tier)
+        return Math.min(basePrice, Math.round(parseFloat(tier.price)));
+      return basePrice;
+    }
+
+    // Harga satuan final 1 baris keranjang: harga grup/level harga DULU,
+    // lalu harga grosir berdasarkan jumlah (ambil yang termurah utk pelanggan).
+    function computeLinePrice(item, basePrice, qty, supplierId = null) {
+      const groupPrice = applyDiscountGroupPrice(item, basePrice, supplierId);
+      return applyTierPrice(item, qty, groupPrice);
+    }
+
+    function notifyGroupPriceBlocked() {
+      if (!groupPriceBlockedItems.length) return;
+      const g = getActiveDiscountGroup();
+      const uniq = [...new Set(groupPriceBlockedItems)];
+      const names =
+        uniq.slice(0, 3).join(", ") +
+        (uniq.length > 3 ? `, +${uniq.length - 3} lainnya` : "");
+      showToast(
+        `⚠️ Harga grup ${g ? g.name : ""} di bawah modal untuk ${uniq.length} barang (${names}) — tetap dipakai harga normal.`,
+        "warning",
+      );
+      groupPriceBlockedItems = [];
+    }
+
+    function recalcCartPricesByGroup() {
+      groupPriceBlockedItems = [];
+      cart.forEach((cartItem) => {
+        const item = allItems.find((i) => i.id === cartItem.id);
+        if (!item) return;
+        const basePrice = cartItem.original_price || item.sell_price;
+        cartItem.price = computeLinePrice(
+          item,
+          basePrice,
+          cartItem.qty,
+          cartItem.supplier_id,
+        );
+      });
+
+      renderCart();
+      recalc();
+      notifyGroupPriceBlocked();
+    }
+
+    function promptQty(id, supplierId = null) {
+      const item = allItems.find((i) => i.id === id);
+      if (!item) return;
+      const availableQty = getAvailableCartStock(item);
+      if (availableQty <= 0) {
+        showToast("Stok " + item.name + " habis!", "error");
+        return;
+      }
+
+      pendingItemId = id;
+      pendingSupplierId = supplierId; // Simpan context supplier dari barcode
+      document.getElementById("qtyItemName").textContent =
+        item.name + (supplierId ? " (Barcode Khusus)" : "");
+      document.getElementById("qtyInp").value = "1";
+
+      // --- CEK APAKAH BARANG INI PUNYA HARGA DISKON ---
+      pendingPriceNormal = item.sell_price;
+      hasDiskon = false;
+      pendingPriceDiskon = 0;
+
+      let dPriceObj = (item.prices || []).find(
+        (p) => p.name === "Harga Diskon",
+      );
+      const priceBox = document.getElementById("priceSelectorBox");
+
+      if (dPriceObj && dPriceObj.price > 0) {
+        hasDiskon = true;
+        pendingPriceDiskon = dPriceObj.price;
+        document.getElementById("lblNormal").textContent =
+          fmtRp(pendingPriceNormal);
+        document.getElementById("lblDiskon").textContent =
+          fmtRp(pendingPriceDiskon);
+        priceBox.style.display = "block";
+        document.getElementById("rdoNormal").checked = true;
+      } else {
+        priceBox.style.display = "none";
+        document.getElementById("rdoNormal").checked = true;
+      }
+      // ------------------------------------------------
+
+      document.getElementById("modalQty").style.display = "flex";
+      activeModal = "qty";
+      changeQtyIdx(0);
+    }
+
+    function changeQtyIdx(target) {
+      qtyIdx = target;
+      const inp = document.getElementById("qtyInp"),
+        bBat = document.getElementById("btnQtyBatal"),
+        bSim = document.getElementById("btnQtySimpan");
+      [inp, bBat, bSim].forEach((el) => el.classList.remove("kb-focus"));
+      if (qtyIdx === 0) {
+        inp.classList.add("kb-focus");
+        inp.focus();
+        inp.select();
+      } else if (qtyIdx === 1) {
+        bBat.classList.add("kb-focus");
+        inp.blur();
+      } else if (qtyIdx === 2) {
+        bSim.classList.add("kb-focus");
+        inp.blur();
+      }
+    }
+
+    function confirmQty() {
+      const qty = parseDesimal(document.getElementById("qtyInp")) || 1;
+      const item = allItems.find((i) => i.id === pendingItemId);
+      if (!item) return;
+
+      // --- TENTUKAN HARGA FINAL YANG DIPILIH KASIR ---
+      let finalPrice = pendingPriceNormal;
+      if (hasDiskon && document.getElementById("rdoDiskon").checked) {
+        finalPrice = pendingPriceDiskon;
+      }
+
+      // 🔥 FIX BUG KERANJANG: Pisahkan item Normal & Diskon 🔥
+      const ex = cart.find(
+        (c) => c.id === pendingItemId && c.original_price === finalPrice,
+      );
+
+      groupPriceBlockedItems = [];
+      if (ex) {
+        const exIndex = cart.indexOf(ex);
+        const availableQty = getAvailableCartStock(item, exIndex);
+        if (ex.qty + qty > availableQty) {
+          showToast("Sisa stok tidak cukup!", "error");
+          return;
+        }
+        ex.qty = roundQty(ex.qty + qty);
+        ex.stock = availableQty;
+        // Hitung ulang harga satuan utk total qty (mis. harga grosir aktif)
+        ex.price = computeLinePrice(item, finalPrice, ex.qty, ex.supplier_id);
+      } else {
+        const availableQty = getAvailableCartStock(item);
+        if (qty > availableQty) {
+          showToast("Sisa stok tidak cukup!", "error");
+          return;
+        }
+        cart.push({
+          id: item.id,
+          name: item.name,
+          unit: item.unit?.abbreviation || item.unit?.name || "pcs",
+          original_price: finalPrice,
+          price: computeLinePrice(
+            item,
+            finalPrice,
+            roundQty(qty),
+            pendingSupplierId,
+          ),
+          qty: roundQty(qty),
+          stock: availableQty,
+          supplier_id: pendingSupplierId, // 🔥 Simpan ID Supplier jika dari barcode khusus
+          ppn_percent: item.ppn_percent, // tarif PPN barang (null = ikut tarif toko)
+        });
+      }
+      notifyGroupPriceBlocked();
+
+      document.getElementById("searchInp").value = "";
+      filterItems();
+      renderCart();
+      recalc();
+      closeModals();
+    }
+
+    function openPayModal() {
+      if (cart.length === 0) return showToast("Keranjang kosong!", "warning");
+      const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
+      document.getElementById("payTotalDisplay").textContent = fmtRp(total);
+      document.getElementById("payInpModal").value = toDesimal(total);
+      document.getElementById("modalPay").style.display = "flex";
+      activeModal = "pay";
+      payModalIdx = 1;
+      updatePayModalUI();
+      setTimeout(() => {
+        const i = document.getElementById("payInpModal");
+        i.focus();
+        i.select();
+      }, 50);
+    }
+
+    function changePayIdx(dir) {
+      payModalIdx = (payModalIdx + dir + 4) % 4;
+      updatePayModalUI();
+    }
+
+    function updatePayModalUI() {
+      const btns = [
+        document.getElementById("btnPayCancel"),
+        document.getElementById("btnPayCash"),
+        document.getElementById("btnPayTrans"),
+        document.getElementById("btnPayCard"),
+      ];
+      btns.forEach((b) => {
+        b.classList.remove("kb-focus");
+        b.classList.remove("active");
+      });
+      btns[payModalIdx].classList.add("kb-focus");
+      if (payModalIdx > 0) {
+        btns[payModalIdx].classList.add("active");
+        payMethod = payModalMethods[payModalIdx];
+      }
+    }
+
+    function confirmPayModal() {
+      document.getElementById("paidInp").value =
+        document.getElementById("payInpModal").value;
+      prosesBayar();
+    }
+
+    // =======================================================================
+    // FUNGSI BARU YANG DITAMBAHKAN UNTUK MENGATASI TOMBOL CASH/TRANSFER MATI
+    // =======================================================================
+    function setPayMethodAndConfirm(method) {
+      payMethod = method;
+      document.getElementById("paidInp").value =
+        document.getElementById("payInpModal").value;
+      prosesBayar();
+    }
+
+    function closeModals() {
+      document
+        .querySelectorAll(".modal-overlay")
+        .forEach((m) => (m.style.display = "none"));
+      activeModal = null;
+      document.getElementById("searchInp").focus();
+    }
+
+    function handleCustomerChange() {
+      const custId = document.getElementById("custSel").value;
+      const selectedCust = allCusts.find((c) => String(c.id) === String(custId));
+      document.getElementById("groupSel").value =
+        selectedCust?.group_id || selectedCust?.group?.id || "";
+      recalcCartPricesByGroup();
+    }
+
+    function handleDiscountGroupChange() {
+      recalcCartPricesByGroup();
+    }
+
+    function renderCart() {
+      const totalQty = cart.reduce((sum, item) => sum + item.qty, 0);
+      document.getElementById("cartFabBadge").textContent = fmtQty(totalQty);
+      document.getElementById("cartCount").textContent = fmtQty(totalQty);
+      const list = document.getElementById("cartList");
+      if (!cart.length) {
+        list.innerHTML =
+          '<div style="padding:32px;text-align:center;color:var(--text-muted);font-size:14px">Belum ada barang</div>';
+        return;
+      }
+      list.innerHTML = cart
+        .map((c, i) => {
+          let discInfo = "";
+          if (c.price < c.original_price) {
+            const diff = c.original_price - c.price;
+            const pct = Math.round((diff / c.original_price) * 100);
+            discInfo = `<span style="color:#f59e0b; font-size: 0.85em; font-weight: bold; margin-right: 5px;">[Diskon ${pct}% / -${fmtRp(diff)}]</span>`;
+          }
+          return `
+          <div class="cart-item">
+            <div class="ci-info">
+              <div class="ci-name">${c.name}</div>
+              <div class="ci-price">${discInfo}${fmtRp(c.price)} / ${c.unit || "pcs"}</div>
+            </div>
+            <div class="qty-ctrl">
+              <button class="qty-btn" onclick="changeQty(${i},-1)">−</button>
+              <span style="font-size:14px;font-weight:700;min-width:18px;text-align:center">${fmtQty(c.qty)}</span>
+              <button class="qty-btn" onclick="changeQty(${i},1)">+</button>
+            </div>
+            <div class="ci-sub">${fmtRp(c.price * c.qty)}</div>
+            <button class="ci-del" onclick="removeCart(${i})">✕</button>
+          </div>`;
+        })
+        .join("");
+    }
+
+    function changeQty(i, d) {
+      const item = allItems.find((x) => x.id === cart[i].id);
+      const availableQty = getAvailableCartStock(item, i);
+      cart[i].stock = availableQty;
+      cart[i].qty = Math.max(
+        1,
+        Math.min(availableQty, roundQty(cart[i].qty + d)),
+      );
+      // Harga satuan menyesuaikan jumlah (harga grosir/tier berdasarkan qty)
+      groupPriceBlockedItems = [];
+      cart[i].price = computeLinePrice(
+        item,
+        cart[i].original_price || item.sell_price,
+        cart[i].qty,
+        cart[i].supplier_id,
+      );
+      notifyGroupPriceBlocked();
+      renderCart();
+      recalc();
+    }
+    function removeCart(i) {
+      cart.splice(i, 1);
+      renderCart();
+      recalc();
+    }
+    function clearCart() {
+      cart = [];
+      renderCart();
+      recalc();
+      document.getElementById("searchInp").focus();
+    }
+    function recalc() {
+      const sub = cart.reduce((s, c) => s + c.price * c.qty, 0);
+      document.getElementById("subtotalEl").textContent = fmtRp(sub);
+      document.getElementById("totalEl").textContent = fmtRp(sub);
+      // Mode PKP: harga sudah termasuk PPN → tampilkan porsi PPN (info), total TIDAK berubah.
+      // PPN dihitung PER BARIS pakai tarif barang (c.ppn_percent), fallback tarif toko.
+      const ppnRow = document.getElementById("ppnRow");
+      const taxEl = document.getElementById("taxPct");
+      if (PKP.is_pkp) {
+        let ppn = 0;
+        const tarifSet = new Set();
+        cart.forEach((c) => {
+          const r = (c.ppn_percent != null ? c.ppn_percent : PKP.tarif) || 0;
+          if (r > 0) {
+            const g = c.price * c.qty;
+            ppn += g - g / (1 + r / 100);
+            tarifSet.add(r);
+          }
+        });
+        if (ppn > 0) {
+          document.getElementById("ppnLabel").textContent =
+            tarifSet.size === 1
+              ? `Termasuk PPN (${[...tarifSet][0]}%)`
+              : "Termasuk PPN";
+          document.getElementById("ppnEl").textContent = fmtRp(ppn);
+          if (ppnRow) ppnRow.style.display = "";
+        } else {
+          if (ppnRow) ppnRow.style.display = "none";
+        }
+        if (taxEl) taxEl.value = PKP.tarif;
+      } else {
+        if (ppnRow) ppnRow.style.display = "none";
+        if (taxEl) taxEl.value = 0;
+      }
+    }
+
+    // =======================================================================
+    // FUNGSI TAMPILAN MOBILE / HP
+    // =======================================================================
+    function toggleCartPanel() {
+      document.getElementById("cartPanel").classList.toggle("show");
+    }
+
+    function closeCartPanel() {
+      document.getElementById("cartPanel").classList.remove("show");
+    }
+
+    function handleMobilePay() {
+      openPayModal();
+    }
+
+    // =======================================================================
+    // API TRANSAKSI
+    // =======================================================================
+    async function prosesBayar() {
+      const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
+      const tendered = parseDesimal(document.getElementById("paidInp").value);
+      if (payMethod === "cash" && tendered < total)
+        return showToast("Uang kurang!", "error");
+      if (payMethod !== "cash" && tendered > total + 0.01)
+        return showToast("Pembayaran non-tunai tidak boleh melebihi tagihan", "error");
+      const paid = payMethod === "cash" ? total : tendered;
+      try {
+        if (typeof showLoading === "function") showLoading("Memproses...");
+        const sale = await api("POST", "/sales/", {
+          date: today(), // Menggunakan tanggal WITA
+          customer_id: document.getElementById("custSel").value || null,
+          discount: 0,
+          // Mode PKP: kirim tarif PPN; harga jual dianggap SUDAH termasuk PPN (dikupas di server).
+          tax: PKP.is_pkp && PKP.tarif > 0 ? PKP.tarif : 0,
+          tax_percent: PKP.is_pkp && PKP.tarif > 0 ? PKP.tarif : 0,
+          is_tax_included: true,
+          paid: paid,
+          cash_received: payMethod === "cash" ? tendered : null,
+          payment_method: payMethod,
+          items: cart.map((c) => ({
+            item_id: c.id,
+            qty: c.qty,
+            sell_price: c.price,
+            discount: 0,
+            ppn_percent: c.ppn_percent, // tarif PPN baris (null → server pakai tarif barang/toko)
+          })),
+        });
+        if (typeof hideLoading === "function") hideLoading();
+
+        applyLocalStockConsumption(cart);
+        clearCart();
+        filterItems();
+
+        // Tampilkan Modal Pilihan Cetak Struk
+        showReceipt(sale);
+      } catch (e) {
+        if (typeof hideLoading === "function") hideLoading();
+        showToast(e.message, "error");
+      }
+    }
+
+    function showReceipt(s) {
+      document.getElementById("rcptModal").style.display = "flex";
+      activeModal = "rcpt";
+      rcptIdx = 2;
+
+      // Panggil API Print secara otomatis jika diperlukan, atau isi Box struk
+      const box = document.getElementById("rcptBox");
+      box.innerHTML = `
+          <h2 style="text-align:center; margin-top:0;">Transaksi Berhasil!</h2>
+          <p style="text-align:center;">Kembalian: <b>${fmtRp(s.change)}</b></p>
+          <div style="display:flex; gap:10px; margin-top:20px;">
+            <button id="btnRcptTutup" class="rcpt-btn" style="flex:1; background:transparent; color:#ef4444; border: 2px solid #ef4444;" onclick="closeModals()">✕ Tutup</button>
+            <button id="btnRcptCetak" class="rcpt-btn" style="flex:1; background:var(--primary); color:white; border:none;" onclick='printReceipt(${JSON.stringify(s)})'>🖨️ Cetak</button>
+            <button id="btnRcptSelesai" class="rcpt-btn" style="flex:1; background:#10b981; color:white; border:none;" onclick="closeModals()">✓ Selesai</button>
+          </div>
+        `;
+      updateRcptUI();
+    }
+
+    function changeRcptIdx(dir) {
+      rcptIdx = (rcptIdx + dir + 3) % 3;
+      updateRcptUI();
+    }
+
+    function updateRcptUI() {
+      const btns = [
+        document.getElementById("btnRcptTutup"),
+        document.getElementById("btnRcptCetak"),
+        document.getElementById("btnRcptSelesai"),
+      ];
+      btns.forEach((b, i) => {
+        if (!b) return;
+        const isSelected = i === rcptIdx;
+        b.classList.toggle("kb-focus", isSelected);
+        if (isSelected) b.focus({ preventScroll: true });
+      });
+    }
+
+    async function printReceipt(saleData) {
+      try {
+        const ps = JSON.parse(
+          localStorage.getItem("ipos_print_settings") || "{}",
+        );
+
+        // 👇 INI YANG BENAR: Harus bawa ID penjualannya! 👇
+        await api("POST", `/sales/print/${saleData.id}`, { settings: ps });
+
+        showToast("Struk dikirim ke antrean printer!");
+        closeModals();
+      } catch (e) {
+        showToast("Gagal print: " + e.message, "error");
+      }
+    }
+
+    // Mulai inisialisasi awal
+    init();
+  </script>
+</body>
+
+</html>

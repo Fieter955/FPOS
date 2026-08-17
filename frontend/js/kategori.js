@@ -36,6 +36,16 @@ function editKat(c) {
   openKatModal(c);
 }
 
+function closeKatModal() {
+  const returnToItemModal = fromItemModal;
+  closeModal("mKat");
+  if (returnToItemModal) {
+    fromItemModal = false;
+    openModal("mBarang");
+    setTimeout(() => document.getElementById("fKat")?.focus({ preventScroll: true }), 0);
+  }
+}
+
 async function saveKat() {
   const name = document.getElementById("kNama").value.trim();
   if (!name) {
@@ -59,10 +69,10 @@ async function saveKat() {
     await refreshSelects();
     if (fromItemModal) {
       document.getElementById("fKat").value = saved.id;
-      openModal("mBarang");
+      closeKatModal();
+    } else {
+      closeModal("mKat");
     }
-    closeModal("mKat");
-    fromItemModal = false;
     loadKat();
   } catch (ex) {
     showToast(ex.message, "error");

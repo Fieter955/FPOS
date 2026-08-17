@@ -1,5 +1,5 @@
-from pydantic import BaseModel, EmailStr
-from typing import Optional, List
+from pydantic import BaseModel, EmailStr, field_validator
+from typing import Optional, List, Literal
 from datetime import date, datetime
 
 # ─── Auth ─────────────────────────────────────────────────────────────────────
@@ -155,6 +155,7 @@ class ItemCreate(BaseModel):
     buy_price: float = 0
     sell_price: float = 0
     profit_margin: float = 0
+    ppn_percent: Optional[float] = None   # tarif PPN barang (%); None → ikut tarif toko
     stock: float = 0
     min_stock: float = 0
     description: Optional[str] = None
@@ -173,6 +174,7 @@ class ItemUpdate(BaseModel):
     buy_price: Optional[float] = None
     sell_price: Optional[float] = None
     profit_margin: Optional[float] = None
+    ppn_percent: Optional[float] = None   # tarif PPN barang (%); None → ikut tarif toko
     min_stock: Optional[float] = None
     description: Optional[str] = None
     barcode: Optional[str] = None
@@ -197,10 +199,12 @@ class ItemOut(BaseModel):
     min_price: float = 0
     sell_price: float
     profit_margin: float
+    ppn_percent: Optional[float] = None   # tarif PPN barang (%); None → ikut tarif toko
     stock: float
     min_stock: float
     description: Optional[str]
     barcode: Optional[str]
+    image_path: Optional[str] = None
     is_discountable: bool
     is_active: bool
     category: Optional[CategoryOut] = None
@@ -212,6 +216,17 @@ class ItemOut(BaseModel):
     supplier_details: List[ItemSupplierOut] = []
     model_config = {"from_attributes": True}
 
+
+class ItemPriceChangeOut(BaseModel):
+    id: int
+    item_id: int
+    supplier_id: Optional[int] = None
+    change_type: str
+    old_price: float
+    new_price: float
+    changed_at: datetime
+    changed_by: Optional[int] = None
+    model_config = {"from_attributes": True}
 
 # ─── CustomerGroup ────────────────────────────────────────────────────────────
 class CustomerGroupCreate(BaseModel):
@@ -273,10 +288,19 @@ class SupplierCreate(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     PpnSupplier: float = 0
+    ppn_type: Optional[str] = None  # "included" | "excluded" | None
     credit_limit: float = 0
     due_date: int = 0
     item_ids: Optional[List[int]] = None
     model_config = {"from_attributes": True}
+
+    @field_validator("PpnSupplier", mode="before")
+    @classmethod
+    def normalize_empty_ppn(cls, value):
+        """Supplier baru tanpa setelan pajak selalu diperlakukan sebagai Non PPN."""
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return 0
+        return value
 
 class SupplierUpdate(BaseModel):
     name: Optional[str] = None
@@ -284,11 +308,17 @@ class SupplierUpdate(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     PpnSupplier: Optional[float] = None
+    ppn_type: Optional[str] = None  # "included" | "excluded" | None
     credit_limit: Optional[float] = None
     due_date: Optional[int] = None
     is_active: Optional[bool] = None
     item_ids: Optional[List[int]] = None
     model_config = {"from_attributes": True}
+
+# Request untuk menyamakan Jenis PPN seluruh barang supplier
+class SupplierPpnApply(BaseModel):
+    ppn_type: str            # "included" | "excluded"
+    dry_run: bool = False
 
 class SupplierOut(BaseModel):
     id: int
@@ -298,6 +328,7 @@ class SupplierOut(BaseModel):
     phone: Optional[str]
     email: Optional[str]
     PpnSupplier: Optional[float]
+    ppn_type: Optional[str] = None
     credit_limit: float
     due_date: int = 0
     deposit_balance: float = 0
@@ -318,6 +349,7 @@ class SupplierListOut(BaseModel):
     phone: Optional[str]
     email: Optional[str]
     PpnSupplier: Optional[float]
+    ppn_type: Optional[str] = None
     credit_limit: float
     due_date: int = 0
     deposit_balance: float = 0
@@ -351,15 +383,18 @@ class PurchaseItemCreate(BaseModel):
     sell_price: float = 0
     profit_margin: float = 0
     discount: float = 0
+    ppn_percent: Optional[float] = None   # tarif PPN baris (%); None → ikut tarif barang/toko (Included/PKP)
 
 class PurchaseCreate(BaseModel):
     number: Optional[str] = None
     date: date
+    due_date: Optional[date] = None
     supplier_id: Optional[int] = None
     discount: float = 0
     tax: float = 0
     tax_percent: float = 0
     is_tax_included: bool = True
+    tax_type: Optional[Literal["include", "exclude", "none"]] = None
     notes: Optional[str] = None
     items: List[PurchaseItemCreate]
     paid: float = 0
@@ -381,6 +416,7 @@ class PurchaseItemOut(BaseModel):
     disc3: float = 0
     disc4: float = 0
     total: float
+    ppn_percent: Optional[float] = None
     item: Optional[ItemOut] = None
     model_config = {"from_attributes": True}
 
@@ -388,6 +424,7 @@ class PurchaseOut(BaseModel):
     id: int
     number: str
     date: date
+    due_date: Optional[date] = None
     branch_id: Optional[int] = None
     supplier_id: Optional[int] = None
     from_po_id: Optional[int] = None
@@ -396,6 +433,7 @@ class PurchaseOut(BaseModel):
     tax: float
     tax_percent: float = 0
     is_tax_included: bool = True
+    tax_type: Optional[str] = None
     total: float
     paid: float
     status: str
@@ -515,6 +553,14 @@ class SaleItemCreate(BaseModel):
     qty: float
     sell_price: float
     discount: float = 0
+    ppn_percent: Optional[float] = None   # tarif PPN baris (%); None → ikut tarif barang/toko di server
+
+class SplitBayar(BaseModel):
+    """Satu baris tender pembayaran (bayar campur di kasir).
+    metode: cash | deposit | debit | credit_card | emoney
+    """
+    metode: str
+    jumlah: float
 
 class SaleCreate(BaseModel):
     number: Optional[str] = None
@@ -525,8 +571,13 @@ class SaleCreate(BaseModel):
     tax: float = 0
     tax_percent: float = 0
     is_tax_included: bool = True
+    other_cost: float = 0   # biaya lain ditagihkan ke pelanggan (nambah total) → Pendapatan Lain-lain
     paid: float = 0
+    # Uang tunai bruto yang diserahkan pelanggan, sebelum kembalian. `paid`
+    # tetap menyatakan nilai bersih yang diterapkan ke tagihan/jurnal.
+    cash_received: Optional[float] = None
     payment_method: str = "cash"
+    payments: Optional[List[SplitBayar]] = None   # rincian tender bayar campur; None → pakai logika lama (payment_method + paid)
     notes: Optional[str] = None
     items: List[SaleItemCreate]
 
@@ -537,6 +588,7 @@ class SaleItemOut(BaseModel):
     buy_price: float = 0
     sell_price: float
     discount: float
+    ppn_percent: float = 0
     total: float
     margin_amount: float = 0
     margin_percent: float = 0
@@ -553,6 +605,7 @@ class SaleOut(BaseModel):
     tax: float
     tax_percent: float = 0
     is_tax_included: bool = True
+    other_cost: float = 0
     total: float
     paid: float
     change: float

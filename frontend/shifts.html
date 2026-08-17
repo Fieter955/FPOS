@@ -81,12 +81,14 @@
             >
               <label>Modal Awal (Rp)</label>
               <input
-                type="number"
+                type="text"
                 id="openingCash"
                 class="input-control"
-                value="0"
-                min="0"
-                inputmode="numeric"
+                value="0,00"
+                inputmode="decimal"
+                data-input-desimal
+                data-min="0"
+                oninput="formatCashInput(this)"
                 style="font-size: 20px; font-weight: 700; text-align: right"
               />
             </div>
@@ -105,6 +107,20 @@
           </div>
 
           <div id="aktifShift" style="display: none">
+            <div
+              id="shiftConflict"
+              style="
+                display: none;
+                margin-bottom: 18px;
+                padding: 14px 16px;
+                border-radius: 12px;
+                border: 1px solid rgba(239, 68, 68, 0.45);
+                background: rgba(239, 68, 68, 0.12);
+                color: #ef4444;
+                font-weight: 700;
+                line-height: 1.5;
+              "
+            ></div>
             <div
               style="
                 display: flex;
@@ -143,7 +159,7 @@
                     margin-bottom: 4px;
                   "
                 >
-                  Kasir
+                  Kasir Pembuka
                 </div>
                 <div
                   id="sKasir"
@@ -250,14 +266,15 @@
         <div class="input-group">
           <label>Kas Aktual di Laci (hitung fisik)</label>
           <input
-            type="number"
+            type="text"
             id="closingCash"
             class="input-control"
-            value="0"
-            min="0"
-            inputmode="numeric"
+            value="0,00"
+            inputmode="decimal"
+            data-input-desimal
+            data-min="0"
+            oninput="formatCashInput(this); hitungSelisih()"
             style="font-size: 20px; font-weight: 700; text-align: right"
-            oninput="hitungSelisih()"
           />
         </div>
         <div
@@ -309,6 +326,14 @@
       let curShift = null,
         sysCash = 0;
 
+      function formatCashInput(input) {
+        formatDesimal(input);
+      }
+
+      function parseCashInput(input) {
+        return parseDesimal(input);
+      }
+
       async function init() {
         try {
           curShift = await api("GET", "/shifts/current");
@@ -317,6 +342,11 @@
             document.getElementById("noShift").style.display = "block";
           } else {
             document.getElementById("aktifShift").style.display = "block";
+            if (curShift.has_conflict) {
+              const conflict = document.getElementById("shiftConflict");
+              conflict.style.display = "block";
+              conflict.textContent = `${curShift.open_shift_count} shift lama masih terbuka di cabang ini. POS diblokir sementara. Tutup shift yang tampil ini, lalu ulangi sampai tersisa satu shift aktif.`;
+            }
             const nama =
               curShift.user_name ||
               curShift.user?.username ||
@@ -345,14 +375,20 @@
       }
 
       async function bukaShift() {
-        const cash =
-          parseFloat(document.getElementById("openingCash").value) || 0;
+        const cash = parseCashInput(document.getElementById("openingCash"));
         try {
           showLoading("Membuka shift...");
           await api("POST", "/shifts/open", { opening_cash: cash });
           hideLoading();
           showToast("Shift berhasil dibuka! 🔓");
-          location.reload();
+          const langsungKePos = await showConfirm(
+            "Shift berhasil dibuka. Apakah ingin langsung menuju POS?",
+          );
+          if (langsungKePos) {
+            location.href = "/pos";
+          } else {
+            location.reload();
+          }
         } catch (e) {
           hideLoading();
           showToast(e.message, "error");
@@ -363,8 +399,7 @@
         if (!curShift) return;
         sysCash =
           (curShift.opening_cash || 0) + (curShift.total_cash_sales || 0);
-        const closing =
-          parseFloat(document.getElementById("closingCash").value) || 0;
+        const closing = parseCashInput(document.getElementById("closingCash"));
         const selisih = closing - sysCash;
         const el = document.getElementById("selisihInfo");
         if (selisih === 0) {
@@ -392,7 +427,9 @@
     <div style="display:flex;justify-content:space-between;font-size:17px;font-weight:900;border-top:1px solid var(--border-color);padding-top:10px;margin-top:6px">
       <span>💰 Kas Sistem</span><b>${fmtRp(sysCash)}</b>
     </div>`;
-        document.getElementById("closingCash").value = sysCash;
+        const closingCashInput = document.getElementById("closingCash");
+        closingCashInput.value = Math.round(sysCash);
+        formatCashInput(closingCashInput);
         document.getElementById("closeNotes").value = "";
         hitungSelisih();
         openModal("mTutup");
@@ -405,8 +442,7 @@
           ))
         )
           return;
-        const closing =
-          parseFloat(document.getElementById("closingCash").value) || 0;
+        const closing = parseCashInput(document.getElementById("closingCash"));
         try {
           showLoading("Menutup shift...");
           const result = await api("POST", `/shifts/${curShift.id}/close`, {

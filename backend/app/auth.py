@@ -10,6 +10,7 @@ import pytz # 👈 TAMBAHAN IMPORT
 from .config import settings
 from .database import get_db
 from . import models
+from .permissions import has_role
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
@@ -64,7 +65,7 @@ def get_current_user(request: Request, token: str = Depends(oauth2_scheme), db: 
     # 🔥 LOGIKA PENCEGAT CABANG SECARA GLOBAL 🔥
     requested_branch = request.headers.get("X-Branch-ID")
     
-    if (user.role or "") == "admin":
+    if has_role(user, "admin"):
         if requested_branch: # Jika admin pilih cabang tertentu
             try:
                 b_id = int(requested_branch)
@@ -86,8 +87,11 @@ def get_current_user(request: Request, token: str = Depends(oauth2_scheme), db: 
     return user
 
 
-def require_admin(current_user: models.User = Depends(get_current_user)):
-    if (current_user.role or "") != "admin":
+def require_admin(request: Request, current_user: models.User = Depends(get_current_user)):
+    # Middleware hak akses menandai request yang sudah lolos izin modul. Ini
+    # mempertahankan dependency lama tanpa membuat role kustom selalu ditolak.
+    permission_authorized = bool(getattr(request.state, "permission_authorized", False))
+    if not has_role(current_user, "admin") and not permission_authorized:
         raise HTTPException(status_code=403, detail="Akses ditolak: hanya admin")
     return current_user
 

@@ -21,6 +21,8 @@ ACCOUNT_SALES = "4-1100"
 ACCOUNT_SALES_RETURN = "4-1200"
 ACCOUNT_COGS = "5-1100"
 ACCOUNT_TAX_EXPENSE = "5-2000" # Beban Pajak
+ACCOUNT_PPN_MASUKAN = "1-1550"  # PPN Masukan (Pajak Dibayar Dimuka) — dipisah dari modal saat toko PKP
+ACCOUNT_PPN_KELUARAN = "2-1200"  # Hutang PPN (Keluaran) — PPN yang dipungut ke pelanggan saat jual
 ACCOUNT_PURCHASE_DISCOUNT = "4-2000"   # Diskon Pembelian — untung retur (refund > modal FIFO)
 ACCOUNT_INVENTORY_VARIANCE = "5-1200"  # Beban Susut & Selisih Persediaan — rugi retur (refund < modal)
 
@@ -71,12 +73,24 @@ def create_customer_balance_write_off_journal(db: Session, *, date_val: date, am
 
 def create_purchase_journal(db: Session, *, date_val: date, number_ref: str,
                             supplier_name: str, total: float, paid: float,
-                            user_id: int, branch_id: int):
+                            user_id: int, branch_id: int,
+                            tax: float = 0, pisah_ppn: bool = False):
     # Pembelian bernilai 0 tidak menghasilkan debit/kredit apa pun -> jangan buat
     # jurnal "hantu" tanpa baris (lihat detail jurnal yang kosong di Akuntansi).
     if total <= 0:
         return None
-    entries = [{"code": ACCOUNT_INVENTORY, "debit": total, "credit": 0}]
+    tax = float(tax or 0)
+    if pisah_ppn and tax > 0:
+        # Toko PKP: PPN ("PPN Masukan") dipisah jadi aset yang bisa dikreditkan ke negara,
+        # sehingga modal/persediaan = nilai net (tanpa PPN). Lihat CLAUDE.md & rencana PKP.
+        net = total - tax
+        entries = [
+            {"code": ACCOUNT_INVENTORY, "debit": net, "credit": 0},
+            {"code": ACCOUNT_PPN_MASUKAN, "debit": tax, "credit": 0},
+        ]
+    else:
+        # Non-PKP (default): PPN melebur jadi bagian modal/persediaan (1-1400).
+        entries = [{"code": ACCOUNT_INVENTORY, "debit": total, "credit": 0}]
     if paid > 0:
         entries.append({"code": ACCOUNT_CASH, "debit": 0, "credit": paid})
     payable = total - paid
@@ -96,8 +110,18 @@ def create_purchase_journal(db: Session, *, date_val: date, number_ref: str,
 
 def create_purchase_reversal_journal(db: Session, *, date_val: date, number_ref: str,
                                      total: float, paid: float, user_id: int,
-                                     branch_id: int):
-    entries = [{"code": ACCOUNT_INVENTORY, "debit": 0, "credit": total}]
+                                     branch_id: int,
+                                     tax: float = 0, pisah_ppn: bool = False):
+    tax = float(tax or 0)
+    if pisah_ppn and tax > 0:
+        # Kebalikan pembelian PKP: PPN Masukan (1-1550) ikut dibalik, persediaan dibalik NET.
+        net = total - tax
+        entries = [
+            {"code": ACCOUNT_INVENTORY, "debit": 0, "credit": net},
+            {"code": ACCOUNT_PPN_MASUKAN, "debit": 0, "credit": tax},
+        ]
+    else:
+        entries = [{"code": ACCOUNT_INVENTORY, "debit": 0, "credit": total}]
     if paid > 0:
         entries.append({"code": ACCOUNT_CASH, "debit": paid, "credit": 0})
     payable = total - paid
@@ -255,7 +279,8 @@ def create_purchase_return_journal(db: Session, *, date_val: date, number_ref: s
                                    supplier_name: str, total_inventory: float,
                                    total_tax: float, is_tax_included: bool,
                                    user_id: int, branch_id: int,
-                                   total_carrying: Optional[float] = None):
+                                   total_carrying: Optional[float] = None,
+                                   ppn_dipisah: bool = False):
     """Jurnal retur pembelian dengan SELISIH HARGA.
 
     Supplier (1-1600) ditagih sebesar refund disepakati (`total_inventory + PPN`); Persediaan
@@ -278,8 +303,12 @@ def create_purchase_return_journal(db: Session, *, date_val: date, number_ref: s
             {"code": ACCOUNT_SALDO_SUPPLIER, "debit": total_to_supplier, "credit": 0},
             {"code": ACCOUNT_INVENTORY, "debit": 0, "credit": total_inventory},
         ]
-        if total_tax > 0 and not is_tax_included:
-            entries.append({"code": ACCOUNT_TAX_EXPENSE, "debit": 0, "credit": total_tax})
+        if total_tax > 0:
+            if ppn_dipisah:
+                # PKP: balikkan PPN Masukan (1-1550) yang dipisah saat beli.
+                entries.append({"code": ACCOUNT_PPN_MASUKAN, "debit": 0, "credit": total_tax})
+            elif not is_tax_included:
+                entries.append({"code": ACCOUNT_TAX_EXPENSE, "debit": 0, "credit": total_tax})
         return _auto_journal(
             db, date_val, number_ref,
             f"Retur Pembelian {number_ref} - {supplier_name}",
@@ -288,6 +317,32 @@ def create_purchase_return_journal(db: Session, *, date_val: date, number_ref: s
 
     # ── Mode FIFO: biaya batch sudah landed (incl pajak) → tanpa kaki pajak terpisah ──
     carrying = float(total_carrying)
+
+    # ── Mode PKP (faktur ini dulu memisah PPN): balikkan PPN Masukan (1-1550) terpisah; selisih
+    #    harga dihitung pada NILAI NET barang (total_inventory) vs biaya batch nyata (carrying). ──
+    if ppn_dipisah and total_tax > 0.005:
+        variance = total_inventory - carrying
+        if variance > 0.005:
+            if not db.query(models.Account).filter(models.Account.code == ACCOUNT_PURCHASE_DISCOUNT).first():
+                carrying, variance = total_inventory, 0.0  # akun selisih tak ada → serap ke Persediaan
+        elif variance < -0.005:
+            if not db.query(models.Account).filter(models.Account.code == ACCOUNT_INVENTORY_VARIANCE).first():
+                carrying, variance = total_inventory, 0.0
+        entries = [
+            {"code": ACCOUNT_SALDO_SUPPLIER, "debit": total_to_supplier, "credit": 0},
+            {"code": ACCOUNT_INVENTORY, "debit": 0, "credit": carrying},
+            {"code": ACCOUNT_PPN_MASUKAN, "debit": 0, "credit": total_tax},
+        ]
+        if variance > 0.005:
+            entries.append({"code": ACCOUNT_PURCHASE_DISCOUNT, "debit": 0, "credit": variance})
+        elif variance < -0.005:
+            entries.append({"code": ACCOUNT_INVENTORY_VARIANCE, "debit": -variance, "credit": 0})
+        return _auto_journal(
+            db, date_val, number_ref,
+            f"Retur Pembelian {number_ref} - {supplier_name}",
+            entries, user_id, branch_id
+        )
+
     variance = total_to_supplier - carrying  # refund(incl pajak) − biaya landed nyata
 
     # Hanya akui selisih bila akunnya tersedia; jika tidak, serap ke Persediaan (2 kaki).
@@ -331,10 +386,13 @@ def create_sale_return_journal(db: Session, *, date_val: date, number_ref: str,
         {"code": ACCOUNT_COGS, "debit": 0, "credit": total_cogs}
     ]
     
-    if total_tax > 0 and not is_tax_included:
-        # Beban PPN ditanggung toko
-        entries.append({"code": ACCOUNT_TAX_EXPENSE, "debit": total_tax, "credit": 0})
-        
+    if total_tax > 0:
+        # PPN Keluaran yang dipungut saat jual ikut dibalik → kurangi Hutang PPN (2-1200),
+        # KONSISTEN dgn jurnal penjualan yang meng-kredit 2-1200. Berlaku untuk penjualan
+        # INKLUSIF (PKP: PPN dikupas mundur dari harga jual oleh pemanggil) MAUPUN eksklusif
+        # (PPN ditambah di atas). `is_tax_included` tak lagi menentukan — yang penting ada PPN.
+        entries.append({"code": ACCOUNT_PPN_KELUARAN, "debit": total_tax, "credit": 0})
+
     return _auto_journal(
         db, date_val, number_ref,
         f"Retur Penjualan {number_ref} - {customer_name}",

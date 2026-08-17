@@ -8,6 +8,7 @@ from ..database import get_db
 from .. import models
 from ..auth import get_current_user, write_audit, require_admin
 from ..services.virtual_units import get_required_stock_qty, is_virtual_variant
+from ..services.tax_context import purchase_tax_type
 
 router = APIRouter()
 WITA = pytz.timezone("Asia/Makassar")
@@ -80,6 +81,7 @@ def get_purchase_history_items(
             "purchase_number": it.purchase.number,
             "supplier_name": it.purchase.supplier.name if it.purchase.supplier else "-",
             "is_tax_included": it.purchase.is_tax_included,
+            "tax_type": purchase_tax_type(it.purchase),
             "tax_percent": it.purchase.tax_percent
         })
     return result
@@ -280,8 +282,10 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
     # gagal di tengah jalan dan meninggalkan stok berpindah tanpa pencatatan GL.
     from .accounting import pastikan_akun_ada
     _akun_wajib = ["2-1300", "4-1200", "1-1400", "5-1100"]
-    if not is_tax_included:
-        _akun_wajib.append("5-2000")
+    # Pastikan 2-1200 ada bila penjualan asli MEMUNGUT PPN — termasuk faktur tarif-campur yang
+    # tax_percent header-nya 0 tetapi ada baris ber-PPN (sale.tax > 0).
+    if (tax_percent and tax_percent > 0) or (getattr(sale, "tax", 0) or 0) > 0:
+        _akun_wajib.append("2-1200")  # PPN Keluaran dibalik ke Hutang PPN (inklusif & eksklusif)
     pastikan_akun_ada(db, _akun_wajib)
 
     retur = models.SaleReturn(
@@ -320,12 +324,26 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
         input_price = it.get("price")
         actual_price = input_price if input_price is not None else sale_item.sell_price
 
-        line_sales = it["qty"] * actual_price
+        gross_line = it["qty"] * actual_price
+        # Pisahkan PPN agar KONSISTEN dgn jurnal JUAL: 4-1200 (Retur Penjualan) menerima nilai
+        # EX-PPN & 2-1200 (PPN Keluaran) ikut dibalik. Tarif PER BARIS: utamakan tarif yang
+        # TERSIMPAN di baris penjualan (akurat utk faktur tarif-campur); penjualan LAMA (ppn baris
+        # 0) → pakai tarif header sbg cadangan. Inklusif → kupas PPN MUNDUR (mirror
+        # hitung_total_penjualan di sales.py); eksklusif → PPN di atas. Tarif 0 → tanpa PPN.
+        line_tarif = sale_item.ppn_percent
+        if not line_tarif or line_tarif <= 0:
+            line_tarif = tax_percent or 0
+        if line_tarif and line_tarif > 0:
+            if is_tax_included:
+                line_sales = gross_line / (1 + line_tarif / 100)
+                line_tax = gross_line - line_sales
+            else:
+                line_sales = gross_line
+                line_tax = gross_line * (line_tarif / 100)
+        else:
+            line_sales = gross_line
+            line_tax = 0.0
         total_sales += line_sales
-        
-        line_tax = 0.0
-        if not is_tax_included:
-            line_tax = line_sales * (tax_percent / 100)
         total_tax += line_tax
         
         # COGS yang dibalik dihitung di bawah (blok "Kembalikan stok"): dari biaya lapisan FIFO
@@ -439,7 +457,9 @@ def get_purchase_returns(skip: int = 0, limit: int = 100,
             "purchase_id": r.purchase_id,
             "purchase_number": purchase.number if purchase else "-",
             "supplier_name": purchase.supplier.name if purchase and purchase.supplier else "-",
-            "total": r.total, "reason": r.reason, "notes": r.notes,
+            "total": r.total,
+            "total_carrying": r.total_carrying, "selisih": r.selisih,
+            "reason": r.reason, "notes": r.notes,
             "items": items_out
         })
     return result
@@ -464,16 +484,20 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
     total_carrying = 0.0    # biaya modal FIFO nyata yang keluar (untuk selisih harga)
     total_tax = 0.0
     
-    # Ambil info pajak dari pembelian asli jika tidak dikirim dari frontend
-    is_tax_included = data.get("is_tax_included", purchase.is_tax_included if hasattr(purchase, 'is_tax_included') else True)
-    tax_percent = data.get("tax_percent", purchase.tax_percent if hasattr(purchase, 'tax_percent') else 0.0)
+    # Pajak retur selalu mengikuti faktur asli. Nilai dari frontend hanya
+    # dipakai untuk tampilan lama, bukan sebagai sumber perhitungan akuntansi.
+    tax_type = purchase_tax_type(purchase)
+    is_tax_included = tax_type == "include"
+    tax_percent = float(getattr(purchase, "tax_percent", 0) or 0)
 
     # 🔒 Pastikan akun jurnal retur tersedia SEBELUM stok dimutasi, supaya jurnal tidak gagal
     # di tengah jalan dan meninggalkan stok berpindah tanpa pencatatan GL. (Akun selisih
     # 4-2000/5-1200 sengaja TIDAK dipaksa ada — sudah ada fallback 2-kaki di journal_service.)
     from .accounting import pastikan_akun_ada
     _akun_wajib = ["1-1600", "1-1400"]
-    if not is_tax_included:
+    if getattr(purchase, "ppn_dipisah", False):
+        _akun_wajib.append("1-1550")  # PKP: PPN Masukan (1-1550) ikut dibalik saat retur
+    elif tax_type == "exclude" and tax_percent > 0:
         _akun_wajib.append("5-2000")
     pastikan_akun_ada(db, _akun_wajib)
 
@@ -500,12 +524,27 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
         input_price = it.get("price")
         actual_price = input_price if input_price is not None else pur_item.buy_price
 
-        line_inventory = it["qty"] * actual_price
-        total_inventory += line_inventory
-        
-        line_tax = 0.0
-        if not is_tax_included:
+        line_gross = it["qty"] * actual_price
+        if tax_type == "include" and getattr(purchase, "ppn_dipisah", False):
+            # PKP + Included: harga retur sudah termasuk PPN → kupas mundur PER-BARIS pakai tarif
+            # saat beli (pur_item.ppn_percent; mundur ke tarif header bila kosong). total_inventory =
+            # NET, total_tax = PPN → jurnal membalik PPN Masukan (1-1550).
+            r = float(pur_item.ppn_percent) if getattr(pur_item, "ppn_percent", None) is not None else float(tax_percent or 0)
+            line_inventory = line_gross / (1 + r / 100) if r > 0 else line_gross
+            line_tax = line_gross - line_inventory
+        elif tax_type == "include":
+            # non-PKP Included: PPN melebur di modal (tak dipisah) → perilaku lama, tanpa kaki pajak.
+            line_inventory = line_gross
+            line_tax = 0.0
+        elif tax_type == "exclude":
+            # Excluded: harga ex-PPN, PPN ditambah di atas (satu tarif header).
+            line_inventory = line_gross
             line_tax = line_inventory * (tax_percent / 100)
+        else:
+            # Tanpa PPN: harga barang dikembalikan apa adanya.
+            line_inventory = line_gross
+            line_tax = 0.0
+        total_inventory += line_inventory
         total_tax += line_tax
 
         db.add(models.PurchaseReturnItem(
@@ -562,7 +601,19 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
 
     total = total_inventory + total_tax
     retur.total = total
-    
+    # Keterlacakan selisih retur (untung+/rugi−) — sejajar dgn variance jurnal di
+    # journal_service.create_purchase_return_journal: mode gudang/FIFO pakai modal NYATA yang
+    # keluar; mode PKP (ppn_dipisah) hitung selisih pada nilai NET; tanpa gudang → tak ada selisih.
+    if gudang_aktif:
+        retur.total_carrying = total_carrying
+        if getattr(purchase, "ppn_dipisah", False) and total_tax > 0.005:
+            retur.selisih = total_inventory - total_carrying
+        else:
+            retur.selisih = (total_inventory + total_tax) - total_carrying
+    else:
+        retur.total_carrying = total_inventory  # tanpa lapisan FIFO: modal = nilai refund
+        retur.selisih = 0.0
+
     # Update Supplier Deposit Balance
     if purchase.supplier_id:
         supp = db.query(models.Supplier).with_for_update().get(purchase.supplier_id)
@@ -582,13 +633,20 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
         total_carrying=(total_carrying if gudang_aktif else None),
         total_tax=total_tax,
         is_tax_included=is_tax_included,
+        # Ikuti mode PPN saat faktur DIBELI (tersimpan di faktur), bukan saklar PKP saat ini.
+        ppn_dipisah=bool(getattr(purchase, "ppn_dipisah", False)),
         user_id=current_user.id,
         branch_id=purchase.branch_id
     )
 
     write_audit(db, current_user.id, "CREATE", "purchase_returns", retur.id, f"Retur {purchase.number}")
     db.commit()
-    return {"id": retur.id, "number": retur.number, "total": total, "message": "Retur pembelian berhasil"}
+    return {
+        "id": retur.id, "number": retur.number, "total": total,
+        "total_carrying": round(retur.total_carrying or 0, 2),
+        "selisih": round(retur.selisih or 0, 2),
+        "message": "Retur pembelian berhasil",
+    }
 
 
 # ══════════════════════════════════════════════════════════════════════════════

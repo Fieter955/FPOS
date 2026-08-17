@@ -409,6 +409,7 @@ def get_default_accounts() -> list[tuple[str, str, str, str, str]]:
             # --- ASET ---
             ("1-1100", "Kas", "asset", "current_asset", "debit"),
             ("1-1200", "Bank", "asset", "current_asset", "debit"),
+            ("1-1250", "E-Money / Dompet Digital", "asset", "current_asset", "debit"), # BARU: uang masuk via e-money/dompet digital
             ("1-1300", "Piutang Usaha", "asset", "current_asset", "debit"),
             ("1-1400", "Persediaan Barang", "asset", "current_asset", "debit"),
             ("1-1500", "Uang Muka Pembelian", "asset", "current_asset", "debit"),
@@ -439,6 +440,7 @@ def get_default_accounts() -> list[tuple[str, str, str, str, str]]:
             ("4-1100", "Penjualan", "revenue", "operating", "credit"),
             ("4-1150", "Diskon Penjualan", "revenue", "operating", "debit"), # BARU
             ("4-1200", "Retur Penjualan", "revenue", "operating", "debit"),
+            ("4-1500", "Pendapatan Biaya Lain (Penjualan)", "revenue", "operating", "credit"), # BARU: biaya lain ditagihkan ke pelanggan di kasir
             ("4-1300", "Pendapatan Lain-lain (Surplus Opname)", "revenue", "non_operating", "credit"),
             ("4-1400", "Pendapatan Lain-lain (Penghapusan Saldo)", "revenue", "non_operating", "credit"),
             ("4-2000", "Diskon Pembelian", "revenue", "non_operating", "credit"), # BARU
@@ -513,9 +515,6 @@ def seed_default_accounts(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    if "admin" not in (current_user.role or ""):
-        raise HTTPException(403, "Hanya admin")
-
     created = ensure_default_accounts(db)
     db.commit()
     if created == 0:
@@ -1668,6 +1667,75 @@ def get_setup_status(db: Session = Depends(get_db), current_user: models.User = 
     # 🛡️ FIX TYPO: Sesuai dengan nama kolom di models.py (tanpa 'd')
     status = getattr(branch, 'is_setup_complete', False)
     return {"is_setup_completed": status}
+
+
+class PkpStatusIn(BaseModel):
+    is_pkp: bool
+    tarif_ppn: Optional[float] = None
+
+
+def _toko_pusat(db: Session):
+    """Toko Pusat = penyimpan status company-wide (PKP). Fallback ke cabang pertama."""
+    return db.query(models.Branch).get(1) or db.query(models.Branch).order_by(models.Branch.id).first()
+
+
+@router.get("/pkp-status")
+def get_pkp_status(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Status PKP toko (company-wide, disimpan di Toko Pusat). Saat ON, PPN pembelian dipisah &
+    kasir memungut PPN (harga jual dianggap SUDAH termasuk PPN tarif `tarif_ppn`)."""
+    branch = _toko_pusat(db)
+    return {
+        "is_pkp": bool(getattr(branch, "is_pkp", False)) if branch else False,
+        "tarif_ppn": float(getattr(branch, "tarif_ppn", 11) or 11) if branch else 11.0,
+    }
+
+
+@router.post("/pkp-status")
+def set_pkp_status(
+    data: PkpStatusIn,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Nyalakan/matikan mode PKP. Saat ON, PPN pada pembelian BARU dipisah ke PPN Masukan
+    (1-1550) dan kasir memungut PPN penjualan (harga termasuk PPN). Pembelian/penjualan lama
+    tidak berubah. Hanya admin."""
+    branch = _toko_pusat(db)
+    if not branch:
+        raise HTTPException(400, "Sistem belum memiliki cabang.")
+    branch.is_pkp = bool(data.is_pkp)
+    if data.tarif_ppn is not None:
+        branch.tarif_ppn = float(data.tarif_ppn)
+    db.add(branch)
+    db.commit()
+    return {"is_pkp": bool(branch.is_pkp), "tarif_ppn": float(branch.tarif_ppn or 0)}
+
+
+@router.get("/ppn-report")
+def get_ppn_report(
+    start: date,
+    end: date,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Ringkasan PPN satu periode untuk cabang aktif (untuk lapor SPT Masa PPN):
+    - PPN Keluaran = PPN yang dipungut saat JUAL → gerakan bersih akun 2-1200.
+    - PPN Masukan  = PPN yang dibayar saat BELI → gerakan bersih akun 1-1550.
+    - Kurang Bayar (disetor) = Keluaran − Masukan bila positif; selisih negatif = Lebih Bayar."""
+    b_id = resolve_active_branch_id(db, current_user)
+    masukan_acc = db.query(models.Account).filter(models.Account.code == "1-1550").first()
+    keluaran_acc = db.query(models.Account).filter(models.Account.code == "2-1200").first()
+    ppn_masukan = float(get_account_balance(db, masukan_acc.id, start_date=start, end_date=end, branch_id=b_id)) if masukan_acc else 0.0
+    ppn_keluaran = float(get_account_balance(db, keluaran_acc.id, start_date=start, end_date=end, branch_id=b_id)) if keluaran_acc else 0.0
+    net = ppn_keluaran - ppn_masukan
+    return {
+        "start": str(start),
+        "end": str(end),
+        "branch_id": b_id,
+        "ppn_keluaran": round(ppn_keluaran, 2),
+        "ppn_masukan": round(ppn_masukan, 2),
+        "kurang_bayar": round(net, 2) if net > 0 else 0.0,
+        "lebih_bayar": round(-net, 2) if net < 0 else 0.0,
+    }
 
 
 @router.post("/setup-initial-balance")

@@ -41,10 +41,37 @@ function openMerekModal(item = null) {
     if (desk) desk.value = item.description || "";
   }
   openModal("mMerek");
+
+  // Fokus eksplisit ke Nama Merek. Jalankan lagi sesudah event klik/layout selesai
+  // karena WebView dapat mengembalikan fokus ke tombol "+" setelah handler onclick.
+  const focusNama = () => {
+    if (
+      nama &&
+      document.getElementById("mMerek")?.style.display === "flex"
+    ) {
+      nama.focus({ preventScroll: true });
+    }
+  };
+  focusNama();
+  requestAnimationFrame(focusNama);
+  setTimeout(focusNama, 0);
 }
 
 function editMerek(b) {
   openMerekModal(b);
+}
+
+function closeMerekModal() {
+  const returnToItemModal = fromItemModal;
+  closeModal("mMerek");
+
+  // Jika dialog merek dibuka dari form barang, tampilkan kembali form yang sama.
+  // Form tidak diinisialisasi ulang agar seluruh input barang tetap utuh.
+  if (returnToItemModal) {
+    fromItemModal = false;
+    openModal("mBarang");
+    setTimeout(() => document.getElementById("fMerek")?.focus({ preventScroll: true }), 0);
+  }
 }
 
 async function saveMerek() {
@@ -70,10 +97,10 @@ async function saveMerek() {
     await refreshSelects();
     if (fromItemModal) {
       document.getElementById("fMerek").value = saved.id;
-      openModal("mBarang");
+      closeMerekModal();
+    } else {
+      closeModal("mMerek");
     }
-    closeModal("mMerek");
-    fromItemModal = false;
     loadMerek();
   } catch (ex) {
     showToast(ex.message, "error");

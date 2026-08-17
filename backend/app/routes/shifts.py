@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func, extract
-from datetime import datetime, date
-from typing import Optional
+from sqlalchemy.exc import IntegrityError
+from datetime import datetime
 from ..database import get_db
 from .. import models
-from ..auth import get_current_user, write_audit, get_query # 👈 TAMBAHAN get_query
+from ..auth import get_current_user, write_audit
+from ..services.shift_service import open_branch_shifts, require_active_branch_id
 
 router = APIRouter()
 import pytz
@@ -15,55 +15,69 @@ def get_local_datetime(): return datetime.now(WITA)
 @router.get("/current")
 def get_current_shift(db: Session = Depends(get_db),
                       current_user: models.User = Depends(get_current_user)):
-    # 👇 UBAH: Gunakan get_query agar hanya mencari shift aktif di cabangnya
-    shift = get_query(db, models.Shift, current_user).filter(
-        models.Shift.user_id == current_user.id,
-        models.Shift.status == "open"
-    ).order_by(models.Shift.id.desc()).first()
-    
-    if not shift:
+    shifts = open_branch_shifts(db, current_user)
+    if not shifts:
         return None
-    return _shift_summary(shift, db)
+
+    # Data lama mungkin masih mempunyai beberapa shift terbuka per cabang.
+    # Tampilkan yang paling lama agar dapat ditutup manual satu per satu, tetapi
+    # tandai konflik supaya frontend tidak mengizinkan kasir masuk ke POS.
+    result = _shift_summary(shifts[0], db)
+    result["has_conflict"] = len(shifts) > 1
+    result["open_shift_count"] = len(shifts)
+    return result
 
 
 @router.post("/open")
 def open_shift(data: dict, db: Session = Depends(get_db),
                current_user: models.User = Depends(get_current_user)):
-    # 👇 UBAH: Cek apakah sudah ada shift terbuka di cabang ini
-    existing = get_query(db, models.Shift, current_user).filter(
-        models.Shift.user_id == current_user.id,
-        models.Shift.status == "open"
-    ).with_for_update().first()
-    
-    if existing:
-        raise HTTPException(400, "Sudah ada shift yang terbuka. Tutup shift dulu.")
+    branch_id = require_active_branch_id(current_user)
+
+    # Kunci baris cabang pada DB yang mendukung SELECT FOR UPDATE. Bersama unique
+    # partial index SQLite, ini mencegah dua kasir membuka shift secara bersamaan.
+    branch = (
+        db.query(models.Branch)
+        .filter(models.Branch.id == branch_id)
+        .with_for_update()
+        .first()
+    )
+    if not branch:
+        raise HTTPException(400, "Cabang aktif tidak ditemukan.")
+    if open_branch_shifts(db, current_user, for_update=True, limit=1):
+        raise HTTPException(400, "Cabang ini sudah memiliki shift yang terbuka.")
 
     shift = models.Shift(
         user_id=current_user.id,
-        branch_id=current_user.active_branch_id, # 👈 STEMPEL CABANG DI SINI!
+        branch_id=branch_id,
         opening_cash=float(data.get("opening_cash", 0)),
         status="open"
     )
     db.add(shift)
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(400, "Cabang ini sudah memiliki shift yang terbuka.")
+
+    write_audit(db, current_user.id, "CREATE", "shifts", shift.id,
+                f"Buka shift cabang {branch_id} dengan kas awal {shift.opening_cash}")
     db.commit()
     db.refresh(shift)
-    
-    write_audit(db, current_user.id, "CREATE", "shifts", shift.id,
-                f"Buka shift dengan kas awal {shift.opening_cash}")
-    
+
     return {"id": shift.id, "message": "Shift dibuka", "opened_at": shift.opened_at.isoformat() if shift.opened_at else None}
 
 
 @router.post("/{shift_id}/close")
 def close_shift(shift_id: int, data: dict, db: Session = Depends(get_db),
                 current_user: models.User = Depends(get_current_user)):
-    # 👇 UBAH: Gunakan get_query untuk keamanan tutup shift
-    shift = get_query(db, models.Shift, current_user).filter(models.Shift.id == shift_id).with_for_update().first()
-    
+    branch_id = require_active_branch_id(current_user)
+    shift = db.query(models.Shift).filter(
+        models.Shift.id == shift_id,
+        models.Shift.branch_id == branch_id,
+    ).with_for_update().first()
+
     if not shift: raise HTTPException(404, "Shift tidak ditemukan")
     if shift.status == "closed": raise HTTPException(400, "Shift sudah ditutup")
-    if shift.user_id != current_user.id and current_user.role != "admin":
-        raise HTTPException(403, "Bukan shift Anda")
 
     # Hitung total cash dari penjualan selama shift ini
     summary = _shift_summary(shift, db)
@@ -77,9 +91,17 @@ def close_shift(shift_id: int, data: dict, db: Session = Depends(get_db),
     shift.closed_at = get_local_datetime()
     shift.status = "closed"
     shift.notes = data.get("notes")
+    opener_name = shift.user.full_name or shift.user.username
+    closer_name = current_user.full_name or current_user.username
+    write_audit(
+        db,
+        current_user.id,
+        "UPDATE",
+        "shifts",
+        shift.id,
+        f"Tutup shift cabang {branch_id}; dibuka oleh {opener_name}; ditutup oleh {closer_name}",
+    )
     db.commit()
-
-    write_audit(db, current_user.id, "UPDATE", "shifts", shift.id, "Tutup shift")
 
     return {
         "message": "Shift ditutup",
@@ -98,12 +120,9 @@ def close_shift(shift_id: int, data: dict, db: Session = Depends(get_db),
 def get_shifts(skip: int = 0, limit: int = 50,
             db: Session = Depends(get_db),
                current_user: models.User = Depends(get_current_user)):
-    # 👇 UBAH: Filter list shift berdasarkan cabang yang aktif
-    q = get_query(db, models.Shift, current_user)
-    
-    if current_user.role != "admin":
-        q = q.filter(models.Shift.user_id == current_user.id)
-        
+    branch_id = require_active_branch_id(current_user)
+    q = db.query(models.Shift).filter(models.Shift.branch_id == branch_id)
+
     shifts = q.order_by(models.Shift.id.desc()).offset(skip).limit(limit).all()
     return [_shift_summary(s, db) for s in shifts]
 
@@ -111,9 +130,12 @@ def get_shifts(skip: int = 0, limit: int = 50,
 @router.get("/{shift_id}")
 def get_shift(shift_id: int, db: Session = Depends(get_db),
               current_user: models.User = Depends(get_current_user)):
-    # 👇 UBAH: Detail shift hanya bisa dibuka jika sesuai cabangnya
-    shift = get_query(db, models.Shift, current_user).filter(models.Shift.id == shift_id).first()
-    
+    branch_id = require_active_branch_id(current_user)
+    shift = db.query(models.Shift).filter(
+        models.Shift.id == shift_id,
+        models.Shift.branch_id == branch_id,
+    ).first()
+
     if not shift: raise HTTPException(404, "Shift tidak ditemukan")
     return _shift_summary(shift, db, detail=True)
 
@@ -128,6 +150,7 @@ def _shift_summary(shift: models.Shift, db: Session, detail: bool = False):
 
     result = {
         "id": shift.id,
+        "branch_id": shift.branch_id,
         "user_id": shift.user_id,
         "user_name": shift.user.full_name or shift.user.username,
         "opening_cash": shift.opening_cash,

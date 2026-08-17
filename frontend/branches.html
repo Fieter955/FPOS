@@ -240,6 +240,7 @@
             await api("POST", "/branches/", payload);
             showToast("Cabang baru dibuat ✓");
           }
+          await notifyBranchListChanged();
           hideLoading();
           closeModal("mCabang");
           load();
@@ -260,6 +261,7 @@
         try {
           showLoading();
           await api("DELETE", `/branches/${id}`);
+          await notifyBranchListChanged();
           hideLoading();
           showToast("Cabang dinonaktifkan ✓");
           load();

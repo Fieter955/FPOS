@@ -172,7 +172,10 @@ def get_item_purchase_history(
     query = (
         db.query(models.PurchaseItem)
         .join(models.Purchase, models.PurchaseItem.purchase_id == models.Purchase.id)
-        .options(joinedload(models.PurchaseItem.item).joinedload(models.Item.unit))
+        .options(
+            joinedload(models.PurchaseItem.item).joinedload(models.Item.unit),
+            joinedload(models.PurchaseItem.purchase).joinedload(models.Purchase.supplier),
+        )
         .filter(models.PurchaseItem.item_id == item_id)
     )
 
@@ -186,9 +189,19 @@ def get_item_purchase_history(
         harga = pi.buy_price or 0
         disc1 = pi.disc1 or 0
         disc2 = pi.disc2 or 0
-        harga_setelah_potongan = harga * (1 - disc1 / 100) * (1 - disc2 / 100)
+        disc3 = pi.disc3 or 0
+        disc4 = pi.disc4 or 0
+        # Potongan bertingkat: tiap potongan memotong harga hasil potongan sebelumnya.
+        harga_setelah_potongan = (
+            harga
+            * (1 - disc1 / 100)
+            * (1 - disc2 / 100)
+            * (1 - disc3 / 100)
+            * (1 - disc4 / 100)
+        )
         hasil.append({
             "tanggal": pi.purchase.date.isoformat() if pi.purchase and pi.purchase.date else None,
+            "supplier": pi.purchase.supplier.name if pi.purchase and pi.purchase.supplier else "-",
             "jumlah": pi.qty,
             "satuan": pi.item.unit.name if pi.item and pi.item.unit else "pcs",
             "harga": harga,
@@ -284,13 +297,22 @@ def create_purchase(
 
     # Jika frontend mengirim status 'draft', simpan draft TANPA jurnal/stok.
     if data.status == "draft":
-        from ..services.purchase_flow import calculate_purchase_totals, add_purchase_items, validate_purchase_items
+        from ..services.purchase_flow import (
+            calculate_purchase_totals,
+            add_purchase_items,
+            validate_purchase_items,
+        )
+        from ..services.tax_context import normalize_purchase_tax_type
 
         validate_purchase_items(db, data)
         totals = calculate_purchase_totals(data, received=False)
+        tax_type = normalize_purchase_tax_type(
+            data.tax_type, is_tax_included=data.is_tax_included
+        )
         purchase = models.Purchase(
             number=number,
             date=tanggal,
+            due_date=data.due_date,
             branch_id=current_user.active_branch_id,
             created_at=get_local_datetime(),
             supplier_id=data.supplier_id,
@@ -298,7 +320,8 @@ def create_purchase(
             discount=totals["discount"],
             tax=totals["tax"],
             tax_percent=data.tax_percent or 0,
-            is_tax_included=data.is_tax_included if data.is_tax_included is not None else True,
+            is_tax_included=(tax_type == "include"),
+            tax_type=tax_type,
             total=totals["total"],
             paid=0,
             status="draft",
@@ -374,6 +397,7 @@ def split_fulfill_request(
             tax=0,
             tax_percent=0,
             is_tax_included=True,
+            tax_type=source.tax_type,
             total=subtotal,
             paid=0,
             status="draft",
@@ -649,6 +673,7 @@ def reorder_missing_items(
         supplier_id=source.supplier_id,
         status="draft",
         is_tax_included=source.is_tax_included,
+        tax_type=source.tax_type,
         tax_percent=source.tax_percent,
         notes=f"Pesanan kekurangan dari {source.number}",
         created_by=current_user.id,

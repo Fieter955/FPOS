@@ -513,7 +513,9 @@
               <label>Uang Tunai di Laci Kasir (Rp)</label>
               <input
                 type="text"
-                inputmode="numeric"
+                inputmode="decimal"
+                data-input-desimal
+                data-min="0"
                 id="vCash"
                 class="input-control val-input"
                 placeholder="0"
@@ -524,7 +526,9 @@
               <label>Saldo di Rekening Bank (Rp)</label>
               <input
                 type="text"
-                inputmode="numeric"
+                inputmode="decimal"
+                data-input-desimal
+                data-min="0"
                 id="vBank"
                 class="input-control val-input"
                 placeholder="0"
@@ -537,7 +541,9 @@
             <label>Total Nilai Fisik Barang di Gudang (Rp)</label>
             <input
               type="text"
-              inputmode="numeric"
+              inputmode="decimal"
+              data-input-desimal
+              data-min="0"
               id="vInv"
               class="input-control val-input"
               placeholder="0"
@@ -564,7 +570,9 @@
               <label>Nilai Peralatan / Kendaraan (Rp)</label>
               <input
                 type="text"
-                inputmode="numeric"
+                inputmode="decimal"
+                data-input-desimal
+                data-min="0"
                 id="vEq"
                 class="input-control val-input"
                 placeholder="0"
@@ -575,7 +583,9 @@
               <label>Nilai Bangunan Toko (Rp)</label>
               <input
                 type="text"
-                inputmode="numeric"
+                inputmode="decimal"
+                data-input-desimal
+                data-min="0"
                 id="vBld"
                 class="input-control val-input"
                 placeholder="0"
@@ -844,27 +854,38 @@
           const options = Array.from(
             dropdown.querySelectorAll(".supplier-option"),
           );
-          if (e.key === "ArrowDown") {
+          const isNextKey = e.key === "ArrowDown" || e.key === "ArrowRight";
+          const isPreviousKey = e.key === "ArrowUp" || e.key === "ArrowLeft";
+          if (isNextKey || isPreviousKey) {
+            if (!options.length) return;
             e.preventDefault();
-            highlightedIndex = Math.min(
-              highlightedIndex + 1,
-              options.length - 1,
-            );
-            renderDropdown(input.value);
-          } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            highlightedIndex = Math.max(highlightedIndex - 1, -1);
+            highlightedIndex =
+              (highlightedIndex + (isNextKey ? 1 : -1) + options.length) %
+              options.length;
             renderDropdown(input.value);
           } else if (e.key === "Enter") {
             e.preventDefault();
-            if (highlightedIndex >= 0 && options[highlightedIndex]) {
-              options[highlightedIndex].dispatchEvent(
+            const selectedOption =
+              options[highlightedIndex >= 0 ? highlightedIndex : 0];
+            if (selectedOption) {
+              selectedOption.dispatchEvent(
                 new MouseEvent("mousedown", { bubbles: true }),
               );
             } else {
               commitTypedSupplier();
             }
+          } else if (e.key === "Tab") {
+            const selectedOption = options[highlightedIndex];
+            if (selectedOption) {
+              selectedOption.dispatchEvent(
+                new MouseEvent("mousedown", { bubbles: true }),
+              );
+            } else {
+              commitTypedSupplier();
+              dropdown.classList.remove("show");
+            }
           } else if (e.key === "Escape") {
+            e.preventDefault();
             dropdown.classList.remove("show");
           }
         });
@@ -916,22 +937,20 @@
       // FORMAT RUPIAH
       // ══════════════════════════════════════════════════════════════
       function formatRupiahInput(e) {
-        let val = e.target.value.replace(/[^0-9]/g, "");
-        e.target.value = val ? new Intl.NumberFormat("id-ID").format(val) : "";
+        formatDesimal(e.target);
         hitungKekayaan();
       }
 
       // Format angka → string Rupiah (untuk input dinamis)
       function fmtRp(num) {
-        return new Intl.NumberFormat("id-ID").format(num || 0);
+        return toDesimal(num);
       }
 
       // Baca nilai angka dari input (hapus titik pemisah)
-      const getRawVal = (id) =>
-        parseFloat(document.getElementById(id).value.replace(/\./g, "")) || 0;
+      const getRawVal = (id) => parseDesimal(document.getElementById(id));
 
       // Baca nilai angka dari elemen input langsung (bukan by id)
-      const getRawFromEl = (el) => parseFloat(el.value.replace(/\./g, "")) || 0;
+      const getRawFromEl = (el) => parseDesimal(el);
 
       async function refreshOpeningInventoryValue(force = false) {
         const input = document.getElementById("vInv");
@@ -944,7 +963,7 @@
           const currentValue = getRawVal("vInv");
 
           if (force || !input.value.trim() || currentValue <= 0) {
-            input.value = suggested > 0 ? fmtRp(Math.round(suggested)) : "";
+            input.value = fmtRp(suggested > 0 ? Math.round(suggested) : 0);
           }
 
           if (hint) {
@@ -1004,7 +1023,9 @@
             <input
               class="row-input amount-input red-tint"
               type="text"
-              inputmode="numeric"
+              inputmode="decimal"
+              data-input-desimal
+              data-min="0"
               placeholder="0"
               value="${amt ? fmtRp(amt) : ""}"
               oninput="onRowAmountInput(event)"
@@ -1030,8 +1051,7 @@
       }
 
       function onRowAmountInput(e) {
-        let val = e.target.value.replace(/[^0-9]/g, "");
-        e.target.value = val ? fmtRp(val) : "";
+        formatDesimal(e.target);
         hitungKekayaan();
       }
 

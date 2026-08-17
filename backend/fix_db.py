@@ -54,6 +54,7 @@ add("sales", "notes",          "TEXT")
 print("\n=== purchases ===")
 add("purchases", "notes",       "TEXT")
 add("purchases", "created_by",  "INTEGER")
+add("purchases", "tax_type",    "TEXT")
 
 print("\n=== items ===")
 add("items", "barcode",      "TEXT")
@@ -141,4 +142,3 @@ add("sale_items", "buy_price", "REAL DEFAULT 0")
 conn.commit()
 conn.close()
 print("\n✅ Selesai! Semua kolom sudah lengkap. Restart server FastAPI sekarang.\n")
-

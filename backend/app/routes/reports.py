@@ -13,6 +13,8 @@ from datetime import datetime
 from ..database import get_db
 from .. import models
 from ..auth import get_current_user, get_query
+from ..permissions import has_permission
+from ..services.low_stock import get_low_stock_items
 
 # 👇 IMPORT LOGIKA DARI ACCOUNTING (SINGLE SOURCE OF TRUTH) 👇
 from .accounting import get_income_statement 
@@ -26,12 +28,8 @@ def get_local_date():
     return datetime.now(WITA).date()
 
 
-def _is_admin_user(user: models.User) -> bool:
-    return (user.role or "") == "admin"
-
-
-def _require_financial_report_access(user: models.User):
-    if not _is_admin_user(user):
+def _require_financial_report_access(db: Session, user: models.User):
+    if not has_permission(db, user, "report.financial", "view"):
         raise HTTPException(403, "Akses laporan modal/HPP/laba hanya untuk admin")
 
 # ─── 1. DASHBOARD KPI (UTAMA) ────────────────────────────────────────────────
@@ -60,37 +58,14 @@ def get_dashboard_data(db: Session = Depends(get_db), current_user: models.User 
 
     # 👇 BARU: Ambil Laba Bersih Bulan Ini dari Modul Akuntansi
     net_profit_month = 0
-    if _is_admin_user(current_user):
+    if has_permission(db, current_user, "report.financial", "view"):
         start_month = today_local.replace(day=1)
         acc_report = get_income_statement(start_date=start_month, end_date=today_local, db=db, current_user=current_user)
         net_profit_month = acc_report.get("net_profit", 0)
 
-    # Hitung stok menipis berdasarkan Gudang Cabang Aktif
-    low_stock_count = 0
-    gudang_cabang = db.query(models.Warehouse.id).filter(
-        models.Warehouse.branch_id == current_user.active_branch_id
-    ).all()
-    warehouse_ids = [g[0] for g in gudang_cabang]
-
-    if warehouse_ids:
-        stock_per_item = db.query(
-            models.WarehouseStock.item_id,
-            func.sum(models.WarehouseStock.stock).label('total_local_stock')
-        ).filter(
-            models.WarehouseStock.warehouse_id.in_(warehouse_ids)
-        ).group_by(models.WarehouseStock.item_id).subquery()
-
-        low_stock_count = db.query(func.count(models.Item.id)).join(
-            stock_per_item, models.Item.id == stock_per_item.c.item_id
-        ).filter(
-            models.Item.is_active == True,
-            stock_per_item.c.total_local_stock <= models.Item.min_stock
-        ).scalar() or 0
-    elif not current_user.active_branch_id: 
-        low_stock_count = db.query(func.count(models.Item.id)).filter(
-            models.Item.is_active == True,
-            models.Item.stock <= models.Item.min_stock
-        ).scalar() or 0
+    # Satu sumber data dengan tab Persediaan > Stok Menipis agar jumlah dan
+    # rincian barang yang terlihat pengguna selalu konsisten.
+    low_stock_items = get_low_stock_items(db, current_user.active_branch_id)
 
     # Top 5 Produk Terlaris Bulan Ini (Filter Cabang)
     top_items_raw = get_query(db, models.Sale, current_user).join(
@@ -143,7 +118,8 @@ def get_dashboard_data(db: Session = Depends(get_db), current_user: models.User 
         "total_purchases_today": float(total_purchases_today),
         "total_transactions_today": int(total_tx_today),
         "net_profit_monthly": float(net_profit_month), # 👈 Data Net Profit Akurat
-        "low_stock_count": int(low_stock_count),
+        "low_stock_count": len(low_stock_items),
+        "low_stock_items": low_stock_items,
         "total_customer_deposit": float(total_cust_deposit),
         "total_supplier_deposit": float(total_supp_deposit),
         "top_items": top_items,
@@ -160,7 +136,7 @@ def profit_loss(
     current_user: models.User = Depends(get_current_user)
 ):
     # 👇 REVISI TOTAL: Tanya langsung ke modul akuntansi
-    _require_financial_report_access(current_user)
+    _require_financial_report_access(db, current_user)
     acc_data = get_income_statement(start_date=start_date, end_date=end_date, db=db, current_user=current_user)
     period_start = start_date or get_local_date().replace(day=1)
     period_end = end_date or get_local_date()
@@ -283,7 +259,7 @@ def get_sales_detailed(
 # ─── 5. INVENTORY VALUATION ──────────────────────────────────────────────────
 @router.get("/inventory-valuation")
 def get_inventory_valuation(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    _require_financial_report_access(current_user)
+    _require_financial_report_access(db, current_user)
     # Calculate stock value based on buy_price
     # If branch active, filter by warehouse stocks
     if current_user.active_branch_id:
@@ -337,7 +313,7 @@ def export_full_report(
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(get_current_user)
 ):
-    _require_financial_report_access(current_user)
+    _require_financial_report_access(db, current_user)
     today_local = get_local_date()
     if not start_date: start_date = today_local.replace(day=1)
     if not end_date: end_date = today_local
@@ -430,7 +406,7 @@ def get_top_items(
 # ─── 8. DEPOSIT & RETUR BALANCE ─────────────────────────────────────────────
 @router.get("/deposits/customers")
 def get_customer_deposits(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    _require_financial_report_access(current_user)
+    _require_financial_report_access(db, current_user)
     customers = db.query(models.Customer).filter(models.Customer.deposit_balance > 0).all()
     return [{
         "id": c.id,
@@ -441,7 +417,7 @@ def get_customer_deposits(db: Session = Depends(get_db), current_user: models.Us
 
 @router.get("/deposits/suppliers")
 def get_supplier_deposits(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    _require_financial_report_access(current_user)
+    _require_financial_report_access(db, current_user)
     suppliers = db.query(models.Supplier).filter(models.Supplier.deposit_balance > 0).all()
     return [{
         "id": s.id,

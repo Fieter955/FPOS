@@ -1,0 +1,540 @@
+.workspace-page {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.workspace-shell {
+  display: grid;
+  grid-template-rows: 3.35rem minmax(0, 1fr);
+  width: 100%;
+  height: 100vh;
+  min-height: 0;
+  background: var(--bg-color);
+}
+
+.workspace-chrome {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.55rem max(0.75rem, env(safe-area-inset-right)) 0;
+  padding-left: max(0.75rem, env(safe-area-inset-left));
+  background: #dce3ec;
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+}
+
+.dark-mode .workspace-chrome {
+  background: #111827;
+}
+
+.workspace-brand {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 0 0 auto;
+  padding-bottom: 0.5rem;
+  color: var(--text-main);
+  font-size: 0.86rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.workspace-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 0.5rem;
+  background: var(--primary);
+  color: #fff;
+  font-size: 1rem;
+  line-height: 1;
+  box-shadow: 0 4px 10px var(--primary-light);
+}
+
+.workspace-tabs-viewport {
+  min-width: 0;
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.45) transparent;
+}
+
+.workspace-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.25rem;
+  min-width: max-content;
+  height: 100%;
+}
+
+.workspace-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: clamp(8.5rem, 15vw, 13rem);
+  height: 2.65rem;
+  padding: 0.55rem 0.65rem 0.5rem 0.85rem;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 0.85rem 0.85rem 0 0;
+  background: rgba(255, 255, 255, 0.42);
+  color: #475569;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.dark-mode .workspace-tab {
+  background: rgba(51, 65, 85, 0.55);
+  color: #cbd5e1;
+}
+
+.workspace-tab:hover {
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text-main);
+}
+
+.dark-mode .workspace-tab:hover {
+  background: #334155;
+}
+
+.workspace-tab.is-active {
+  z-index: 2;
+  background: var(--bg-color);
+  color: var(--text-main);
+  border-color: var(--border-color);
+  box-shadow: inset 0 3px 0 var(--primary);
+}
+
+.workspace-tab-icon {
+  flex: 0 0 auto;
+  color: var(--primary);
+  font-size: 0.95rem;
+}
+
+.workspace-tab-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-tab-close {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: currentColor;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.workspace-tab-close:hover,
+.workspace-tab-close:focus-visible {
+  background: rgba(100, 116, 139, 0.2);
+  outline: none;
+}
+
+.workspace-tab:focus-visible {
+  outline: 3px solid var(--primary-light);
+  outline-offset: -3px;
+}
+
+.workspace-tab-count {
+  align-self: center;
+  flex: 0 0 auto;
+  min-width: 2.8rem;
+  padding-bottom: 0.55rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+.workspace-account {
+  position: relative;
+  align-self: center;
+  flex: 0 0 auto;
+  padding-bottom: 0.45rem;
+}
+
+.workspace-account-button {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  max-width: 13rem;
+  min-height: 2.75rem;
+  padding: 0.3rem 0.55rem 0.3rem 0.35rem;
+  border: 1px solid rgba(100, 116, 139, 0.3);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--text-main);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.workspace-account-button:hover,
+.workspace-account.is-open .workspace-account-button {
+  border-color: rgba(37, 99, 235, 0.45);
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.workspace-account-button:focus-visible,
+.workspace-logout-button:focus-visible {
+  outline: 3px solid var(--primary-light);
+  outline-offset: 2px;
+}
+
+.dark-mode .workspace-account-button {
+  border-color: #334155;
+  background: rgba(51, 65, 85, 0.72);
+}
+
+.dark-mode .workspace-account-button:hover,
+.dark-mode .workspace-account.is-open .workspace-account-button {
+  border-color: #64748b;
+  background: #334155;
+}
+
+.workspace-account-avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+  box-shadow: 0 3px 8px var(--primary-light);
+}
+
+.workspace-account-summary,
+.workspace-account-details {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.workspace-account-summary {
+  max-width: 8rem;
+}
+
+.workspace-account-caption {
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.workspace-account-name {
+  overflow: hidden;
+  color: var(--text-main);
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-account-chevron {
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  transition: transform 0.15s ease;
+}
+
+.workspace-account.is-open .workspace-account-chevron {
+  transform: rotate(180deg);
+}
+
+.workspace-account-menu {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  z-index: 50;
+  width: min(18rem, calc(100vw - 1.5rem));
+  padding: 0.65rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.9rem;
+  background: var(--card-bg);
+  color: var(--text-main);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.22);
+}
+
+.workspace-account-menu[hidden] {
+  display: none;
+}
+
+.workspace-account-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+  padding: 0.35rem;
+}
+
+.workspace-account-avatar-large {
+  width: 2.4rem;
+  height: 2.4rem;
+  font-size: 0.85rem;
+}
+
+.workspace-account-details strong,
+.workspace-account-details span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-account-details strong {
+  font-size: 0.85rem;
+}
+
+.workspace-account-details span {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+.workspace-account-divider {
+  height: 1px;
+  margin: 0.55rem 0.2rem;
+  background: var(--border-color);
+}
+
+.workspace-branch-switcher {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.25rem 0.35rem 0.15rem;
+}
+
+.workspace-branch-switcher[hidden],
+.workspace-branch-current[hidden],
+.workspace-branch-select[hidden] {
+  display: none;
+}
+
+.workspace-branch-label {
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.workspace-branch-select,
+.workspace-branch-current {
+  display: block;
+  width: 100%;
+  min-height: 2.35rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.65rem;
+  background: var(--bg-color);
+  color: var(--text-main);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.workspace-branch-select {
+  cursor: pointer;
+}
+
+.workspace-branch-select:focus-visible {
+  outline: 3px solid var(--primary-light);
+  outline-offset: 1px;
+}
+
+.workspace-branch-select:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+
+.workspace-branch-current {
+  overflow: hidden;
+  color: var(--primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-logout-button {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.55rem 0.65rem;
+  border: 0;
+  border-radius: 0.7rem;
+  background: transparent;
+  color: #dc2626;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.workspace-logout-button:hover {
+  background: rgba(220, 38, 38, 0.1);
+}
+
+.workspace-logout-button svg {
+  flex: 0 0 auto;
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.workspace-logout-button span {
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace-logout-button strong {
+  font-size: 0.8rem;
+}
+
+.workspace-logout-button small {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  font-weight: 500;
+}
+
+.dark-mode .workspace-branch-select,
+.dark-mode .workspace-branch-current {
+  background: #0f172a;
+}
+
+.workspace-frames {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-color);
+}
+
+.workspace-frame {
+  position: absolute;
+  inset: 0;
+  display: none;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--bg-color);
+}
+
+.workspace-frame.is-active {
+  display: block;
+}
+
+.workspace-boot {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.workspace-spinner {
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 3px solid var(--primary-light);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: workspace-spin 0.75s linear infinite;
+}
+
+@keyframes workspace-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media screen and (min-width: 1024px) and (max-width: 1536px) and (hover: hover) and (pointer: fine) {
+  .workspace-shell {
+    height: var(--zoomed-viewport-height);
+  }
+}
+
+@media (max-width: 640px) {
+  .workspace-shell {
+    grid-template-rows: 3.15rem minmax(0, 1fr);
+  }
+
+  .workspace-chrome {
+    gap: 0.4rem;
+    padding-top: 0.45rem;
+  }
+
+  .workspace-brand > span:last-child,
+  .workspace-tab-count {
+    display: none;
+  }
+
+  .workspace-tab {
+    width: 9.25rem;
+    height: 2.5rem;
+  }
+
+  .workspace-account {
+    padding-bottom: 0.35rem;
+  }
+
+  .workspace-account-button {
+    width: 2.75rem;
+    min-height: 2.75rem;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .workspace-account-summary,
+  .workspace-account-chevron {
+    display: none;
+  }
+
+  .workspace-account-avatar {
+    width: 1.85rem;
+    height: 1.85rem;
+  }
+}

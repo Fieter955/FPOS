@@ -37,6 +37,7 @@ def delete_group(gid: int, db: Session = Depends(get_db), _=Depends(get_current_
 # ─── Customers ────────────────────────────────────────────────────────────────
 @router.get("/", response_model=list[schemas.CustomerOut])
 def get_customers(search: Optional[str] = None, active_only: bool = True,
+                  sort: Optional[str] = None,
                   skip: int = 0, limit: int = 100,
                   db: Session = Depends(get_db), _=Depends(get_current_user)):
     from sqlalchemy.orm import subqueryload, joinedload
@@ -50,6 +51,12 @@ def get_customers(search: Optional[str] = None, active_only: bool = True,
         models.Customer.code.ilike(f"%{search}%") |
         models.Customer.phone.ilike(f"%{search}%")
     )
+    if sort == "deposit_desc":
+        q = q.order_by(
+            models.Customer.deposit_balance.desc(),
+            models.Customer.name.asc(),
+            models.Customer.id.asc(),
+        )
     return q.offset(skip).limit(limit).all()
 
 @router.get("/{cid}", response_model=schemas.CustomerOut)

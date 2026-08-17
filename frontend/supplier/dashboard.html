@@ -239,7 +239,7 @@
             padding: 0;
             margin-bottom: 16px;
           "
-          onclick="location.href = '/dashboard'"
+          onclick="requestSupplierNavigation('/dashboard')"
         >
           ← Kembali
         </button>
@@ -321,13 +321,21 @@
 
     <script src="/js/api.js"></script>
     <script src="/js/theme.js"></script>
+    <script src="/js/supplier-form-keyboard.js?v=20260814-enter-nav"></script>
     <script>
       requireAuth();
+      const supplierSort =
+        new URLSearchParams(location.search).get("sort") === "deposit_desc"
+          ? "deposit_desc"
+          : "";
       let editId = null;
+      let originalPpnType = ""; // Jenis PPN supplier saat modal dibuka (untuk deteksi perubahan)
       let allItems = [];
       let selectedItems = new Map();
       let itemSearchTimeout = null;
       let activeItemDropdown = null;
+      let supplierFormBaseline = null;
+      let supplierSaveInProgress = false;
 
       function fmtRp(n) {
         return new Intl.NumberFormat("id-ID", {
@@ -344,6 +352,67 @@
           month: "short",
           year: "numeric",
         });
+      }
+
+      function serializeSupplierForm() {
+        if (!document.getElementById("supForm")) return null;
+        const value = (id) => document.getElementById(id)?.value ?? "";
+        return JSON.stringify({
+          editId: editId || null,
+          name: value("sNama"),
+          phone: value("sPhone"),
+          email: value("sEmail"),
+          address: value("sAlamat"),
+          ppn: value("PpnSupplier"),
+          ppnType: value("sPpnType"),
+          creditLimit: value("sCredit"),
+          dueDate: value("sDueDate"),
+          notes: value("sNotes"),
+          itemIds: Array.from(selectedItems.keys()).sort((a, b) => a - b),
+        });
+      }
+
+      function hasDirtySupplierForm() {
+        return (
+          supplierFormBaseline !== null &&
+          serializeSupplierForm() !== supplierFormBaseline
+        );
+      }
+
+      function discardSupplierChanges() {
+        supplierFormBaseline = null;
+        closeModal("mSup");
+        notifyUnsavedChangesChanged();
+      }
+
+      async function requestCloseSupplierModal() {
+        if (!hasDirtySupplierForm()) {
+          discardSupplierChanges();
+          return;
+        }
+        await resolveUnsavedChangesBeforeExit(
+          "Perubahan Supplier belum disimpan. Apa yang ingin dilakukan?",
+          {
+            saveText: "Simpan & Tutup",
+            discardText: "Tutup Tanpa Simpan",
+          },
+        );
+      }
+
+      async function requestSupplierNavigation(target) {
+        const canLeave = await resolveUnsavedChangesBeforeExit(
+          "Perubahan Supplier belum disimpan. Apa yang ingin dilakukan sebelum meninggalkan halaman?",
+          {
+            saveText: "Simpan & Keluar",
+            discardText: "Keluar Tanpa Simpan",
+          },
+        );
+        if (!canLeave) return;
+        if (FPOS_WORKSPACE_EMBEDDED && target === "/dashboard") {
+          focusWorkspaceDashboard();
+        } else {
+          window.location.href = target;
+        }
       }
 
       function positionDropdown(inputEl, dropdownEl) {
@@ -434,10 +503,12 @@
           code: item.code,
         });
         renderSelectedItems();
+        notifyUnsavedChangesChanged();
       }
       function removeItemFromSelection(itemId) {
         selectedItems.delete(itemId);
         renderSelectedItems();
+        notifyUnsavedChangesChanged();
       }
       function renderSelectedItems() {
         const container = document.getElementById("selectedItemsContainer");
@@ -493,7 +564,11 @@
 
       async function loadModal() {
         try {
-          const resp = await fetch("/supplier/tambahSuplier.html");
+          // ?v= + no-store: paksa ambil form modal terbaru, jangan dari cache webview
+          // (kalau dari cache lama, dropdown "Jenis PPN" hilang id-nya → fitur diam-diam mati).
+          const resp = await fetch("/supplier/tambahSuplier.html?v=" + Date.now(), {
+            cache: "no-store",
+          });
           const html = await resp.text();
           const parser = new DOMParser();
           const doc = parser.parseFromString(html, "text/html");
@@ -507,7 +582,7 @@
                  <div class="modal-box" style="max-width: 700px">
                    <div class="modal-hdr">
                      <h2 id="mSupTitle">Tambah Supplier</h2>
-                     <button class="btn-x" onclick="closeModal('mSup')">×</button>
+                     <button class="btn-x" onclick="requestCloseSupplierModal()">×</button>
                    </div>
                    <div class="modal-body" style="padding:0;">
                      ${form.outerHTML}
@@ -519,15 +594,18 @@
             // Bersihkan elemen yang tidak diperlukan di dalam modal
             const modalBody = document.querySelector("#mSup .modal-body");
             modalBody.querySelector("h2")?.remove();
-            modalBody
-              .querySelector("button[onclick*='history.back']")
-              ?.remove();
 
             // Ubah onsubmit form agar menggunakan fungsi save dari dashboard ini
             const injectedForm = modalBody.querySelector("form");
             if (injectedForm) {
               injectedForm.onsubmit = (e) => save(e);
+              injectedForm.addEventListener("input", notifyUnsavedChangesChanged);
+              injectedForm.addEventListener("change", notifyUnsavedChangesChanged);
             }
+            const cancelButton = modalBody.querySelector(
+              "[data-supplier-cancel]",
+            );
+            if (cancelButton) cancelButton.onclick = requestCloseSupplierModal;
 
             setupItemSearch();
           }
@@ -540,6 +618,7 @@
         const q = document.getElementById("srch").value;
         let url = "/suppliers/?limit=500";
         if (q) url += `&search=${encodeURIComponent(q)}`;
+        if (supplierSort) url += `&sort=${supplierSort}`;
         try {
           const d = await api("GET", url);
           document.getElementById("tblBody").innerHTML = d.length
@@ -568,6 +647,7 @@
 
       async function openSupModal() {
         editId = null;
+        supplierFormBaseline = null;
         selectedItems.clear();
         document.getElementById("mSupTitle").textContent = "Tambah Supplier";
         document.getElementById("sId").value = "";
@@ -577,18 +657,24 @@
           "sEmail",
           "sAlamat",
           "sNotes",
-          "PpnSupplier",
         ].forEach((id) => (document.getElementById(id).value = ""));
-        document.getElementById("sCredit").value = "0";
+        document.getElementById("PpnSupplier").value = "0,00";
+        document.getElementById("sCredit").value = "0,00";
         document.getElementById("sDueDate").value = "0";
+        const ppnSel = document.getElementById("sPpnType");
+        if (ppnSel) ppnSel.value = "";
+        originalPpnType = "";
         renderSelectedItems();
         await loadAllItems();
         openModal("mSup");
+        supplierFormBaseline = serializeSupplierForm();
+        notifyUnsavedChangesChanged();
         setTimeout(() => document.getElementById("sNama")?.focus(), 100);
       }
 
       async function editSupplier(s) {
         editId = s.id;
+        supplierFormBaseline = null;
         selectedItems.clear();
         document.getElementById("mSupTitle").textContent = "Edit Supplier";
         document.getElementById("sId").value = s.id;
@@ -596,8 +682,15 @@
         document.getElementById("sPhone").value = s.phone || "";
         document.getElementById("sEmail").value = s.email || "";
         document.getElementById("sAlamat").value = s.address || "";
-        document.getElementById("PpnSupplier").value = s.PpnSupplier || 0;
-        document.getElementById("sCredit").value = s.credit_limit || 0;
+        document.getElementById("PpnSupplier").value = toDesimal(
+          s.PpnSupplier || 0,
+        );
+        const ppnSelEdit = document.getElementById("sPpnType");
+        if (ppnSelEdit) ppnSelEdit.value = s.ppn_type || "";
+        originalPpnType = s.ppn_type || "";
+        document.getElementById("sCredit").value = toDesimal(
+          s.credit_limit || 0,
+        );
         document.getElementById("sDueDate").value = s.due_date || 0;
         document.getElementById("sDeposit").value = fmtRp(
           s.deposit_balance || 0,
@@ -618,26 +711,32 @@
         renderSelectedItems();
         await loadAllItems();
         openModal("mSup");
+        supplierFormBaseline = serializeSupplierForm();
+        notifyUnsavedChangesChanged();
         setTimeout(() => document.getElementById("sNama")?.focus(), 100);
       }
 
       async function save(e) {
         if (e && e.preventDefault) e.preventDefault();
+        if (supplierSaveInProgress) return false;
         const name = document.getElementById("sNama").value.trim();
         if (!name) {
           showToast("Nama supplier wajib diisi", "error");
-          return;
+          document.getElementById("sNama")?.focus();
+          return false;
         }
 
+        const ppnType = document.getElementById("sPpnType")?.value || null;
         const data = {
           name: name,
           phone: document.getElementById("sPhone").value || null,
           email: document.getElementById("sEmail").value || null,
           address: document.getElementById("sAlamat").value || null,
-          PpnSupplier:
-            parseFloat(document.getElementById("PpnSupplier").value) || 0,
-          credit_limit:
-            parseFloat(document.getElementById("sCredit").value) || 0,
+          PpnSupplier: ppnType
+            ? parseDesimal(document.getElementById("PpnSupplier"))
+            : 0,
+          ppn_type: ppnType,
+          credit_limit: parseDesimal(document.getElementById("sCredit")),
           due_date:
             parseInt(document.getElementById("sDueDate").value) || 0,
           notes: document.getElementById("sNotes").value || null,
@@ -645,22 +744,126 @@
           // 🔑 KODE TIDAK DIKIRIM, BACKEND AUTO-GENERATE
         };
 
+        // Jenis PPN supplier diubah → tawarkan menyamakan semua barangnya
+        let terapkanPpn = false;
+        if (
+          editId &&
+          (ppnType === "included" || ppnType === "excluded") &&
+          ppnType !== originalPpnType
+        ) {
+          let cek;
+          try {
+            cek = await api("POST", `/suppliers/${editId}/apply-ppn-type`, {
+              ppn_type: ppnType,
+              dry_run: true,
+            });
+          } catch (ex) {
+            showToast(ex.message || "Gagal memeriksa barang supplier", "error");
+            return false;
+          }
+          if (cek && cek.count > 0) {
+            const lanjut = await konfirmasiUbahPpn(ppnType, cek.different);
+            if (!lanjut) {
+              // Batal total: kembalikan dropdown ke nilai semula, tidak menyimpan apa pun
+              const sel = document.getElementById("sPpnType");
+              if (sel) sel.value = originalPpnType;
+              notifyUnsavedChangesChanged();
+              return false;
+            }
+            terapkanPpn = true;
+          }
+        }
+
+        const btn = document.getElementById("btnSimpan");
+        let saved = false;
         try {
-          const btn = document.getElementById("btnSimpan");
+          supplierSaveInProgress = true;
           btn.disabled = true;
           btn.textContent = "Menyimpan...";
           if (editId) await api("PUT", `/suppliers/${editId}`, data);
           else await api("POST", "/suppliers/", data);
-          showToast("Supplier disimpan ✓");
+
+          if (terapkanPpn) {
+            const res = await api(
+              "POST",
+              `/suppliers/${editId}/apply-ppn-type`,
+              { ppn_type: ppnType, dry_run: false },
+            );
+            const labelTgt = ppnType === "included" ? "Include" : "Exclude";
+            showToast(
+              `Supplier disimpan ✓ ${res.updated || 0} barang disamakan ke ${labelTgt}`,
+            );
+          } else {
+            showToast("Supplier disimpan ✓");
+          }
+          originalPpnType = ppnType || "";
+          supplierFormBaseline = serializeSupplierForm();
+          notifyUnsavedChangesChanged();
           closeModal("mSup");
+          supplierFormBaseline = null;
+          notifyUnsavedChangesChanged();
           load();
+          saved = true;
         } catch (ex) {
           showToast(ex.message || "Gagal menyimpan", "error");
         } finally {
-          const btn = document.getElementById("btnSimpan");
+          supplierSaveInProgress = false;
           btn.disabled = false;
           btn.textContent = "✓ Simpan";
         }
+        return saved;
+      }
+
+      // Popup konfirmasi: daftar barang yang setelan PPN-nya berbeda dari target.
+      // Mengembalikan Promise<boolean> (true = lanjut samakan semua).
+      function konfirmasiUbahPpn(target, daftar) {
+        return new Promise((resolve) => {
+          const labelTarget =
+            target === "included"
+              ? "Include (PPN termasuk harga)"
+              : "Exclude (PPN dipisah)";
+          const rows = (daftar || [])
+            .map((d) => {
+              const setNow =
+                d.current_ppn_type === "excluded" ? "Exclude" : "Include";
+              return `<tr>
+                <td style="padding:6px 8px">${d.name}</td>
+                <td style="padding:6px 8px;text-align:right;color:var(--text-muted)">${setNow}</td>
+              </tr>`;
+            })
+            .join("");
+          const ov = document.createElement("div");
+          ov.style.cssText =
+            "position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);z-index:10000;padding:16px;";
+          ov.innerHTML = `
+            <div class="modal-box" style="max-width:460px;width:100%">
+              <div class="modal-hdr"><h2 style="margin:0">Ada setelan PPN berbeda</h2></div>
+              <p style="color:var(--text-main);line-height:1.5;margin:12px 0">
+                Ada <b>${(daftar || []).length}</b> barang yang setelan PPN-nya berbeda. Jika dilanjutkan,
+                semua barang ini diubah ke <b>${labelTarget}</b> dan <b>harga belinya disesuaikan otomatis</b>.
+              </p>
+              <div class="tbl-wrap" style="max-height:240px;overflow-y:auto;border:1px solid var(--border-color);border-radius:8px">
+                <table class="tbl" style="width:100%">
+                  <thead><tr>
+                    <th style="text-align:left;padding:6px 8px">Barang</th>
+                    <th style="text-align:right;padding:6px 8px">Setelan sekarang</th>
+                  </tr></thead>
+                  <tbody>${rows}</tbody>
+                </table>
+              </div>
+              <div style="display:flex;gap:12px;margin-top:16px">
+                <button id="_ppnNo" class="btn" style="flex:1;background:var(--bg-color);border:1px solid var(--border-color);color:var(--text-main)">Batal</button>
+                <button id="_ppnYes" class="btn btn-primary" style="flex:1">Ya, ubah semua</button>
+              </div>
+            </div>`;
+          document.body.appendChild(ov);
+          const done = (val) => {
+            ov.remove();
+            resolve(val);
+          };
+          ov.querySelector("#_ppnNo").onclick = () => done(false);
+          ov.querySelector("#_ppnYes").onclick = () => done(true);
+        });
       }
 
       async function delSup(id, name) {
@@ -704,9 +907,20 @@
       }
 
       document.addEventListener("DOMContentLoaded", async () => {
-        loadModal();
-        await loadAllItems();
+        // Jangan menahan tabel supplier sambil menunggu modal dan seluruh data
+        // barang. Daftar master harus tetap tampil bila fitur tambahan gagal.
         load();
+
+        if (typeof registerUnsavedChangesGuard === "function") {
+          registerUnsavedChangesGuard({
+            label: "Supplier",
+            isDirty: hasDirtySupplierForm,
+            save: () => save(),
+            discard: discardSupplierChanges,
+          });
+        }
+
+        await Promise.all([loadModal(), loadAllItems()]);
       });
     </script>
   </body>
