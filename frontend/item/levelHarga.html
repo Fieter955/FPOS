@@ -1,0 +1,28 @@
+<div class="tbl-wrap">
+  <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+    <h3 style="margin: 0; font-size: 1.1em;">Harga Berdasarkan Level Group (Grup Pelanggan)</h3>
+  </div>
+  <table class="tbl" id="satuanGridTable">
+    <thead id="satuanGridHead">
+      <!-- Dinamis diisi JS berdasarkan allGroups -->
+    </thead>
+    <tbody id="satuanGridBody">
+      <!-- Dinamis diisi JS Shared State -->
+    </tbody>
+  </table>
+  <div style="margin-top: 12px; font-size: 12px; color: var(--text-muted); line-height: 1.5;">
+    ℹ️ <b>Tips</b>: Anda dapat mengatur harga jual yang berbeda-beda untuk tiap grup pelanggan pada setiap level satuan.<br>
+    Perubahan di sini tersinkronisasi dengan tab <b>Satuan</b> dan <b>Level Jumlah</b>.
+  </div>
+</div>
+
+<style>
+  .group-label {
+    text-align: center;
+    background: var(--primary) !important;
+    color: #fff !important;
+    font-weight: 800 !important;
+    font-size: 10px !important;
+    padding: 4px !important;
+  }
+</style>

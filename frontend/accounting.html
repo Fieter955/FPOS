@@ -1,0 +1,1559 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Akuntansi - iPos 5.0</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <style>
+      /* Tambahan CSS Khusus Tabel Jurnal Input */
+      .tbl-input th {
+        text-align: left;
+        background: rgba(255, 255, 255, 0.05);
+        padding: 8px;
+        color: var(--text-muted);
+        font-size: 13px;
+      }
+      .tbl-input td {
+        padding: 6px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      }
+      .tab-btn {
+        padding: 8px 20px;
+        border-radius: 100px;
+        cursor: pointer;
+        font-family: inherit;
+        font-weight: 700;
+        transition: 0.2s;
+        border: 2px solid var(--border-color);
+        background: transparent;
+        color: var(--text-muted);
+      }
+      .tab-btn.active {
+        border-color: var(--primary);
+        background: var(--primary);
+        color: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-container">
+      <main class="main-content">
+        <button
+          class="btn"
+          style="
+            background: transparent;
+            color: var(--text-muted);
+            padding: 0;
+            margin-bottom: 16px;
+          "
+          onclick="location.href = '/dashboard'"
+        >
+          ← Kembali
+        </button>
+        <div class="pg-header">
+          <div>
+            <h1>📒 Akuntansi</h1>
+            <p>
+              Buku kas, jurnal double-entry, chart of accounts, arus kas, dan
+              neraca.
+            </p>
+          </div>
+        </div>
+
+        <div
+          style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap"
+        >
+          <button id="tbKas" onclick="switchTab('kas')" class="tab-btn active">
+            💵 Buku Kas
+          </button>
+          <button id="tbJurnal" onclick="switchTab('jurnal')" class="tab-btn">
+            📓 Jurnal
+          </button>
+          <button id="tbCoa" onclick="switchTab('coa')" class="tab-btn">
+            📋 Akun (CoA)
+          </button>
+          <button
+            id="tbCashflow"
+            onclick="switchTab('cashflow')"
+            class="tab-btn"
+          >
+            🌊 Arus Kas
+          </button>
+          <button id="tbNeraca" onclick="switchTab('neraca')" class="tab-btn">
+            ⚖️ Neraca
+          </button>
+          <button id="tbTutup" onclick="switchTab('tutup')" class="tab-btn">
+            🔒 Tutup Buku
+          </button>
+        </div>
+
+        <div id="pnlKas">
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 14px;
+              flex-wrap: wrap;
+              gap: 10px;
+            "
+          >
+            <div class="filter-bar" style="margin-bottom: 0">
+              <input
+                id="kasStart"
+                type="date"
+                class="input-control"
+                onchange="loadKas()"
+              />
+              <input
+                id="kasEnd"
+                type="date"
+                class="input-control"
+                onchange="loadKas()"
+              />
+              <select id="kasType" class="input-control" onchange="loadKas()">
+                <option value="">Semua Tipe</option>
+                <option value="income">Kas Masuk</option>
+                <option value="expense">Kas Keluar</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" onclick="openModal('mKas')">
+              ➕ Catat Kas
+            </button>
+          </div>
+          <div
+            id="kasSummary"
+            style="
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+              gap: 14px;
+              margin-bottom: 20px;
+            "
+          ></div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Tanggal</th>
+                  <th>Keterangan</th>
+                  <th>Tipe</th>
+                  <th>Jumlah</th>
+                  <th>Akun</th>
+                  <th>Hapus</th>
+                </tr>
+              </thead>
+              <tbody id="tblKas"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="pnlJurnal" style="display: none">
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 14px;
+              flex-wrap: wrap;
+              gap: 10px;
+            "
+          >
+            <div class="filter-bar" style="margin-bottom: 0">
+              <input
+                id="jStart"
+                type="date"
+                class="input-control"
+                onchange="loadJurnal()"
+              />
+              <input
+                id="jEnd"
+                type="date"
+                class="input-control"
+                onchange="loadJurnal()"
+              />
+            </div>
+            <button
+              class="btn btn-primary"
+              style="background: #3b82f6"
+              onclick="openJurnalModal()"
+            >
+              ➕ Tambah Jurnal Umum
+            </button>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Tanggal</th>
+                  <th>Deskripsi</th>
+                  <th>Referensi</th>
+                  <th>Total Debet</th>
+                  <th>Total Kredit</th>
+                </tr>
+              </thead>
+              <tbody id="tblJurnal"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="pnlCoa" style="display: none">
+          <div
+            style="
+              display: flex;
+              justify-content: flex-end;
+              gap: 10px;
+              margin-bottom: 14px;
+            "
+          >
+            <button
+              class="btn"
+              style="
+                background: #10b981;
+                color: white;
+                border: none;
+                font-weight: bold;
+              "
+              onclick="seedCoa()"
+            >
+              🌱 Generate Akun Standar
+            </button>
+            <button class="btn btn-primary" onclick="openCoaModal()">
+              ➕ Tambah Akun
+            </button>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Kode Akun</th>
+                  <th>Nama Akun</th>
+                  <th>Tipe</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="tblCoa"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="pnlCashflow" style="display: none">
+          <div class="filter-bar">
+            <input
+              id="cfStart"
+              type="date"
+              class="input-control"
+              onchange="loadCashFlow()"
+            />
+            <input
+              id="cfEnd"
+              type="date"
+              class="input-control"
+              onchange="loadCashFlow()"
+            />
+          </div>
+          <div
+            class="card"
+            style="
+              padding: 24px;
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              border-radius: 12px;
+            "
+          >
+            <h2 style="text-align: center; margin-bottom: 8px">
+              Laporan Arus Kas
+            </h2>
+            <div id="cfContent"></div>
+          </div>
+        </div>
+
+        <div id="pnlNeraca" style="display: none">
+          <div class="filter-bar">
+            <span
+              style="
+                font-size: 14px;
+                font-weight: bold;
+                color: var(--text-muted);
+              "
+              >Per Tanggal:</span
+            >
+            <input
+              id="neracaDate"
+              type="date"
+              class="input-control"
+              onchange="loadNeraca()"
+            />
+          </div>
+          <div
+            class="card"
+            style="
+              padding: 24px;
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              border-radius: 12px;
+            "
+          >
+            <h2 style="text-align: center; margin-bottom: 8px">
+              Neraca (Balance Sheet)
+            </h2>
+            <p
+              id="neracaStatus"
+              style="
+                text-align: center;
+                color: var(--text-muted);
+                margin-bottom: 24px;
+                font-size: 14px;
+              "
+            >
+              Memuat data kekayaan...
+            </p>
+            <div id="neracaContent"></div>
+          </div>
+        </div>
+
+        <div id="pnlTutup" style="display: none">
+          <div
+            class="card"
+            style="
+              padding: 24px;
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              border-radius: 12px;
+              margin-bottom: 16px;
+            "
+          >
+            <h2 style="margin: 0 0 8px">🔒 Tutup Buku</h2>
+            <p style="color: var(--text-muted); margin: 0 0 16px; font-size: 14px">
+              Mengunci periode akuntansi yang sudah selesai agar laporan tidak berubah.
+              Setelah ditutup, transaksi dengan tanggal
+              <b>≤ tanggal tutup buku</b> akan ditolak (jurnal manual, kas, pembelian, dll).
+            </p>
+
+            <div
+              style="
+                background: rgba(249, 115, 22, 0.08);
+                border: 1px dashed rgba(249, 115, 22, 0.35);
+                border-radius: 12px;
+                padding: 14px;
+                margin-bottom: 16px;
+              "
+            >
+              <div style="display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap">
+                <div>
+                  <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px">
+                    Terkunci Sampai
+                  </div>
+                  <div id="bkLockedUntil" style="font-weight: 900; font-size: 18px">
+                    -
+                  </div>
+                </div>
+                <div style="flex: 1; min-width: 220px">
+                  <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px">
+                    Catatan
+                  </div>
+                  <div id="bkLockedNote" style="font-size: 13px; color: var(--text-main)">
+                    -
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="row2" style="margin-bottom: 12px">
+              <div class="input-group">
+                <label>Jenis Tutup Buku *</label>
+                <select
+                  id="bkCloseType"
+                  class="input-control"
+                  onchange="normalizeCloseEndDate()"
+                >
+                  <option value="month">Bulanan (Akhir Bulan)</option>
+                  <option value="year">Tahunan (31 Desember)</option>
+                </select>
+              </div>
+              <div class="input-group">
+                <label>Tanggal Tutup Buku (Akhir Periode) *</label>
+                <input
+                  id="bkEndDate"
+                  type="date"
+                  class="input-control"
+                  onchange="normalizeCloseEndDate()"
+                />
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label>Catatan (Opsional)</label>
+              <input
+                id="bkNotes"
+                class="input-control"
+                placeholder="Contoh: Tutup buku April 2026"
+              />
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px">
+              <button class="btn btn-primary" onclick="doCloseBooks()">✓ Tutup Buku</button>
+              <button
+                class="btn"
+                style="
+                  background: var(--bg-color);
+                  border: 1px solid var(--border-color);
+                  color: var(--text-main);
+                "
+                onclick="reopenLatestClose()"
+              >
+                ↩ Buka Tutup Buku Terakhir
+              </button>
+            </div>
+          </div>
+
+          <div
+            class="card"
+            style="
+              padding: 24px;
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              border-radius: 12px;
+            "
+          >
+            <h3 style="margin: 0 0 12px">Riwayat Tutup Buku</h3>
+            <div id="bkHistory" style="color: var(--text-muted)">Memuat...</div>
+          </div>
+
+          <div
+            class="card"
+            style="
+              padding: 24px;
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              border-radius: 12px;
+              margin-top: 16px;
+            "
+          >
+            <h3 style="margin: 0 0 8px">⚖️ Samakan Nilai Persediaan</h3>
+            <p style="color: var(--text-muted); margin: 0 0 16px; font-size: 14px; line-height: 1.6">
+              Memeriksa apakah <b>nilai persediaan di laporan keuangan</b> sudah sama dengan
+              <b>catatan stok rinci</b>. Bila ada selisih (sisa dari pindah sistem), tombol di bawah
+              akan menyamakannya. <b>Tidak memengaruhi laba/rugi</b> — selisih dicatat sebagai
+              pembetulan modal awal. Aman dijalankan ulang.
+            </p>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap">
+              <button class="btn btn-primary" onclick="cekSelisihPersediaan()">🔍 Cek Selisih</button>
+              <button
+                id="btnSamakanPersediaan"
+                class="btn"
+                style="display: none; background: #10b981; color: #fff"
+                onclick="samakanPersediaan()"
+              >
+                ✓ Samakan Sekarang
+              </button>
+            </div>
+            <div id="reconResult" style="margin-top: 16px; color: var(--text-muted); font-size: 14px"></div>
+          </div>
+
+          <div
+            style="
+              padding: 24px;
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              border-radius: 12px;
+              margin-top: 16px;
+            "
+          >
+            <h3 style="margin: 0 0 8px">🧾 Status Pajak Toko (PKP)</h3>
+            <p style="color: var(--text-muted); margin: 0 0 16px; font-size: 14px; line-height: 1.6">
+              Nyalakan <b>hanya jika toko sudah resmi PKP</b> (memungut & menyetor PPN ke negara,
+              serta menerima Faktur Pajak dari supplier). Saat menyala, PPN pada pembelian
+              <b>dipisah otomatis</b> dari harga modal barang — dicatat sebagai pajak yang bisa
+              dikreditkan, bukan dilebur jadi modal. Jika belum PKP, biarkan mati: PPN otomatis
+              menjadi bagian harga modal. <b>Perubahan ini hanya berlaku untuk pembelian baru</b>;
+              pembelian yang sudah tercatat tidak berubah. Saat mode PKP aktif, tarif diterapkan
+              sesuai Data Barang; barang berstatus <b>Tanpa PPN</b> tetap tidak dipungut PPN.
+            </p>
+            <label style="display: flex; align-items: center; gap: 10px; font-weight: 600; cursor: pointer">
+              <input type="checkbox" id="chkPkp" style="width: 18px; height: 18px" />
+              Toko sudah PKP (pisahkan PPN pembelian & pungut PPN penjualan)
+            </label>
+            <div style="margin-top: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+              <label style="font-weight: 600">Tarif PPN penjualan (%)</label>
+              <input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" id="inpTarifPpn" class="input-control" style="width: 90px" value="11,00" />
+              <span style="color: var(--text-muted); font-size: 13px">harga jual dianggap sudah termasuk PPN ini</span>
+              <button class="btn btn-primary" onclick="simpanStatusPkp()">Simpan</button>
+            </div>
+            <div id="pkpInfo" style="margin-top: 10px; color: var(--text-muted); font-size: 13px"></div>
+          </div>
+
+          <div
+            style="
+              padding: 24px;
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              border-radius: 12px;
+              margin-top: 16px;
+            "
+          >
+            <h3 style="margin: 0 0 8px">📊 Laporan PPN (untuk Lapor Pajak)</h3>
+            <p style="color: var(--text-muted); margin: 0 0 16px; font-size: 14px; line-height: 1.6">
+              Ringkasan PPN satu periode: <b>PPN Keluaran</b> (dipungut saat menjual) dikurangi
+              <b>PPN Masukan</b> (dibayar saat membeli). Selisihnya = jumlah yang harus
+              <b>disetor ke negara</b> (atau lebih bayar). Hanya relevan bila toko sudah PKP.
+            </p>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end">
+              <div class="input-group" style="margin: 0">
+                <label>Dari Tanggal</label>
+                <input id="ppnStart" type="date" class="input-control" />
+              </div>
+              <div class="input-group" style="margin: 0">
+                <label>Sampai Tanggal</label>
+                <input id="ppnEnd" type="date" class="input-control" />
+              </div>
+              <button class="btn btn-primary" onclick="loadPpnReport()">🔍 Tampilkan</button>
+              <button id="btnCetakPpn" class="btn" style="display: none" onclick="cetakPpnReport()">🖨️ Cetak</button>
+            </div>
+            <div id="ppnResult" style="margin-top: 16px; color: var(--text-muted); font-size: 14px"></div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <div class="modal-overlay" id="mJurnal">
+      <div class="modal-box" style="width: 800px; max-width: 95%">
+        <div class="modal-hdr">
+          <h2>📓 Tambah Jurnal Umum (Manual)</h2>
+          <button class="btn-x" onclick="closeModal('mJurnal')">×</button>
+        </div>
+        <div class="input-group" style="margin-bottom: 12px">
+          <label>Tanggal Transaksi *</label>
+          <input id="jTgl" type="date" class="input-control" />
+        </div>
+        <div class="input-group" style="margin-bottom: 16px">
+          <label>Keterangan / Deskripsi *</label>
+          <input
+            id="jKet"
+            class="input-control"
+            placeholder="Contoh: Saldo Awal Bangunan & Modal"
+          />
+        </div>
+
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+            margin-bottom: 8px;
+          "
+        >
+          <h4 style="margin: 0; color: var(--text-main)">
+            Rincian Akun (Double-Entry)
+          </h4>
+          <button
+            class="btn"
+            style="
+              background: #3b82f6;
+              color: white;
+              border: none;
+              padding: 6px 12px;
+              font-size: 12px;
+            "
+            onclick="addJurnalRow()"
+          >
+            + Tambah Baris
+          </button>
+        </div>
+
+        <div style="max-height: 250px; overflow-y: auto; margin-bottom: 16px">
+          <table
+            class="tbl-input"
+            style="width: 100%; border-collapse: collapse"
+          >
+            <thead>
+              <tr>
+                <th style="width: 45%">Pilih Akun (CoA)</th>
+                <th style="width: 20%">Posisi</th>
+                <th style="width: 25%">Jumlah (Rp)</th>
+                <th style="width: 10%; text-align: center">Hapus</th>
+              </tr>
+            </thead>
+            <tbody id="tblJurnalInput"></tbody>
+          </table>
+        </div>
+
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            padding: 14px;
+            background: rgba(0, 0, 0, 0.15);
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-weight: bold;
+          "
+        >
+          <div>
+            Debit:
+            <span
+              id="lblTotDebit"
+              style="color: #3b82f6; font-size: 18px; margin-left: 8px"
+              >Rp 0</span
+            >
+          </div>
+          <div>
+            Kredit:
+            <span
+              id="lblTotKredit"
+              style="color: #f59e0b; font-size: 18px; margin-left: 8px"
+              >Rp 0</span
+            >
+          </div>
+          <div>
+            <span
+              id="lblSelisih"
+              style="
+                background: #ef4444;
+                color: white;
+                padding: 4px 10px;
+                border-radius: 100px;
+                font-size: 12px;
+              "
+              >SELISIH: Rp 0</span
+            >
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+          <button
+            onclick="closeModal('mJurnal')"
+            class="btn"
+            style="
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              color: var(--text-main);
+            "
+          >
+            Batal
+          </button>
+          <button
+            onclick="saveJurnal()"
+            id="btnSaveJurnal"
+            class="btn btn-primary"
+            disabled
+          >
+            ✓ Simpan Jurnal
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="mKas">
+      <div class="modal-box">
+        <div class="modal-hdr">
+          <h2>💵 Catat Transaksi Kas</h2>
+          <button class="btn-x" onclick="closeModal('mKas')">×</button>
+        </div>
+        <div class="row2" style="margin-bottom: 16px">
+          <div class="input-group">
+            <label>Tipe *</label>
+            <select id="kTipe" class="input-control">
+              <option value="income">💰 Kas Masuk</option>
+              <option value="expense">💸 Kas Keluar</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label>Tanggal *</label>
+            <input id="kTgl" type="date" class="input-control" />
+          </div>
+        </div>
+        <div class="input-group">
+          <label>Keterangan *</label>
+          <input
+            id="kKet"
+            class="input-control"
+            placeholder="Sumber atau tujuan kas..."
+          />
+        </div>
+        <div class="row2" style="margin-bottom: 16px">
+          <div class="input-group">
+            <label>Jumlah (Rp) *</label>
+            <input
+              id="kJumlah"
+              type="text"
+              data-input-desimal
+              class="input-control"
+              min="0"
+              inputmode="decimal"
+              placeholder="0"
+              style="font-size: 20px; font-weight: 700"
+            />
+          </div>
+          <div class="input-group">
+            <label>Akun *</label>
+            <select id="kAkun" class="input-control">
+              <option value="">-- Pilih Akun --</option>
+            </select>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+          <button
+            onclick="closeModal('mKas')"
+            class="btn"
+            style="
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              color: var(--text-main);
+            "
+          >
+            Batal
+          </button>
+          <button onclick="saveKas()" class="btn btn-primary">✓ Simpan</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="mCoa">
+      <div class="modal-box">
+        <div class="modal-hdr">
+          <h2 id="mCoaTitle">Tambah Akun</h2>
+          <button class="btn-x" onclick="closeModal('mCoa')">×</button>
+        </div>
+        <input type="hidden" id="coaId" />
+        <div class="row2" style="margin-bottom: 16px">
+          <div class="input-group">
+            <label>Kode Akun *</label>
+            <input id="coaKode" class="input-control" placeholder="1-0001" />
+          </div>
+          <div class="input-group">
+            <label>Tipe Akun *</label>
+            <select id="coaTipe" class="input-control">
+              <option value="asset">Aset</option>
+              <option value="liability">Kewajiban</option>
+              <option value="equity">Ekuitas</option>
+              <option value="revenue">Pendapatan</option>
+              <option value="expense">Beban</option>
+            </select>
+          </div>
+        </div>
+        <div class="input-group">
+          <label>Nama Akun *</label>
+          <input
+            id="coaNama"
+            class="input-control"
+            placeholder="Nama akun..."
+          />
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+          <button
+            onclick="closeModal('mCoa')"
+            class="btn"
+            style="
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              color: var(--text-main);
+            "
+          >
+            Batal
+          </button>
+          <button onclick="saveCoa()" class="btn btn-primary">✓ Simpan</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/theme.js"></script>
+    <script>
+      requireAuth();
+      let editCoaId = null;
+      let globalAkunList = [];
+
+      // Fungsi Navigasi Tab
+      function switchTab(t) {
+        ["Kas", "Jurnal", "Coa", "Cashflow", "Neraca", "Tutup"].forEach((x) => {
+          const pnl = document.getElementById("pnl" + x);
+          const btn = document.getElementById("tb" + x);
+
+          if (pnl) pnl.style.display = x.toLowerCase() === t ? "block" : "none";
+          if (btn)
+            btn.className =
+              x.toLowerCase() === t ? "tab-btn active" : "tab-btn";
+        });
+
+        if (t === "kas") loadKas();
+        if (t === "jurnal") loadJurnal();
+        if (t === "coa") loadCoa();
+        if (t === "cashflow") loadCashFlow();
+        if (t === "neraca") loadNeraca();
+        if (t === "tutup") {
+          loadBookClose();
+          loadStatusPkp();
+          _initPpnDates();
+        }
+      }
+
+      // Preload Data Akun (Global)
+      async function fetchGlobalAkun() {
+        if (globalAkunList.length === 0) {
+          try {
+            globalAkunList = await api("GET", "/accounting/accounts");
+          } catch (e) {}
+        }
+      }
+
+      // Load Akun untuk Modal Kas
+      async function loadAkunSelect() {
+        await fetchGlobalAkun();
+        const sel = document.getElementById("kAkun");
+        if (!sel) return;
+        const prev = sel.value;
+        sel.innerHTML =
+          '<option value="">-- Pilih Akun --</option>' +
+          globalAkunList
+            .map(
+              (a) => `<option value="${a.id}">${a.code} - ${a.name}</option>`,
+            )
+            .join("");
+        sel.value = prev;
+      }
+
+      async function applyAccountingDeepLink() {
+        const params = new URLSearchParams(window.location.search);
+        const tab = params.get("tab");
+        const openKas = params.get("openKas") === "1";
+
+        switchTab(tab || "jurnal");
+
+        if (!openKas) return;
+
+        switchTab("kas");
+        await loadAkunSelect();
+
+        document.getElementById("kTgl").value = today();
+        document.getElementById("kTipe").value = params.get("type") || "income";
+        document.getElementById("kKet").value = params.get("desc") || "";
+
+        const accountCode = params.get("account_code");
+        if (accountCode) {
+          const akun = globalAkunList.find((a) => a.code === accountCode);
+          if (akun) document.getElementById("kAkun").value = akun.id;
+        }
+
+        const amount = parseFloat(params.get("amount") || 0) || 0;
+        document.getElementById("kJumlah").value = toDesimal(
+          amount > 0 ? amount : 0,
+        );
+        openModal("mKas");
+      }
+
+      // --------------------------------------------------------------------------------
+      // JS: MODAL JURNAL UMUM
+      // --------------------------------------------------------------------------------
+      async function openJurnalModal() {
+        await fetchGlobalAkun();
+        document.getElementById("jTgl").value = today();
+        document.getElementById("jKet").value = "";
+        document.getElementById("tblJurnalInput").innerHTML = "";
+
+        addJurnalRow("debit");
+        addJurnalRow("credit");
+
+        calcJurnal();
+        openModal("mJurnal");
+      }
+
+      function addJurnalRow(defaultPos = "debit") {
+        const tr = document.createElement("tr");
+        let options = '<option value="">-- Cari / Pilih Akun --</option>';
+        globalAkunList.forEach((a) => {
+          options += `<option value="${a.id}">${a.code} - ${a.name}</option>`;
+        });
+
+        tr.innerHTML = `
+            <td><select class="input-control j-akun" onchange="calcJurnal()">${options}</select></td>
+            <td>
+                <select class="input-control j-pos" onchange="calcJurnal()">
+                    <option value="debit" ${defaultPos === "debit" ? "selected" : ""}>Debit</option>
+                    <option value="credit" ${defaultPos === "credit" ? "selected" : ""}>Kredit</option>
+                </select>
+            </td>
+            <td><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control j-amt" value="0,00" style="font-weight:bold; color:var(--primary); text-align:right" oninput="calcJurnal()" /></td>
+            <td style="text-align:center;"><button class="btn" style="background:#ef4444; color:white; border:none; padding:4px 8px;" onclick="this.closest('tr').remove(); calcJurnal()">X</button></td>
+        `;
+        document.getElementById("tblJurnalInput").appendChild(tr);
+      }
+
+      function calcJurnal() {
+        let tDebit = 0;
+        let tKredit = 0;
+        const rows = document.querySelectorAll("#tblJurnalInput tr");
+
+        rows.forEach((r) => {
+          const pos = r.querySelector(".j-pos").value;
+          const amt = parseDesimal(r.querySelector(".j-amt"));
+          if (pos === "debit") tDebit += amt;
+          else tKredit += amt;
+        });
+
+        const diff = Math.abs(tDebit - tKredit);
+
+        document.getElementById("lblTotDebit").innerText = fmtRp(tDebit);
+        document.getElementById("lblTotKredit").innerText = fmtRp(tKredit);
+
+        const btnSave = document.getElementById("btnSaveJurnal");
+        const lblDiff = document.getElementById("lblSelisih");
+
+        if (tDebit > 0 && diff < 1) {
+          lblDiff.innerText = "✓ SEIMBANG";
+          lblDiff.style.background = "#10b981";
+          btnSave.disabled = false;
+        } else {
+          lblDiff.innerText = "SELISIH: " + fmtRp(diff);
+          lblDiff.style.background = "#ef4444";
+          btnSave.disabled = true;
+        }
+      }
+
+      async function saveJurnal() {
+        const date = document.getElementById("jTgl").value;
+        const desc = document.getElementById("jKet").value.trim();
+
+        // Referensi gaib (otomatis dibelakang layar)
+        const autoRef = "MNL-" + Math.floor(Math.random() * 90000 + 10000);
+
+        if (!desc) {
+          showToast("Keterangan wajib diisi!", "error");
+          return;
+        }
+
+        const lines = [];
+        const rows = document.querySelectorAll("#tblJurnalInput tr");
+        let hasError = false;
+
+        rows.forEach((r) => {
+          const accId = r.querySelector(".j-akun").value;
+          const pos = r.querySelector(".j-pos").value;
+          const amt = parseDesimal(r.querySelector(".j-amt"));
+
+          if (!accId || amt <= 0) {
+            if (amt > 0 && !accId) hasError = true;
+            return;
+          }
+
+          lines.push({
+            debit_account_id: pos === "debit" ? parseInt(accId) : null,
+            credit_account_id: pos === "credit" ? parseInt(accId) : null,
+            amount: amt,
+            description: desc,
+          });
+        });
+
+        if (hasError || lines.length < 2) {
+          showToast(
+            "Pastikan akun dipilih dan minimal ada 2 baris valid (Debit & Kredit)!",
+            "error",
+          );
+          return;
+        }
+
+        try {
+          await api("POST", "/accounting/journals", {
+            date: date,
+            description: desc,
+            reference: autoRef,
+            lines: lines,
+          });
+          showToast("Jurnal manual berhasil disuntikkan!");
+          closeModal("mJurnal");
+          loadJurnal();
+          if (document.getElementById("pnlNeraca").style.display === "block")
+            loadNeraca();
+        } catch (e) {
+          showToast(e.message, "error");
+        }
+      }
+
+      // --------------------------------------------------------------------------------
+      // JS: LOAD DATA (KAS, JURNAL, COA, CASHFLOW, NERACA)
+      // --------------------------------------------------------------------------------
+      async function loadKas() {
+        const s = document.getElementById("kasStart").value,
+          e = document.getElementById("kasEnd").value,
+          t = document.getElementById("kasType").value;
+        let url = "/accounting/cash-transactions?limit=300";
+        if (s) url += `&start_date=${s}`;
+        if (e) url += `&end_date=${e}`;
+        if (t) url += `&type=${t}`;
+        try {
+          const d = await api("GET", url);
+          const masuk = d
+            .filter((x) => x.type === "income")
+            .reduce((a, x) => a + x.amount, 0);
+          const keluar = d
+            .filter((x) => x.type === "expense")
+            .reduce((a, x) => a + x.amount, 0);
+          document.getElementById("kasSummary").innerHTML = `
+            <div class="card" style="padding:18px;border:1px solid #10b981"><div style="font-size:13px;color:var(--text-muted);margin-bottom:4px">💰 Kas Masuk</div><div style="font-size:24px;font-weight:900;color:#10b981">${fmtRp(masuk)}</div></div>
+            <div class="card" style="padding:18px;border:1px solid #ef4444"><div style="font-size:13px;color:var(--text-muted);margin-bottom:4px">💸 Kas Keluar</div><div style="font-size:24px;font-weight:900;color:#ef4444">${fmtRp(keluar)}</div></div>
+            <div class="card" style="padding:18px;border:2px solid var(--primary)"><div style="font-size:13px;color:var(--text-muted);margin-bottom:4px">📊 Saldo Bersih</div><div style="font-size:24px;font-weight:900;color:${masuk - keluar >= 0 ? "#10b981" : "#ef4444"}">${fmtRp(masuk - keluar)}</div></div>`;
+          document.getElementById("tblKas").innerHTML = d.length
+            ? d
+                .map(
+                  (x) => `
+            <tr>
+              <td style="font-size:13px;color:var(--text-muted)">${fmtDate(x.date)}</td>
+              <td><b>${x.description}</b></td>
+              <td>${x.type === "income" ? '<span class="bl">💰 Masuk</span>' : '<span class="br">💸 Keluar</span>'}</td>
+              <td style="font-size:18px;font-weight:800;color:${x.type === "income" ? "#10b981" : "#ef4444"}">${x.type === "income" ? "+" : "-"} ${fmtRp(x.amount)}</td>
+              <td style="font-size:13px;color:var(--text-muted)">${x.account?.name || "-"}</td>
+              <td><button class="bsm bd" onclick="hapusKas(${x.id})">Hapus</button></td>
+            </tr>`,
+                )
+                .join("")
+            : '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada transaksi kas</td></tr>';
+          loadAkunSelect();
+        } catch (ex) {}
+      }
+
+      async function saveKas() {
+        const ket = document.getElementById("kKet").value.trim(),
+          jml = parseDesimal(document.getElementById("kJumlah")),
+          akunId = document.getElementById("kAkun").value;
+        if (!ket || !jml || !akunId) {
+          showToast("Data wajib diisi lengkap", "error");
+          return;
+        }
+        try {
+          await api("POST", "/accounting/cash-transactions", {
+            type: document.getElementById("kTipe").value,
+            date: document.getElementById("kTgl").value,
+            description: ket,
+            amount: jml,
+            account_id: parseInt(akunId),
+          });
+          showToast("Berhasil!");
+          closeModal("mKas");
+          loadKas();
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function hapusKas(id) {
+        if (!(await showConfirm("Hapus transaksi ini?"))) return;
+        try {
+          await api("DELETE", `/accounting/cash-transactions/${id}`);
+          showToast("Dihapus");
+          loadKas();
+        } catch (ex) {}
+      }
+
+      async function loadJurnal() {
+        const s = document.getElementById("jStart").value,
+          e = document.getElementById("jEnd").value;
+        let url = "/accounting/journals?limit=100";
+        if (s) url += `&start_date=${s}`;
+        if (e) url += `&end_date=${e}`;
+        try {
+          const d = await api("GET", url);
+          document.getElementById("tblJurnal").innerHTML = d.length
+            ? d
+                .map(
+                  (j) => `
+            <tr>
+              <td style="font-size:13px">${fmtDate(j.date)}</td>
+              <td><b>${j.description}</b><br><button style="background:none;border:none;color:var(--primary);cursor:pointer;font-size:12px;padding:0;" onclick="const el=document.getElementById('det_${j.id}'); el.style.display=el.style.display==='none'?'table-row':'none'">Detail ▾</button></td>
+              <td style="font-family:monospace;font-size:13px">${j.reference || "-"}</td>
+              <td style="color:#3b82f6;font-weight:700">${fmtRp(j.total_debit)}</td>
+              <td style="color:#ef4444;font-weight:700">${fmtRp(j.total_credit)}</td>
+            </tr>
+            <tr id="det_${j.id}" style="display:none;background:rgba(0,0,0,0.1);"><td colspan="5" style="padding:10px 20px;">
+              ${(j.lines && j.lines.length) ? `<table style="width:100%;font-size:12px;">${j.lines.map((l) => `<tr><td>${l.debit_account || l.credit_account}</td><td style="text-align:right">${l.debit_account ? fmtRp(l.amount) : "-"}</td><td style="text-align:right">${l.credit_account ? fmtRp(l.amount) : "-"}</td></tr>`).join("")}</table>` : `<div style="color:var(--text-muted);font-style:italic;font-size:12px;">— Tidak ada baris jurnal (nilai transaksi Rp 0) —</div>`}
+            </td></tr>`,
+                )
+                .join("")
+            : '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted)">Kosong</td></tr>';
+        } catch (ex) {}
+      }
+
+      async function loadCoa() {
+        try {
+          const d = await api("GET", "/accounting/accounts");
+          document.getElementById("tblCoa").innerHTML = d.length
+            ? d
+                .map(
+                  (a) => `
+            <tr>
+              <td style="font-family:monospace;font-weight:700;color:var(--primary)">${a.code}</td>
+              <td><b>${a.name}</b></td>
+              <td>${a.type}</td>
+              <td><button class="bsm be" onclick='editCoa(${JSON.stringify(a)})'>Edit</button></td>
+            </tr>`,
+                )
+                .join("")
+            : '<tr><td colspan="4">Kosong</td></tr>';
+        } catch (ex) {}
+      }
+
+      async function seedCoa() {
+        if (!(await showConfirm("Generate akun standar?"))) return;
+        try {
+          await api("POST", "/accounting/accounts/seed-default");
+          loadCoa();
+          loadAkunSelect();
+        } catch (ex) {}
+      }
+
+      async function loadCashFlow() {
+        const s = document.getElementById("cfStart").value,
+          e = document.getElementById("cfEnd").value;
+        try {
+          const d = await api(
+            "GET",
+            `/accounting/cash-flow?start_date=${s}&end_date=${e}`,
+          );
+          const renderLines = (arr) =>
+            arr
+              .map(
+                (r) =>
+                  `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);"><span>${r.name}</span><strong>${fmtRp(r.amount)}</strong></div>`,
+              )
+              .join("");
+          document.getElementById("cfContent").innerHTML = `
+            <div style="background:rgba(59,130,246,0.1);padding:12px;border-radius:8px;margin-bottom:16px;"><strong>Saldo Awal: ${fmtRp(d.opening_balance)}</strong></div>
+            <h4 style="color:var(--primary);">Operasi</h4>${renderLines(d.operating.inflows)}${renderLines(d.operating.outflows)}
+            <h4 style="color:#f59e0b;">Investasi</h4>${renderLines(d.investing.items)}
+            <h4 style="color:#8b5cf6;">Pendanaan</h4>${renderLines(d.financing.items)}
+            <div style="margin-top:20px;padding:12px;border-top:2px solid var(--border-color);display:flex;justify-content:space-between;font-weight:900;"><span>Saldo Akhir</span><span style="color:#10b981;">${fmtRp(d.closing_balance)}</span></div>`;
+        } catch (ex) {}
+      }
+
+      async function loadNeraca() {
+        const d = document.getElementById("neracaDate").value || today();
+        document.getElementById("neracaDate").value = d;
+        try {
+          document.getElementById("neracaContent").innerHTML =
+            '<div style="text-align:center;padding:40px;">🔄 Menghitung...</div>';
+          const res = await api("GET", `/accounting/balance-sheet?as_of=${d}`);
+          const formatRow = (arr) =>
+            arr
+              .map(
+                (r) =>
+                  `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed rgba(255,255,255,0.1);"><span>${r.code} - ${r.name}</span><strong>${fmtRp(r.amount)}</strong></div>`,
+              )
+              .join("");
+
+          document.getElementById("neracaStatus").innerHTML = res.balanced
+            ? '<span class="bl" style="padding:4px 12px; border-radius:100px;">✓ SEIMBANG</span>'
+            : '<span class="br" style="padding:4px 12px; border-radius:100px;">⚠️ TIDAK SEIMBANG</span>';
+
+          document.getElementById("neracaContent").innerHTML = `
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));gap:20px;">
+              <div style="padding:16px;background:rgba(255,255,255,0.03);border-radius:12px;border-top:4px solid #3b82f6;">
+                <h3 style="color:#3b82f6;">AKTIVA (HARTA)</h3>
+                <h4>Lancar</h4>${formatRow(res.assets.current)}
+                <h4>Tetap</h4>${formatRow(res.assets.fixed)}
+                <div style="margin-top:20px;padding-top:10px;border-top:2px solid #3b82f6;display:flex;justify-content:space-between;font-weight:900;"><span>TOTAL HARTA</span><span>${fmtRp(res.assets.total)}</span></div>
+              </div>
+              <div style="padding:16px;background:rgba(255,255,255,0.03);border-radius:12px;border-top:4px solid #f59e0b;">
+                <h3 style="color:#f59e0b;">PASIVA (HUTANG & MODAL)</h3>
+                <h4>Hutang</h4>${formatRow(res.liabilities.current)}${formatRow(res.liabilities.long_term)}
+                <h4>Ekuitas</h4>${formatRow(res.equity.items)}
+                <div style="margin-top:20px;padding-top:10px;border-top:2px solid #f59e0b;display:flex;justify-content:space-between;font-weight:900;"><span>TOTAL PASIVA</span><span>${fmtRp(res.total_liabilities_equity)}</span></div>
+              </div>
+            </div>`;
+        } catch (ex) {}
+      }
+
+      function escHtml(s) {
+        return String(s || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function normalizeCloseEndDate() {
+        const type = document.getElementById("bkCloseType")?.value || "month";
+        const el = document.getElementById("bkEndDate");
+        if (!el || !el.value) return;
+        const d = new Date(el.value + "T00:00:00");
+        if (Number.isNaN(d.getTime())) return;
+
+        const out =
+          type === "year"
+            ? new Date(d.getFullYear(), 11, 31)
+            : new Date(d.getFullYear(), d.getMonth() + 1, 0);
+
+        el.value = out.toLocaleDateString("en-CA");
+      }
+
+      async function loadBookClose() {
+        const lockedEl = document.getElementById("bkLockedUntil");
+        const noteEl = document.getElementById("bkLockedNote");
+        const histEl = document.getElementById("bkHistory");
+
+        if (lockedEl) lockedEl.textContent = "…";
+        if (noteEl) noteEl.textContent = "Memuat...";
+        try {
+          const st = await api("GET", "/accounting/book-close/status");
+          const locked = st.locked_until || null;
+          if (lockedEl) lockedEl.textContent = locked || "-";
+          if (noteEl)
+            noteEl.textContent = locked
+              ? `Transaksi tanggal ≤ ${locked} tidak bisa dibuat/dihapus.`
+              : "Belum ada tutup buku.";
+        } catch (ex) {
+          if (lockedEl) lockedEl.textContent = "-";
+          if (noteEl) noteEl.textContent = "Gagal memuat status.";
+          showToast(ex.message, "error");
+        }
+
+        try {
+          const h = await api("GET", "/accounting/book-close/history?limit=24");
+          if (!histEl) return;
+          if (!Array.isArray(h) || h.length === 0) {
+            histEl.innerHTML =
+              '<div style="text-align:center;padding:16px;color:var(--text-muted)">Belum ada riwayat</div>';
+            return;
+          }
+
+          histEl.innerHTML = `
+            <div class="tbl-wrap">
+              <table class="tbl">
+                <thead>
+                  <tr>
+                    <th>Periode</th>
+                    <th>Tipe</th>
+                    <th>Status</th>
+                    <th>Catatan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${h
+                    .map(
+                      (x) => `
+                    <tr>
+                      <td style="font-family:monospace;font-size:13px">${escHtml(x.period_start)} → ${escHtml(x.period_end)}</td>
+                      <td>${escHtml(x.close_type)}</td>
+                      <td>${x.is_active ? '<span class="bl">AKTIF</span>' : '<span class="bg">DIBUKA</span>'}</td>
+                      <td style="color:var(--text-muted)">${escHtml(x.notes || "-")}</td>
+                    </tr>`,
+                    )
+                    .join("")}
+                </tbody>
+              </table>
+            </div>
+          `;
+        } catch (ex) {
+          if (histEl) histEl.textContent = "Gagal memuat riwayat.";
+        }
+      }
+
+      async function doCloseBooks() {
+        const type = document.getElementById("bkCloseType")?.value || "month";
+        const dateEl = document.getElementById("bkEndDate");
+        const notes = document.getElementById("bkNotes")?.value || "";
+        if (!dateEl || !dateEl.value)
+          return showToast("Tanggal tutup buku wajib diisi", "error");
+
+        normalizeCloseEndDate();
+        const endDate = dateEl.value;
+        const msg =
+          `TUTUP BUKU (${type.toUpperCase()}) sampai ${endDate}?\n\n` +
+          `Setelah ditutup, transaksi tanggal ≤ ${endDate} akan ditolak.\n\n` +
+          `Lanjutkan?`;
+        if (!(await showConfirm(msg))) return;
+
+        try {
+          if (typeof showLoading === "function") showLoading("Memproses...");
+          const res = await api("POST", "/accounting/book-close/close", {
+            close_type: type,
+            end_date: endDate,
+            notes: notes,
+          });
+          if (typeof hideLoading === "function") hideLoading();
+          showToast(res.message || "Berhasil ✓", "success");
+          await loadBookClose();
+        } catch (ex) {
+          if (typeof hideLoading === "function") hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function reopenLatestClose() {
+        const msg =
+          "Buka tutup buku terakhir?\n\n" +
+          "Ini akan membuka kembali periode yang sebelumnya terkunci. " +
+          "Gunakan hanya jika ada kesalahan dan Anda paham dampaknya.";
+        if (!(await showConfirm(msg))) return;
+        try {
+          if (typeof showLoading === "function") showLoading("Memproses...");
+          const res = await api("POST", "/accounting/book-close/reopen-latest", {});
+          if (typeof hideLoading === "function") hideLoading();
+          showToast(res.message || "Berhasil ✓", "success");
+          await loadBookClose();
+        } catch (ex) {
+          if (typeof hideLoading === "function") hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      // ── Samakan Nilai Persediaan (GL vs catatan stok rinci) ──────────────────
+      let _reconPerluSamakan = false;
+      function renderReconResult(res) {
+        const box = document.getElementById("reconResult");
+        const perlu = (res.hasil || []).filter((r) => Math.abs(r.selisih) >= 1);
+        _reconPerluSamakan = perlu.length > 0;
+        const btn = document.getElementById("btnSamakanPersediaan");
+        if (!_reconPerluSamakan) {
+          box.innerHTML = "✅ Sudah sama. Tidak ada selisih yang perlu dirapikan.";
+          btn.style.display = "none";
+          return;
+        }
+        let html =
+          '<div style="margin-bottom:8px">Ditemukan selisih yang perlu disamakan:</div>' +
+          '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+          '<th>Cabang</th><th style="text-align:right">Di Laporan</th>' +
+          '<th style="text-align:right">Catatan Stok</th><th style="text-align:right">Selisih</th>' +
+          "</tr></thead><tbody>";
+        perlu.forEach((r) => {
+          html +=
+            `<tr><td>${r.branch}</td>` +
+            `<td style="text-align:right">${fmtRp(r.gl_persediaan)}</td>` +
+            `<td style="text-align:right">${fmtRp(r.nilai_batch)}</td>` +
+            `<td style="text-align:right;font-weight:700">${fmtRp(r.selisih)}</td></tr>`;
+        });
+        html +=
+          "</tbody></table></div>" +
+          '<div style="margin-top:8px;font-size:13px">Klik <b>Samakan Sekarang</b> untuk merapikan — tidak memengaruhi laba/rugi.</div>';
+        box.innerHTML = html;
+        btn.style.display = "inline-block";
+      }
+
+      async function cekSelisihPersediaan() {
+        const box = document.getElementById("reconResult");
+        box.innerHTML = "Memeriksa...";
+        document.getElementById("btnSamakanPersediaan").style.display = "none";
+        try {
+          const res = await api(
+            "POST",
+            "/accounting/reconcile-inventory-value?dry_run=true",
+          );
+          renderReconResult(res);
+        } catch (e) {
+          box.innerHTML = `<span style="color:#ef4444">${e.message}</span>`;
+        }
+      }
+
+      async function samakanPersediaan() {
+        if (!_reconPerluSamakan) return;
+        const ok = await showConfirm(
+          "Samakan nilai persediaan sekarang?\n\n" +
+            "Selisih dicatat sebagai pembetulan modal awal. Laba/rugi TIDAK berubah.",
+        );
+        if (!ok) return;
+        try {
+          if (typeof showLoading === "function") showLoading("Menyamakan...");
+          const res = await api(
+            "POST",
+            "/accounting/reconcile-inventory-value?dry_run=false",
+          );
+          if (typeof hideLoading === "function") hideLoading();
+          const n = (res.hasil || []).filter((r) => r.diposting).length;
+          showToast(`Selesai. ${n} cabang disamakan ✓`, "success");
+          // Tampilkan ulang (harusnya jadi "sudah sama") + segarkan neraca bila ada.
+          const ulang = await api(
+            "POST",
+            "/accounting/reconcile-inventory-value?dry_run=true",
+          );
+          renderReconResult(ulang);
+          if (typeof loadNeraca === "function") loadNeraca();
+        } catch (e) {
+          if (typeof hideLoading === "function") hideLoading();
+          showToast(e.message, "error");
+        }
+      }
+
+      // ── Status PKP toko (pisah/lebur PPN pembelian) ──────────────────────────
+      async function loadStatusPkp() {
+        try {
+          const res = await api("GET", "/accounting/pkp-status");
+          const chk = document.getElementById("chkPkp");
+          if (chk) chk.checked = !!res.is_pkp;
+          const tar = document.getElementById("inpTarifPpn");
+          if (tar)
+            tar.value = toDesimal(
+              res.tarif_ppn != null ? res.tarif_ppn : 11,
+            );
+          const info = document.getElementById("pkpInfo");
+          if (info)
+            info.textContent = res.is_pkp
+              ? `Mode PKP AKTIF — barang kena pajak memakai tarif ${res.tarif_ppn}% (harga termasuk PPN); barang Tanpa PPN tetap bebas PPN.`
+              : "Mode non-PKP — PPN melebur jadi modal; kasir tidak memungut PPN.";
+        } catch (e) {
+          /* abaikan diam-diam (mis. belum punya akses) */
+        }
+      }
+
+      async function simpanStatusPkp() {
+        const chk = document.getElementById("chkPkp");
+        const nilai = !!chk.checked;
+        const tarif = parseDesimal(document.getElementById("inpTarifPpn"));
+        const ok = await showConfirm(
+          (nilai
+            ? `Nyalakan mode PKP (tarif PPN ${tarif}%)?\n\nMulai sekarang, pembelian BARU memisah PPN dari modal, dan kasir memungut PPN ${tarif}% untuk barang kena pajak. Barang berstatus Tanpa PPN tetap bebas PPN.`
+            : "Matikan mode PKP?\n\nPPN pembelian kembali dilebur ke modal & kasir tidak memungut PPN.") +
+            "\n\nTransaksi yang sudah tercatat tidak berubah.",
+        );
+        if (!ok) {
+          loadStatusPkp();
+          return;
+        }
+        try {
+          const res = await api("POST", "/accounting/pkp-status", { is_pkp: nilai, tarif_ppn: tarif });
+          showToast("Status PKP disimpan ✓", "success");
+          loadStatusPkp();
+        } catch (e) {
+          loadStatusPkp();
+          showToast(e.message, "error");
+        }
+      }
+
+      // ── Laporan PPN (Keluaran vs Masukan → setor) ────────────────────────────
+      let _ppnData = null;
+      function _bulanIni() {
+        const now = new Date();
+        const y = now.getFullYear(), m = now.getMonth();
+        const p = (n) => String(n).padStart(2, "0");
+        const first = `${y}-${p(m + 1)}-01`;
+        const last = new Date(y, m + 1, 0);
+        const lastStr = `${last.getFullYear()}-${p(last.getMonth() + 1)}-${p(last.getDate())}`;
+        return [first, lastStr];
+      }
+      function _initPpnDates() {
+        const s = document.getElementById("ppnStart"), e = document.getElementById("ppnEnd");
+        if (s && !s.value) { const [a, b] = _bulanIni(); s.value = a; e.value = b; }
+      }
+      async function loadPpnReport() {
+        const s = document.getElementById("ppnStart").value;
+        const e = document.getElementById("ppnEnd").value;
+        const box = document.getElementById("ppnResult");
+        if (!s || !e) return showToast("Isi rentang tanggal dulu", "error");
+        box.innerHTML = "Memuat...";
+        try {
+          const r = await api("GET", `/accounting/ppn-report?start=${s}&end=${e}`);
+          _ppnData = r;
+          const setor = r.kurang_bayar > 0;
+          box.innerHTML =
+            '<table class="tbl" style="max-width:480px"><tbody>' +
+            `<tr><td>PPN Keluaran (dari penjualan)</td><td style="text-align:right">${fmtRp(r.ppn_keluaran)}</td></tr>` +
+            `<tr><td>PPN Masukan (dari pembelian)</td><td style="text-align:right">− ${fmtRp(r.ppn_masukan)}</td></tr>` +
+            `<tr style="font-weight:700;border-top:2px solid var(--border-color)"><td>${setor ? "Kurang Bayar (setor ke negara)" : "Lebih Bayar (bisa dikompensasi)"}</td>` +
+            `<td style="text-align:right">${fmtRp(setor ? r.kurang_bayar : r.lebih_bayar)}</td></tr>` +
+            "</tbody></table>";
+          document.getElementById("btnCetakPpn").style.display = "inline-block";
+        } catch (err) {
+          box.innerHTML = `<span style="color:#ef4444">${err.message}</span>`;
+        }
+      }
+      function cetakPpnReport() {
+        if (!_ppnData) return;
+        const r = _ppnData;
+        const setor = r.kurang_bayar > 0;
+        const w = window.open("", "_blank", "width=620,height=640");
+        w.document.write(
+          `<html><head><title>Laporan PPN ${r.start} s/d ${r.end}</title>` +
+          "<style>body{font-family:Arial,sans-serif;padding:32px;color:#111}" +
+          "h2{margin:0 0 4px}.muted{color:#666;font-size:13px;margin:0 0 20px}" +
+          "table{width:100%;border-collapse:collapse;max-width:480px}" +
+          "td{padding:8px 4px}.tot{font-weight:700;border-top:2px solid #111}" +
+          ".r{text-align:right}</style></head><body>" +
+          "<h2>Laporan PPN</h2>" +
+          `<p class="muted">Periode ${r.start} s/d ${r.end}</p>` +
+          "<table><tbody>" +
+          `<tr><td>PPN Keluaran (penjualan)</td><td class="r">${fmtRp(r.ppn_keluaran)}</td></tr>` +
+          `<tr><td>PPN Masukan (pembelian)</td><td class="r">− ${fmtRp(r.ppn_masukan)}</td></tr>` +
+          `<tr class="tot"><td>${setor ? "Kurang Bayar (disetor)" : "Lebih Bayar"}</td>` +
+          `<td class="r">${fmtRp(setor ? r.kurang_bayar : r.lebih_bayar)}</td></tr>` +
+          "</tbody></table>" +
+          '<p class="muted" style="margin-top:24px">Dokumen internal untuk pencocokan. Faktur Pajak resmi dibuat lewat e-Faktur / Coretax.</p>' +
+          "</body></html>",
+        );
+        w.document.close();
+        w.focus();
+        w.print();
+      }
+
+      function openCoaModal() {
+        editCoaId = null;
+        document.getElementById("mCoaTitle").textContent = "Tambah Akun";
+        document.getElementById("coaId").value = "";
+        document.getElementById("coaKode").value = "";
+        document.getElementById("coaNama").value = "";
+        document.getElementById("coaTipe").value = "asset";
+        openModal("mCoa");
+      }
+      async function editCoa(a) {
+        editCoaId = a.id;
+        document.getElementById("mCoaTitle").textContent = "Edit Akun";
+        document.getElementById("coaId").value = a.id;
+        document.getElementById("coaKode").value = a.code;
+        document.getElementById("coaNama").value = a.name;
+        document.getElementById("coaTipe").value = a.type;
+        openModal("mCoa");
+      }
+      async function saveCoa() {
+        const code = document.getElementById("coaKode").value.trim(),
+          name = document.getElementById("coaNama").value.trim();
+        if (!code || !name) {
+          showToast("Kode dan nama wajib diisi", "error");
+          return;
+        }
+        const data = {
+          code,
+          name,
+          type: document.getElementById("coaTipe").value,
+        };
+        try {
+          if (editCoaId)
+            await api("PUT", `/accounting/accounts/${editCoaId}`, data);
+          else await api("POST", "/accounting/accounts", data);
+          showToast("Berhasil!");
+          closeModal("mCoa");
+          loadCoa();
+          loadAkunSelect();
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+      function closeModal(id) {
+        document.getElementById(id).style.display = "none";
+      }
+      function openModal(id) {
+        document.getElementById(id).style.display = "flex";
+      }
+
+      // Init Tanggal
+      const m = new Date(),
+        y = m.getFullYear(),
+        mo = String(m.getMonth() + 1).padStart(2, "0");
+      ["kasStart", "jStart", "cfStart"].forEach((id) => {
+        if (document.getElementById(id))
+          document.getElementById(id).value = `${y}-${mo}-01`;
+      });
+      ["kasEnd", "jEnd", "cfEnd", "neracaDate"].forEach((id) => {
+        if (document.getElementById(id))
+          document.getElementById(id).value = today();
+      });
+
+      const bkEnd = document.getElementById("bkEndDate");
+      if (bkEnd && !bkEnd.value) {
+        const lastPrevMonth = new Date(y, m.getMonth(), 0);
+        bkEnd.value = lastPrevMonth.toLocaleDateString("en-CA");
+      }
+
+      // Default Tab yang terbuka / deep link
+      applyAccountingDeepLink();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,286 @@
+/* 
+  Shared Components Styles 
+  Used for Searchable Dropdowns, Custom Modals, etc.
+*/
+
+.combobox-container,
+.item-search-box {
+  width: 100%;
+  position: relative;
+}
+
+.combobox-input {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  background: var(--input-bg);
+  color: var(--text-main);
+  font-size: var(--fs-sm);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.combobox-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+/* Premium Dropdown Styling */
+.premium-dropdown {
+  position: fixed;
+  max-height: min(50vh, 17.5rem);
+  overflow-y: auto;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 0.625rem;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  z-index: 999999;
+  display: none;
+}
+
+.premium-dropdown.show {
+  display: block;
+  animation: dropdownFadeIn 0.15s ease;
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.premium-dropdown-item {
+  padding: 0.625rem 0.875rem;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-main);
+  font-size: var(--fs-sm);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-xs);
+  transition: background 0.15s;
+}
+
+/* Nama barang/supplier/akun yang panjang dipotong "…" — tidak meluber keluar
+   dropdown di HP. Berlaku untuk SEMUA combo (createPremiumCombo). */
+.premium-dropdown-item > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.premium-dropdown-item:hover,
+.premium-dropdown-item.highlight {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.premium-dropdown-item small {
+  color: var(--text-muted);
+  margin-left: var(--space-xs);
+  font-size: var(--fs-xs);
+}
+
+/* Purchase Grid Component Styling */
+.purchase-grid-container {
+  width: 100%;
+  overflow-x: auto;
+  padding-bottom: var(--space-xs);
+}
+
+.purchase-grid-header {
+  display: grid;
+  grid-template-columns: 2fr 6.25rem 1.2fr 6.25rem 1.2fr var(--disc-col-width, 6.25rem) 1.2fr 2.5rem;
+  gap: var(--space-sm);
+  padding: var(--space-sm) 0;
+  border-bottom: 2px solid var(--border-color);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 56.25rem;
+}
+
+.purchase-grid-row {
+  display: grid;
+  grid-template-columns: 2fr 6.25rem 1.2fr 6.25rem 1.2fr var(--disc-col-width, 6.25rem) 1.2fr 2.5rem;
+  gap: var(--space-sm);
+  align-items: center;
+  padding: var(--space-xs) 0;
+  border-bottom: 1px solid var(--border-color);
+  min-width: 56.25rem;
+}
+
+.purchase-grid-row:last-child {
+  border-bottom: none;
+}
+
+.purchase-grid-netto {
+  font-weight: 700;
+  color: var(--primary);
+  text-align: right;
+}
+
+/* Tiered Discount Group */
+.disc-group {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+}
+
+.disc-group .input-control,
+.disc-group .combobox-input {
+  padding: var(--space-xs) 0.375rem;
+  font-size: 0.8125rem;
+  /* min-width:0 → boleh menyusut mengikuti lebar kolom Diskon supaya 3-4 input
+     potongan bertingkat tetap muat dalam sel dan tidak meluber ke kolom Total. */
+  min-width: 0;
+  flex: 1;
+}
+
+.btn-plus-disc {
+  background: var(--primary-light);
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: 0.25rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-weight: bold;
+  flex-shrink: 0;
+  transition: 0.2s;
+}
+
+.btn-plus-disc:hover {
+  background: var(--primary);
+  color: white;
+}
+
+/* Fulfillment Grid (Dual Qty) */
+.fulfillment-grid-header {
+  display: grid;
+  grid-template-columns: 2fr 5rem 5rem 1.2fr 5rem 1.2fr var(--disc-col-width, 5rem) 1.3fr;
+  gap: var(--space-sm);
+  padding: var(--space-sm) 0;
+  border-bottom: 2px solid var(--border-color);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 56.25rem;
+}
+
+.fulfillment-grid-row {
+  display: grid;
+  grid-template-columns: 2fr 5rem 5rem 1.2fr 5rem 1.2fr var(--disc-col-width, 5rem) 1.3fr;
+  gap: var(--space-sm);
+  align-items: center;
+  padding: var(--space-xs) 0;
+  border-bottom: 1px solid var(--border-color);
+  min-width: 56.25rem;
+}
+
+.fulfillment-grid-row:last-child {
+  border-bottom: none;
+}
+
+.purchase-grid-empty {
+  padding: 2.5rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ============================================================
+   RESPONSIF — komponen bersama (mobile-first)
+   ============================================================ */
+
+/* Grid form OrderManager: 1 kolom di HP, 2 kolom di layar lebar */
+.om-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-lg);
+}
+@media (min-width: 768px) {
+  .om-grid {
+    grid-template-columns: 1.5fr 1fr;
+  }
+}
+
+/* Pembungkus sel grid pembelian (dipasang createPurchaseGrid) supaya tiap
+   input bisa diberi label kolom saat grid tampil sebagai kartu di HP. */
+.pg-cell {
+  display: block;
+  min-width: 0;
+}
+
+/* Grid Pembelian/Fulfillment → KARTU per-item di HP & tablet kecil (<=768px).
+   Ambang dinaikkan dari 640px supaya HP landscape & tablet portrait tidak
+   terpaksa scroll samping (grid butuh min-width 900px). Tablet besar &
+   desktop (>=769px) tetap tampil grid penuh.
+   atribut data-label dipasang dari header oleh createPurchaseGrid. */
+@media (max-width: 768px) {
+  .purchase-grid-header,
+  .fulfillment-grid-header {
+    display: none !important;
+  }
+  .purchase-grid-container {
+    overflow-x: visible;
+  }
+  .purchase-grid-row,
+  .fulfillment-grid-row {
+    display: flex !important;
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: var(--space-xs);
+    min-width: 0 !important;
+    grid-template-columns: none !important;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm) !important;
+    margin-bottom: 0.625rem;
+  }
+  /* tiap sel: nama kolom di kiri, nilai/input di kanan */
+  .purchase-grid-row > [data-label],
+  .fulfillment-grid-row > [data-label] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.625rem;
+    width: 100%;
+  }
+  .purchase-grid-row > [data-label]::before,
+  .fulfillment-grid-row > [data-label]::before {
+    content: attr(data-label);
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .pg-cell > input {
+    flex: 1;
+    width: auto;
+    text-align: right !important;
+  }
+  /* sel pemilih barang tampil penuh di atas kartu */
+  .purchase-grid-row > .item-col-container,
+  .fulfillment-grid-row > .item-col-container {
+    width: 100%;
+  }
+  .purchase-grid-row > .btn-del-row,
+  .fulfillment-grid-row > .btn-del-row {
+    align-self: flex-end;
+  }
+}

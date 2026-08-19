@@ -1,0 +1,1312 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Onboarding - FPOS</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <style>
+      body {
+        background-color: var(--bg-color);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      .wizard-container {
+        max-width: 800px;
+        margin: 40px auto;
+        width: 100%;
+        padding: 0 20px;
+      }
+
+      /* Stepper UI */
+      .stepper {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 40px;
+        position: relative;
+        padding: 0 40px;
+      }
+      .stepper::before {
+        content: "";
+        position: absolute;
+        top: 20px;
+        left: 60px;
+        right: 60px;
+        height: 3px;
+        background: var(--border-color);
+        z-index: 1;
+      }
+      .step {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+      .step-circle {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: var(--card-bg);
+        border: 3px solid var(--border-color);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 900;
+        font-size: 18px;
+        color: var(--text-muted);
+        transition: 0.3s;
+      }
+      .step.active .step-circle {
+        border-color: var(--primary);
+        background: var(--primary);
+        color: white;
+        box-shadow: 0 0 15px var(--primary-light);
+      }
+      .step.completed .step-circle {
+        border-color: #10b981;
+        background: #10b981;
+        color: white;
+      }
+      .step-label {
+        font-size: 14px;
+        font-weight: bold;
+        color: var(--text-muted);
+      }
+      .step.active .step-label {
+        color: var(--primary);
+      }
+
+      /* Panels */
+      .step-panel {
+        display: none;
+        animation: fadeIn 0.4s ease-in-out;
+      }
+      .step-panel.active {
+        display: block;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* Card & Inputs */
+      .onboard-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        padding: 30px;
+        margin-bottom: 20px;
+        box-shadow: var(--shadow-sm);
+      }
+      .input-group label {
+        display: block;
+        font-size: 13px;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+      }
+      .val-input {
+        font-size: 20px;
+        font-weight: 900;
+        color: var(--text-main);
+        background: rgba(0, 0, 0, 0.1);
+      }
+      .val-input:focus {
+        background: var(--bg-color);
+        border-color: var(--primary);
+      }
+      .btn-nav {
+        padding: 14px 28px;
+        font-size: 16px;
+        font-weight: 900;
+        border-radius: 12px;
+      }
+
+      /* ── DYNAMIC ROWS TABLE ────────────────────────────────────── */
+      .rows-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 10px;
+      }
+      .rows-table thead th {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-muted);
+        padding: 0 8px 8px;
+        text-align: left;
+        border-bottom: 1px solid var(--border-color);
+      }
+      .rows-table thead th:last-child {
+        width: 40px;
+        text-align: center;
+      }
+      .rows-table tbody tr {
+        animation: rowSlideIn 0.2s ease;
+      }
+      @keyframes rowSlideIn {
+        from {
+          opacity: 0;
+          transform: translateX(-8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      .rows-table tbody td {
+        padding: 6px 4px;
+        vertical-align: middle;
+      }
+      .rows-table tbody td:first-child {
+        padding-left: 0;
+      }
+      .rows-table tbody td:last-child {
+        padding-right: 0;
+        text-align: center;
+      }
+
+      .row-input {
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid var(--border-color);
+        background: var(--bg-color);
+        color: var(--text-main);
+        font-size: 14px;
+        transition: border-color 0.2s;
+      }
+      .row-input:focus {
+        outline: none;
+        border-color: var(--primary);
+      }
+      .row-input.amount-input {
+        font-weight: 700;
+        font-size: 15px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .row-input.amount-input.red-tint {
+        color: #ef4444;
+        border-color: rgba(239, 68, 68, 0.3);
+      }
+      .row-input.amount-input.red-tint:focus {
+        border-color: #ef4444;
+      }
+      .supplier-autocomplete {
+        position: relative;
+      }
+      .supplier-dropdown {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        max-height: 220px;
+        overflow-y: auto;
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+        z-index: 50;
+        display: none;
+      }
+      .supplier-dropdown.show {
+        display: block;
+      }
+      .supplier-option,
+      .supplier-empty {
+        padding: 10px 12px;
+        font-size: 13px;
+      }
+      .supplier-option {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        cursor: pointer;
+        border-bottom: 1px solid var(--border-color);
+      }
+      .supplier-option:last-child {
+        border-bottom: none;
+      }
+      .supplier-option:hover,
+      .supplier-option.highlight {
+        background: var(--primary-light);
+        color: var(--primary);
+      }
+      .supplier-option-code {
+        color: var(--text-muted);
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .supplier-empty {
+        color: var(--text-muted);
+        font-style: italic;
+        text-align: center;
+      }
+
+      .btn-del-row {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        background: rgba(239, 68, 68, 0.08);
+        color: #ef4444;
+        font-size: 16px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition:
+          background 0.2s,
+          transform 0.1s;
+        line-height: 1;
+      }
+      .btn-del-row:hover {
+        background: rgba(239, 68, 68, 0.2);
+        transform: scale(1.1);
+      }
+      .btn-del-row:disabled {
+        opacity: 0.25;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .btn-add-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 14px;
+        border-radius: 8px;
+        border: 1px dashed var(--border-color);
+        background: transparent;
+        color: var(--text-muted);
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-top: 4px;
+      }
+      .btn-add-row:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+        background: rgba(var(--primary-rgb, 99, 102, 241), 0.05);
+      }
+
+      .rows-subtotal {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 0 4px;
+        border-top: 1px solid var(--border-color);
+        margin-top: 4px;
+        font-size: 13px;
+        color: var(--text-muted);
+      }
+      .rows-subtotal .subtotal-val {
+        font-size: 17px;
+        font-weight: 900;
+        color: var(--text-main);
+        font-variant-numeric: tabular-nums;
+      }
+      .rows-subtotal.red .subtotal-val {
+        color: #ef4444;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wizard-container">
+      <div style="text-align: center; margin-bottom: 40px">
+        <div style="font-size: 48px; margin-bottom: 10px">🚀</div>
+        <h1 style="margin: 0; color: var(--text-main)">Setup Awal FPOS</h1>
+        <p style="color: var(--text-muted); margin-top: 8px">
+          Selesaikan 2 langkah mudah ini untuk mulai menggunakan aplikasi.
+        </p>
+      </div>
+
+      <div class="stepper">
+        <div class="step active" id="indicator-1">
+          <div class="step-circle">1</div>
+          <div class="step-label">Data Barang</div>
+        </div>
+        <div class="step" id="indicator-2">
+          <div class="step-circle">2</div>
+          <div class="step-label">Saldo Awal</div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <!-- STEP 1 — Data Barang                                       -->
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <div id="step-1" class="step-panel active">
+        <div class="onboard-card" style="border: 2px solid #10b981">
+          <h2 style="margin: 0 0 10px; color: #10b981">
+            📥 Cara Cepat: Import Excel
+          </h2>
+          <p
+            style="
+              color: var(--text-muted);
+              font-size: 14px;
+              margin-bottom: 16px;
+            "
+          >
+            Punya ratusan barang? Jangan input manual! Gunakan file Excel/CSV
+            untuk memasukkan semua data barang, harga, dan stok Anda sekaligus.
+          </p>
+          <div
+            style="
+              background: var(--bg-color);
+              padding: 16px;
+              border-radius: 8px;
+              margin-bottom: 20px;
+            "
+          >
+            <div
+              style="
+                font-size: 12px;
+                color: var(--text-muted);
+                margin-bottom: 6px;
+              "
+            >
+              Format Kolom Header (Baris 1) Wajib:
+            </div>
+            <code
+              style="color: #10b981; font-size: 13px; word-break: break-all"
+            >
+              KODEBARCODE, NAMAITEM, JENIS, MEREK, SATUAN, HARGAPOKOK,
+              HARGAJUAL, STOK, STOKMIN, KETERANGAN, SUPPLIER
+            </code>
+          </div>
+          <input
+            type="file"
+            id="excelFile"
+            accept=".xlsx,.xls,.csv"
+            class="input-control"
+            style="margin-bottom: 16px"
+          />
+          <button
+            onclick="importExcel()"
+            class="btn btn-primary"
+            style="
+              background: #10b981;
+              border: none;
+              font-weight: bold;
+              width: 100%;
+            "
+          >
+            📄 Upload & Jalankan Import
+          </button>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px">
+          <div class="onboard-card">
+            <h3 style="margin: 0 0 10px">🧱 Setup Otomatis</h3>
+            <p
+              style="
+                color: var(--text-muted);
+                font-size: 13px;
+                margin-bottom: 16px;
+              "
+            >
+              Buatkan kategori dan satuan standar toko bangunan.
+            </p>
+            <button
+              onclick="setupCepat()"
+              class="btn"
+              style="
+                width: 100%;
+                border: 1px solid var(--primary);
+                color: var(--primary);
+              "
+            >
+              Buat Standar
+            </button>
+          </div>
+          <div class="onboard-card">
+            <h3 style="margin: 0 0 10px">🎮 Coba-coba (Demo)</h3>
+            <p
+              style="
+                color: var(--text-muted);
+                font-size: 13px;
+                margin-bottom: 16px;
+              "
+            >
+              Isi aplikasi dengan data contoh untuk sekadar tes fitur.
+            </p>
+            <button
+              onclick="buatDemo()"
+              class="btn"
+              style="
+                width: 100%;
+                background: var(--bg-color);
+                border: 1px solid var(--border-color);
+              "
+            >
+              Generate Data Demo
+            </button>
+          </div>
+        </div>
+
+        <div style="text-align: right; margin-top: 30px">
+          <button onclick="goToStep(2)" class="btn btn-primary btn-nav">
+            Lanjut ke Saldo Awal ➔
+          </button>
+          <div
+            style="font-size: 12px; color: var(--text-muted); margin-top: 8px"
+          >
+            (Anda bisa melewati langkah ini dan mengisinya nanti di menu
+            Pengaturan)
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <!-- STEP 2 — Saldo Awal                                        -->
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <div id="step-2" class="step-panel">
+        <div class="onboard-card" style="border: 2px solid var(--primary)">
+          <h2 style="margin: 0 0 10px; color: var(--primary)">
+            ⚖️ Setup Saldo Awal (Wajib)
+          </h2>
+          <p
+            style="
+              color: var(--text-muted);
+              margin-bottom: 24px;
+              line-height: 1.5;
+            "
+          >
+            Masukkan nilai kekayaan Zona Kerja Anda saat ini. Sistem akan
+            otomatis memproses data ini menjadi jurnal akuntansi agar
+            <b>Neraca Anda seimbang</b> sejak hari pertama.
+          </p>
+
+          <!-- ── HARTA & ASET ──────────────────────────────────── -->
+          <h3
+            style="
+              font-size: 15px;
+              margin-bottom: 12px;
+              border-bottom: 1px solid var(--border-color);
+              padding-bottom: 8px;
+            "
+          >
+            💰 HARTA & ASET
+          </h3>
+
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 16px;
+              margin-bottom: 16px;
+            "
+          >
+            <div class="input-group">
+              <label>Uang Tunai di Laci Kasir (Rp)</label>
+              <input
+                type="text"
+                inputmode="decimal"
+                data-input-desimal
+                data-min="0"
+                id="vCash"
+                class="input-control val-input"
+                placeholder="0"
+                oninput="formatRupiahInput(event)"
+              />
+            </div>
+            <div class="input-group">
+              <label>Saldo di Rekening Bank (Rp)</label>
+              <input
+                type="text"
+                inputmode="decimal"
+                data-input-desimal
+                data-min="0"
+                id="vBank"
+                class="input-control val-input"
+                placeholder="0"
+                oninput="formatRupiahInput(event)"
+              />
+            </div>
+          </div>
+
+          <div class="input-group" style="margin-bottom: 16px">
+            <label>Total Nilai Fisik Barang di Gudang (Rp)</label>
+            <input
+              type="text"
+              inputmode="decimal"
+              data-input-desimal
+              data-min="0"
+              id="vInv"
+              class="input-control val-input"
+              placeholder="0"
+              oninput="formatRupiahInput(event)"
+            />
+            <div
+              id="vInvHint"
+              style="font-size: 12px; color: var(--text-muted); margin-top: 6px"
+            >
+              Nilai persediaan akan dibaca otomatis dari stok hasil import
+              Excel.
+            </div>
+          </div>
+
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 16px;
+              margin-bottom: 24px;
+            "
+          >
+            <div class="input-group">
+              <label>Nilai Peralatan / Kendaraan (Rp)</label>
+              <input
+                type="text"
+                inputmode="decimal"
+                data-input-desimal
+                data-min="0"
+                id="vEq"
+                class="input-control val-input"
+                placeholder="0"
+                oninput="formatRupiahInput(event)"
+              />
+            </div>
+            <div class="input-group">
+              <label>Nilai Bangunan Toko (Rp)</label>
+              <input
+                type="text"
+                inputmode="decimal"
+                data-input-desimal
+                data-min="0"
+                id="vBld"
+                class="input-control val-input"
+                placeholder="0"
+                oninput="formatRupiahInput(event)"
+              />
+            </div>
+          </div>
+
+          <!-- ── HUTANG / KEWAJIBAN — DYNAMIC ROWS ────────────── -->
+          <h3
+            style="
+              font-size: 15px;
+              margin-bottom: 6px;
+              border-bottom: 1px solid var(--border-color);
+              padding-bottom: 8px;
+              color: #ef4444;
+            "
+          >
+            💳 HUTANG / KEWAJIBAN
+          </h3>
+          <p
+            style="
+              font-size: 12px;
+              color: var(--text-muted);
+              margin-bottom: 14px;
+            "
+          >
+            Catat setiap hutang secara terpisah agar mudah diidentifikasi. Klik
+            <b>+ Tambah Baris</b> untuk menambah item hutang baru.
+          </p>
+
+          <!-- Tabel Hutang -->
+          <table class="rows-table" id="tblHutang">
+            <thead>
+              <tr>
+                <th style="width: 32%">Supplier</th>
+                <th style="width: 34%">Deskripsi</th>
+                <th style="width: 28%">Jumlah (Rp)</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="bodyHutang">
+              <!-- baris pertama — tidak bisa dihapus -->
+            </tbody>
+          </table>
+
+          <datalist id="supplierList"></datalist>
+
+          <button class="btn-add-row" onclick="tambahBaris('hutang')">
+            <span style="font-size: 18px; line-height: 1">+</span> Tambah Baris
+            Hutang
+          </button>
+
+          <div class="rows-subtotal red" id="subtotalHutang">
+            <span>Total Hutang:</span>
+            <span class="subtotal-val" id="lblTotalHutang">Rp 0</span>
+          </div>
+
+          <!-- ── MODAL BERSIH ──────────────────────────────────── -->
+          <div
+            style="
+              background: rgba(59, 130, 246, 0.1);
+              border: 1px dashed rgba(59, 130, 246, 0.4);
+              padding: 20px;
+              border-radius: 12px;
+              text-align: center;
+              margin-top: 24px;
+            "
+          >
+            <div
+              style="
+                font-size: 13px;
+                color: var(--text-muted);
+                font-weight: bold;
+              "
+            >
+              Kekayaan Bersih / Modal Awal Toko:
+            </div>
+            <div
+              id="lblModal"
+              style="
+                font-size: 32px;
+                font-weight: 900;
+                color: #10b981;
+                margin-top: 4px;
+              "
+            >
+              Rp 0
+            </div>
+            <div
+              style="font-size: 12px; color: var(--text-muted); margin-top: 8px"
+            >
+              (Harta dikurangi Hutang)
+            </div>
+          </div>
+        </div>
+
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 30px;
+          "
+        >
+          <button
+            onclick="goToStep(1)"
+            class="btn btn-nav"
+            style="
+              background: transparent;
+              border: 1px solid var(--border-color);
+            "
+          >
+            ← Kembali
+          </button>
+          <button
+            onclick="submitSaldoAwal()"
+            id="btnSubmitSaldo"
+            class="btn btn-primary btn-nav"
+          >
+            Simpan & Selesaikan Setup ✓
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/theme.js"></script>
+    <script>
+      requireAuth();
+
+      // 🛡️ PENJAGA GERBANG: Jika setup sudah selesai (atau jika ini Cabang), tendang ke Dashboard
+      async function checkGatekeeper() {
+        try {
+          const res = await api("GET", "/accounting/setup-status");
+          if (res.is_setup_completed) {
+            window.location.replace("/dashboard");
+          }
+        } catch (e) {
+          console.error("Gagal mengecek status setup", e);
+        }
+      }
+      checkGatekeeper();
+
+      let supplierOptions = [];
+
+      function normalizeSupplierText(value) {
+        return String(value || "")
+          .trim()
+          .toLowerCase();
+      }
+
+      function getFilteredSupplierOptions(searchText = "") {
+        const search = normalizeSupplierText(searchText);
+        return supplierOptions.filter((supplier) => {
+          const name = normalizeSupplierText(supplier.name);
+          const code = normalizeSupplierText(supplier.code);
+          return (
+            !search || name.includes(search) || (code && code.includes(search))
+          );
+        });
+      }
+
+      function closeAllSupplierDropdowns(exceptDropdown = null) {
+        document
+          .querySelectorAll(".supplier-dropdown.show")
+          .forEach((dropdown) => {
+            if (dropdown !== exceptDropdown) dropdown.classList.remove("show");
+          });
+      }
+
+      function setupSupplierAutocomplete(input) {
+        if (!input || input.dataset.autocompleteReady === "1") return;
+        input.dataset.autocompleteReady = "1";
+
+        const wrapper = input.closest(".supplier-autocomplete");
+        const dropdown = wrapper?.querySelector(".supplier-dropdown");
+        let highlightedIndex = -1;
+
+        const selectSupplier = (supplier) => {
+          if (!supplier) return false;
+          input.value = supplier.name;
+          input.dataset.supplierId = supplier.id;
+          highlightedIndex = -1;
+          dropdown.classList.remove("show");
+          hitungKekayaan();
+          return true;
+        };
+
+        const renderDropdown = (searchText = "") => {
+          if (!dropdown) return [];
+          const filtered = getFilteredSupplierOptions(searchText);
+          if (filtered.length === 0) {
+            dropdown.innerHTML =
+              '<div class="supplier-empty">Supplier tidak ditemukan</div>';
+            dropdown.classList.add("show");
+            return [];
+          }
+
+          const visibleSuppliers = filtered.slice(0, 50);
+          dropdown.innerHTML = visibleSuppliers
+            .map(
+              (supplier, idx) => `
+                <div class="supplier-option ${idx === highlightedIndex ? "highlight" : ""}" data-id="${supplier.id}">
+                  <span>${supplier.name}</span>
+                  <span class="supplier-option-code">${supplier.code || ""}</span>
+                </div>
+              `,
+            )
+            .join("");
+
+          if (filtered.length > visibleSuppliers.length) {
+            dropdown.innerHTML += `<div class="supplier-empty">Menampilkan ${visibleSuppliers.length} dari ${filtered.length} supplier. Lanjutkan mengetik.</div>`;
+          }
+
+          dropdown.classList.add("show");
+          closeAllSupplierDropdowns(dropdown);
+          dropdown.querySelectorAll(".supplier-option").forEach((optionEl) => {
+            optionEl.addEventListener("mousedown", (e) => {
+              e.preventDefault();
+              const supplier = supplierOptions.find(
+                (item) => item.id === parseInt(optionEl.dataset.id),
+              );
+              selectSupplier(supplier);
+            });
+          });
+          return visibleSuppliers;
+        };
+
+        const commitTypedSupplier = () => {
+          const typed = normalizeSupplierText(input.value);
+          if (!typed) {
+            input.dataset.supplierId = "";
+            dropdown.classList.remove("show");
+            return false;
+          }
+
+          const exactMatch = supplierOptions.find((supplier) => {
+            const name = normalizeSupplierText(supplier.name);
+            const code = normalizeSupplierText(supplier.code);
+            return name === typed || (code && code === typed);
+          });
+          if (exactMatch) return selectSupplier(exactMatch);
+
+          const filtered = getFilteredSupplierOptions(input.value);
+          if (filtered.length === 1) return selectSupplier(filtered[0]);
+
+          input.dataset.supplierId = "";
+          return false;
+        };
+
+        input.addEventListener("focus", () => {
+          highlightedIndex = -1;
+          renderDropdown(input.value);
+        });
+
+        input.addEventListener("input", () => {
+          input.dataset.supplierId = "";
+          highlightedIndex = -1;
+          renderDropdown(input.value);
+          hitungKekayaan();
+        });
+
+        input.addEventListener("keydown", (e) => {
+          if (!dropdown.classList.contains("show")) return;
+          const options = Array.from(
+            dropdown.querySelectorAll(".supplier-option"),
+          );
+          const isNextKey = e.key === "ArrowDown" || e.key === "ArrowRight";
+          const isPreviousKey = e.key === "ArrowUp" || e.key === "ArrowLeft";
+          if (isNextKey || isPreviousKey) {
+            if (!options.length) return;
+            e.preventDefault();
+            highlightedIndex =
+              (highlightedIndex + (isNextKey ? 1 : -1) + options.length) %
+              options.length;
+            renderDropdown(input.value);
+          } else if (e.key === "Enter") {
+            e.preventDefault();
+            const selectedOption =
+              options[highlightedIndex >= 0 ? highlightedIndex : 0];
+            if (selectedOption) {
+              selectedOption.dispatchEvent(
+                new MouseEvent("mousedown", { bubbles: true }),
+              );
+            } else {
+              commitTypedSupplier();
+            }
+          } else if (e.key === "Tab") {
+            const selectedOption = options[highlightedIndex];
+            if (selectedOption) {
+              selectedOption.dispatchEvent(
+                new MouseEvent("mousedown", { bubbles: true }),
+              );
+            } else {
+              commitTypedSupplier();
+              dropdown.classList.remove("show");
+            }
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            dropdown.classList.remove("show");
+          }
+        });
+
+        input.addEventListener("blur", () => {
+          setTimeout(() => {
+            if (!wrapper.contains(document.activeElement)) {
+              commitTypedSupplier();
+              dropdown.classList.remove("show");
+            }
+          }, 120);
+        });
+      }
+
+      async function loadSupplierDatalist() {
+        try {
+          const suppliers = await api("GET", "/suppliers/?limit=5000");
+          supplierOptions = (suppliers || [])
+            .filter((s) => s && s.name)
+            .sort((a, b) => (a.name || "").localeCompare(b.name || "", "id"));
+        } catch (e) {
+          // Optional: onboarding tetap bisa jalan walau supplier gagal dimuat.
+          supplierOptions = [];
+        }
+      }
+
+      // ══════════════════════════════════════════════════════════════
+      // NAVIGASI WIZARD
+      // ══════════════════════════════════════════════════════════════
+      function goToStep(step) {
+        document
+          .querySelectorAll(".step-panel")
+          .forEach((el) => el.classList.remove("active"));
+        document.getElementById(`step-${step}`).classList.add("active");
+        if (step === 1) {
+          document.getElementById("indicator-1").classList.add("active");
+          document.getElementById("indicator-2").classList.remove("active");
+          document.getElementById("indicator-1").classList.remove("completed");
+        } else {
+          document.getElementById("indicator-1").classList.remove("active");
+          document.getElementById("indicator-1").classList.add("completed");
+          document.getElementById("indicator-2").classList.add("active");
+          refreshOpeningInventoryValue();
+        }
+        window.scrollTo(0, 0);
+      }
+
+      // ══════════════════════════════════════════════════════════════
+      // FORMAT RUPIAH
+      // ══════════════════════════════════════════════════════════════
+      function formatRupiahInput(e) {
+        formatDesimal(e.target);
+        hitungKekayaan();
+      }
+
+      // Format angka → string Rupiah (untuk input dinamis)
+      function fmtRp(num) {
+        return toDesimal(num);
+      }
+
+      // Baca nilai angka dari input (hapus titik pemisah)
+      const getRawVal = (id) => parseDesimal(document.getElementById(id));
+
+      // Baca nilai angka dari elemen input langsung (bukan by id)
+      const getRawFromEl = (el) => parseDesimal(el);
+
+      async function refreshOpeningInventoryValue(force = false) {
+        const input = document.getElementById("vInv");
+        const hint = document.getElementById("vInvHint");
+        if (!input) return;
+
+        try {
+          const res = await api("GET", "/accounting/opening-inventory-value");
+          const suggested = parseFloat(res?.inventory_value) || 0;
+          const currentValue = getRawVal("vInv");
+
+          if (force || !input.value.trim() || currentValue <= 0) {
+            input.value = fmtRp(suggested > 0 ? Math.round(suggested) : 0);
+          }
+
+          if (hint) {
+            hint.textContent =
+              suggested > 0
+                ? `Otomatis dari stok import: ${res?.item_count || 0} barang, nilai ${new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(suggested)}.`
+                : "Belum ada nilai persediaan terdeteksi dari stok import.";
+          }
+
+          hitungKekayaan();
+        } catch (e) {
+          if (hint) {
+            hint.textContent =
+              "Nilai persediaan otomatis belum bisa dibaca. Anda masih bisa isi manual.";
+          }
+        }
+      }
+
+      // ══════════════════════════════════════════════════════════════
+      // DYNAMIC ROWS — HUTANG
+      // ══════════════════════════════════════════════════════════════
+
+      /**
+       * Tambah satu baris ke tabel hutang.
+       * @param {'hutang'} type  — bisa dikembangkan ke tipe lain
+       * @param {string}   desc  — nilai default keterangan
+       * @param {number}   amt   — nilai default jumlah
+       */
+      function tambahBaris(type, supplier = "", desc = "", amt = "") {
+        const tbody = document.getElementById("bodyHutang");
+        const rowCount = tbody.querySelectorAll("tr").length;
+        const isFirst = rowCount === 0;
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>
+            <div class="supplier-autocomplete">
+              <input
+                class="row-input hutang-supplier"
+                type="text"
+                placeholder="Pilih / ketik supplier"
+                value="${supplier}"
+              />
+              <div class="supplier-dropdown"></div>
+            </div>
+          </td>
+          <td>
+            <input
+              class="row-input hutang-desc"
+              type="text"
+              placeholder="cth: Hutang invoice lama"
+              value="${desc}"
+              oninput="hitungKekayaan()"
+            />
+          </td>
+          <td>
+            <input
+              class="row-input amount-input red-tint"
+              type="text"
+              inputmode="decimal"
+              data-input-desimal
+              data-min="0"
+              placeholder="0"
+              value="${amt ? fmtRp(amt) : ""}"
+              oninput="onRowAmountInput(event)"
+            />
+          </td>
+          <td>
+            <button
+              class="btn-del-row"
+              title="Hapus baris"
+              onclick="hapusBaris(this)"
+              ${isFirst ? "disabled" : ""}
+            >×</button>
+          </td>
+        `;
+
+        tbody.appendChild(tr);
+        setupSupplierAutocomplete(tr.querySelector(".hutang-supplier"));
+        updateDeleteButtons("bodyHutang");
+        hitungKekayaan();
+
+        // Fokus ke input supplier baris baru
+        tr.querySelector(".hutang-supplier").focus();
+      }
+
+      function onRowAmountInput(e) {
+        formatDesimal(e.target);
+        hitungKekayaan();
+      }
+
+      function hapusBaris(btn) {
+        const tr = btn.closest("tr");
+        tr.style.opacity = "0";
+        tr.style.transform = "translateX(20px)";
+        tr.style.transition = "0.2s";
+        setTimeout(() => {
+          tr.remove();
+          updateDeleteButtons("bodyHutang");
+          hitungKekayaan();
+        }, 200);
+      }
+
+      /**
+       * Pastikan tombol delete disabled hanya pada baris pertama
+       * jika hanya ada 1 baris tersisa.
+       */
+      function updateDeleteButtons(tbodyId) {
+        const rows = document.getElementById(tbodyId).querySelectorAll("tr");
+        rows.forEach((row, i) => {
+          const btn = row.querySelector(".btn-del-row");
+          if (btn) btn.disabled = rows.length === 1;
+        });
+      }
+
+      /** Jumlahkan semua baris hutang */
+      function getTotalHutang() {
+        let total = 0;
+        document
+          .getElementById("bodyHutang")
+          .querySelectorAll(".amount-input")
+          .forEach((el) => {
+            total += getRawFromEl(el);
+          });
+        return total;
+      }
+
+      // ══════════════════════════════════════════════════════════════
+      // HITUNG KEKAYAAN BERSIH
+      // ══════════════════════════════════════════════════════════════
+      function hitungKekayaan() {
+        const totalHarta =
+          getRawVal("vCash") +
+          getRawVal("vBank") +
+          getRawVal("vInv") +
+          getRawVal("vEq") +
+          getRawVal("vBld");
+
+        const totalHutang = getTotalHutang();
+        const modal = totalHarta - totalHutang;
+
+        // Update subtotal hutang
+        document.getElementById("lblTotalHutang").innerText =
+          new Intl.NumberFormat("id-ID", {
+            style: "currency",
+            currency: "IDR",
+            maximumFractionDigits: 0,
+          }).format(totalHutang);
+
+        // Update modal bersih
+        const lblModal = document.getElementById("lblModal");
+        lblModal.innerText = new Intl.NumberFormat("id-ID", {
+          style: "currency",
+          currency: "IDR",
+          maximumFractionDigits: 0,
+        }).format(modal);
+        lblModal.style.color = modal < 0 ? "#ef4444" : "#10b981";
+      }
+
+      // ══════════════════════════════════════════════════════════════
+      // SUBMIT SALDO AWAL
+      // ══════════════════════════════════════════════════════════════
+      async function submitSaldoAwal() {
+        const btn = document.getElementById("btnSubmitSaldo");
+        btn.disabled = true;
+        btn.innerText = "Menyusun Neraca...";
+
+        // Kumpulkan detail hutang (untuk log / referensi)
+        const hutangRows = [];
+        const invalidSupplier = [];
+        document
+          .getElementById("bodyHutang")
+          .querySelectorAll("tr")
+          .forEach((tr) => {
+            const supplierName = tr
+              .querySelector(".hutang-supplier")
+              ?.value?.trim();
+            const desc = tr.querySelector(".hutang-desc")?.value?.trim();
+            const amt = getRawFromEl(tr.querySelector(".amount-input"));
+            if (amt > 0) {
+              if (!supplierName) invalidSupplier.push(true);
+              hutangRows.push({
+                supplier_name: supplierName || "",
+                description: desc || "Hutang",
+                amount: amt,
+              });
+            }
+          });
+
+        if (invalidSupplier.length) {
+          showToast("Nama supplier untuk hutang tidak boleh kosong.", "error");
+          btn.disabled = false;
+          btn.innerText = "Simpan & Selesaikan Setup âœ“";
+          return;
+        }
+
+        const totalHutang = hutangRows.reduce((s, r) => s + r.amount, 0);
+
+        // API menerima total payable (backend tidak berubah)
+        const payload = {
+          cash: getRawVal("vCash"),
+          bank: getRawVal("vBank"),
+          inventory: getRawVal("vInv"),
+          equipment: getRawVal("vEq"),
+          building: getRawVal("vBld"),
+          payable: totalHutang,
+          // Detail rincian hutang dikirim sebagai metadata (opsional)
+          payable_detail: hutangRows,
+        };
+
+        try {
+          await api("POST", "/accounting/setup-initial-balance", payload);
+          showToast("Setup Selesai! Neraca Anda Seimbang ✓");
+
+          document.getElementById("step-2").innerHTML = `
+            <div style="text-align:center; padding:60px 20px;">
+              <div style="font-size:80px; margin-bottom:20px;">🎉</div>
+              <h1 style="color:#10b981;">Setup Selesai!</h1>
+              <p style="color:var(--text-muted); font-size:16px;">
+                Sistem akuntansi Anda telah diinisialisasi dan siap digunakan.
+              </p>
+              <div style="margin-top:30px; color:var(--primary); font-weight:bold;">
+                Mengarahkan ke Dashboard...
+              </div>
+            </div>
+          `;
+
+          setTimeout(() => {
+            window.location.replace("/dashboard");
+          }, 2000);
+        } catch (e) {
+          showToast(e.message, "error");
+          btn.disabled = false;
+          btn.innerText = "Simpan & Selesaikan Setup ✓";
+        }
+      }
+
+      // ══════════════════════════════════════════════════════════════
+      // LOGIKA STEP 1
+      // ══════════════════════════════════════════════════════════════
+      async function importExcel() {
+        const fInput = document.getElementById("excelFile");
+        if (!fInput.files[0])
+          return showToast(
+            "Harap pilih file Excel atau CSV terlebih dahulu!",
+            "error",
+          );
+        const fd = new FormData();
+        fd.append("file", fInput.files[0]);
+        try {
+          showLoading("Sedang memproses ribuan data...");
+          const res = await apiForm("/items/import", fd);
+          hideLoading();
+          await loadSupplierDatalist();
+          await refreshOpeningInventoryValue(true);
+          showToast(res.message || "Import Berhasil!");
+          fInput.value = "";
+          if (
+            confirm(
+              "Import berhasil! Apakah Anda ingin lanjut mengatur Saldo Awal Neraca sekarang?",
+            )
+          ) {
+            goToStep(2);
+          }
+        } catch (e) {
+          hideLoading();
+          showToast(e.message, "error");
+        }
+      }
+
+      async function buatDemo() {
+        if (
+          !(await showConfirm(
+            "Buat data demo?\n\nData barang dan transaksi contoh akan ditambahkan ke sistem.",
+          ))
+        )
+          return;
+        try {
+          showLoading("Menyusun data demo...");
+          await api("POST", "/onboarding/create-demo");
+          hideLoading();
+          showToast("Data demo berhasil dibuat ✓");
+          goToStep(2);
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function setupCepat() {
+        const kategori = [
+          "Semen & Bahan Pengikat",
+          "Bata & Batako",
+          "Pasir & Kerikil",
+          "Besi & Baja",
+          "Kayu & Triplek",
+          "Cat & Finishing",
+          "Pipa & Sanitasi",
+          "Keramik & Granit",
+          "Atap & Genteng",
+          "Alat & Perkakas",
+        ];
+        const satuan = [
+          { name: "Sak", abbreviation: "sak" },
+          { name: "Kilogram", abbreviation: "kg" },
+          { name: "Meter", abbreviation: "m" },
+          { name: "Meter Persegi", abbreviation: "m²" },
+          { name: "Batang", abbreviation: "btg" },
+          { name: "Lembar", abbreviation: "lbr" },
+          { name: "Dus", abbreviation: "dus" },
+          { name: "Pcs", abbreviation: "pcs" },
+        ];
+        try {
+          showLoading("Membuat kategori dan satuan standar...");
+          for (const nama of kategori) {
+            try {
+              await api("POST", "/items/categories", { name: nama });
+            } catch (e) {}
+          }
+          for (const s of satuan) {
+            try {
+              await api("POST", "/items/units", s);
+            } catch (e) {}
+          }
+          hideLoading();
+          showToast("Kategori & Satuan Toko Bangunan berhasil dibuat ✓");
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      // ══════════════════════════════════════════════════════════════
+      // INIT — satu baris hutang default saat halaman dimuat
+      // ══════════════════════════════════════════════════════════════
+      tambahBaris("hutang");
+      loadSupplierDatalist();
+      refreshOpeningInventoryValue();
+      document.addEventListener("click", (e) => {
+        if (!e.target.closest(".supplier-autocomplete")) {
+          closeAllSupplierDropdowns();
+        }
+      });
+    </script>
+  </body>
+</html>

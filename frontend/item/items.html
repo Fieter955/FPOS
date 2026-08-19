@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Data Barang - FPOS</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/advanced_settings.css" />
+  </head>
+  <body>
+    <div class="app-container">
+      <main class="main-content">
+        <button
+          class="btn"
+          style="
+            background: transparent;
+            color: var(--text-muted);
+            padding: 0;
+            margin-bottom: 16px;
+          "
+          onclick="location.href = '/dashboard'"
+        >
+          ← Kembali
+        </button>
+
+        <div class="pg-header">
+          <div>
+            <h1>📦 Data Barang</h1>
+            <p>Kelola produk, harga normal/diskon, kategori, dan satuan.</p>
+          </div>
+          <div style="display: flex; gap: 10px">
+            <button
+              class="btn"
+              style="
+                background: var(--bg-color);
+                border: 1px solid var(--border-color);
+              "
+              onclick="switchTab('kat')"
+            >
+              🏷️ Kategori
+            </button>
+            <button
+              class="btn"
+              style="
+                background: var(--bg-color);
+                border: 1px solid var(--border-color);
+              "
+              onclick="switchTab('merek')"
+            >
+              🏢 Merek
+            </button>
+            <button
+              class="btn"
+              style="
+                background: var(--bg-color);
+                border: 1px solid var(--border-color);
+              "
+              onclick="switchTab('sat')"
+            >
+              📐 Satuan
+            </button>
+            <button class="btn btn-primary" onclick="openItemModal()">
+              ➕ Tambah Barang
+            </button>
+          </div>
+        </div>
+
+        <div id="tabBar" style="display: flex; gap: 8px; margin-bottom: 20px">
+          <button
+            id="tbBarang"
+            class="cat-btn active"
+            onclick="switchTab('brg')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--primary);
+              background: var(--primary);
+              color: #fff;
+              font-weight: 700;
+              cursor: pointer;
+            "
+          >
+            Barang
+          </button>
+          <button
+            id="tbKat"
+            class="cat-btn"
+            onclick="switchTab('kat')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+            "
+          >
+            Kategori
+          </button>
+          <button
+            id="tbMerek"
+            class="cat-btn"
+            onclick="switchTab('merek')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+            "
+          >
+            Merek
+          </button>
+          <button
+            id="tbSat"
+            class="cat-btn"
+            onclick="switchTab('sat')"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+            "
+          >
+            Satuan
+          </button>
+        </div>
+
+        <div id="pnlBrg">
+          <div class="filter-bar">
+            <input
+              id="srchBarang"
+              type="text"
+              class="input-control"
+              placeholder="🔍 Cari kode / nama / barcode..."
+              oninput="debouncedLoadItems()"
+            />
+            <select id="filterKat" class="input-control" onchange="loadItems()">
+              <option value="">Semua Kategori</option>
+            </select>
+            <label
+              style="
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 14px;
+                font-weight: 600;
+                color: var(--text-muted);
+                white-space: nowrap;
+              "
+            >
+              <input
+                type="checkbox"
+                id="showInaktif"
+                onchange="loadItems()"
+                style="width: 16px; height: 16px"
+              />
+              Tampilkan Nonaktif
+            </label>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Nama Barang & Barcode</th>
+                  <th>Kategori</th>
+                  <th>Satuan</th>
+                  <th>H.Beli</th>
+                  <th>H.Jual Normal</th>
+                  <th>H.Jual Diskon</th>
+                  <th>Stok</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="tblBarang"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="katContainer"></div>
+        <div id="merekContainer"></div>
+        <div id="unitsContainer"></div>
+      </main>
+    </div>
+
+    <style>
+      /* Render ringan untuk tabel panjang (1000+ baris): browser melewati layout/paint
+         baris yang di luar layar. contain-intrinsic-size memberi perkiraan tinggi baris
+         agar scrollbar tetap stabil. */
+      #tblBarang tr {
+        content-visibility: auto;
+        contain-intrinsic-size: 0 49px;
+      }
+
+      /* Menghilangkan spinner (panah atas bawah) pada input number */
+      input::-webkit-outer-spin-button,
+      input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      input[type="number"] {
+        -moz-appearance: textfield;
+      }
+
+      /* === KOMPONEN SUPPLIER === */
+      .sup-selection-section {
+        margin: 16px 0;
+        padding: 16px;
+        background: var(--bg-color);
+        border-radius: 12px;
+        border: 1px solid var(--border-color);
+      }
+      .sup-selection-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .sup-selection-header label {
+        font-weight: 600;
+        color: var(--text-muted);
+        font-size: 14px;
+      }
+      .supplier-context-combobox {
+        position: relative;
+        flex: 1;
+        min-width: 0;
+      }
+      .supplier-context-input {
+        width: 100%;
+        margin: 0 !important;
+        padding-right: 38px;
+        box-sizing: border-box;
+      }
+      .supplier-context-input[aria-expanded="true"] {
+        border-color: var(--primary);
+      }
+      .supplier-context-chevron {
+        position: absolute;
+        top: 50%;
+        right: 14px;
+        transform: translateY(-55%);
+        color: var(--text-muted);
+        font-size: 18px;
+        line-height: 1;
+        pointer-events: none;
+      }
+      .supplier-context-dropdown {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        max-height: 250px;
+        overflow-y: auto;
+        display: none;
+        background: var(--card-bg, #fff);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+        z-index: 10000;
+      }
+      .supplier-context-dropdown.show {
+        display: block;
+      }
+      .supplier-context-option {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 9px 12px;
+        cursor: pointer;
+        border-bottom: 1px solid var(--border-color);
+      }
+      .supplier-context-option:last-of-type {
+        border-bottom: none;
+      }
+      .supplier-context-option:hover,
+      .supplier-context-option.highlighted {
+        background: var(--primary-light);
+        color: var(--primary);
+      }
+      .supplier-context-option small {
+        color: var(--text-muted);
+        white-space: nowrap;
+      }
+      .supplier-context-empty,
+      .supplier-context-hint {
+        padding: 10px 12px;
+        color: var(--text-muted);
+        font-size: 12px;
+        text-align: center;
+      }
+      .supplier-context-hint {
+        border-top: 1px solid var(--border-color);
+      }
+      .sup-search-box {
+        position: relative;
+        width: 100%;
+        max-width: 400px;
+      }
+      .sup-search-input {
+        width: 100%;
+        padding: 10px 12px 10px 36px;
+        border: 2px solid var(--border-color);
+        border-radius: 10px;
+        background: var(--input-bg, #1e293b);
+        color: var(--text-main);
+        font-size: 14px;
+        outline: none;
+        box-sizing: border-box;
+      }
+      .sup-search-input:focus {
+        border-color: var(--primary);
+      }
+      .sup-search-icon {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+        font-size: 14px;
+        pointer-events: none;
+      }
+      .sup-dropdown {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        width: 100%;
+        max-height: 250px;
+        overflow-y: auto;
+        background: var(--card-bg, #ffffff);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        z-index: 9999;
+        display: none;
+      }
+      .sup-dropdown.show {
+        display: block;
+      }
+      .sup-dropdown-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 12px;
+        cursor: pointer;
+        border-bottom: 1px solid var(--border-color);
+      }
+      .sup-dropdown-item:last-child {
+        border-bottom: none;
+      }
+      .sup-dropdown-item:hover,
+      .sup-dropdown-item.highlighted {
+        background: var(--primary-light);
+      }
+      .sup-add-btn {
+        background: var(--primary);
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-weight: bold;
+      }
+      .sup-dropdown-empty {
+        padding: 12px;
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 13px;
+      }
+      .selected-sups-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        min-height: 36px;
+        padding: 8px;
+        border: 1px dashed var(--border-color);
+        border-radius: 8px;
+        background: var(--card-bg);
+      }
+      .sup-chip {
+        display: inline-flex;
+        align-items: center;
+        background: var(--primary-light);
+        color: var(--primary);
+        padding: 4px 8px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 500;
+        border: 1px solid var(--primary);
+      }
+      .chip-remove {
+        background: none;
+        border: none;
+        color: inherit;
+        margin-left: 6px;
+        cursor: pointer;
+        font-size: 16px;
+        line-height: 1;
+        padding: 0 2px;
+      }
+      .chip-remove:hover {
+        opacity: 0.7;
+      }
+    </style>
+    <div id="popUpContainer"></div>
+
+    <script src="/js/api.js?v=20260813-modal-focus"></script>
+    <script src="/js/theme.js"></script>
+    <script src="/js/kategori.js"></script>
+    <script src="/js/merek.js?v=20260813-modal-focus"></script>
+    <script src="/js/units.js?v=20260813-modal-focus"></script>
+    <script src="/js/supplier-form-keyboard.js?v=20260814-enter-nav"></script>
+    <script src="/js/item/itemForm.js?v=20260814-supplier-search"></script>
+  </body>
+</html>

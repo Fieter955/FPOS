@@ -1,0 +1,60 @@
+<div id="pnlMerek" style="display: none">
+  <div
+    style="
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 14px;
+    "
+  >
+    <button class="btn btn-primary" onclick="openMerekModal()">
+      ➕ Tambah Merek
+    </button>
+  </div>
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>Nama Merek</th>
+          <th>Deskripsi</th>
+          <th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody id="tblMerek"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal-overlay" id="mMerek">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <h2 id="mMerekTitle">Tambah Merek</h2>
+      <button class="btn-x" onclick="closeMerekModal()">×</button>
+    </div>
+    <div class="input-group">
+      <label>Nama *</label
+      ><input
+        id="merekNama"
+        class="input-control"
+        autofocus
+        placeholder="contoh: Gresik, Tiga Roda"
+      />
+    </div>
+    <div class="input-group">
+      <label>Deskripsi</label
+      ><textarea id="merekDesk" class="input-control" rows="2"></textarea>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+      <button
+        onclick="closeMerekModal()"
+        class="btn"
+        style="
+          background: var(--bg-color);
+          border: 1px solid var(--border-color);
+        "
+      >
+        Batal
+      </button>
+      <button onclick="saveMerek()" class="btn btn-primary">Simpan</button>
+    </div>
+  </div>
+</div>

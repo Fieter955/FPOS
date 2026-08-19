@@ -1,0 +1,46 @@
+<div class="tbl-wrap">
+  <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+    <h3 style="margin: 0; font-size: 1.1em;">Harga Berdasarkan Jumlah (Grosir/Tiering)</h3>
+  </div>
+  <table class="tbl" id="satuanGridTable">
+    <thead>
+      <tr>
+        <th style="width: 30px"></th>
+        <th>Satuan</th>
+        <th>Jenis</th>
+        <th style="width: 60px">Konv</th>
+        <th class="sep">H. Pokok</th>
+        
+        <th colspan="4" class="tier-label sep">Tier 1</th>
+        <th colspan="4" class="tier-label sep">Tier 2</th>
+        <th colspan="4" class="tier-label sep">Tier 3</th>
+        <th colspan="4" class="tier-label">Tier 4</th>
+      </tr>
+      <tr>
+        <th colspan="5"></th>
+        <th>Dari</th><th>Sampai</th><th>% Mg</th><th class="sep">Harga</th>
+        <th>Dari</th><th>Sampai</th><th>% Mg</th><th class="sep">Harga</th>
+        <th>Dari</th><th>Sampai</th><th>% Mg</th><th class="sep">Harga</th>
+        <th>Dari</th><th>Sampai</th><th>% Mg</th><th>Harga</th>
+      </tr>
+    </thead>
+    <tbody id="satuanGridBody">
+      <!-- Dinamis diisi JS Shared State -->
+    </tbody>
+  </table>
+  <div style="margin-top: 12px; font-size: 12px; color: var(--text-muted); line-height: 1.5;">
+    ℹ️ <b>Tips</b>: Atur harga khusus untuk pembelian jumlah banyak (grosir) pada setiap satuan.<br>
+    Perubahan di sini tersinkronisasi dengan tab <b>Satuan</b> dan <b>Level Harga</b>.
+  </div>
+</div>
+
+<style>
+  .tier-label {
+    text-align: center;
+    background: var(--primary) !important;
+    color: #fff !important;
+    font-weight: 800 !important;
+    font-size: 10px !important;
+    padding: 4px !important;
+  }
+</style>

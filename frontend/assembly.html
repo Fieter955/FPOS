@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Perakitan - FPOS</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    .assembly-tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px; }
+    .assembly-tab { padding:9px 18px; border-radius:100px; border:2px solid var(--border-color); background:transparent; color:var(--text-muted); font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; }
+    .assembly-tab.active { border-color:var(--primary); background:var(--primary); color:#fff; }
+    .panel-toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px; }
+    .panel-note { color:var(--text-muted); font-size:13px; }
+    .line-card { border:1px solid var(--border-color); border-radius:10px; margin-bottom:8px; padding:10px; background:var(--card-bg,#fff); }
+    .line-grid { display:grid; grid-template-columns:minmax(220px,3fr) minmax(120px,1fr) 38px; gap:8px; align-items:end; }
+    .line-grid.four { grid-template-columns:minmax(190px,2fr) minmax(110px,1fr) minmax(110px,1fr) 38px; }
+    .line-grid.result { grid-template-columns:minmax(210px,2fr) 90px 90px minmax(120px,1fr); }
+    .icon-button { width:36px; height:38px; border:0; border-radius:8px; color:#ef4444; background:rgba(239,68,68,.12); cursor:pointer; font-weight:800; }
+    .summary-box { padding:12px 14px; border-radius:10px; background:var(--bg-color); margin:10px 0 14px; font-size:13px; }
+    .status { display:inline-block; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:800; }
+    .status.open,.status.in_progress { color:#2563eb; background:rgba(37,99,235,.13); }
+    .status.partially_processed,.status.partially_completed { color:#d97706; background:rgba(245,158,11,.15); }
+    .status.processed,.status.completed,.status.posted { color:#16a34a; background:rgba(34,197,94,.15); }
+    .status.cancelled,.status.reversed { color:#dc2626; background:rgba(239,68,68,.13); }
+    .modal-box.xwide { width:min(980px,96vw); max-width:980px; max-height:92vh; overflow:auto; }
+    .modal-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:16px; }
+    .btn-secondary { background:var(--bg-color); border:1px solid var(--border-color); color:var(--text-main); }
+    .muted { color:var(--text-muted); font-size:12px; }
+    .progress-value { font-size:12px; font-weight:700; white-space:nowrap; }
+    @media (max-width:720px) {
+      .line-grid,.line-grid.four,.line-grid.result { grid-template-columns:1fr; }
+      .icon-button { width:100%; }
+      .panel-toolbar { align-items:flex-start; flex-direction:column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <main class="main-content">
+      <button class="btn" style="background:transparent;color:var(--text-muted);padding:0;margin-bottom:16px" onclick="location.href='/dashboard'">← Kembali</button>
+      <div class="pg-header">
+        <div>
+          <h1>🔧 Perakitan</h1>
+          <p>Formula → Pesanan → Proses Perakitan → Proses Jadi.</p>
+        </div>
+      </div>
+
+      <div class="assembly-tabs">
+        <button id="tab-bom" class="assembly-tab active" onclick="switchTab('bom')">📋 Formula</button>
+        <button id="tab-orders" class="assembly-tab" onclick="switchTab('orders')">🧾 Pesanan Perakitan</button>
+        <button id="tab-processes" class="assembly-tab" onclick="switchTab('processes')">⚙️ Proses Perakitan</button>
+        <button id="tab-results" class="assembly-tab" onclick="switchTab('results')">✅ Proses Jadi</button>
+      </div>
+
+      <section id="panel-bom">
+        <div class="panel-toolbar">
+          <span class="panel-note">Master komposisi dan output standar produk rakitan.</span>
+          <button class="btn btn-primary" onclick="openBOM()">＋ Buat Formula</button>
+        </div>
+        <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Produk Hasil</th><th>Output Formula</th><th>Komponen</th><th>Estimasi Biaya</th><th>Aksi</th></tr></thead><tbody id="tblBOM"></tbody></table></div>
+      </section>
+
+      <section id="panel-orders" style="display:none">
+        <div class="panel-toolbar">
+          <span class="panel-note">Pesanan pelanggan belum mengubah stok.</span>
+          <button class="btn btn-primary" onclick="openOrder()">＋ Buat Pesanan</button>
+        </div>
+        <div class="tbl-wrap"><table class="tbl"><thead><tr><th>No. Pesanan</th><th>Pelanggan</th><th>Tanggal</th><th>Produk</th><th>Total Qty</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="tblOrders"></tbody></table></div>
+      </section>
+
+      <section id="panel-processes" style="display:none">
+        <div class="panel-toolbar">
+          <span class="panel-note">Saat proses dimulai, bahan baku dipotong dari gudang.</span>
+          <button class="btn btn-primary" onclick="openProcess()">＋ Mulai Proses</button>
+        </div>
+        <div class="tbl-wrap"><table class="tbl"><thead><tr><th>No. Proses</th><th>Referensi</th><th>Gudang</th><th>Tanggal</th><th>Target</th><th>Sudah Jadi</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="tblProcesses"></tbody></table></div>
+      </section>
+
+      <section id="panel-results" style="display:none">
+        <div class="panel-toolbar">
+          <span class="panel-note">Jumlah aktual di sini yang menambah stok produk jadi.</span>
+          <button class="btn btn-primary" onclick="openResult()">＋ Catat Proses Jadi</button>
+        </div>
+        <div class="tbl-wrap"><table class="tbl"><thead><tr><th>No. Hasil</th><th>No. Proses</th><th>Tanggal</th><th>Gudang</th><th>Qty Aktual</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="tblResults"></tbody></table></div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-overlay" id="mBOM">
+    <div class="modal-box xwide">
+      <div class="modal-hdr"><h2 id="bomTitle">Buat Formula</h2><button class="btn-x" onclick="closeModal('mBOM')">×</button></div>
+      <input type="hidden" id="bomId" />
+      <div class="row2">
+        <div class="input-group"><label>Produk Hasil *</label><select id="bomProduct" class="input-control"></select><div class="muted">Barang belum ada? Buat dahulu di <a href="/item/items">Master Item</a>.</div></div>
+        <div class="input-group"><label>Output Standar Formula *</label><input id="bomOutput" type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" class="input-control" value="1" oninput="calculateBOMCost()" /></div>
+      </div>
+      <div class="row2">
+        <div class="input-group"><label>Biaya Operasional per Formula</label><input id="bomOperational" type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control" value="0" oninput="calculateBOMCost()" /></div>
+        <div class="input-group"><label>Catatan</label><input id="bomNotes" class="input-control" /></div>
+      </div>
+      <div class="panel-toolbar"><b>Komponen / Bahan Baku</b><button class="btn btn-secondary" type="button" onclick="addBOMLine()">＋ Tambah Komponen</button></div>
+      <div id="bomLines"></div>
+      <div id="bomCost" class="summary-box">Estimasi biaya: Rp 0</div>
+      <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal('mBOM')">Batal</button><button class="btn btn-primary" onclick="saveBOM()">Simpan Formula</button></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="mOrder">
+    <div class="modal-box xwide">
+      <div class="modal-hdr"><h2>Buat Pesanan Perakitan</h2><button class="btn-x" onclick="closeModal('mOrder')">×</button></div>
+      <div class="row2">
+        <div class="input-group"><label>Pelanggan *</label><select id="orderCustomer" class="input-control"></select></div>
+        <div class="input-group"><label>Tanggal *</label><input id="orderDate" type="date" class="input-control" /></div>
+      </div>
+      <div class="input-group"><label>Catatan</label><input id="orderNotes" class="input-control" /></div>
+      <div class="panel-toolbar"><b>Produk yang Dipesan</b><button class="btn btn-secondary" onclick="addOrderLine()">＋ Tambah Produk</button></div>
+      <div id="orderLines"></div>
+      <div class="summary-box">Menyimpan pesanan tidak memotong bahan dan tidak menambah barang jadi.</div>
+      <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal('mOrder')">Batal</button><button class="btn btn-primary" onclick="saveOrder()">Simpan Pesanan</button></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="mProcess">
+    <div class="modal-box xwide">
+      <div class="modal-hdr"><h2>Mulai Proses Perakitan</h2><button class="btn-x" onclick="closeModal('mProcess')">×</button></div>
+      <div class="row2">
+        <div class="input-group"><label>Ambil dari Pesanan (opsional)</label><select id="processOrder" class="input-control" onchange="onProcessOrderChange()"></select></div>
+        <div class="input-group"><label>Gudang Bahan *</label><select id="processWarehouse" class="input-control" onchange="previewProcess()"></select></div>
+      </div>
+      <div class="row2">
+        <div class="input-group"><label>Pelanggan Proses Langsung</label><select id="processCustomer" class="input-control"></select></div>
+        <div class="input-group"><label>Tanggal *</label><input id="processDate" type="date" class="input-control" /></div>
+      </div>
+      <div class="input-group"><label>Catatan</label><input id="processNotes" class="input-control" /></div>
+      <div class="panel-toolbar"><b>Target Produk Jadi</b><button id="btnAddProcessLine" class="btn btn-secondary" onclick="addProcessLine()">＋ Tambah Produk</button></div>
+      <div id="processLines"></div>
+      <div id="processPreview" class="summary-box">Pilih formula, target, dan gudang untuk melihat kebutuhan bahan.</div>
+      <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal('mProcess')">Batal</button><button class="btn btn-primary" onclick="saveProcess()">Mulai & Potong Bahan</button></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="mResult">
+    <div class="modal-box xwide">
+      <div class="modal-hdr"><h2>Catat Proses Jadi</h2><button class="btn-x" onclick="closeModal('mResult')">×</button></div>
+      <div class="row2">
+        <div class="input-group"><label>Proses Perakitan *</label><select id="resultProcess" class="input-control" onchange="onResultProcessChange()"></select></div>
+        <div class="input-group"><label>Tanggal *</label><input id="resultDate" type="date" class="input-control" /></div>
+      </div>
+      <div id="resultProcessInfo" class="summary-box">Pilih proses yang sedang berjalan.</div>
+      <div id="resultLines"></div>
+      <label style="display:flex;gap:9px;align-items:flex-start;margin-top:12px"><input id="resultClose" type="checkbox" checked /><span><b>Tutup proses setelah hasil ini</b><br><span class="muted">Jika jumlah aktual berbeda dari target, sistem akan meminta konfirmasi.</span></span></label>
+      <div class="input-group" style="margin-top:12px"><label>Catatan</label><input id="resultNotes" class="input-control" /></div>
+      <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal('mResult')">Batal</button><button class="btn btn-primary" onclick="saveResult()">Posting Barang Jadi</button></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="mDetail">
+    <div class="modal-box xwide">
+      <div class="modal-hdr"><h2 id="detailTitle">Detail</h2><button class="btn-x" onclick="closeModal('mDetail')">×</button></div>
+      <div id="detailBody"></div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/theme.js"></script>
+  <script>
+    requireAuth();
+    let allItems = [], allBOMs = [], allCustomers = [], allWarehouses = [];
+    let allOrders = [], allProcesses = [], allResults = [];
+
+    const esc = (value) => String(value ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]);
+    const num = (value) =>
+      typeof value === "string" ? parseDesimal(value, { maximumFractionDigits: 4 }) : Number(value || 0);
+    const qty = (value) => num(value).toLocaleString("id-ID", {maximumFractionDigits:4});
+    const money = (value) => "Rp " + Math.round(num(value)).toLocaleString("id-ID");
+    const statusLabel = {open:"Menunggu",partially_processed:"Diproses Sebagian",processed:"Sudah Diproses",in_progress:"Dalam Proses",partially_completed:"Jadi Sebagian",completed:"Selesai",posted:"Diposting",cancelled:"Dibatalkan",reversed:"Dibalik"};
+    const badge = (status) => `<span class="status ${esc(status)}">${esc(statusLabel[status] || status)}</span>`;
+    const emptyRow = (cols, text) => `<tr><td colspan="${cols}" style="text-align:center;padding:28px;color:var(--text-muted)">${esc(text)}</td></tr>`;
+    const itemOptions = (selected="") => '<option value="">-- Pilih Barang --</option>' + allItems.map(i => `<option value="${i.id}" ${String(i.id)===String(selected)?"selected":""}>${esc(i.name)} (${esc(i.code||"")})</option>`).join("");
+    const bomOptions = (selected="") => '<option value="">-- Pilih Formula --</option>' + allBOMs.map(b => `<option value="${b.id}" ${String(b.id)===String(selected)?"selected":""}>${esc(b.product_name)} — output ${qty(b.qty_produced)}</option>`).join("");
+    const customerOptions = (optional=false) => `<option value="">${optional?"-- Tanpa pelanggan --":"-- Pilih Pelanggan --"}</option>` + allCustomers.map(c => `<option value="${c.id}">${esc(c.name)} (${esc(c.code||"")})</option>`).join("");
+    const warehouseOptions = () => '<option value="">-- Pilih Gudang --</option>' + allWarehouses.map(w => `<option value="${w.id}" ${w.is_default?"selected":""}>${esc(w.name)}</option>`).join("");
+
+    async function init() {
+      try {
+        [allItems, allBOMs, allCustomers, allWarehouses] = await Promise.all([
+          api("GET", "/items/?limit=500"), api("GET", "/assembly/bom"),
+          api("GET", "/customers/?limit=500"), api("GET", "/warehouses/")
+        ]);
+        subscribeItemMasterChanges(refreshAssemblyItems);
+        renderBOMs();
+      } catch (error) { showToast(error.message, "error"); }
+    }
+
+    async function refreshAssemblyItems() {
+      try {
+        allItems = await api("GET", "/items/?limit=500");
+        document
+          .querySelectorAll("#bomProduct, #bomLines .material-select")
+          .forEach((select) => {
+            const selected = select.value;
+            select.innerHTML = itemOptions(selected);
+          });
+      } catch (error) {
+        console.error("Gagal menyegarkan barang perakitan", error);
+      }
+    }
+
+    function switchTab(name) {
+      ["bom","orders","processes","results"].forEach(tab => {
+        document.getElementById(`panel-${tab}`).style.display = tab===name ? "block" : "none";
+        document.getElementById(`tab-${tab}`).classList.toggle("active", tab===name);
+      });
+      if (name === "orders") loadOrders();
+      if (name === "processes") loadProcesses();
+      if (name === "results") loadResults();
+    }
+
+    function openBOM(id=null) {
+      const bom = id ? allBOMs.find(b => b.id===id) : null;
+      document.getElementById("bomId").value = bom?.id || "";
+      document.getElementById("bomTitle").textContent = bom ? "Edit Formula" : "Buat Formula";
+      document.getElementById("bomProduct").innerHTML = itemOptions(bom?.product_id);
+      document.getElementById("bomOutput").value = bom?.qty_produced || 1;
+      document.getElementById("bomOperational").value = bom?.operational_cost || 0;
+      document.getElementById("bomNotes").value = bom?.notes || "";
+      document.getElementById("bomLines").innerHTML = "";
+      (bom?.materials?.length ? bom.materials : [{}]).forEach(line => addBOMLine(line));
+      calculateBOMCost();
+      openModal("mBOM");
+    }
+
+    function addBOMLine(line={}) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "line-card";
+      wrapper.innerHTML = `<div class="line-grid"><div class="input-group" style="margin:0"><label>Bahan</label><select class="input-control material-select" onchange="calculateBOMCost()">${itemOptions(line.material_id)}</select></div><div class="input-group" style="margin:0"><label>Qty Pakai</label><input class="input-control material-qty" type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" value="${num(line.qty_needed)||1}" oninput="calculateBOMCost()" /></div><button class="icon-button" onclick="this.closest('.line-card').remove();calculateBOMCost()">×</button></div>`;
+      document.getElementById("bomLines").appendChild(wrapper);
+    }
+
+    function calculateBOMCost() {
+      let cost = num(document.getElementById("bomOperational")?.value);
+      document.querySelectorAll("#bomLines .line-card").forEach(row => {
+        const item = allItems.find(i => i.id===Number(row.querySelector(".material-select").value));
+        cost += num(row.querySelector(".material-qty").value) * num(item?.buy_price);
+      });
+      const output = num(document.getElementById("bomOutput")?.value) || 1;
+      document.getElementById("bomCost").textContent = `Estimasi biaya per formula: ${money(cost)} • HPP per unit: ${money(cost/output)}`;
+    }
+
+    async function saveBOM() {
+      const materials = [...document.querySelectorAll("#bomLines .line-card")].map(row => ({material_id:Number(row.querySelector(".material-select").value),qty_needed:num(row.querySelector(".material-qty").value)})).filter(x => x.material_id);
+      const payload = {product_id:Number(document.getElementById("bomProduct").value),qty_produced:num(document.getElementById("bomOutput").value),operational_cost:num(document.getElementById("bomOperational").value),notes:document.getElementById("bomNotes").value||null,materials};
+      if (!payload.product_id || !materials.length) return showToast("Pilih produk hasil dan minimal satu bahan", "error");
+      try {
+        showLoading("Menyimpan formula...");
+        const id = document.getElementById("bomId").value;
+        await api(id?"PUT":"POST", id?`/assembly/bom/${id}`:"/assembly/bom", payload);
+        allBOMs = await api("GET", "/assembly/bom");
+        hideLoading(); closeModal("mBOM"); renderBOMs(); showToast("Formula disimpan ✓");
+      } catch (error) { hideLoading(); showToast(error.message,"error"); }
+    }
+
+    function renderBOMs() {
+      document.getElementById("tblBOM").innerHTML = allBOMs.length ? allBOMs.map(b => {
+        const componentCost = (b.materials||[]).reduce((sum,line) => sum + num(allItems.find(i=>i.id===line.material_id)?.buy_price)*num(line.qty_needed),0);
+        return `<tr><td><b>${esc(b.product_name)}</b><br><span class="muted">${esc(b.product_code)}</span></td><td>${qty(b.qty_produced)}</td><td>${b.materials?.length||0}</td><td>${money(componentCost+num(b.operational_cost))}</td><td style="white-space:nowrap"><button class="bsm" onclick="detailBOM(${b.id})">Detail</button> <button class="bsm bl" onclick="openBOM(${b.id})">Edit</button> <button class="bsm bd" onclick="deleteBOM(${b.id})">Hapus</button></td></tr>`;
+      }).join("") : emptyRow(5,"Belum ada formula");
+    }
+
+    function detailBOM(id) {
+      const b=allBOMs.find(x=>x.id===id); if(!b)return;
+      showDetail(`Formula ${b.product_name}`, `<div class="summary-box"><b>Output:</b> ${qty(b.qty_produced)} unit<br><b>Biaya operasional:</b> ${money(b.operational_cost)}<br><b>Catatan:</b> ${esc(b.notes||"-")}</div><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Bahan</th><th>Qty</th><th>Stok Saat Ini</th></tr></thead><tbody>${(b.materials||[]).map(l=>`<tr><td>${esc(l.material_name)}</td><td>${qty(l.qty_needed)} ${esc(l.unit||"")}</td><td>${qty(l.current_stock)}</td></tr>`).join("")}</tbody></table></div>`);
+    }
+
+    async function deleteBOM(id) {
+      if (!(await showConfirm("Nonaktifkan formula ini?"))) return;
+      try { await api("DELETE",`/assembly/bom/${id}`); allBOMs=await api("GET","/assembly/bom"); renderBOMs(); showToast("Formula dinonaktifkan"); } catch(error){showToast(error.message,"error");}
+    }
+
+    function openOrder() {
+      document.getElementById("orderCustomer").innerHTML=customerOptions(false);
+      document.getElementById("orderDate").value=today();
+      document.getElementById("orderNotes").value="";
+      document.getElementById("orderLines").innerHTML="";
+      addOrderLine(); openModal("mOrder");
+    }
+    function addOrderLine(line={}) {
+      const wrapper=document.createElement("div"); wrapper.className="line-card";
+      wrapper.innerHTML=`<div class="line-grid"><div class="input-group" style="margin:0"><label>Formula Produk</label><select class="input-control order-bom">${bomOptions(line.bom_id)}</select></div><div class="input-group" style="margin:0"><label>Qty Produk Jadi</label><input class="input-control order-qty" type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" value="${num(line.qty_ordered)||1}" /></div><button class="icon-button" onclick="this.closest('.line-card').remove()">×</button></div>`;
+      document.getElementById("orderLines").appendChild(wrapper);
+    }
+    async function saveOrder() {
+      const lines=[...document.querySelectorAll("#orderLines .line-card")].map(row=>({bom_id:Number(row.querySelector(".order-bom").value),qty_ordered:num(row.querySelector(".order-qty").value)})).filter(x=>x.bom_id);
+      const payload={date:document.getElementById("orderDate").value,customer_id:Number(document.getElementById("orderCustomer").value),notes:document.getElementById("orderNotes").value||null,lines};
+      if(!payload.customer_id||!lines.length)return showToast("Pilih pelanggan dan minimal satu produk","error");
+      try{showLoading("Menyimpan pesanan...");await api("POST","/assembly/orders",payload);hideLoading();closeModal("mOrder");await loadOrders();switchTab("orders");showToast("Pesanan dibuat; stok belum berubah ✓");}catch(error){hideLoading();showToast(error.message,"error");}
+    }
+    async function loadOrders(){try{allOrders=await api("GET","/assembly/orders?limit=100");document.getElementById("tblOrders").innerHTML=allOrders.length?allOrders.map(o=>`<tr><td><b>${esc(o.number)}</b></td><td>${esc(o.customer_name)}</td><td>${fmtDate(o.date)}</td><td>${o.item_count}</td><td>${qty(o.total_qty)}</td><td>${badge(o.status)}</td><td style="white-space:nowrap"><button class="bsm" onclick="detailOrder(${o.id})">Detail</button> ${(o.status==='open'||o.status==='partially_processed')?`<button class="bsm bl" onclick="openProcess(${o.id})">Proses</button>`:""} ${o.status==='open'?`<button class="bsm bd" onclick="cancelOrder(${o.id})">Batal</button>`:""}</td></tr>`).join(""):emptyRow(7,"Belum ada pesanan perakitan");}catch(error){showToast(error.message,"error");}}
+    async function detailOrder(id){try{const o=await api("GET",`/assembly/orders/${id}`);showDetail(`Pesanan ${o.number}`,`<div class="summary-box"><b>Pelanggan:</b> ${esc(o.customer_name)}<br><b>Status:</b> ${statusLabel[o.status]||o.status}<br><b>Catatan:</b> ${esc(o.notes||"-")}</div>${lineTable(o.lines,"order")}`);}catch(error){showToast(error.message,"error");}}
+    async function cancelOrder(id){if(!(await showConfirm("Batalkan pesanan ini? Stok tidak akan berubah.")))return;try{await api("POST",`/assembly/orders/${id}/cancel`,{});await loadOrders();showToast("Pesanan dibatalkan");}catch(error){showToast(error.message,"error");}}
+
+    async function openProcess(orderId=null) {
+      await loadOrders();
+      document.getElementById("processOrder").innerHTML='<option value="">-- Proses langsung tanpa pesanan --</option>'+allOrders.filter(o=>["open","partially_processed"].includes(o.status)).map(o=>`<option value="${o.id}" ${o.id===orderId?"selected":""}>${esc(o.number)} — ${esc(o.customer_name)}</option>`).join("");
+      document.getElementById("processWarehouse").innerHTML=warehouseOptions();
+      document.getElementById("processCustomer").innerHTML=customerOptions(true);
+      document.getElementById("processDate").value=today(); document.getElementById("processNotes").value="";
+      document.getElementById("processLines").innerHTML=""; document.getElementById("processPreview").textContent="Pilih formula, target, dan gudang untuk melihat kebutuhan bahan.";
+      if(orderId) await onProcessOrderChange(); else addProcessLine();
+      openModal("mProcess");
+    }
+    function addProcessLine(line={}) {
+      const wrapper=document.createElement("div"); wrapper.className="line-card";
+      wrapper.innerHTML=`<div class="line-grid"><div class="input-group" style="margin:0"><label>Formula Produk</label><select class="input-control process-bom" onchange="previewProcess()">${bomOptions(line.bom_id)}</select></div><div class="input-group" style="margin:0"><label>Target Produk Jadi</label><input class="input-control process-qty" type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" value="${num(line.qty_target)||1}" oninput="previewProcess()" /></div><button class="icon-button" onclick="this.closest('.line-card').remove();previewProcess()">×</button></div>`;
+      document.getElementById("processLines").appendChild(wrapper);
+    }
+    async function onProcessOrderChange(){
+      const id=Number(document.getElementById("processOrder").value), container=document.getElementById("processLines"), addBtn=document.getElementById("btnAddProcessLine"), customer=document.getElementById("processCustomer"); container.innerHTML="";
+      if(!id){customer.disabled=false;addBtn.style.display="inline-flex";addProcessLine();return previewProcess();}
+      try{const order=await api("GET",`/assembly/orders/${id}`);customer.value=order.customer_id;customer.disabled=true;addBtn.style.display="none";order.lines.filter(l=>num(l.qty_remaining)>0).forEach(line=>{const row=document.createElement("div");row.className="line-card process-order-line";row.dataset.orderLineId=line.id;row.innerHTML=`<div class="line-grid"><div><b>${esc(line.product_name)}</b><div class="muted">Sisa pesanan ${qty(line.qty_remaining)}</div></div><div class="input-group" style="margin:0"><label>Target Diproses</label><input class="input-control process-qty" type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" data-max="${line.qty_remaining}" value="${line.qty_remaining}" oninput="previewProcess()" /></div><span></span></div>`;container.appendChild(row);});previewProcess();}catch(error){showToast(error.message,"error");}
+    }
+    async function previewProcess(){
+      const warehouse=Number(document.getElementById("processWarehouse").value), rows=[...document.querySelectorAll("#processLines .line-card")], preview=document.getElementById("processPreview");
+      if(!warehouse||!rows.length){preview.textContent="Pilih formula, target, dan gudang untuk melihat kebutuhan bahan.";return;}
+      const orderId=Number(document.getElementById("processOrder").value); let specs=[];
+      if(orderId){try{const order=await api("GET",`/assembly/orders/${orderId}`);specs=rows.map(row=>{const line=order.lines.find(l=>l.id===Number(row.dataset.orderLineId));return {bom_id:line?.bom_id,target:num(row.querySelector(".process-qty").value)};});}catch{return;}}
+      else specs=rows.map(row=>({bom_id:Number(row.querySelector(".process-bom").value),target:num(row.querySelector(".process-qty").value)}));
+      specs=specs.filter(x=>x.bom_id&&x.target>0); if(!specs.length)return;
+      try{const simulations=await Promise.all(specs.map(s=>api("GET",`/assembly/simulate/${s.bom_id}?qty=${encodeURIComponent(s.target)}&warehouse_id=${warehouse}`)));const materials=new Map();simulations.forEach(sim=>sim.materials.forEach(m=>{const old=materials.get(m.material_id)||{name:m.material_name,needed:0,available:m.available};old.needed+=num(m.qty_required);old.available=Math.min(old.available,num(m.available));materials.set(m.material_id,old);}));preview.innerHTML=`<b>Kebutuhan bahan:</b><br>${[...materials.values()].map(m=>`${esc(m.name)}: butuh <b>${qty(m.needed)}</b>, tersedia ${qty(m.available)} ${m.available+1e-9>=m.needed?'✓':'<span style="color:#ef4444">(kurang)</span>'}`).join("<br>")}`;}catch(error){preview.textContent=error.message;}
+    }
+    async function saveProcess(){
+      const orderId=Number(document.getElementById("processOrder").value), rows=[...document.querySelectorAll("#processLines .line-card")];let lines=[];
+      if(orderId) lines=rows.map(row=>({order_line_id:Number(row.dataset.orderLineId),qty_target:num(row.querySelector(".process-qty").value)})); else lines=rows.map(row=>({bom_id:Number(row.querySelector(".process-bom").value),qty_target:num(row.querySelector(".process-qty").value)})).filter(x=>x.bom_id);
+      const payload={date:document.getElementById("processDate").value,order_id:orderId||null,customer_id:orderId?null:(Number(document.getElementById("processCustomer").value)||null),warehouse_id:Number(document.getElementById("processWarehouse").value),notes:document.getElementById("processNotes").value||null,lines};
+      if(!payload.warehouse_id||!lines.length)return showToast("Pilih gudang dan minimal satu target produk","error");
+      if(!(await showConfirm("Mulai proses? Stok seluruh bahan akan langsung dikurangi.")))return;
+      try{showLoading("Memotong bahan...");await api("POST","/assembly/processes",payload);hideLoading();closeModal("mProcess");await Promise.all([loadProcesses(),loadOrders()]);switchTab("processes");showToast("Proses dimulai; bahan sudah dipotong ✓");}catch(error){hideLoading();showToast(error.message,"error");}
+    }
+    async function loadProcesses(){try{allProcesses=await api("GET","/assembly/processes?limit=100");document.getElementById("tblProcesses").innerHTML=allProcesses.length?allProcesses.map(p=>`<tr><td><b>${esc(p.number)}</b></td><td>${esc(p.order_number||"Proses langsung")}</td><td>${esc(p.warehouse_name)}</td><td>${fmtDate(p.date)}</td><td>${qty(p.total_target)}</td><td>${qty(p.total_completed)}</td><td>${badge(p.status)}</td><td style="white-space:nowrap"><button class="bsm" onclick="detailProcess(${p.id})">Detail</button> ${["in_progress","partially_completed"].includes(p.status)&&!p.is_legacy?`<button class="bsm bl" onclick="openResult(${p.id})">Catat Jadi</button> <button class="bsm bd" onclick="cancelProcess(${p.id})">Batal</button>`:""}</td></tr>`).join(""):emptyRow(8,"Belum ada proses perakitan");}catch(error){showToast(error.message,"error");}}
+    async function detailProcess(id){try{const p=await api("GET",`/assembly/processes/${id}`);showDetail(`Proses ${p.number}`,`<div class="summary-box"><b>Gudang:</b> ${esc(p.warehouse_name)}<br><b>Pesanan:</b> ${esc(p.order_number||"Langsung")}<br><b>Status:</b> ${esc(statusLabel[p.status]||p.status)}<br><b>Catatan:</b> ${esc(p.notes||"-")}</div>${lineTable(p.lines,"process")}`);}catch(error){showToast(error.message,"error");}}
+    async function cancelProcess(id){if(!(await showConfirm("Batalkan proses dan kembalikan seluruh bahan? Semua Proses Jadi harus sudah direversal.")))return;try{await api("POST",`/assembly/processes/${id}/cancel`,{});await loadProcesses();showToast("Proses dibatalkan; bahan dikembalikan");}catch(error){showToast(error.message,"error");}}
+
+    async function openResult(processId=null){
+      await loadProcesses();const open=allProcesses.filter(p=>["in_progress","partially_completed"].includes(p.status)&&!p.is_legacy);document.getElementById("resultProcess").innerHTML='<option value="">-- Pilih Proses --</option>'+open.map(p=>`<option value="${p.id}" ${p.id===processId?"selected":""}>${esc(p.number)} — ${esc(p.warehouse_name)}</option>`).join("");document.getElementById("resultDate").value=today();document.getElementById("resultNotes").value="";document.getElementById("resultClose").checked=true;document.getElementById("resultLines").innerHTML="";document.getElementById("resultProcessInfo").textContent="Pilih proses yang sedang berjalan.";if(processId)await onResultProcessChange();openModal("mResult");
+    }
+    async function onResultProcessChange(){const id=Number(document.getElementById("resultProcess").value),container=document.getElementById("resultLines");container.innerHTML="";if(!id)return;try{const p=await api("GET",`/assembly/processes/${id}`);document.getElementById("resultProcessInfo").innerHTML=`<b>${esc(p.number)}</b> • Gudang ${esc(p.warehouse_name)}<br>Bahan sudah dipotong. Masukkan jumlah barang yang benar-benar selesai.`;p.lines.forEach(line=>{const row=document.createElement("div");row.className="line-card result-line";row.dataset.processLineId=line.id;row.dataset.completed=line.qty_completed;row.dataset.target=line.qty_target;row.innerHTML=`<div class="line-grid result"><div><b>${esc(line.product_name)}</b><div class="muted">${esc(line.product_code||"")}</div></div><div><span class="muted">Target</span><div class="progress-value">${qty(line.qty_target)}</div></div><div><span class="muted">Sudah jadi</span><div class="progress-value">${qty(line.qty_completed)}</div></div><div class="input-group" style="margin:0"><label>Hasil kali ini</label><input class="input-control result-qty" type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0" value="${num(line.qty_remaining)>0?line.qty_remaining:""}" /></div></div>`;container.appendChild(row);});}catch(error){showToast(error.message,"error");}}
+    async function saveResult(){const processId=Number(document.getElementById("resultProcess").value),closeProcess=document.getElementById("resultClose").checked,rows=[...document.querySelectorAll("#resultLines .result-line")];const lines=rows.map(row=>({process_line_id:Number(row.dataset.processLineId),qty_finished:num(row.querySelector(".result-qty").value)})).filter(x=>x.qty_finished>0);if(!processId||!lines.length)return showToast("Pilih proses dan masukkan minimal satu hasil aktual","error");let confirmVariance=false;if(closeProcess){confirmVariance=rows.some(row=>{const input=num(row.querySelector(".result-qty").value);return Math.abs(num(row.dataset.completed)+input-num(row.dataset.target))>1e-9;});if(confirmVariance&&!(await showConfirm("Jumlah aktual berbeda dari target. Tetap tutup proses dengan jumlah tersebut?")))return;}const payload={process_id:processId,date:document.getElementById("resultDate").value,close_process:closeProcess,confirm_variance:confirmVariance,notes:document.getElementById("resultNotes").value||null,lines};try{showLoading("Memposting barang jadi...");await api("POST","/assembly/results",payload);hideLoading();closeModal("mResult");await Promise.all([loadResults(),loadProcesses()]);switchTab("results");showToast("Barang jadi ditambahkan sesuai jumlah aktual ✓");}catch(error){hideLoading();showToast(error.message,"error");}}
+    async function loadResults(){try{allResults=await api("GET","/assembly/results?limit=100");document.getElementById("tblResults").innerHTML=allResults.length?allResults.map(r=>`<tr><td><b>${esc(r.number)}</b></td><td>${esc(r.process_number)}</td><td>${fmtDate(r.date)}</td><td>${esc(r.warehouse_name)}</td><td>${qty(r.total_qty)}</td><td>${badge(r.status)}</td><td style="white-space:nowrap"><button class="bsm" onclick="detailResult(${r.id})">Detail</button> ${r.status==='posted'&&!r.is_legacy?`<button class="bsm bd" onclick="reverseResult(${r.id})">Reversal</button>`:""}</td></tr>`).join(""):emptyRow(7,"Belum ada Proses Jadi");}catch(error){showToast(error.message,"error");}}
+    async function detailResult(id){try{const r=await api("GET",`/assembly/results/${id}`);showDetail(`Proses Jadi ${r.number}`,`<div class="summary-box"><b>Proses:</b> ${esc(r.process_number)}<br><b>Status:</b> ${esc(statusLabel[r.status]||r.status)}<br><b>Menutup proses:</b> ${r.closes_process?'Ya':'Tidak'}<br><b>Catatan:</b> ${esc(r.notes||"-")}</div>${lineTable(r.lines,"result")}`);}catch(error){showToast(error.message,"error");}}
+    async function reverseResult(id){if(!(await showConfirm("Balikkan Proses Jadi ini? Stok barang hasil akan dikurangi.")))return;try{await api("POST",`/assembly/results/${id}/reverse`,{});await Promise.all([loadResults(),loadProcesses()]);showToast("Proses Jadi berhasil direversal");}catch(error){showToast(error.message,"error");}}
+
+    function lineTable(lines,type){let heads="",body="";if(type==="order"){heads="<th>Produk</th><th>Dipesan</th><th>Diproses</th><th>Sisa</th>";body=lines.map(l=>`<tr><td>${esc(l.product_name)}</td><td>${qty(l.qty_ordered)}</td><td>${qty(l.qty_processed)}</td><td>${qty(l.qty_remaining)}</td></tr>`).join("");}else if(type==="process"){heads="<th>Produk</th><th>Target</th><th>Sudah Jadi</th><th>Biaya Proses</th>";body=lines.map(l=>`<tr><td>${esc(l.product_name)}</td><td>${qty(l.qty_target)}</td><td>${qty(l.qty_completed)}</td><td>${money(num(l.material_cost)+num(l.operational_cost))}</td></tr>`).join("");}else{heads="<th>Produk</th><th>Qty Aktual</th><th>HPP/unit</th><th>Nilai</th>";body=lines.map(l=>`<tr><td>${esc(l.product_name)}</td><td>${qty(l.qty_finished)}</td><td>${money(l.unit_cost)}</td><td>${money(l.allocated_cost)}</td></tr>`).join("");}return `<div class="tbl-wrap"><table class="tbl"><thead><tr>${heads}</tr></thead><tbody>${body}</tbody></table></div>`;}
+    function showDetail(title,html){document.getElementById("detailTitle").textContent=title;document.getElementById("detailBody").innerHTML=html;openModal("mDetail");}
+
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "name": "fpos-frontend-build",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Build pipeline ringan untuk frontend FPOS: minify + content-hash + rewrite aset.",
+  "scripts": {
+    "build": "node build.mjs",
+    "test:numeric": "node --test tests/input-desimal.test.mjs",
+    "test:master-data": "node --test tests/master-data-loading.test.mjs",
+    "test:purchase-draft": "node --test tests/purchase-draft.test.mjs",
+    "watch": "node build.mjs --watch"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "html-minifier-terser": "^7.2.0"
+  }
+}

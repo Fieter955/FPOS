@@ -1,0 +1,710 @@
+from pydantic import BaseModel, EmailStr, field_validator
+from typing import Optional, List, Literal
+from datetime import date, datetime
+
+# ─── Auth ─────────────────────────────────────────────────────────────────────
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    user: dict
+
+class RoleCreate(BaseModel):
+    name: str
+
+class RoleOut(RoleCreate):
+    id: int
+    model_config = {"from_attributes": True}
+
+class UserCreate(BaseModel):
+    username: str
+    email: Optional[str] = None
+    full_name: Optional[str] = None
+    password: str
+    role: str = "kasir"
+    branch_id: Optional[int] = None
+
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = None
+    role: Optional[str] = None
+    branch_id: Optional[int] = None
+    is_active: Optional[bool] = None
+    password: Optional[str] = None
+
+class UserOut(BaseModel):
+    id: int
+    username: str
+    email: Optional[str]
+    full_name: Optional[str]
+    role: str
+    branch_id: Optional[int]
+    active_branch_id: Optional[int] = None
+    branch_status: Optional[str] = "Cabang"
+    is_active: bool
+    model_config = {"from_attributes": True}
+
+
+# ─── Category ─────────────────────────────────────────────────────────────────
+class CategoryCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+class CategoryOut(CategoryCreate):
+    id: int
+    model_config = {"from_attributes": True}
+
+
+# ─── Brand ────────────────────────────────────────────────────────────────────
+class BrandCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+class BrandOut(BrandCreate):
+    id: int
+    model_config = {"from_attributes": True}
+
+
+# ─── Unit ─────────────────────────────────────────────────────────────────────
+class UnitCreate(BaseModel):
+    name: str
+    abbreviation: Optional[str] = None
+
+class UnitOut(UnitCreate):
+    id: int
+    model_config = {"from_attributes": True}
+
+# ─── Branch / Cabang ──────────────────────────────────────────────────────────
+class BranchCreate(BaseModel):
+    code: str
+    name: str
+    address: str
+    phone: Optional[str] = None
+    status: Optional[str] = "Cabang"
+
+class BranchUpdate(BaseModel):
+    name: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    status: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class BranchOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    address: Optional[str]
+    phone: Optional[str]
+    status: str
+    is_active: bool
+    model_config = {"from_attributes": True}
+
+
+# ─── ItemPrice ────────────────────────────────────────────────────────────────
+class ItemPriceCreate(BaseModel):
+    name: str
+    price: float
+    min_qty: float = 1.0
+
+class ItemPriceOut(ItemPriceCreate):
+    id: int
+    model_config = {"from_attributes": True}
+
+class SupplierSimpleOut(BaseModel):
+    id: int
+    name: str
+    code: Optional[str] = None
+    model_config = {"from_attributes": True}
+
+# ─── Item Supplier Settings ────────────────────────────────────────────────────
+class ItemSupplierCreate(BaseModel):
+    supplier_id: int
+    buy_price: float = 0
+    barcode: Optional[str] = None
+    ppn_type: Optional[str] = "included"   # included | excluded
+    ppn_percent: float = 0
+
+class ItemSupplierOut(ItemSupplierCreate):
+    model_config = {"from_attributes": True}
+
+# Update harga beli (dan PPN) satu item untuk satu supplier saja (tanpa mengubah supplier lain).
+# Semua field selain supplier_id opsional → hanya field yang dikirim yang di-update.
+class HargaSupplierUpdate(BaseModel):
+    supplier_id: int
+    harga_beli: Optional[float] = None
+    ppn_type: Optional[str] = None      # included | excluded
+    ppn_percent: Optional[float] = None
+
+# ─── Item Group Discount (Potongan Harga Jual per grup pelanggan) ───────────────
+class ItemGroupDiscountCreate(BaseModel):
+    group_id: int
+    disc1: float = 0
+    disc2: float = 0
+    disc3: float = 0
+    disc4: float = 0
+
+class ItemGroupDiscountOut(ItemGroupDiscountCreate):
+    id: int
+    model_config = {"from_attributes": True}
+
+# ─── Item ─────────────────────────────────────────────────────────────────────
+class ItemCreate(BaseModel):
+    code: str
+    name: str
+    category_id: Optional[int] = None
+    brand_id: Optional[int] = None
+    unit_id: Optional[int] = None
+    buy_price: float = 0
+    sell_price: float = 0
+    profit_margin: float = 0
+    ppn_percent: Optional[float] = None   # tarif PPN barang (%); None → ikut tarif toko
+    stock: float = 0
+    min_stock: float = 0
+    description: Optional[str] = None
+    barcode: Optional[str] = None
+    is_discountable: bool = False
+    supplier_ids: Optional[List[int]] = None
+    supplier_settings: Optional[List[ItemSupplierCreate]] = []
+    prices: Optional[List[ItemPriceCreate]] = []
+    group_discounts: Optional[List[ItemGroupDiscountCreate]] = []
+
+class ItemUpdate(BaseModel):
+    name: Optional[str] = None
+    category_id: Optional[int] = None
+    brand_id: Optional[int] = None
+    unit_id: Optional[int] = None
+    buy_price: Optional[float] = None
+    sell_price: Optional[float] = None
+    profit_margin: Optional[float] = None
+    ppn_percent: Optional[float] = None   # tarif PPN barang (%); None → ikut tarif toko
+    min_stock: Optional[float] = None
+    description: Optional[str] = None
+    barcode: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_discountable: Optional[bool] = None
+    supplier_ids: Optional[List[int]] = None
+    supplier_settings: Optional[List[ItemSupplierCreate]] = None
+    prices: Optional[List[ItemPriceCreate]] = None
+    group_discounts: Optional[List[ItemGroupDiscountCreate]] = None
+
+class ItemOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    category_id: Optional[int]
+    brand_id: Optional[int] = None
+    unit_id: Optional[int]
+    parent_item_id: Optional[int] = None
+    conversion_factor_to_parent: float = 1
+    is_virtual_variant: bool = False
+    buy_price: float
+    min_price: float = 0
+    sell_price: float
+    profit_margin: float
+    ppn_percent: Optional[float] = None   # tarif PPN barang (%); None → ikut tarif toko
+    stock: float
+    min_stock: float
+    description: Optional[str]
+    barcode: Optional[str]
+    image_path: Optional[str] = None
+    is_discountable: bool
+    is_active: bool
+    category: Optional[CategoryOut] = None
+    brand: Optional[BrandOut] = None
+    unit: Optional[UnitOut] = None
+    prices: List[ItemPriceOut] = []
+    group_discounts: List[ItemGroupDiscountOut] = []
+    suppliers: List[SupplierSimpleOut] = []
+    supplier_details: List[ItemSupplierOut] = []
+    model_config = {"from_attributes": True}
+
+
+class ItemPriceChangeOut(BaseModel):
+    id: int
+    item_id: int
+    supplier_id: Optional[int] = None
+    change_type: str
+    old_price: float
+    new_price: float
+    changed_at: datetime
+    changed_by: Optional[int] = None
+    model_config = {"from_attributes": True}
+
+# ─── CustomerGroup ────────────────────────────────────────────────────────────
+class CustomerGroupCreate(BaseModel):
+    name: str
+    discount_percent: float = 0
+
+class CustomerGroupOut(CustomerGroupCreate):
+    id: int
+    member_count: int = 0
+    model_config = {"from_attributes": True}
+
+
+# ─── Customer ─────────────────────────────────────────────────────────────────
+class CustomerCreate(BaseModel):
+    code: Optional[str] = None
+    name: str
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    group_id: Optional[int] = None
+    credit_limit: float = 0
+
+class CustomerUpdate(BaseModel):
+    name: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    group_id: Optional[int] = None
+    credit_limit: Optional[float] = None
+    is_active: Optional[bool] = None
+
+class CustomerTransferBalance(BaseModel):
+    target_customer_id: int
+    amount: float
+
+class CustomerOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    address: Optional[str]
+    phone: Optional[str]
+    email: Optional[str]
+    group_id: Optional[int]
+    points: float
+    loyalty_points: float = 0
+    total_purchase: float = 0
+    credit_limit: float
+    deposit_balance: float = 0
+    is_active: bool
+    group: Optional[CustomerGroupOut] = None
+    model_config = {"from_attributes": True}
+
+
+# ── Supplier ─────────────────────────────────────────────────────────────────
+class SupplierCreate(BaseModel):
+    code: Optional[str] = None  # 👈 DIUBAH: Tidak wajib diisi user
+    name: str
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    PpnSupplier: float = 0
+    ppn_type: Optional[str] = None  # "included" | "excluded" | None
+    credit_limit: float = 0
+    due_date: int = 0
+    item_ids: Optional[List[int]] = None
+    model_config = {"from_attributes": True}
+
+    @field_validator("PpnSupplier", mode="before")
+    @classmethod
+    def normalize_empty_ppn(cls, value):
+        """Supplier baru tanpa setelan pajak selalu diperlakukan sebagai Non PPN."""
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return 0
+        return value
+
+class SupplierUpdate(BaseModel):
+    name: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    PpnSupplier: Optional[float] = None
+    ppn_type: Optional[str] = None  # "included" | "excluded" | None
+    credit_limit: Optional[float] = None
+    due_date: Optional[int] = None
+    is_active: Optional[bool] = None
+    item_ids: Optional[List[int]] = None
+    model_config = {"from_attributes": True}
+
+# Request untuk menyamakan Jenis PPN seluruh barang supplier
+class SupplierPpnApply(BaseModel):
+    ppn_type: str            # "included" | "excluded"
+    dry_run: bool = False
+
+class SupplierOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    address: Optional[str]
+    phone: Optional[str]
+    email: Optional[str]
+    PpnSupplier: Optional[float]
+    ppn_type: Optional[str] = None
+    credit_limit: float
+    due_date: int = 0
+    deposit_balance: float = 0
+    is_active: bool
+    items: List[ItemOut] = []
+    model_config = {"from_attributes": True}
+
+
+class SupplierListOut(BaseModel):
+    """Versi ringan untuk DAFTAR supplier — TANPA nested `items`. SupplierOut.items membuat
+    GET /suppliers/ menyerialisasi ribuan ItemOut (per supplier) + lazy-load N+1, sampai ~2 detik
+    untuk 31 supplier saja. Semua field skalar dipertahankan agar tabel & picker tetap lengkap.
+    Detail per-supplier (dengan items) tetap lewat GET /suppliers/{id}."""
+    id: int
+    code: str
+    name: str
+    address: Optional[str]
+    phone: Optional[str]
+    email: Optional[str]
+    PpnSupplier: Optional[float]
+    ppn_type: Optional[str] = None
+    credit_limit: float
+    due_date: int = 0
+    deposit_balance: float = 0
+    is_active: bool
+    model_config = {"from_attributes": True}
+
+# ─── SalesPerson ──────────────────────────────────────────────────────────────
+class SalesPersonCreate(BaseModel):
+    code: str
+    name: str
+    commission_percent: float = 0
+    phone: Optional[str] = None
+
+class SalesPersonOut(SalesPersonCreate):
+    id: int
+    is_active: bool
+    model_config = {"from_attributes": True}
+
+
+# ─── Purchase ─────────────────────────────────────────────────────────────────
+class PurchaseItemCreate(BaseModel):
+    item_id: int
+    qty: float
+    qty_ordered: float = 0
+    qty_received: float = 0
+    buy_price: float
+    disc1: float = 0
+    disc2: float = 0
+    disc3: float = 0
+    disc4: float = 0
+    sell_price: float = 0
+    profit_margin: float = 0
+    discount: float = 0
+    ppn_percent: Optional[float] = None   # tarif PPN baris (%); None → ikut tarif barang/toko (Included/PKP)
+
+class PurchaseCreate(BaseModel):
+    number: Optional[str] = None
+    date: date
+    due_date: Optional[date] = None
+    supplier_id: Optional[int] = None
+    discount: float = 0
+    tax: float = 0
+    tax_percent: float = 0
+    is_tax_included: bool = True
+    tax_type: Optional[Literal["include", "exclude", "none"]] = None
+    notes: Optional[str] = None
+    items: List[PurchaseItemCreate]
+    paid: float = 0
+    status: Optional[str] = None
+    is_branch_request: Optional[bool] = False
+    target_branch_id: Optional[int] = None
+    from_po_id: Optional[int] = None
+
+class PurchaseItemOut(BaseModel):
+    id: int
+    item_id: int
+    qty: float
+    qty_ordered: float = 0
+    qty_received: float = 0
+    buy_price: float
+    discount: float
+    disc1: float = 0
+    disc2: float = 0
+    disc3: float = 0
+    disc4: float = 0
+    total: float
+    ppn_percent: Optional[float] = None
+    item: Optional[ItemOut] = None
+    model_config = {"from_attributes": True}
+
+class PurchaseOut(BaseModel):
+    id: int
+    number: str
+    date: date
+    due_date: Optional[date] = None
+    branch_id: Optional[int] = None
+    supplier_id: Optional[int] = None
+    from_po_id: Optional[int] = None
+    subtotal: float
+    discount: float
+    tax: float
+    tax_percent: float = 0
+    is_tax_included: bool = True
+    tax_type: Optional[str] = None
+    total: float
+    paid: float
+    status: str
+    notes: Optional[str]
+    is_branch_request: Optional[bool] = False
+    target_branch_id: Optional[int] = None
+    is_received_by_branch: bool = False
+    supplier: Optional[SupplierOut] = None
+    branch: Optional[BranchOut] = None
+    target_branch: Optional[BranchOut] = None
+    items: List[PurchaseItemOut] = []
+    fulfillment_drafts: List["PurchaseOut"] = []
+    model_config = {"from_attributes": True}
+
+# ─── Returns ──────────────────────────────────────────────────────────────────
+class PurchaseReturnItemCreate(BaseModel):
+    item_id: int
+    qty: float
+    price: float
+    trade_in_return_item_id: Optional[int] = None
+
+class PurchaseReturnCreate(BaseModel):
+    number: Optional[str] = None
+    date: date
+    purchase_id: int
+    tax_percent: float = 0
+    is_tax_included: bool = True
+    reason: Optional[str] = None
+    items: List[PurchaseReturnItemCreate]
+
+class PurchaseReturnItemOut(BaseModel):
+    id: int
+    item_id: int
+    qty: float
+    price: float
+    total: float
+    item: Optional[ItemOut] = None
+    model_config = {"from_attributes": True}
+
+class PurchaseReturnOut(BaseModel):
+    id: int
+    number: str
+    date: date
+    purchase_id: int
+    tax_percent: float
+    is_tax_included: bool
+    total: float
+    reason: Optional[str]
+    items: List[PurchaseReturnItemOut] = []
+    model_config = {"from_attributes": True}
+
+class SaleReturnItemCreate(BaseModel):
+    item_id: int
+    qty: float
+    price: float
+
+class SaleReturnCreate(BaseModel):
+    number: Optional[str] = None
+    date: date
+    sale_id: int
+    tax_percent: float = 0
+    is_tax_included: bool = True
+    reason: Optional[str] = None
+    items: List[SaleReturnItemCreate]
+
+class SaleReturnItemOut(BaseModel):
+    id: int
+    item_id: int
+    qty: float
+    price: float
+    total: float
+    item: Optional[ItemOut] = None
+    model_config = {"from_attributes": True}
+
+class SaleReturnOut(BaseModel):
+    id: int
+    number: str
+    date: date
+    sale_id: int
+    tax_percent: float
+    is_tax_included: bool
+    total: float
+    reason: Optional[str]
+    items: List[SaleReturnItemOut] = []
+    model_config = {"from_attributes": True}
+
+class PurchasePayment(BaseModel):
+    amount: float = 0
+    cash_amount: float = 0
+    bank_amount: float = 0
+    notes: Optional[str] = None
+
+class SplitFulfillItem(BaseModel):
+    item_id: int
+    qty: float
+    supplier_id: int
+    buy_price: float = 0
+
+class SplitFulfillRequest(BaseModel):
+    items: List[SplitFulfillItem]
+    notes: Optional[str] = None
+
+class DraftReceiveItem(BaseModel):
+    purchase_item_id: int
+    qty_received: float
+    buy_price: float
+    new_item_name: Optional[str] = None
+
+class DraftReceiveRequest(BaseModel):
+    items: List[DraftReceiveItem]
+    notes: Optional[str] = None
+
+
+# ─── Sale ─────────────────────────────────────────────────────────────────────
+class SaleItemCreate(BaseModel):
+    item_id: int
+    qty: float
+    sell_price: float
+    discount: float = 0
+    ppn_percent: Optional[float] = None   # tarif PPN baris (%); None → ikut tarif barang/toko di server
+
+class SplitBayar(BaseModel):
+    """Satu baris tender pembayaran (bayar campur di kasir).
+    metode: cash | deposit | debit | credit_card | emoney
+    """
+    metode: str
+    jumlah: float
+
+class SaleCreate(BaseModel):
+    number: Optional[str] = None
+    date: date
+    customer_id: Optional[int] = None
+    salesperson_id: Optional[int] = None
+    discount: float = 0
+    tax: float = 0
+    tax_percent: float = 0
+    is_tax_included: bool = True
+    other_cost: float = 0   # biaya lain ditagihkan ke pelanggan (nambah total) → Pendapatan Lain-lain
+    paid: float = 0
+    # Uang tunai bruto yang diserahkan pelanggan, sebelum kembalian. `paid`
+    # tetap menyatakan nilai bersih yang diterapkan ke tagihan/jurnal.
+    cash_received: Optional[float] = None
+    payment_method: str = "cash"
+    payments: Optional[List[SplitBayar]] = None   # rincian tender bayar campur; None → pakai logika lama (payment_method + paid)
+    notes: Optional[str] = None
+    items: List[SaleItemCreate]
+
+class SaleItemOut(BaseModel):
+    id: int
+    item_id: int
+    qty: float
+    buy_price: float = 0
+    sell_price: float
+    discount: float
+    ppn_percent: float = 0
+    total: float
+    margin_amount: float = 0
+    margin_percent: float = 0
+    item: Optional[ItemOut] = None
+    model_config = {"from_attributes": True}
+
+class SaleOut(BaseModel):
+    id: int
+    number: str
+    date: date
+    customer_id: Optional[int]
+    subtotal: float
+    discount: float
+    tax: float
+    tax_percent: float = 0
+    is_tax_included: bool = True
+    other_cost: float = 0
+    total: float
+    paid: float
+    change: float
+    payment_method: str
+    status: str
+    notes: Optional[str]
+    customer: Optional[CustomerOut] = None
+    items: List[SaleItemOut] = []
+    model_config = {"from_attributes": True}
+
+
+# ─── Branch Deposit ──────────────────────────────────────────────────────────
+class BranchDepositCreate(BaseModel):
+    amount: float # Total
+    cash_amount: float = 0
+    bank_amount: float = 0
+    bank_account_id: Optional[int] = None
+    notes: Optional[str] = None
+
+class BranchDepositOut(BaseModel):
+    id: int
+    branch_id: int
+    date: date
+    amount: float
+    cash_amount: float
+    bank_amount: float
+    bank_account_id: Optional[int]
+    journal_id: Optional[int]
+    notes: Optional[str]
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+
+# ─── Stock Opname ─────────────────────────────────────────────────────────────
+class AdjustmentCreate(BaseModel):
+    item_id: int
+    type: str          # 'in', 'out', 'adjust'
+    qty: float
+    description: str
+    opname_mode: str = "running"  # 'opening' (setup awal) | 'running' (opname berjalan)
+
+
+# ─── Cash Transaction ─────────────────────────────────────────────────────────
+class CashTransactionCreate(BaseModel):
+    number: Optional[str] = None
+    date: date
+    type: str
+    amount: float
+    description: Optional[str] = None
+    reference: Optional[str] = None
+    account_id: int
+    
+
+class CashTransactionOut(CashTransactionCreate):
+    id: int
+    model_config = {"from_attributes": True}
+
+
+
+# ─── Dashboard Stats ──────────────────────────────────────────────────────────
+class DashboardStats(BaseModel):
+    total_sales_today: float
+    total_purchases_today: float
+    total_transactions_today: int
+    low_stock_count: int
+    top_items: list
+    recent_sales: list
+
+
+# ─── Accounting (Jurnal & COA) ────────────────────────────────────────────────
+class AccountCreate(BaseModel):
+    code: str
+    name: str
+    type: str
+
+class AccountOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    type: str
+    is_active: bool
+    model_config = {"from_attributes": True}
+
+class JournalEntryLineOut(BaseModel):
+    id: int
+    account_id: int
+    debit: float
+    credit: float
+    account: Optional[AccountOut] = None
+    model_config = {"from_attributes": True}
+
+class JournalOut(BaseModel):
+    id: int
+    number: str
+    date: date
+    description: str
+    reference: Optional[str] = None
+    # 👇👇 INI ADALAH KUNCI JAWABANNYA 👇👇
+    entries: List[JournalEntryLineOut] = [] 
+    model_config = {"from_attributes": True}
+
+PurchaseOut.model_rebuild()

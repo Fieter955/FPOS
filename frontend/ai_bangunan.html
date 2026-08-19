@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Bangunan - iPos 5.0</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-container"><main class="main-content" style="max-width:900px;margin:0 auto">
+<button class="btn" style="background:transparent;color:var(--text-muted);padding:0;margin-bottom:16px" onclick="location.href='/dashboard'">← Kembali</button>
+<div style="text-align:center;margin-bottom:28px">
+  <div style="font-size:56px;margin-bottom:12px">🤖📐</div>
+  <h1 style="margin:0">Kalkulator Material AI</h1>
+  <p style="margin:8px 0 0;color:var(--text-muted)">Bantu pelanggan hitung kebutuhan material proyek secara otomatis</p>
+</div>
+
+<!-- Tab -->
+<div style="display:flex;gap:8px;margin-bottom:24px;justify-content:center;flex-wrap:wrap">
+  <button id="tbKalc"   onclick="switchTab('kalc')"   style="padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit">🧮 Kalkulator</button>
+  <button id="tbProyek" onclick="switchTab('proyek')" style="padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit">🏗️ Proyek</button>
+  <button id="tbChat"   onclick="switchTab('chat')"   style="padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit">💬 Tanya AI</button>
+</div>
+
+<!-- Panel Kalkulator -->
+<div id="pnlKalc">
+  <div class="card" style="padding:28px;margin-bottom:20px">
+    <div class="row2" style="margin-bottom:16px">
+      <div class="input-group">
+        <label>Jenis Pekerjaan</label>
+        <select id="jobType" class="input-control" onchange="updateFields()">
+          <option value="keramik_lantai">🏠 Pemasangan Keramik Lantai</option>
+          <option value="keramik_dinding">🧱 Keramik Dinding</option>
+          <option value="plester_dinding">🪣 Plester / Acian Dinding</option>
+          <option value="pengecatan">🎨 Pengecatan Tembok</option>
+          <option value="pondasi_batu_kali">⬛ Pondasi Batu Kali</option>
+          <option value="pasangan_bata">🧱 Pasangan Bata Merah</option>
+          <option value="atap_genteng">🏠 Pemasangan Genteng</option>
+        </select>
+      </div>
+    </div>
+    <div id="dynamicFields" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px"></div>
+    <button onclick="hitung()" class="btn btn-primary" style="width:100%;height:54px;font-size:17px">✨ Hitung Estimasi Material</button>
+  </div>
+
+  <div id="resultCard" style="display:none">
+    <div class="card" style="padding:24px;border:2px solid var(--success,#10b981)">
+      <h3 style="margin:0 0 16px;color:var(--success,#10b981)">✅ Hasil Perhitungan</h3>
+      <div id="resultContent"></div>
+      <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
+        <button onclick="tambahKeKasir()" class="btn btn-primary">🛒 Cari di Data Barang</button>
+        <button onclick="cetakEstimasi()" class="btn" style="background:var(--bg-color);border:1px solid var(--border-color);color:var(--text-main)">🖨️ Cetak Estimasi</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Panel Proyek -->
+<div id="pnlProyek" style="display:none">
+  <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+    <button class="btn btn-primary" onclick="openModal('mProyek')">➕ Tambah Proyek</button>
+  </div>
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>Nama Proyek</th><th>Klien</th><th>Nilai Proyek</th><th>Tgl Mulai</th><th>Status</th><th>Aksi</th></tr></thead>
+    <tbody id="tblProyek"></tbody>
+  </table></div>
+</div>
+
+<!-- Panel Chat AI Bangunan -->
+<div id="pnlChat" style="display:none">
+  <div class="card" style="overflow:hidden">
+    <div id="bChatBox" style="height:350px;padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;background:var(--bg-color)"></div>
+    <div style="padding:14px;background:var(--card-bg);border-top:1px solid var(--border-color);display:flex;gap:10px">
+      <input id="bChatInput" class="input-control" style="flex:1;margin:0" placeholder="Tanya tentang material bangunan... (Enter = kirim)"
+        onkeydown="if(event.key==='Enter')kirimChat()">
+      <button onclick="kirimChat()" class="btn btn-primary" style="padding:12px 20px">➤ Kirim</button>
+    </div>
+  </div>
+</div>
+
+</main></div>
+
+<!-- Modal: Proyek -->
+<div class="modal-overlay" id="mProyek"><div class="modal-box">
+  <div class="modal-hdr"><h2 id="mProjTitle">Tambah Proyek</h2><button class="btn-x" onclick="closeModal('mProyek')">×</button></div>
+  <input type="hidden" id="projId">
+  <div class="input-group"><label>Nama Proyek *</label><input id="projNama" class="input-control" placeholder="contoh: Renovasi Rumah Pak Budi"></div>
+  <div class="input-group"><label>Nama Klien</label><input id="projKlien" class="input-control" placeholder="Nama pemilik / kontraktor"></div>
+  <div class="row2" style="margin-bottom:16px">
+    <div class="input-group"><label>Nilai Proyek (Rp)</label><input id="projNilai" type="text" class="input-control" data-input-desimal data-min="0" value="0,00" inputmode="decimal"></div>
+    <div class="input-group"><label>Tanggal Mulai</label><input id="projTgl" type="date" class="input-control"></div>
+  </div>
+  <div class="input-group"><label>Deskripsi / Catatan</label><textarea id="projDesk" class="input-control" rows="2" placeholder="Jenis pekerjaan, lokasi, dll..."></textarea></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <button onclick="closeModal('mProyek')" class="btn" style="background:var(--bg-color);border:1px solid var(--border-color);color:var(--text-main)">Batal</button>
+    <button onclick="saveProyek()" class="btn btn-primary">✓ Simpan Proyek</button>
+  </div>
+</div></div>
+
+<script src="/js/api.js"></script><script src="/js/theme.js"></script>
+<script>
+requireAuth();
+let editProjId=null, lastResult=null;
+const ON='padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit';
+const OFF='padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit';
+
+function switchTab(t){
+  ['Kalc','Proyek','Chat'].forEach(x=>{
+    document.getElementById('pnl'+x).style.display=x.toLowerCase()===t?'block':'none';
+    document.getElementById('tb'+x).style.cssText=x.toLowerCase()===t?ON:OFF;
+  });
+  if(t==='proyek') loadProyek();
+  if(t==='chat' && !document.getElementById('bChatBox').children.length) initChat();
+}
+
+/* ── Kalkulator ── */
+const fields={
+  keramik_lantai:[{id:'luas',label:'Luas Lantai (m²)',placeholder:'contoh: 24'},{id:'ukuran',label:'Ukuran Keramik (cm)',placeholder:'contoh: 60'}],
+  keramik_dinding:[{id:'luas',label:'Luas Dinding (m²)',placeholder:'contoh: 16'},{id:'ukuran',label:'Ukuran Keramik (cm)',placeholder:'contoh: 30'}],
+  plester_dinding:[{id:'luas',label:'Luas Dinding (m²)',placeholder:'contoh: 80'},{id:'tebal',label:'Ketebalan Plester (cm)',placeholder:'contoh: 2'}],
+  pengecatan:[{id:'luas',label:'Luas yang Dicat (m²)',placeholder:'contoh: 100'},{id:'lapisan',label:'Jumlah Lapisan',placeholder:'contoh: 2'}],
+  pondasi_batu_kali:[{id:'panjang',label:'Panjang Pondasi (m)',placeholder:'contoh: 20'},{id:'lebar',label:'Lebar Pondasi (m)',placeholder:'contoh: 0.6'},{id:'tinggi',label:'Tinggi Pondasi (m)',placeholder:'contoh: 0.8'}],
+  pasangan_bata:[{id:'luas',label:'Luas Dinding (m²)',placeholder:'contoh: 30'},{id:'tebal',label:'Tebal Dinding (cm)',placeholder:'contoh: 12'}],
+  atap_genteng:[{id:'luas',label:'Luas Atap (m²)',placeholder:'contoh: 60'},{id:'jenis',label:'Tipe Genteng',placeholder:'contoh: press, beton'}],
+};
+
+function updateFields(){
+  const type=document.getElementById('jobType').value;
+  const flds=fields[type]||[];
+  document.getElementById('dynamicFields').innerHTML=flds.map(f=>`
+    <div class="input-group" style="margin:0">
+      <label>${f.label}</label>
+      <input id="f_${f.id}" type="text" ${f.id==='jenis'?'':'inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0"'} class="input-control" placeholder="${f.placeholder}">
+    </div>`).join('');
+}
+
+async function hitung(){
+  const type=document.getElementById('jobType').value;
+  const flds=fields[type]||[];
+  const params={type};
+  let ok=true;
+  flds.forEach(f=>{
+    const v=document.getElementById(`f_${f.id}`)?.value;
+    if(!v||v==='0'){ok=false;}
+    params[f.id]=f.id==='jenis'?v:parseDesimal(v,{maximumFractionDigits:4});
+  });
+  if(!ok){showToast('Isi semua field dulu','error');return;}
+  try{
+    showLoading('Menghitung kebutuhan material...');
+    let r;
+    try{ r=await api('POST','/ai-bangunan/calculate-material',params); }
+    catch(e){ r=calcLocal(params); }
+    hideLoading();
+    lastResult=r;
+    document.getElementById('resultCard').style.display='block';
+    document.getElementById('resultContent').innerHTML=
+      Object.entries(r.result||r).map(([k,v])=>`
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-color)">
+          <span style="font-size:15px;font-weight:600">${k}</span>
+          <span style="font-size:17px;font-weight:800;color:var(--primary)">${v}</span>
+        </div>`).join('')+
+      (r.notes?`<div style="margin-top:12px;font-size:14px;color:var(--text-muted);background:var(--bg-color);padding:12px;border-radius:10px">💡 ${r.notes}</div>`:'');
+    document.getElementById('resultCard').scrollIntoView({behavior:'smooth'});
+  }catch(ex){hideLoading();showToast(ex.message,'error');}
+}
+
+function calcLocal(p){
+  const r={};
+  if(p.type==='keramik_lantai'){
+    const luas=p.luas||0, uk=p.ukuran||60;
+    const perDus=uk>=60?4:uk>=40?6:9;
+    r['Luas Total']=(luas+' m²');
+    r['Keramik (termasuk waste 10%)']=(Math.ceil(luas*1.1/(uk*uk/10000)/perDus)+' Dus');
+    r['Semen Perekat']=(Math.ceil(luas*4.5/40)+' Sak 40kg');
+    r['Semen Nat']=(Math.ceil(luas*0.5)+' Kg');
+  }else if(p.type==='pengecatan'){
+    const luas=p.luas||0, lap=p.lapisan||2;
+    r['Luas Total']=(luas+' m²');
+    r['Cat Tembok (12m²/liter)']=(Math.ceil(luas*lap/12)+' Liter');
+    r['Cat Dasar / Plamir']=(Math.ceil(luas/20)+' Kg');
+    r['Amplas']=(Math.ceil(luas/10)+' Lembar');
+  }else if(p.type==='plester_dinding'){
+    const luas=p.luas||0, tebal=(p.tebal||2)/100;
+    const vol=luas*tebal;
+    r['Volume Plester']=(vol.toFixed(2)+' m³');
+    r['Semen PC']=(Math.ceil(vol*300/50)+' Sak 50kg');
+    r['Pasir Pasang']=(vol.toFixed(2)+' m³');
+  }else if(p.type==='pondasi_batu_kali'){
+    const vol=p.panjang*p.lebar*p.tinggi;
+    r['Volume Pondasi']=(vol.toFixed(2)+' m³');
+    r['Batu Kali']=(Math.ceil(vol*1.2)+' m³');
+    r['Semen PC']=(Math.ceil(vol*150/50)+' Sak 50kg');
+    r['Pasir Pasang']=(vol.toFixed(2)+' m³');
+  }else{
+    r['Info']='Masukkan dimensi yang benar untuk hasil perhitungan';
+  }
+  return{result:r,notes:'Hasil perhitungan estimasi. Tambahkan 10-15% sebagai cadangan.'};
+}
+
+function tambahKeKasir(){window.location.href='/item/items';}
+function cetakEstimasi(){
+  if(!lastResult)return;
+  const win=window.open('','_blank','width=600,height=500');
+  const jenis=document.getElementById('jobType').options[document.getElementById('jobType').selectedIndex].text;
+  const rows=Object.entries(lastResult.result||lastResult).map(([k,v])=>`<tr><td>${k}</td><td style="font-weight:bold;text-align:right">${v}</td></tr>`).join('');
+  win.document.write(`<html><head><title>Estimasi Material</title><style>body{font-family:Arial;padding:20px}table{width:100%;border-collapse:collapse}td{padding:10px;border-bottom:1px solid #eee}h2{color:#f97316}</style></head>
+  <body><h2>Estimasi Kebutuhan Material</h2><p><b>Jenis Pekerjaan:</b> ${jenis}</p><table>${rows}</table>
+  ${lastResult.notes?`<p style="color:#666;font-size:13px">💡 ${lastResult.notes}</p>`:''}
+  <p style="color:#999;font-size:12px;margin-top:20px">Digenerate oleh iPos 5.0 — ${new Date().toLocaleString('id-ID')}</p>
+  </body></html>`);
+  win.document.close(); setTimeout(()=>win.print(),400);
+}
+
+/* ── Proyek ── */
+async function loadProyek(){
+  try{
+    const d=await api('GET','/ai-bangunan/projects?limit=100');
+    const stBadge=s=>({active:'<span style="color:#10b981;font-weight:700">● Aktif</span>',completed:'<span style="color:#3b82f6;font-weight:700">✓ Selesai</span>'}[s]||`<span style="color:var(--text-muted)">${s||'-'}</span>`);
+    document.getElementById('tblProyek').innerHTML=d.length?d.map(p=>`<tr>
+      <td><b style="font-size:16px">${p.name}</b></td>
+      <td>${p.client_name||'-'}</td>
+      <td style="font-weight:700;color:var(--primary)">${p.project_value?fmtRp(p.project_value):'-'}</td>
+      <td style="font-size:13px;color:var(--text-muted)">${fmtDate(p.start_date)}</td>
+      <td>${stBadge(p.status)}</td>
+      <td style="white-space:nowrap">
+        ${p.status==='active'?`<button class="bsm bl" onclick="selesaikanProyek(${p.id})">✓ Selesai</button>`:''}
+        <button class="bsm bd" onclick="hapusProyek(${p.id})">Hapus</button>
+      </td></tr>`).join(''):'<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada proyek</td></tr>';
+  }catch(ex){showToast(ex.message,'error');}
+}
+
+const _origOM=openModal;
+window.openModal=function(id){
+  if(id==='mProyek'){
+    editProjId=null; document.getElementById('mProjTitle').textContent='Tambah Proyek Baru';
+    document.getElementById('projId').value='';
+    ['projNama','projKlien','projDesk'].forEach(i=>document.getElementById(i).value='');
+    document.getElementById('projNilai').value=0;
+    document.getElementById('projTgl').value=today();
+  }
+  _origOM(id);
+};
+
+async function saveProyek(){
+  const name=document.getElementById('projNama').value.trim();
+  if(!name){showToast('Nama proyek wajib diisi','error');return;}
+  const id=document.getElementById('projId').value;
+  const data={name,client_name:document.getElementById('projKlien').value||null,
+    project_value:parseDesimal(document.getElementById('projNilai'))||null,
+    start_date:document.getElementById('projTgl').value||null,
+    description:document.getElementById('projDesk').value||null};
+  try{
+    if(id) await api('PUT',`/ai-bangunan/projects/${id}`,data);
+    else   await api('POST','/ai-bangunan/projects',data);
+    showToast('Proyek disimpan ✓');closeModal('mProyek');loadProyek();
+  }catch(ex){showToast(ex.message,'error');}
+}
+
+async function selesaikanProyek(id){
+  if(!await showConfirm('Tandai proyek ini sebagai selesai?'))return;
+  try{await api('PUT',`/ai-bangunan/projects/${id}`,{status:'completed'});showToast('Proyek ditandai selesai ✓');loadProyek();}
+  catch(ex){showToast(ex.message,'error');}
+}
+async function hapusProyek(id){
+  if(!await showConfirm('Hapus proyek ini?'))return;
+  try{await api('DELETE',`/ai-bangunan/projects/${id}`);showToast('Dihapus');loadProyek();}
+  catch(ex){showToast(ex.message,'error');}
+}
+
+/* ── Chat AI Bangunan ── */
+function initChat(){
+  const box=document.getElementById('bChatBox');
+  const d=document.createElement('div');
+  d.style.cssText='max-width:85%;padding:14px 18px;border-radius:18px;font-size:15px;background:var(--card-bg);border:1px solid var(--border-color);align-self:flex-start;border-bottom-left-radius:4px';
+  d.textContent='Halo! Tanya saya tentang material bangunan, cara hitung kebutuhan, atau rekomendasi produk untuk proyek Anda 🏗️';
+  box.appendChild(d);
+}
+
+async function kirimChat(){
+  const inp=document.getElementById('bChatInput');
+  const msg=inp.value.trim(); if(!msg)return;
+  inp.value='';
+  const box=document.getElementById('bChatBox');
+  const addB=(text,isUser)=>{
+    const d=document.createElement('div');
+    d.style.cssText=`max-width:85%;padding:14px 18px;border-radius:18px;font-size:15px;white-space:pre-wrap;${isUser?'background:var(--primary);color:#fff;align-self:flex-end;border-bottom-right-radius:4px':'background:var(--card-bg);border:1px solid var(--border-color);align-self:flex-start;border-bottom-left-radius:4px'}`;
+    d.textContent=text; box.appendChild(d); box.scrollTop=box.scrollHeight; return d;
+  };
+  addB(msg,true);
+  const ld=addB('⏳ Sedang berpikir...',false);
+  try{
+    const r=await api('POST','/ai-bangunan/chat',{message:msg}).catch(()=>api('POST','/ai/chat',{message:'Pertanyaan tentang material bangunan: '+msg,history:[]}));
+    ld.textContent=r.response||r.message||JSON.stringify(r);
+  }catch(ex){ld.textContent='⚠️ Error: '+ex.message;}
+  box.scrollTop=box.scrollHeight;
+}
+
+// Init
+updateFields();
+</script>
+</body></html>

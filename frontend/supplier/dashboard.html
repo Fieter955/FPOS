@@ -1,0 +1,927 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"
+    />
+    <title>Supplier - iPos 5.0</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <style>
+      .item-selection-section {
+        margin: 16px 0;
+        padding: 16px;
+        background: var(--bg-color);
+        border-radius: 12px;
+        border: 1px solid var(--border-color);
+      }
+      .item-selection-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .item-selection-header label {
+        font-weight: 600;
+        color: var(--text-muted);
+        font-size: 14px;
+      }
+      .item-search-box {
+        position: relative;
+        width: 100%;
+        max-width: 400px;
+      }
+      .item-search-input {
+        width: 100%;
+        padding: 10px 12px 10px 36px;
+        border: 2px solid var(--border-color);
+        border-radius: 10px;
+        background: var(--input-bg, #1e293b);
+        color: var(--text-main);
+        font-size: 14px;
+        outline: none;
+        box-sizing: border-box;
+        transition: border-color 0.2s;
+      }
+      .item-search-input:focus {
+        border-color: var(--primary);
+      }
+      .item-search-icon {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+        font-size: 14px;
+        pointer-events: none;
+      }
+      .item-dropdown {
+        position: fixed;
+        width: calc(100% - 32px);
+        max-width: 400px;
+        max-height: 240px;
+        overflow-y: auto;
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+        z-index: 9999;
+        display: none;
+      }
+      .item-dropdown.show {
+        display: block;
+        animation: fadeIn 0.15s ease;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(-5px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .item-dropdown-item {
+        padding: 12px 16px;
+        cursor: pointer;
+        border-bottom: 1px solid var(--border-color);
+        color: var(--text-main);
+        font-size: 14px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: background 0.15s;
+      }
+      .item-dropdown-item:last-child {
+        border-bottom: none;
+      }
+      .item-dropdown-item:hover,
+      .item-dropdown-item.highlight {
+        background: var(--primary-light);
+        color: var(--primary);
+      }
+      .item-dropdown-item .item-code {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-left: 8px;
+      }
+      .item-dropdown-item .item-add-btn {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: var(--primary);
+        color: white;
+        border: none;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        margin-left: 8px;
+        transition: transform 0.1s;
+      }
+      .item-dropdown-item .item-add-btn:hover {
+        transform: scale(1.1);
+      }
+      .item-dropdown-empty {
+        padding: 16px;
+        text-align: center;
+        color: var(--text-muted);
+        font-style: italic;
+        font-size: 13px;
+      }
+      .selected-items-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        min-height: 40px;
+        margin-top: 12px;
+      }
+      .item-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        background: var(--primary-light);
+        color: var(--primary);
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 500;
+        border: 1px solid var(--primary);
+      }
+      .item-chip .chip-name {
+        max-width: 150px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .item-chip .chip-remove {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: rgba(239, 68, 68, 0.2);
+        color: #ef4444;
+        border: none;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        transition: background 0.15s;
+      }
+      .item-chip .chip-remove:hover {
+        background: rgba(239, 68, 68, 0.4);
+      }
+      .selected-items-empty {
+        color: var(--text-muted);
+        font-size: 13px;
+        font-style: italic;
+        padding: 8px 4px;
+      }
+      .item-dropdown::-webkit-scrollbar,
+      .selected-items-container::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      .item-dropdown::-webkit-scrollbar-track,
+      .selected-items-container::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .item-dropdown::-webkit-scrollbar-thumb,
+      .selected-items-container::-webkit-scrollbar-thumb {
+        background: var(--border-color);
+        border-radius: 3px;
+      }
+      .item-dropdown::-webkit-scrollbar-thumb:hover {
+        background: var(--text-muted);
+      }
+      @media (max-width: 700px) {
+        .item-selection-header {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        .item-search-box {
+          max-width: 100%;
+        }
+        .item-dropdown {
+          width: calc(100vw - 48px);
+          left: 50%;
+          transform: translateX(-50%);
+        }
+        .item-chip .chip-name {
+          max-width: 120px;
+        }
+        .modal-box {
+          width: calc(100% - 24px);
+          margin: 12px;
+          max-height: calc(100vh - 24px);
+          overflow-y: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-container">
+      <main class="main-content">
+        <button
+          class="btn"
+          style="
+            background: transparent;
+            color: var(--text-muted);
+            padding: 0;
+            margin-bottom: 16px;
+          "
+          onclick="requestSupplierNavigation('/dashboard')"
+        >
+          ← Kembali
+        </button>
+        <div class="pg-header">
+          <div>
+            <h1>🏭 Data Supplier</h1>
+            <p>Daftar pemasok, distributor, dan pabrik.</p>
+          </div>
+          <button class="btn btn-primary" onclick="openSupModal()">
+            ➕ Tambah Supplier
+          </button>
+        </div>
+        <div class="filter-bar">
+          <input
+            id="srch"
+            type="text"
+            class="input-control"
+            placeholder="🔍 Cari nama supplier..."
+            oninput="load()"
+          />
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Nama Supplier</th>
+                <th>Telepon</th>
+                <th>Deposit</th>
+                <th>Email</th>
+                <th>PPN Supplier</th>
+                <th>Status</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="tblBody"></tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+
+    <!-- Modal Tambah/Edit Supplier -->
+    <div id="tambahEditBarang"></div>
+
+    <!-- Modal Riwayat -->
+    <div class="modal-overlay" id="mRiwayat">
+      <div class="modal-box" style="max-width: 600px">
+        <div class="modal-hdr">
+          <h2 id="mRiwayatTitle">Riwayat Beli</h2>
+          <button class="btn-x" onclick="closeModal('mRiwayat')">×</button>
+        </div>
+        <div class="tbl-wrap" style="max-height: 350px; overflow-y: auto">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>No. Faktur</th>
+                <th>Tanggal</th>
+                <th>Total</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="tblRiwayatBody"></tbody>
+          </table>
+        </div>
+        <div style="margin-top: 16px; text-align: right">
+          <button
+            onclick="closeModal('mRiwayat')"
+            class="btn"
+            style="
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              color: var(--text-main);
+            "
+          >
+            Tutup
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/theme.js"></script>
+    <script src="/js/supplier-form-keyboard.js?v=20260814-enter-nav"></script>
+    <script>
+      requireAuth();
+      const supplierSort =
+        new URLSearchParams(location.search).get("sort") === "deposit_desc"
+          ? "deposit_desc"
+          : "";
+      let editId = null;
+      let originalPpnType = ""; // Jenis PPN supplier saat modal dibuka (untuk deteksi perubahan)
+      let allItems = [];
+      let selectedItems = new Map();
+      let itemSearchTimeout = null;
+      let activeItemDropdown = null;
+      let supplierFormBaseline = null;
+      let supplierSaveInProgress = false;
+
+      function fmtRp(n) {
+        return new Intl.NumberFormat("id-ID", {
+          style: "currency",
+          currency: "IDR",
+          minimumFractionDigits: 0,
+        }).format(n || 0);
+      }
+      function fmtDate(d) {
+        if (!d) return "-";
+        const dt = new Date(d + "T00:00:00");
+        return dt.toLocaleDateString("id-ID", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        });
+      }
+
+      function serializeSupplierForm() {
+        if (!document.getElementById("supForm")) return null;
+        const value = (id) => document.getElementById(id)?.value ?? "";
+        return JSON.stringify({
+          editId: editId || null,
+          name: value("sNama"),
+          phone: value("sPhone"),
+          email: value("sEmail"),
+          address: value("sAlamat"),
+          ppn: value("PpnSupplier"),
+          ppnType: value("sPpnType"),
+          creditLimit: value("sCredit"),
+          dueDate: value("sDueDate"),
+          notes: value("sNotes"),
+          itemIds: Array.from(selectedItems.keys()).sort((a, b) => a - b),
+        });
+      }
+
+      function hasDirtySupplierForm() {
+        return (
+          supplierFormBaseline !== null &&
+          serializeSupplierForm() !== supplierFormBaseline
+        );
+      }
+
+      function discardSupplierChanges() {
+        supplierFormBaseline = null;
+        closeModal("mSup");
+        notifyUnsavedChangesChanged();
+      }
+
+      async function requestCloseSupplierModal() {
+        if (!hasDirtySupplierForm()) {
+          discardSupplierChanges();
+          return;
+        }
+        await resolveUnsavedChangesBeforeExit(
+          "Perubahan Supplier belum disimpan. Apa yang ingin dilakukan?",
+          {
+            saveText: "Simpan & Tutup",
+            discardText: "Tutup Tanpa Simpan",
+          },
+        );
+      }
+
+      async function requestSupplierNavigation(target) {
+        const canLeave = await resolveUnsavedChangesBeforeExit(
+          "Perubahan Supplier belum disimpan. Apa yang ingin dilakukan sebelum meninggalkan halaman?",
+          {
+            saveText: "Simpan & Keluar",
+            discardText: "Keluar Tanpa Simpan",
+          },
+        );
+        if (!canLeave) return;
+        if (FPOS_WORKSPACE_EMBEDDED && target === "/dashboard") {
+          focusWorkspaceDashboard();
+        } else {
+          window.location.href = target;
+        }
+      }
+
+      function positionDropdown(inputEl, dropdownEl) {
+        const rect = inputEl.getBoundingClientRect();
+        const viewportHeight = window.innerHeight;
+        const dropdownHeight = 240;
+        let top = rect.bottom + window.scrollY + 4;
+        if (rect.bottom + dropdownHeight > viewportHeight - 20)
+          top = rect.top + window.scrollY - dropdownHeight - 4;
+        const isMobile = window.innerWidth <= 700;
+        dropdownEl.style.top = `${Math.max(8, top)}px`;
+        dropdownEl.style.left = isMobile
+          ? "50%"
+          : `${rect.left + window.scrollX}px`;
+        dropdownEl.style.transform = isMobile ? "translateX(-50%)" : "none";
+        dropdownEl.style.width = isMobile
+          ? "calc(100vw - 32px)"
+          : `${Math.min(rect.width, 400)}px`;
+      }
+
+      async function loadAllItems() {
+        try {
+          // Minta langsung 20.000 item biar tidak pernah terpotong lagi
+          const result = await api(
+            "GET",
+            "/items/?limit=20000&active_only=true",
+          );
+
+          // Guard: pastikan format yang diterima adalah array
+          allItems = Array.isArray(result)
+            ? result
+            : result?.items || result?.data || [];
+
+          if (allItems.length === 0) {
+            console.warn(
+              "Peringatan: Tidak ada item yang dimuat dari database.",
+            );
+          }
+        } catch (e) {
+          // Sekarang jika gagal, kasir/admin akan tahu masalahnya!
+          showToast("Gagal memuat daftar barang: " + e.message, "error");
+          allItems = [];
+        }
+      }
+
+      function renderItemDropdown(searchText = "") {
+        const dropdown = document.getElementById("itemDropdown");
+        const search = searchText.toLowerCase().trim();
+        const available = allItems.filter(
+          (item) =>
+            !selectedItems.has(item.id) &&
+            (item.name.toLowerCase().includes(search) ||
+              (item.code && item.code.toLowerCase().includes(search)) ||
+              (item.barcode && String(item.barcode).includes(search))),
+        );
+        if (available.length === 0) {
+          dropdown.innerHTML = `<div class="item-dropdown-empty">${search ? "Tidak ditemukan" : "Semua barang sudah ditambahkan"}</div>`;
+          dropdown.classList.add("show");
+          return;
+        }
+        dropdown.innerHTML = available
+          .slice(0, 50)
+          .map(
+            (item) =>
+              `<div class="item-dropdown-item" data-id="${item.id}" data-name="${item.name.replace(/"/g, "&quot;")}">
+            <span>${item.name}${item.code ? `<span class="item-code">[${item.code}]</span>` : ""}</span>
+            <button type="button" class="item-add-btn">+</button>
+          </div>`,
+          )
+          .join("");
+        dropdown.classList.add("show");
+        dropdown.querySelectorAll(".item-dropdown-item").forEach((el) => {
+          el.querySelector(".item-add-btn").addEventListener("click", (e) => {
+            e.stopPropagation();
+            const item = allItems.find((i) => i.id === parseInt(el.dataset.id));
+            if (item) addItemToSelection(item);
+            document.getElementById("itemSearchInput").value = "";
+            dropdown.classList.remove("show");
+          });
+        });
+      }
+
+      function addItemToSelection(item) {
+        if (selectedItems.has(item.id)) return;
+        selectedItems.set(item.id, {
+          id: item.id,
+          name: item.name,
+          code: item.code,
+        });
+        renderSelectedItems();
+        notifyUnsavedChangesChanged();
+      }
+      function removeItemFromSelection(itemId) {
+        selectedItems.delete(itemId);
+        renderSelectedItems();
+        notifyUnsavedChangesChanged();
+      }
+      function renderSelectedItems() {
+        const container = document.getElementById("selectedItemsContainer");
+        if (selectedItems.size === 0) {
+          container.innerHTML = `<span class="selected-items-empty">Belum ada barang dipilih</span>`;
+          return;
+        }
+        container.innerHTML = Array.from(selectedItems.values())
+          .map(
+            (item) =>
+              `<span class="item-chip">
+            <span class="chip-name" title="${item.name}${item.code ? " - " + item.code : ""}">
+              ${item.name}${item.code ? ` <small style="opacity:0.7">[${item.code}]</small>` : ""}
+            </span>
+            <button type="button" class="chip-remove" onclick="removeItemFromSelection(${item.id})">×</button>
+          </span>`,
+          )
+          .join("");
+      }
+
+      function setupItemSearch() {
+        const input = document.getElementById("itemSearchInput");
+        const dropdown = document.getElementById("itemDropdown");
+        if (!input || !dropdown) return;
+
+        input.addEventListener("focus", () => {
+          renderItemDropdown(input.value);
+          positionDropdown(input, dropdown);
+          activeItemDropdown = { input, dropdown };
+        });
+        input.addEventListener("input", () => {
+          clearTimeout(itemSearchTimeout);
+          itemSearchTimeout = setTimeout(() => {
+            renderItemDropdown(input.value);
+            if (activeItemDropdown) positionDropdown(input, dropdown);
+          }, 150);
+        });
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") dropdown.classList.remove("show");
+        });
+        document.addEventListener("click", (e) => {
+          if (!input.contains(e.target) && !dropdown.contains(e.target))
+            dropdown.classList.remove("show");
+        });
+        window.addEventListener("resize", () => {
+          if (activeItemDropdown?.dropdown?.classList.contains("show"))
+            positionDropdown(
+              activeItemDropdown.input,
+              activeItemDropdown.dropdown,
+            );
+        });
+      }
+
+      async function loadModal() {
+        try {
+          // ?v= + no-store: paksa ambil form modal terbaru, jangan dari cache webview
+          // (kalau dari cache lama, dropdown "Jenis PPN" hilang id-nya → fitur diam-diam mati).
+          const resp = await fetch("/supplier/tambahSuplier.html?v=" + Date.now(), {
+            cache: "no-store",
+          });
+          const html = await resp.text();
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, "text/html");
+
+          // Cari form atau card dari halaman standalone
+          const form = doc.querySelector("form");
+
+          if (form) {
+            document.getElementById("tambahEditBarang").innerHTML = `
+               <div class="modal-overlay" id="mSup">
+                 <div class="modal-box" style="max-width: 700px">
+                   <div class="modal-hdr">
+                     <h2 id="mSupTitle">Tambah Supplier</h2>
+                     <button class="btn-x" onclick="requestCloseSupplierModal()">×</button>
+                   </div>
+                   <div class="modal-body" style="padding:0;">
+                     ${form.outerHTML}
+                   </div>
+                 </div>
+               </div>
+             `;
+
+            // Bersihkan elemen yang tidak diperlukan di dalam modal
+            const modalBody = document.querySelector("#mSup .modal-body");
+            modalBody.querySelector("h2")?.remove();
+
+            // Ubah onsubmit form agar menggunakan fungsi save dari dashboard ini
+            const injectedForm = modalBody.querySelector("form");
+            if (injectedForm) {
+              injectedForm.onsubmit = (e) => save(e);
+              injectedForm.addEventListener("input", notifyUnsavedChangesChanged);
+              injectedForm.addEventListener("change", notifyUnsavedChangesChanged);
+            }
+            const cancelButton = modalBody.querySelector(
+              "[data-supplier-cancel]",
+            );
+            if (cancelButton) cancelButton.onclick = requestCloseSupplierModal;
+
+            setupItemSearch();
+          }
+        } catch (e) {
+          console.error("Gagal memuat modal supplier:", e);
+        }
+      }
+
+      async function load() {
+        const q = document.getElementById("srch").value;
+        let url = "/suppliers/?limit=500";
+        if (q) url += `&search=${encodeURIComponent(q)}`;
+        if (supplierSort) url += `&sort=${supplierSort}`;
+        try {
+          const d = await api("GET", url);
+          document.getElementById("tblBody").innerHTML = d.length
+            ? d
+                .map(
+                  (s) => `<tr>
+                <td><b style="font-size:16px">${s.name}</b></td>
+                <td>${s.phone || "-"}</td>
+                <td style="font-weight:700;color:var(--primary)">${fmtRp(s.deposit_balance || 0)}</td>
+                <td>${s.email || "-"}</td>
+                <td>${s.PpnSupplier !== undefined ? s.PpnSupplier.toFixed(2) : "0.00"}</td>
+                <td><span style="color:${s.is_active !== false ? "#10b981" : "#ef4444"};font-weight:700">${s.is_active !== false ? "● Aktif" : "✗ Nonaktif"}</span></td>
+                <td style="white-space:nowrap">
+                  <button class="bsm be" onclick='editSupplier(${JSON.stringify(s).replace(/"/g, "&quot;")})'>Edit</button>
+                  <button class="bsm bd" onclick="delSup(${s.id},'${s.name.replace(/'/g, "\\'")}')">Hapus</button>
+                  <button class="bsm bv" onclick="lihatPembelian(${s.id},'${s.name.replace(/'/g, "\\'")}')">Riwayat</button>
+                </td>
+              </tr>`,
+                )
+                .join("")
+            : '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada supplier</td></tr>';
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function openSupModal() {
+        editId = null;
+        supplierFormBaseline = null;
+        selectedItems.clear();
+        document.getElementById("mSupTitle").textContent = "Tambah Supplier";
+        document.getElementById("sId").value = "";
+        [
+          "sNama",
+          "sPhone",
+          "sEmail",
+          "sAlamat",
+          "sNotes",
+        ].forEach((id) => (document.getElementById(id).value = ""));
+        document.getElementById("PpnSupplier").value = "0,00";
+        document.getElementById("sCredit").value = "0,00";
+        document.getElementById("sDueDate").value = "0";
+        const ppnSel = document.getElementById("sPpnType");
+        if (ppnSel) ppnSel.value = "";
+        originalPpnType = "";
+        renderSelectedItems();
+        await loadAllItems();
+        openModal("mSup");
+        supplierFormBaseline = serializeSupplierForm();
+        notifyUnsavedChangesChanged();
+        setTimeout(() => document.getElementById("sNama")?.focus(), 100);
+      }
+
+      async function editSupplier(s) {
+        editId = s.id;
+        supplierFormBaseline = null;
+        selectedItems.clear();
+        document.getElementById("mSupTitle").textContent = "Edit Supplier";
+        document.getElementById("sId").value = s.id;
+        document.getElementById("sNama").value = s.name;
+        document.getElementById("sPhone").value = s.phone || "";
+        document.getElementById("sEmail").value = s.email || "";
+        document.getElementById("sAlamat").value = s.address || "";
+        document.getElementById("PpnSupplier").value = toDesimal(
+          s.PpnSupplier || 0,
+        );
+        const ppnSelEdit = document.getElementById("sPpnType");
+        if (ppnSelEdit) ppnSelEdit.value = s.ppn_type || "";
+        originalPpnType = s.ppn_type || "";
+        document.getElementById("sCredit").value = toDesimal(
+          s.credit_limit || 0,
+        );
+        document.getElementById("sDueDate").value = s.due_date || 0;
+        document.getElementById("sDeposit").value = fmtRp(
+          s.deposit_balance || 0,
+        );
+        document.getElementById("sNotes").value = s.notes || "";
+        try {
+          const items = await api("GET", `/suppliers/${s.id}/items`);
+          items.forEach((item) =>
+            selectedItems.set(item.id, {
+              id: item.id,
+              name: item.name,
+              code: item.code,
+            }),
+          );
+        } catch (e) {
+          console.warn("Gagal load items supplier:", e.message);
+        }
+        renderSelectedItems();
+        await loadAllItems();
+        openModal("mSup");
+        supplierFormBaseline = serializeSupplierForm();
+        notifyUnsavedChangesChanged();
+        setTimeout(() => document.getElementById("sNama")?.focus(), 100);
+      }
+
+      async function save(e) {
+        if (e && e.preventDefault) e.preventDefault();
+        if (supplierSaveInProgress) return false;
+        const name = document.getElementById("sNama").value.trim();
+        if (!name) {
+          showToast("Nama supplier wajib diisi", "error");
+          document.getElementById("sNama")?.focus();
+          return false;
+        }
+
+        const ppnType = document.getElementById("sPpnType")?.value || null;
+        const data = {
+          name: name,
+          phone: document.getElementById("sPhone").value || null,
+          email: document.getElementById("sEmail").value || null,
+          address: document.getElementById("sAlamat").value || null,
+          PpnSupplier: ppnType
+            ? parseDesimal(document.getElementById("PpnSupplier"))
+            : 0,
+          ppn_type: ppnType,
+          credit_limit: parseDesimal(document.getElementById("sCredit")),
+          due_date:
+            parseInt(document.getElementById("sDueDate").value) || 0,
+          notes: document.getElementById("sNotes").value || null,
+          item_ids: Array.from(selectedItems.keys()),
+          // 🔑 KODE TIDAK DIKIRIM, BACKEND AUTO-GENERATE
+        };
+
+        // Jenis PPN supplier diubah → tawarkan menyamakan semua barangnya
+        let terapkanPpn = false;
+        if (
+          editId &&
+          (ppnType === "included" || ppnType === "excluded") &&
+          ppnType !== originalPpnType
+        ) {
+          let cek;
+          try {
+            cek = await api("POST", `/suppliers/${editId}/apply-ppn-type`, {
+              ppn_type: ppnType,
+              dry_run: true,
+            });
+          } catch (ex) {
+            showToast(ex.message || "Gagal memeriksa barang supplier", "error");
+            return false;
+          }
+          if (cek && cek.count > 0) {
+            const lanjut = await konfirmasiUbahPpn(ppnType, cek.different);
+            if (!lanjut) {
+              // Batal total: kembalikan dropdown ke nilai semula, tidak menyimpan apa pun
+              const sel = document.getElementById("sPpnType");
+              if (sel) sel.value = originalPpnType;
+              notifyUnsavedChangesChanged();
+              return false;
+            }
+            terapkanPpn = true;
+          }
+        }
+
+        const btn = document.getElementById("btnSimpan");
+        let saved = false;
+        try {
+          supplierSaveInProgress = true;
+          btn.disabled = true;
+          btn.textContent = "Menyimpan...";
+          if (editId) await api("PUT", `/suppliers/${editId}`, data);
+          else await api("POST", "/suppliers/", data);
+
+          if (terapkanPpn) {
+            const res = await api(
+              "POST",
+              `/suppliers/${editId}/apply-ppn-type`,
+              { ppn_type: ppnType, dry_run: false },
+            );
+            const labelTgt = ppnType === "included" ? "Include" : "Exclude";
+            showToast(
+              `Supplier disimpan ✓ ${res.updated || 0} barang disamakan ke ${labelTgt}`,
+            );
+          } else {
+            showToast("Supplier disimpan ✓");
+          }
+          originalPpnType = ppnType || "";
+          supplierFormBaseline = serializeSupplierForm();
+          notifyUnsavedChangesChanged();
+          closeModal("mSup");
+          supplierFormBaseline = null;
+          notifyUnsavedChangesChanged();
+          load();
+          saved = true;
+        } catch (ex) {
+          showToast(ex.message || "Gagal menyimpan", "error");
+        } finally {
+          supplierSaveInProgress = false;
+          btn.disabled = false;
+          btn.textContent = "✓ Simpan";
+        }
+        return saved;
+      }
+
+      // Popup konfirmasi: daftar barang yang setelan PPN-nya berbeda dari target.
+      // Mengembalikan Promise<boolean> (true = lanjut samakan semua).
+      function konfirmasiUbahPpn(target, daftar) {
+        return new Promise((resolve) => {
+          const labelTarget =
+            target === "included"
+              ? "Include (PPN termasuk harga)"
+              : "Exclude (PPN dipisah)";
+          const rows = (daftar || [])
+            .map((d) => {
+              const setNow =
+                d.current_ppn_type === "excluded" ? "Exclude" : "Include";
+              return `<tr>
+                <td style="padding:6px 8px">${d.name}</td>
+                <td style="padding:6px 8px;text-align:right;color:var(--text-muted)">${setNow}</td>
+              </tr>`;
+            })
+            .join("");
+          const ov = document.createElement("div");
+          ov.style.cssText =
+            "position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);z-index:10000;padding:16px;";
+          ov.innerHTML = `
+            <div class="modal-box" style="max-width:460px;width:100%">
+              <div class="modal-hdr"><h2 style="margin:0">Ada setelan PPN berbeda</h2></div>
+              <p style="color:var(--text-main);line-height:1.5;margin:12px 0">
+                Ada <b>${(daftar || []).length}</b> barang yang setelan PPN-nya berbeda. Jika dilanjutkan,
+                semua barang ini diubah ke <b>${labelTarget}</b> dan <b>harga belinya disesuaikan otomatis</b>.
+              </p>
+              <div class="tbl-wrap" style="max-height:240px;overflow-y:auto;border:1px solid var(--border-color);border-radius:8px">
+                <table class="tbl" style="width:100%">
+                  <thead><tr>
+                    <th style="text-align:left;padding:6px 8px">Barang</th>
+                    <th style="text-align:right;padding:6px 8px">Setelan sekarang</th>
+                  </tr></thead>
+                  <tbody>${rows}</tbody>
+                </table>
+              </div>
+              <div style="display:flex;gap:12px;margin-top:16px">
+                <button id="_ppnNo" class="btn" style="flex:1;background:var(--bg-color);border:1px solid var(--border-color);color:var(--text-main)">Batal</button>
+                <button id="_ppnYes" class="btn btn-primary" style="flex:1">Ya, ubah semua</button>
+              </div>
+            </div>`;
+          document.body.appendChild(ov);
+          const done = (val) => {
+            ov.remove();
+            resolve(val);
+          };
+          ov.querySelector("#_ppnNo").onclick = () => done(false);
+          ov.querySelector("#_ppnYes").onclick = () => done(true);
+        });
+      }
+
+      async function delSup(id, name) {
+        if (!(await showConfirm(`Hapus supplier "${name}"?`))) return;
+        try {
+          await api("DELETE", `/suppliers/${id}`);
+          showToast("Dihapus");
+          load();
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function lihatPembelian(id, name) {
+        try {
+          if (typeof showLoading === "function")
+            showLoading("Memuat riwayat...");
+          const d = await api("GET", `/purchases/?supplier_id=${id}&limit=50`);
+          if (typeof hideLoading === "function") hideLoading();
+          const rows = d
+            .map((p) => {
+              let color =
+                p.status === "paid"
+                  ? "#10b981"
+                  : p.status === "unpaid"
+                    ? "#ef4444"
+                    : "#f59e0b";
+              return `<tr><td style="font-family:monospace;font-size:13px;color:var(--primary)">${p.number}</td><td>${fmtDate(p.date)}</td><td style="font-weight:700">${fmtRp(p.total)}</td><td><span style="font-weight:bold;color:${color}">${p.status.toUpperCase()}</span></td></tr>`;
+            })
+            .join("");
+          document.getElementById("mRiwayatTitle").textContent =
+            `Riwayat: ${name}`;
+          document.getElementById("tblRiwayatBody").innerHTML =
+            rows ||
+            '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada riwayat</td></tr>';
+          openModal("mRiwayat");
+        } catch (ex) {
+          if (typeof hideLoading === "function") hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      document.addEventListener("DOMContentLoaded", async () => {
+        // Jangan menahan tabel supplier sambil menunggu modal dan seluruh data
+        // barang. Daftar master harus tetap tampil bila fitur tambahan gagal.
+        load();
+
+        if (typeof registerUnsavedChangesGuard === "function") {
+          registerUnsavedChangesGuard({
+            label: "Supplier",
+            isDirty: hasDirtySupplierForm,
+            save: () => save(),
+            discard: discardSupplierChanges,
+          });
+        }
+
+        await Promise.all([loadModal(), loadAllItems()]);
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\.py$\")",
+      "Bash(curl:*)",
+      "Bash(python -c ' *)",
+      "Bash(PYTHONIOENCODING=utf-8 python -c ' *)",
+      "Bash(command -v node)",
+      "Bash(node -e ' *)",
+      "Bash(node --check _items_check.js)",
+      "Bash(rm -f _items_check.js)",
+      "Bash(node --check _pos_check.js)",
+      "Bash(rm -f _pos_check.js)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('app/services/journal_service.py',encoding='utf-8'\\).read\\(\\)\\); print\\('journal_service.py OK'\\)\")",
+      "Bash(git check-ignore *)",
+      "Bash(node --check frontend/js/components.js)",
+      "Bash(awk '-F[: ]+' '{if\\($\\(NF-0\\)+0>=28 || $NF+0>=28\\) print}')",
+      "Bash(node --check \"C:/Users/Ilmu Komputer/OneDrive/Desktop/portofolio/POS/versi simple/frontend/js/item/itemForm.js\")"
+    ]
+  },
+  "worktree": {
+    "bgIsolation": "none"
+  }
+}

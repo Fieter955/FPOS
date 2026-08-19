@@ -1,0 +1,2343 @@
+<!doctype html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pembelian - FPOS</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/components.css?v=potongan4" />
+
+  <style>
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+    /* Menyamakan tinggi combobox supplier dengan input lainnya (.input-control) */
+    #supplierCombobox .combobox-input {
+      padding: 1em 1.25em;
+      font-size: 16px;
+      font-weight: 500;
+      border: 2px solid var(--border-color);
+      border-radius: var(--radius-sm);
+    }
+
+    #supplierCombobox .combobox-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px var(--primary-light);
+    }
+
+    /* Hiding the PPN Included column when tax type is exclude */
+    body.hide-tax-col .purchase-grid-header,
+    body.hide-tax-col .purchase-grid-row {
+      grid-template-columns: 40px minmax(260px, 1fr) 130px 70px 110px 120px 210px 150px 120px !important;
+    }
+
+    body.hide-tax-col .purchase-grid-header>div:nth-child(9),
+    body.hide-tax-col .purchase-grid-row>input.pg2-tax {
+      display: none !important;
+    }
+
+    input[type="number"] {
+      -moz-appearance: textfield;
+    }
+
+    .tabs .btn {
+      white-space: nowrap;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      padding: 8px 16px;
+    }
+
+    .tabs {
+      position: relative;
+      z-index: 100;
+      width: 100%;
+    }
+
+    .view-section {
+      animation: fadeIn 0.2s ease;
+    }
+
+    .modal-box.wide {
+      width: 95%;
+      margin: 16px auto;
+      max-height: calc(100vh - 40px);
+      overflow-y: auto;
+      padding: 24px;
+      background: var(--card-bg);
+      border-radius: 20px;
+    }
+
+    /* Mode form purchase dibuat rapat agar kontrol utama tetap terlihat di laptop. */
+    body.purchase-form-active .main-content {
+      padding: 12px 20px 8px;
+    }
+
+    body.purchase-form-active .main-content>button:first-child {
+      margin-bottom: 6px !important;
+      font-size: 13px;
+    }
+
+    body.purchase-form-active .pg-header {
+      gap: 6px !important;
+      margin-bottom: 0;
+    }
+
+    body.purchase-form-active .pg-header h1 {
+      margin-bottom: 2px;
+      font-size: 22px;
+      line-height: 1.15;
+    }
+
+    body.purchase-form-active .pg-header p {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    body.purchase-form-active .tabs .btn {
+      min-height: 32px;
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    body.purchase-form-active #viewForm {
+      padding-top: 6px !important;
+    }
+
+    .form-heading-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .form-heading-row .modal-hdr {
+      margin: 0;
+      padding: 0;
+    }
+
+    .form-heading-row h2 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.2;
+    }
+
+    .form-meta {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 6px 16px;
+      padding: 6px 10px;
+      font-size: 12px;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+    }
+
+    .purchase-primary-fields {
+      display: grid !important;
+      grid-template-columns: 2fr 1fr 1fr !important;
+      gap: 10px !important;
+      margin-bottom: 8px !important;
+    }
+
+    .purchase-primary-fields .input-group {
+      min-width: 0;
+      margin-bottom: 0;
+    }
+
+    .purchase-primary-fields label {
+      margin-bottom: 3px !important;
+      font-size: 12px;
+    }
+
+    .purchase-primary-fields .input-control,
+    .purchase-primary-fields #supplierCombobox .combobox-input {
+      height: 36px;
+      padding: 0 10px;
+      font-size: 14px;
+      border-width: 1px;
+      border-radius: 8px;
+    }
+
+    .purchase-items-card {
+      padding: 10px 12px !important;
+      margin-bottom: 10px !important;
+      border-radius: 12px;
+    }
+
+    .purchase-items-header {
+      margin-bottom: 6px !important;
+    }
+
+    .purchase-items-header h3 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .purchase-items-header .btn {
+      min-height: 32px;
+      padding: 6px 12px;
+      font-size: 12px;
+      border-radius: 8px;
+    }
+
+    #viewForm .purchase-grid-container {
+      max-height: 205px;
+      overflow-y: auto;
+      scrollbar-gutter: stable;
+    }
+
+    #viewForm .purchase-grid-header {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      align-items: center;
+      gap: 8px !important;
+      padding: 4px 8px !important;
+      line-height: 1.15;
+    }
+
+    #viewForm .purchase-grid-body {
+      min-height: 0 !important;
+    }
+
+    #viewForm .purchase-grid-row {
+      min-height: 40px;
+      gap: 8px !important;
+      padding: 4px 8px !important;
+    }
+
+    #viewForm .purchase-grid-row .combobox-input {
+      height: 30px;
+      min-height: 30px;
+      padding: 0 6px;
+    }
+
+    #viewForm .purchase-grid-row .pg2-detail {
+      min-height: 30px;
+      padding: 4px 8px !important;
+    }
+
+    /* Tiga panel bawah: detail transaksi, potongan, dan pembayaran. */
+    .summary-box-container {
+      width: 100%;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: 0 !important;
+      background: transparent !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+    }
+
+    .summary-box-grid {
+      display: grid !important;
+      grid-template-columns: minmax(250px, 0.75fr) minmax(360px, 1.1fr) minmax(320px, 1fr);
+      gap: 10px !important;
+      font-size: 13px !important;
+      align-items: stretch;
+    }
+
+    .summary-panel {
+      min-width: 0 !important;
+      gap: 4px !important;
+      padding: 10px !important;
+      background: var(--card-bg) !important;
+      border: 1px solid var(--border-color) !important;
+      border-radius: 12px !important;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .summary-adjustments>div {
+      grid-template-columns: 88px 58px minmax(0, 1fr) 28px !important;
+      gap: 5px !important;
+    }
+
+    .summary-payment>div {
+      grid-template-columns: 82px minmax(0, 1fr) 28px !important;
+      gap: 5px !important;
+    }
+
+    .summary-payment>div:first-child {
+      grid-template-columns: 82px minmax(0, 1fr) !important;
+      margin-bottom: 2px !important;
+      padding-bottom: 6px !important;
+    }
+
+    .summary-panel .input-control:not(#totalAkhir):not(#sumKredit) {
+      height: 28px !important;
+      padding: 0 7px !important;
+      min-width: 0;
+      font-size: 13px;
+    }
+
+    .summary-panel .btn {
+      width: 28px !important;
+      height: 28px !important;
+    }
+
+    .summary-panel #totalAkhir {
+      font-size: 19px !important;
+    }
+
+    .transaction-details-panel {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .due-fields {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(90px, 0.65fr);
+      gap: 8px;
+    }
+
+    .transaction-details-panel .input-group {
+      min-width: 0;
+      margin-bottom: 5px;
+    }
+
+    .transaction-details-panel label {
+      margin-bottom: 3px !important;
+      font-size: 11px;
+    }
+
+    .transaction-details-panel .input-control {
+      height: 30px;
+      padding: 0 8px;
+      font-size: 13px;
+      border-width: 1px;
+      border-radius: 8px;
+    }
+
+    .transaction-details-panel textarea.input-control {
+      height: 44px;
+      padding: 6px 8px;
+      resize: none;
+    }
+
+    .form-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: auto;
+    }
+
+    .transaction-details-panel .form-actions .btn {
+      width: 100% !important;
+      height: 30px !important;
+      min-height: 30px;
+      padding: 5px 8px;
+      font-size: 12px;
+    }
+
+    @media (max-width: 1023px) {
+      .summary-box-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .transaction-details-panel {
+        grid-column: 1 / -1;
+      }
+    }
+
+    @media (max-width: 768px) {
+      body.purchase-form-active .main-content {
+        padding: var(--content-pad);
+      }
+
+      .form-heading-row {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .form-meta {
+        width: 100%;
+        justify-content: flex-start;
+      }
+
+      .purchase-primary-fields,
+      .summary-box-grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+      }
+
+      #viewForm .purchase-grid-container {
+        max-height: none;
+        overflow-y: visible;
+        scrollbar-gutter: auto;
+      }
+
+      .transaction-details-panel {
+        grid-column: auto;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .summary-panel {
+        padding: 12px !important;
+      }
+
+      .summary-adjustments>div {
+        grid-template-columns: 92px 56px minmax(0, 1fr) 30px !important;
+        gap: 6px !important;
+      }
+
+      .summary-payment>div {
+        grid-template-columns: 88px minmax(0, 1fr) 30px !important;
+        gap: 6px !important;
+      }
+
+      .summary-payment>div:first-child {
+        grid-template-columns: 88px minmax(0, 1fr) !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app-container">
+    <main class="main-content">
+      <button class="btn" style="
+            background: transparent;
+            color: var(--text-muted);
+            padding: 0;
+            margin-bottom: 16px;
+          " onclick="kembaliKeDashboard()">
+        ← Kembali
+      </button>
+
+      <div class="pg-header" style="flex-direction: column; align-items: flex-start; gap: 16px">
+        <div>
+          <h1>📥 Pembelian & Pesanan</h1>
+          <p>Kelola pesanan, penerimaan barang, dan pembayaran.</p>
+        </div>
+        <div class="tabs">
+          <div style="
+                display: flex;
+                gap: 8px;
+                overflow-x: auto;
+                width: 100%;
+                padding-bottom: 4px;
+              ">
+            <button id="btnTabList" class="btn btn-primary" onclick="switchTab('list')">
+              Tampilan Utama
+            </button>
+            <button id="btnTabPO" class="btn" style="
+                  background: var(--bg-color);
+                  border: 1px solid var(--border-color);
+                  color: var(--text-main);
+                " onclick="switchTab('po')">
+              📝 Catat Pesanan
+            </button>
+            <button id="btnTabPurchase" class="btn" style="
+                  background: var(--bg-color);
+                  border: 1px solid var(--border-color);
+                  color: var(--text-main);
+                " onclick="switchTab('purchase')">
+              📥 Catat Pembelian
+            </button>
+            <button id="btnTabPayment" class="btn" style="
+                  background: var(--bg-color);
+                  border: 1px solid var(--border-color);
+                  color: var(--text-main);
+                " onclick="switchTab('payment')">
+              💸 Catat Pembayaran
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div id="viewList" class="view-section">
+        <div id="mainFilterContainer"></div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>No. Faktur</th>
+                <th>Tanggal</th>
+                <th>Jatuh Tempo</th>
+                <th>Supplier</th>
+                <th>Total</th>
+                <th>Terbayar</th>
+                <th>Status</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="tblBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="viewForm" class="view-section" style="display: none; padding-top: 16px">
+        <div class="form-heading-row">
+          <div class="modal-hdr">
+            <h2 id="formTitle">📥 Catat Pembelian</h2>
+          </div>
+
+          <div class="form-meta">
+            <div><span style="color: var(--text-muted)">🕒 Jam:</span> <strong id="infoTime"
+                style="color: var(--text-main); margin-left: 4px;">-</strong></div>
+            <div><span style="color: var(--text-muted)">👤 User:</span> <strong id="infoUser"
+                style="color: var(--text-main); margin-left: 4px;">-</strong></div>
+            <div><span style="color: var(--text-muted)">🏢 Cabang:</span> <strong id="infoBranch"
+                style="color: var(--text-main); margin-left: 4px;">-</strong></div>
+          </div>
+        </div>
+
+        <div class="purchase-primary-fields" style="
+              display: grid;
+              grid-template-columns: 2fr 1fr 1fr;
+              gap: 16px;
+              margin-bottom: 16px;
+            ">
+          <div class="input-group">
+            <label style="margin-bottom: 6px">Supplier *</label>
+            <div id="supplierCombobox"></div>
+          </div>
+          <div class="input-group">
+            <label style="margin-bottom: 6px">Tanggal *</label>
+            <input type="date" id="bDate" class="input-control" />
+          </div>
+          <div class="input-group">
+            <label style="margin-bottom: 6px">Tipe PPN *</label>
+            <select id="bTaxType" class="input-control" aria-describedby="taxTypeLockHint" onchange="handleTaxTypeChange()">
+              <option value="" disabled selected>-- Pilih --</option>
+              <option value="include">Include</option>
+              <option value="exclude">Exclude</option>
+              <option value="none">Tanpa PPN</option>
+            </select>
+            <small id="taxTypeLockHint" style="display:block;min-height:16px;margin-top:4px;color:var(--text-muted);font-size:11px" aria-live="polite"></small>
+          </div>
+        </div>
+        <!-- Removed Diskon & PPN top block, moved to summary box below -->
+
+        <!-- Tabel barang langsung bisa diisi (Tipe PPN default "Include"). -->
+        <div id="mainFormContentWrapper" style="position: relative;">
+          <div class="card purchase-items-card" style="padding: 20px; margin-bottom: 20px">
+            <div class="purchase-items-header" style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 16px;
+              ">
+              <h3>Daftar Barang</h3>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+                <span id="itemSyncStatus" style="font-size:12px;color:var(--text-muted)" aria-live="polite"></span>
+                <button class="btn" id="btnRefreshPurchaseItems" type="button" onclick="refreshPurchaseItems({ notify: true })" title="Muat ulang daftar barang supplier">
+                  ↻ Muat Ulang Barang
+                </button>
+                <button class="btn btn-primary" id="btnAddRow" onclick="tambahBarisPembelian()">
+                  + Tambah Baris
+                </button>
+              </div>
+            </div>
+            <div id="formGridContainer"></div>
+          </div>
+
+          <!-- SUMMARY BOX (Aesthetic Modern Style) -->
+          <div class="summary-box-container card"
+            style="padding: 24px; margin-bottom: 24px; border: 1px solid var(--border-color); background: var(--card-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);">
+            <div class="summary-box-grid"
+              style="display: flex; flex-wrap: wrap; gap: 32px; font-size: 14px; color: var(--text-main);">
+
+              <!-- Detail transaksi dan aksi -->
+              <div class="summary-panel transaction-details-panel">
+                <div class="due-fields">
+                  <div class="input-group">
+                    <label>Tanggal Jatuh Tempo</label>
+                    <input type="date" id="bDueDate" class="input-control" />
+                  </div>
+                  <div class="input-group">
+                    <label>Jatuh Tempo (Hari)</label>
+                    <input type="number" id="bDueDays" class="input-control" min="0" />
+                  </div>
+                </div>
+
+                <div class="input-group">
+                  <label>Catatan</label>
+                  <textarea id="bNotes" class="input-control" rows="2" placeholder="Keterangan..."></textarea>
+                </div>
+
+                <div class="form-actions">
+                  <button onclick="batalkanForm()" class="btn">← Batal</button>
+                  <button onclick="simpanPembelian()" class="btn btn-primary" id="btnSimpan">
+                    ✓ Simpan
+                  </button>
+                </div>
+              </div>
+
+              <!-- Kiri -->
+              <div class="summary-panel summary-adjustments"
+                style="flex: 1; min-width: 320px; display: flex; flex-direction: column; gap: 12px;">
+
+                <!-- Sub Total -->
+                <div style="display: grid; grid-template-columns: 120px 80px 1fr 36px; gap: 12px; align-items: center;">
+                  <div style="text-align: right; color: var(--text-muted); font-weight: 500;">Sub Total</div>
+                  <input type="text" id="sumQty" readonly class="input-control"
+                    style="text-align: right; background: transparent; border: none; font-weight: 600; padding: 0; height: auto; box-shadow: none;"
+                    value="0,00" />
+                  <input type="text" id="sumSubTotal" readonly class="input-control"
+                    style="text-align: right; background: transparent; border: none; font-weight: 600; padding: 0; height: auto; box-shadow: none;"
+                    value="0,00" />
+                  <div></div>
+                </div>
+
+                <!-- Potongan (Bulk) -->
+                <div style="display: grid; grid-template-columns: 120px 80px 1fr 36px; gap: 12px; align-items: center;">
+                  <div style="text-align: right; color: var(--text-muted); font-weight: 500;">Potongan <span
+                      style="font-size: 11px; opacity: 0.7;">(%)</span></div>
+                  <input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" id="bBulkDisc" class="input-control"
+                    style="text-align: right; height: 36px; padding: 0 12px; border-radius: 8px;" value="0"
+                    oninput="applyBulkDiscount()" />
+                  <input type="text" id="bBulkDiscAmt" readonly class="input-control"
+                    style="text-align: right; background: var(--bg-color); border: 1px dashed var(--border-color); height: 36px; padding: 0 12px; border-radius: 8px; color: var(--text-muted);"
+                    value="0,00" />
+                  <button type="button" class="btn"
+                    style="padding: 0; width: 36px; height: 36px; border-radius: 8px; background: var(--primary-light); color: var(--primary); border: none; display: flex; align-items: center; justify-content: center;"
+                    title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 20h9"></path>
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    </svg>
+                  </button>
+                </div>
+
+                <!-- Potongan Nota -->
+                <div style="display: grid; grid-template-columns: 120px 80px 1fr 36px; gap: 12px; align-items: center;">
+                  <div style="text-align: right; color: var(--text-muted); font-weight: 500;">Potongan Nota <span
+                      style="font-size: 11px; opacity: 0.7;">(%)</span></div>
+                  <input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" id="bDisc" class="input-control"
+                    style="text-align: right; height: 36px; padding: 0 12px; border-radius: 8px;" value="0"
+                    oninput="hitungGrandTotal()" />
+                  <input type="text" id="bDiscAmt" readonly class="input-control"
+                    style="text-align: right; background: var(--bg-color); border: 1px dashed var(--border-color); height: 36px; padding: 0 12px; border-radius: 8px; color: var(--text-muted);"
+                    value="0,00" />
+                  <button type="button" class="btn"
+                    style="padding: 0; width: 36px; height: 36px; border-radius: 8px; background: var(--primary-light); color: var(--primary); border: none; display: flex; align-items: center; justify-content: center;"
+                    title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 20h9"></path>
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    </svg>
+                  </button>
+                </div>
+
+                <!-- Pajak -->
+                <div style="display: grid; grid-template-columns: 120px 80px 1fr 36px; gap: 12px; align-items: center;">
+                  <div style="text-align: right; color: var(--text-muted); font-weight: 500;">Pajak <span
+                      style="font-size: 11px; opacity: 0.7;">(%)</span></div>
+                  <input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" id="bTax" class="input-control"
+                    style="text-align: right; height: 36px; padding: 0 12px; border-radius: 8px; border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.05);"
+                    value="0" oninput="hitungGrandTotal()" />
+                  <input type="text" id="bTaxAmt" readonly class="input-control"
+                    style="text-align: right; background: var(--bg-color); border: 1px dashed var(--border-color); height: 36px; padding: 0 12px; border-radius: 8px; color: var(--text-muted);"
+                    value="0,00" />
+                  <button type="button" class="btn"
+                    style="padding: 0; width: 36px; height: 36px; border-radius: 8px; background: var(--primary-light); color: var(--primary); border: none; display: flex; align-items: center; justify-content: center;"
+                    title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 20h9"></path>
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    </svg>
+                  </button>
+                </div>
+
+                <!-- Biaya Lain -->
+                <div style="display: grid; grid-template-columns: 120px 80px 1fr 36px; gap: 12px; align-items: center;">
+                  <div style="text-align: right; color: var(--text-muted); font-weight: 500;">Biaya Lain</div>
+                  <button type="button" class="btn"
+                    style="padding: 0; height: 36px; border-radius: 8px; background: rgba(245, 158, 11, 0.1); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); display: flex; align-items: center; justify-content: center; width: 100%;"
+                    title="Biaya Lain">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"></path>
+                      <path d="M12 18V6"></path>
+                    </svg>
+                  </button>
+                  <input type="text" readonly class="input-control"
+                    style="text-align: right; background: var(--bg-color); border: 1px dashed var(--border-color); height: 36px; padding: 0 12px; border-radius: 8px; color: var(--text-muted);"
+                    value="0,00" />
+                  <button type="button" class="btn"
+                    style="padding: 0; width: 36px; height: 36px; border-radius: 8px; background: var(--primary-light); color: var(--primary); border: none; display: flex; align-items: center; justify-content: center;"
+                    title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 20h9"></path>
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    </svg>
+                  </button>
+                </div>
+
+              </div>
+
+              <!-- Kanan -->
+              <div class="summary-panel summary-payment"
+                style="flex: 1; min-width: 320px; display: flex; flex-direction: column; gap: 12px; background: var(--bg-color); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color);">
+
+                <!-- Total Akhir (Highlighted) -->
+                <div
+                  style="display: grid; grid-template-columns: 120px 1fr; gap: 12px; align-items: center; margin-bottom: 8px; padding-bottom: 12px; border-bottom: 2px dashed var(--border-color);">
+                  <div style="text-align: left; color: var(--text-muted); font-weight: 700; font-size: 16px;">Total
+                    Akhir
+                  </div>
+                  <input type="text" id="totalAkhir" readonly class="input-control"
+                    style="text-align: right; background: transparent; border: none; color: var(--primary); font-weight: 800; font-size: 28px; padding: 0; height: auto; box-shadow: none; letter-spacing: -0.5px;"
+                    value="0,00" />
+                </div>
+
+                <!-- DP PO -->
+                <div style="display: grid; grid-template-columns: 120px 1fr 36px; gap: 12px; align-items: center;">
+                  <div style="text-align: left; color: var(--text-muted); font-weight: 500;">DP PO</div>
+                  <input type="text" readonly class="input-control"
+                    style="text-align: right; background: var(--card-bg); height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border-color);"
+                    value="0,00" />
+                  <button type="button" class="btn"
+                    style="padding: 0; width: 36px; height: 36px; border-radius: 8px; background: var(--primary-light); color: var(--primary); border: none; display: flex; align-items: center; justify-content: center;"
+                    title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 20h9"></path>
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    </svg>
+                  </button>
+                </div>
+
+                <!-- Deposit -->
+                <div style="display: grid; grid-template-columns: 120px 1fr 36px; gap: 12px; align-items: center;">
+                  <div style="text-align: left; color: var(--text-muted); font-weight: 500;">Deposit</div>
+                  <input type="text" readonly class="input-control"
+                    style="text-align: right; background: var(--card-bg); height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border-color);"
+                    value="0,00" />
+                  <button type="button" class="btn"
+                    style="padding: 0; width: 36px; height: 36px; border-radius: 8px; background: var(--primary-light); color: var(--primary); border: none; display: flex; align-items: center; justify-content: center;"
+                    title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 20h9"></path>
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    </svg>
+                  </button>
+                </div>
+
+                <!-- Tunai / DP -->
+                <div style="display: grid; grid-template-columns: 120px 1fr 36px; gap: 12px; align-items: center;">
+                  <div style="text-align: left; color: var(--text-muted); font-weight: 500;">Tunai / DP</div>
+                  <input type="text" readonly class="input-control"
+                    style="text-align: right; background: var(--card-bg); height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border-color);"
+                    value="0,00" />
+                  <button type="button" class="btn"
+                    style="padding: 0; width: 36px; height: 36px; border-radius: 8px; background: var(--primary-light); color: var(--primary); border: none; display: flex; align-items: center; justify-content: center;"
+                    title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 20h9"></path>
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    </svg>
+                  </button>
+                </div>
+
+                <!-- Kredit -->
+                <div style="display: grid; grid-template-columns: 120px 1fr 36px; gap: 12px; align-items: center;">
+                  <div style="text-align: left; color: var(--text-muted); font-weight: 500;">Kredit</div>
+                  <input type="text" id="sumKredit" readonly class="input-control"
+                    style="text-align: right; background: transparent; border: none; color: var(--danger); font-weight: 700; font-size: 16px; padding: 0; height: auto; box-shadow: none;"
+                    value="0,00" />
+                  <button type="button" class="btn"
+                    style="padding: 0; width: 36px; height: 36px; border-radius: 8px; background: var(--primary-light); color: var(--primary); border: none; display: flex; align-items: center; justify-content: center;"
+                    title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 20h9"></path>
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    </svg>
+                  </button>
+                </div>
+
+              </div>
+            </div>
+
+            <span id="totalLabel" style="display: none;">Rp 0</span>
+          </div>
+        </div><!-- END OVERLAY WRAPPER -->
+      </div>
+
+      <div id="viewPayment" class="view-section" style="display: none; padding-top: 16px">
+        <div id="paymentFilterContainer"></div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>No. Faktur</th>
+                <th>Tanggal</th>
+                <th>Supplier</th>
+                <th style="text-align: right">Total</th>
+                <th style="text-align: right">Terbayar</th>
+                <th style="text-align: right">Sisa Hutang</th>
+                <th>Status</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="paymentTblBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-overlay" id="mDetail">
+    <div class="modal-box wide">
+      <div class="modal-hdr">
+        <h2>Detail Pembelian</h2>
+        <button class="btn-x" onclick="closeModal('mDetail')">×</button>
+      </div>
+      <div id="mDetailBody"></div>
+    </div>
+  </div>
+
+  <!-- Modal Peringatan Mismatch -->
+  <div class="modal-overlay" id="mMismatch">
+    <div class="modal-box" style="max-width: 550px; border: 2px solid var(--border-color)">
+      <div class="modal-hdr">
+        <h2 style="color: var(--danger); font-size: 22px">
+          ⚠️ Mismatch Barang
+        </h2>
+        <button class="btn-x" onclick="closeModal('mMismatch')">×</button>
+      </div>
+      <div id="mMismatchBody" style="padding: 16px 0">
+        <!-- Content built by buildMismatchSummary -->
+      </div>
+      <div id="mMismatchFooter" style="
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 16px;
+          ">
+        <!-- Buttons dynamically built -->
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/theme.js"></script>
+  <script src="/js/purchase-draft.js"></script>
+  <script src="/js/components.js?v=potongan4"></script>
+  <script src="/js/print.js"></script>
+  <script>
+    requireAuth();
+    const myBranchId = localStorage.getItem("active_branch_id") || 1;
+    let currentTab = "list",
+      currentFormMode = "purchase",
+      draftId = null;
+    let mainFilter = null,
+      paymentFilter = null,
+      formGrid = null,
+      allSuppliers = [];
+    let pendingPaymentData = null; // To store data while mismatch modal is open
+    let tarifPpnStandar = 11; // Tarif PPN standar toko (dimuat dari setelan; default 11%)
+    let draftAutosaveTimer = null;
+    let draftBaselineSnapshot = null;
+    let lastPersistedSnapshot = null;
+    let isRestoringPurchaseDraft = false;
+    let draftStorageWarningShown = false;
+    let purchaseItemsRefreshSequence = 0;
+    let unsubscribeItemMasterChanges = null;
+
+    function getPurchaseDraftStore(mode = currentFormMode) {
+      if (typeof PurchaseDraftStore === "undefined") return null;
+      const user = getUser();
+      const userId =
+        user.id || user.username || user.email || user.name || "anonymous";
+      const branchId =
+        localStorage.getItem("active_branch_id") ||
+        user.active_branch_id ||
+        myBranchId ||
+        1;
+      return PurchaseDraftStore.create({ userId, branchId, mode });
+    }
+
+    function serializePurchaseForm() {
+      const supplierIdRaw = document.querySelector(
+        "#supplierCombobox .combobox-value",
+      )?.value;
+      return {
+        mode: currentFormMode,
+        draft_id: draftId,
+        supplier_id: supplierIdRaw ? parseInt(supplierIdRaw, 10) : null,
+        supplier_name:
+          document.querySelector("#supplierCombobox .combobox-input")?.value ||
+          "",
+        date: document.getElementById("bDate")?.value || "",
+        due_date: document.getElementById("bDueDate")?.value || "",
+        due_days: document.getElementById("bDueDays")?.value || "0",
+        tax_type: document.getElementById("bTaxType")?.value || "include",
+        bulk_disc: document.getElementById("bBulkDisc")?.value || "0,00",
+        disc: document.getElementById("bDisc")?.value || "0,00",
+        tax: document.getElementById("bTax")?.value || "0,00",
+        notes: document.getElementById("bNotes")?.value || "",
+        rows: formGrid?.getDetailRows?.() || [],
+      };
+    }
+
+    function comparablePurchaseDraft(draft) {
+      return JSON.stringify(draft || null);
+    }
+
+    function savePurchaseDraftNow() {
+      if (
+        isRestoringPurchaseDraft ||
+        !formGrid ||
+        (currentTab !== "po" && currentTab !== "purchase")
+      ) {
+        return true;
+      }
+      if (draftAutosaveTimer) {
+        clearTimeout(draftAutosaveTimer);
+        draftAutosaveTimer = null;
+      }
+
+      const draft = serializePurchaseForm();
+      const snapshot = comparablePurchaseDraft(draft);
+      const store = getPurchaseDraftStore(draft.mode);
+      if (!store) return false;
+
+      if (snapshot === draftBaselineSnapshot) {
+        lastPersistedSnapshot = null;
+        return store.remove();
+      }
+      if (snapshot === lastPersistedSnapshot) return true;
+
+      const saved = store.save(draft);
+      if (saved) {
+        lastPersistedSnapshot = snapshot;
+      } else if (!draftStorageWarningShown && document.visibilityState !== "hidden") {
+        draftStorageWarningShown = true;
+        showToast(
+          "Draft tidak dapat disimpan di perangkat ini. Jangan tutup halaman sebelum transaksi disimpan.",
+          "warning",
+        );
+      }
+      return saved;
+    }
+
+    function schedulePurchaseDraftSave() {
+      if (
+        isRestoringPurchaseDraft ||
+        draftBaselineSnapshot === null ||
+        (currentTab !== "po" && currentTab !== "purchase")
+      ) {
+        return;
+      }
+      clearTimeout(draftAutosaveTimer);
+      draftAutosaveTimer = setTimeout(savePurchaseDraftNow, 250);
+    }
+
+    function handlePurchaseGridChange() {
+      updatePurchaseTaxTypeLock();
+      hitungGrandTotal();
+      schedulePurchaseDraftSave();
+    }
+
+    function tambahBarisPembelian() {
+      formGrid?.addRow();
+      updatePurchaseTaxTypeLock();
+      schedulePurchaseDraftSave();
+    }
+
+    async function refreshPurchaseItems({ notify = false } = {}) {
+      const supplierId = document.querySelector(
+        "#supplierCombobox .combobox-value",
+      )?.value;
+      if (!supplierId || !formGrid) {
+        if (notify && !supplierId) showToast("Pilih supplier dulu", "warning");
+        return false;
+      }
+
+      const sequence = ++purchaseItemsRefreshSequence;
+      // Simpan perubahan yang sedang diketik sebelum daftar pilihan diperbarui.
+      // updateDataSource sendiri tidak menyentuh baris maupun nilai input.
+      savePurchaseDraftNow();
+      const refreshButton = document.getElementById("btnRefreshPurchaseItems");
+      const status = document.getElementById("itemSyncStatus");
+      if (refreshButton) refreshButton.disabled = true;
+      try {
+        const items = await api(
+          "GET",
+          `/purchases/items/?supplier_id=${supplierId}`,
+        );
+        if (sequence !== purchaseItemsRefreshSequence) return false;
+        formGrid.updateDataSource(items || []);
+        if (status) {
+          status.textContent = "Daftar barang terbaru";
+          window.setTimeout(() => {
+            if (status.textContent === "Daftar barang terbaru") {
+              status.textContent = "";
+            }
+          }, 3000);
+        }
+        if (notify) showToast("Daftar barang supplier diperbarui", "info");
+        return true;
+      } catch (error) {
+        console.error("Gagal menyegarkan daftar barang pembelian", error);
+        if (notify) showToast("Gagal memuat ulang barang: " + error.message, "error");
+        return false;
+      } finally {
+        if (sequence === purchaseItemsRefreshSequence && refreshButton) {
+          refreshButton.disabled = false;
+        }
+      }
+    }
+
+    function setupItemMasterSynchronization() {
+      if (typeof subscribeItemMasterChanges !== "function") return;
+      unsubscribeItemMasterChanges = subscribeItemMasterChanges(() => {
+        if (currentTab !== "po" && currentTab !== "purchase") return;
+        refreshPurchaseItems();
+      });
+      window.addEventListener("pagehide", () => {
+        unsubscribeItemMasterChanges?.();
+      }, { once: true });
+    }
+
+    setupItemMasterSynchronization();
+
+    function kembaliKeDashboard() {
+      savePurchaseDraftNow();
+      focusWorkspaceDashboard();
+    }
+
+    function batalkanForm() {
+      savePurchaseDraftNow();
+      switchTab("list", { draftAlreadySaved: true });
+    }
+
+    function checkRequiredSelection() {
+      const supplierVal = document.querySelector("#supplierCombobox .combobox-value")?.value;
+      const taxTypeVal = document.getElementById("bTaxType").value;
+      const overlay = document.getElementById("mainFormOverlay");
+      if (overlay) {
+        if (supplierVal && taxTypeVal) {
+          overlay.style.display = "none";
+        } else {
+          overlay.style.display = "flex";
+        }
+      }
+    }
+
+    function updatePurchaseTaxTypeLock() {
+      const taxType = document.getElementById("bTaxType");
+      if (!taxType) return;
+      const hasItems = Boolean(formGrid?.getData?.().some((item) => item?.item_id));
+      const hint = document.getElementById("taxTypeLockHint");
+      taxType.disabled = hasItems;
+      taxType.setAttribute("aria-disabled", String(hasItems));
+      if (hint) {
+        hint.textContent = hasItems
+          ? "Hapus semua barang terlebih dahulu untuk mengganti tipe PPN."
+          : "";
+      }
+    }
+
+    function handleTaxTypeChange() {
+      const taxType = document.getElementById("bTaxType").value;
+      const bTax = document.getElementById("bTax");
+
+      if (taxType === "include") {
+        if (bTax) {
+          bTax.readOnly = true;
+          bTax.value = "0,00";
+          bTax.style.opacity = "0.5";
+          bTax.style.pointerEvents = "none";
+        }
+        document.body.classList.remove("hide-tax-col");
+      } else if (taxType === "none") {
+        // Tanpa PPN: pajak dikunci 0 & kolom PPN per-baris disembunyikan.
+        if (bTax) {
+          bTax.readOnly = true;
+          bTax.value = "0,00";
+          bTax.style.opacity = "0.5";
+          bTax.style.pointerEvents = "none";
+        }
+        document.body.classList.add("hide-tax-col");
+      } else if (taxType === "exclude") {
+        if (bTax) {
+          bTax.readOnly = false;
+          bTax.style.opacity = "1";
+          bTax.style.pointerEvents = "auto";
+        }
+        document.body.classList.add("hide-tax-col");
+      }
+
+      checkRequiredSelection();
+      updatePurchaseTaxTypeLock();
+      if (typeof hitungGrandTotal === "function") hitungGrandTotal();
+      schedulePurchaseDraftSave();
+    }
+
+    // Setup Global Barcode Scanner
+    setupBarcodeScanner(async (scode) => {
+      // Hanya aktif jika sedang di tab form (po atau purchase)
+      if (currentTab !== "po" && currentTab !== "purchase") return;
+
+      try {
+        // Cari item berdasarkan barcode/kode
+        const items = await api(
+          "GET",
+          "/items/?limit=20000&search=" + encodeURIComponent(scode),
+        );
+        const match = findItemByScanCode(items, scode);
+        if (match) {
+          const item = match.item;
+          if (formGrid) {
+            const row = formGrid.addItem
+              ? await formGrid.addItem(item)
+              : formGrid.addRow(item);
+            if (!row) return;
+            updatePurchaseTaxTypeLock();
+            schedulePurchaseDraftSave();
+            showToast("Berhasil menambah: " + item.name);
+          }
+        } else {
+          showToast("Barcode " + scode + " tidak ditemukan!", "error");
+        }
+      } catch (e) {
+        console.error("Scanner Error:", e);
+      }
+    });
+
+    // Initialize Shared Payment Modal
+    const apModal = createPaymentModal({
+      type: "ap",
+      onSuccess: () => {
+        if (currentTab === "payment") loadPayments();
+        else load();
+      },
+    });
+
+    function updateDueDate() {
+      const baseDateStr = document.getElementById("bDate").value;
+      const days = parseInt(document.getElementById("bDueDays").value) || 0;
+      if (baseDateStr) {
+        const d = new Date(baseDateStr);
+        d.setDate(d.getDate() + days);
+        document.getElementById("bDueDate").value = d.toISOString().split("T")[0];
+      }
+    }
+
+    function updateDueDays() {
+      const baseDateStr = document.getElementById("bDate").value;
+      const targetDateStr = document.getElementById("bDueDate").value;
+      if (baseDateStr && targetDateStr) {
+        const d1 = new Date(baseDateStr);
+        const d2 = new Date(targetDateStr);
+        const diffDays = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
+        document.getElementById("bDueDays").value = diffDays >= 0 ? diffDays : 0;
+      }
+    }
+
+    document.getElementById("bDate").addEventListener("change", updateDueDate);
+    document.getElementById("bDueDays").addEventListener("input", updateDueDate);
+    document.getElementById("bDueDate").addEventListener("change", updateDueDays);
+    document
+      .getElementById("viewForm")
+      .addEventListener("input", schedulePurchaseDraftSave);
+    document
+      .getElementById("viewForm")
+      .addEventListener("change", schedulePurchaseDraftSave);
+    window.addEventListener("pagehide", savePurchaseDraftNow);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") savePurchaseDraftNow();
+    });
+
+    // Realtime Info
+    setInterval(() => {
+      const el = document.getElementById("infoTime");
+      if (el) el.textContent = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    }, 1000);
+
+    async function loadUserInfo() {
+      const user = getUser();
+      const elUser = document.getElementById("infoUser");
+      if (elUser) elUser.textContent = user.name || user.username || "-";
+
+      const elBranch = document.getElementById("infoBranch");
+      if (elBranch) {
+        try {
+          const branches = await cachedApi("/branches/");
+          const activeId = localStorage.getItem("active_branch_id") || user.active_branch_id;
+          const b = branches.find(x => x.id == activeId);
+          elBranch.textContent = b ? b.name : "Toko Utama";
+        } catch (e) {
+          elBranch.textContent = "Toko Utama";
+        }
+      }
+    }
+    loadUserInfo();
+
+    async function applyPurchaseFormDraft(draft, { notify = false } = {}) {
+      if (!draft || typeof draft !== "object") return false;
+      isRestoringPurchaseDraft = true;
+      try {
+        draftId = draft.draft_id || null;
+        document.getElementById("bDate").value = draft.date || today();
+        document.getElementById("bDueDays").value = draft.due_days ?? 0;
+        updateDueDate();
+        if (draft.due_date) {
+          document.getElementById("bDueDate").value = draft.due_date;
+        }
+
+        const taxType = document.getElementById("bTaxType");
+        taxType.value = draft.tax_type || "include";
+        handleTaxTypeChange();
+        document.getElementById("bBulkDisc").value =
+          draft.bulk_disc ?? "0,00";
+        document.getElementById("bDisc").value = draft.disc ?? "0,00";
+        document.getElementById("bTax").value = draft.tax ?? "0,00";
+        document.getElementById("bNotes").value = draft.notes || "";
+
+        const comboContainer = document.getElementById("supplierCombobox");
+        if (draft.supplier_id) {
+          comboContainer._combo.set(
+            draft.supplier_id,
+            draft.supplier_name || "",
+          );
+          try {
+            const items = await api(
+              "GET",
+              `/purchases/items/?supplier_id=${draft.supplier_id}`,
+            );
+            formGrid.updateDataSource(items);
+          } catch (error) {
+            console.error("Gagal memuat barang supplier untuk draft", error);
+          }
+        } else if (draft.supplier_name) {
+          const supplierInput = comboContainer.querySelector(".combobox-input");
+          if (supplierInput) supplierInput.value = draft.supplier_name;
+        }
+
+        if (Array.isArray(draft.rows)) formGrid.loadRows(draft.rows);
+        updatePurchaseTaxTypeLock();
+        hitungGrandTotal();
+        checkRequiredSelection();
+        lastPersistedSnapshot = comparablePurchaseDraft(
+          serializePurchaseForm(),
+        );
+        if (notify) {
+          showToast(
+            currentFormMode === "po"
+              ? "Draft pesanan dipulihkan"
+              : "Draft pembelian dipulihkan",
+            "info",
+          );
+        }
+        return true;
+      } finally {
+        isRestoringPurchaseDraft = false;
+      }
+    }
+
+    async function restorePersistentPurchaseDraft() {
+      const store = getPurchaseDraftStore(currentFormMode);
+      const draft = store?.read();
+      if (!draft) return false;
+      return applyPurchaseFormDraft(draft, { notify: true });
+    }
+
+    function switchTab(tab, options = {}) {
+      const leavingForm = currentTab === "po" || currentTab === "purchase";
+      if (leavingForm && !options.draftAlreadySaved) savePurchaseDraftNow();
+      if (leavingForm && tab === currentTab) return;
+
+      currentTab = tab;
+      document.body.classList.toggle(
+        "purchase-form-active",
+        tab === "po" || tab === "purchase",
+      );
+      document
+        .querySelectorAll(".view-section")
+        .forEach((el) => (el.style.display = "none"));
+      document.querySelectorAll(".tabs .btn").forEach((btn) => {
+        btn.style.background = "var(--bg-color)";
+        btn.style.color = "var(--text-main)";
+      });
+      document.getElementById(
+        "view" +
+        (tab === "list" ? "List" : tab === "payment" ? "Payment" : "Form"),
+      ).style.display = "block";
+      if (tab === "list") load();
+      else if (tab === "po") {
+        currentFormMode = "po";
+        document.getElementById("formTitle").textContent =
+          "📝 Catat Pesanan (Draft)";
+        openForm().catch((error) => {
+          isRestoringPurchaseDraft = false;
+          console.error("Gagal membuka form pesanan", error);
+          showToast("Gagal membuka form pesanan", "error");
+        });
+      } else if (tab === "purchase") {
+        currentFormMode = "purchase";
+        document.getElementById("formTitle").textContent =
+          "📥 Catat Pembelian";
+        openForm().catch((error) => {
+          isRestoringPurchaseDraft = false;
+          console.error("Gagal membuka form pembelian", error);
+          showToast("Gagal membuka form pembelian", "error");
+        });
+      } else if (tab === "payment") openPaymentTab();
+    }
+
+    async function openForm(existing = null, { restorePersistent = true } = {}) {
+      draftBaselineSnapshot = null;
+      lastPersistedSnapshot = null;
+      isRestoringPurchaseDraft = true;
+      document.getElementById("formGridContainer").innerHTML =
+        '<div id="gridTarget"></div>';
+      document.getElementById("bDate").value = today();
+      document.getElementById("bDueDays").value = 0;
+      updateDueDate();
+
+      // Default Tipe PPN "Include" agar tabel barang langsung bisa diisi (tanpa overlay).
+      const bTaxType = document.getElementById("bTaxType");
+      if (bTaxType) {
+        bTaxType.value = "include";
+        handleTaxTypeChange();
+      }
+
+      document.getElementById("bDisc").value = "0,00";
+      document.getElementById("bTax").value = "0,00";
+      document.getElementById("bBulkDisc").value = "0,00";
+      document.getElementById("bNotes").value = "";
+      document.getElementById("totalLabel").textContent = "Rp 0";
+      draftId = existing ? existing.id : null;
+
+      // Toggle buttons removed for new summary UI
+
+      allSuppliers = await api(
+        "GET",
+        "/suppliers/?limit=5000&active_only=true",
+      );
+      createPremiumCombo("supplierCombobox", allSuppliers, {
+        onSelect: async (sel) => {
+          if (sel && typeof sel.due_date !== "undefined") {
+            document.getElementById("bDueDays").value = sel.due_date;
+            updateDueDate();
+          }
+          const items = await api(
+            "GET",
+            `/purchases/items/?supplier_id=${sel.id}`,
+          );
+          if (formGrid) formGrid.updateDataSource(items);
+          checkRequiredSelection();
+          schedulePurchaseDraftSave();
+        },
+      });
+
+      if (existing) {
+        document
+          .getElementById("supplierCombobox")
+          ._combo.set(existing.supplier_id, existing.supplier?.name || "");
+        // Pulihkan Tipe PPN dari data tersimpan agar buka draft tidak mereset ke default.
+        const elTaxType = document.getElementById("bTaxType");
+        if (elTaxType) {
+          // tax_type membedakan Exclude dari Tanpa PPN. Fallback menjaga draft
+          // lama yang hanya menyimpan is_tax_included tetap dapat dibuka.
+          elTaxType.value = existing.tax_type ||
+            (existing.is_tax_included ? "include" : "exclude");
+          handleTaxTypeChange();
+        }
+        const items = existing.items.map((it) => ({
+          id: it.item_id,
+          name: it.item?.name,
+          code: it.item?.code,
+          qty: it.qty,
+          buy_price: it.buy_price,
+          sell_price: it.item?.sell_price || 0,
+          profit_margin: it.item?.profit_margin || 0,
+          ppn_percent: it.ppn_percent,
+          // Bawa potongan bertingkat (maks 4) agar tidak hilang saat edit pembelian.
+          // Tingkat 1 selalu ada; tingkat 2-4 hanya bila terisi.
+          discs: [
+            it.disc1 || 0,
+            it.disc2 || 0,
+            it.disc3 || 0,
+            it.disc4 || 0,
+          ].filter((v, i) => i === 0 || v),
+        }));
+        formGrid = createPurchaseSummaryGrid("gridTarget", {
+          initialItems: items,
+          onChange: handlePurchaseGridChange,
+          onRowsChanged: updatePurchaseTaxTypeLock,
+          onDetail: bukaDetailItem,
+          getSupplierId: ambilSupplierIdTerpilih,
+          enableEnterNavigation: currentFormMode === "purchase",
+          ...konfigPpnGrid(),
+        });
+      } else {
+        formGrid = createPurchaseSummaryGrid("gridTarget", {
+          onChange: handlePurchaseGridChange,
+          onRowsChanged: updatePurchaseTaxTypeLock,
+          onDetail: bukaDetailItem,
+          getSupplierId: ambilSupplierIdTerpilih,
+          enableEnterNavigation: currentFormMode === "purchase",
+          ...konfigPpnGrid(),
+        });
+      }
+      updatePurchaseTaxTypeLock();
+      hitungGrandTotal();
+      isRestoringPurchaseDraft = false;
+      draftBaselineSnapshot = comparablePurchaseDraft(serializePurchaseForm());
+      if (!existing && restorePersistent) {
+        await restorePersistentPurchaseDraft();
+      }
+    }
+
+    // Ambil id supplier yang sedang dipilih pada combobox supplier (atau null).
+    // Dipakai grid untuk menyimpan harga beli & PPN ke data barang per supplier.
+    function ambilSupplierIdTerpilih() {
+      const v = document.querySelector(
+        "#supplierCombobox .combobox-value",
+      )?.value;
+      return v ? parseInt(v) : null;
+    }
+
+    // Callback PPN untuk grid: tipe transaksi, tarif standar toko, & penulisan ke "Pajak".
+    function konfigPpnGrid() {
+      return {
+        getTipePpn: () => document.getElementById("bTaxType")?.value || "",
+        getTarifStandar: () => tarifPpnStandar,
+        setPajakRingkasan: (persen) => {
+          const bTax = document.getElementById("bTax");
+          if (bTax) bTax.value = toDesimal(persen);
+          if (typeof hitungGrandTotal === "function") hitungGrandTotal();
+        },
+      };
+    }
+
+    // Simpan seluruh state form ke sessionStorage lalu buka halaman detail item.
+    // Dipakai sebagai callback onDetail dari grid (tombol "Detail" tiap baris).
+    function bukaDetailItem(rowIndex, detail) {
+      const draft = serializePurchaseForm();
+      const supData = (allSuppliers || []).find(
+        (supplier) => supplier.id === draft.supplier_id,
+      );
+      draft.supplier_ppn = supData ? supData.PpnSupplier || 0 : 0;
+      draft.editRow = rowIndex;
+      sessionStorage.setItem("purchase_form_draft", JSON.stringify(draft));
+      savePurchaseDraftNow();
+      location.href = "detail_item.html";
+    }
+
+    // Pulihkan form pembelian dari draft sessionStorage (setelah kembali dari detail_item).
+    async function restoreFormFromDraft(draft) {
+      currentFormMode = draft.mode || "purchase";
+      document.getElementById("formTitle").textContent =
+        currentFormMode === "po"
+          ? "📝 Catat Pesanan (Draft)"
+          : "📥 Catat Pembelian";
+
+      currentTab = currentFormMode;
+      document.body.classList.add("purchase-form-active");
+      document
+        .querySelectorAll(".view-section")
+        .forEach((el) => (el.style.display = "none"));
+      document.getElementById("viewForm").style.display = "block";
+
+      await openForm(null, { restorePersistent: false });
+      await applyPurchaseFormDraft(draft);
+      lastPersistedSnapshot = null;
+      savePurchaseDraftNow();
+    }
+
+    function formatTotalStr(num) {
+      return new Intl.NumberFormat("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num || 0);
+    }
+
+    function applyBulkDiscount() {
+      if (!formGrid) return;
+      const val = parseDesimal(document.getElementById("bBulkDisc"));
+      const rows = formGrid.getDetailRows();
+      rows.forEach(r => {
+        if (!r.discs) r.discs = [0];
+        r.discs[0] = val;
+      });
+      formGrid.loadRows(rows);
+      hitungGrandTotal();
+    }
+
+    function hitungGrandTotal() {
+      if (!formGrid) return;
+      const items = formGrid.getData();
+      // pakai total net per-baris (sudah termasuk diskon bertingkat dari Detail Item)
+      let sub = items.reduce((acc, it) => acc + (it.total || 0), 0);
+      let totalQty = items.reduce((acc, it) => acc + (it.qty || 0), 0);
+      let sumItemDiscAmt = items.reduce((acc, it) => acc + ((it.discount || 0) * (it.qty || 0)), 0);
+
+      const disc = parseDesimal(document.getElementById("bDisc"));
+      const tax = parseDesimal(document.getElementById("bTax"));
+      const taxType = document.getElementById("bTaxType")?.value || "exclude";
+
+      let discAmt = (sub * disc) / 100;
+      let grand = sub - discAmt;
+      let taxAmt = 0;
+
+      if (taxType === "none") {
+        taxAmt = 0; // Tanpa PPN: tidak ada pajak sama sekali
+      } else if (taxType === "exclude") {
+        taxAmt = (grand * tax) / 100;
+        grand = grand + taxAmt;
+      } else {
+        // Include: harga baris sudah termasuk PPN. Hitung porsi pajak per
+        // baris agar tarif barang yang berbeda tidak dirata-ratakan oleh
+        // field header (yang memang dikunci 0 pada mode Include).
+        taxAmt = items.reduce((sum, it) => {
+          const rate = Number(it.ppn_percent ?? 0) || 0;
+          const lineGrossAfterDiscount = (it.total || 0) * (1 - disc / 100);
+          return rate > 0
+            ? sum + lineGrossAfterDiscount - lineGrossAfterDiscount / (1 + rate / 100)
+            : sum;
+        }, 0);
+      }
+
+      const elQty = document.getElementById("sumQty");
+      if (elQty) {
+        elQty.value = formatTotalStr(totalQty);
+        document.getElementById("sumSubTotal").value = formatTotalStr(sub);
+        const elBulkDiscAmt = document.getElementById("bBulkDiscAmt");
+        if (elBulkDiscAmt) elBulkDiscAmt.value = formatTotalStr(sumItemDiscAmt);
+        document.getElementById("bDiscAmt").value = formatTotalStr(discAmt);
+        document.getElementById("bTaxAmt").value = formatTotalStr(taxAmt);
+        document.getElementById("totalAkhir").value = formatTotalStr(grand);
+        document.getElementById("sumKredit").value = formatTotalStr(grand);
+      }
+
+      const elTotalLabel = document.getElementById("totalLabel");
+      if (elTotalLabel) elTotalLabel.textContent = fmtRp(grand);
+    }
+
+    async function simpanPembelian() {
+      const sid = document.querySelector(
+        "#supplierCombobox .combobox-value",
+      )?.value;
+      if (!sid) return showToast("Pilih supplier dulu", "error");
+      const items = formGrid.getData();
+      if (!items.length)
+        return showToast("Tambahkan minimal 1 barang", "error");
+      try {
+        showLoading();
+        const taxValue = parseDesimal(document.getElementById("bTax"));
+        const taxType = document.getElementById("bTaxType")?.value || "include";
+        const payload = {
+          date: document.getElementById("bDate").value,
+          due_date: document.getElementById("bDueDate").value || null,
+          supplier_id: parseInt(sid),
+          discount: parseDesimal(document.getElementById("bDisc")),
+          tax: taxValue,
+          tax_percent: taxValue,
+          tax_type: taxType,
+          is_tax_included: taxType === "include",
+          notes: document.getElementById("bNotes").value || null,
+          items: items,
+          paid: 0,
+          status: currentFormMode === "po" ? "draft" : "unpaid",
+        };
+        if (draftId) await api("PUT", `/purchases/${draftId}`, payload);
+        else await api("POST", "/purchases/", payload);
+        getPurchaseDraftStore(currentFormMode)?.remove();
+        sessionStorage.removeItem("purchase_form_draft");
+        sessionStorage.removeItem("purchase_form_return");
+        lastPersistedSnapshot = null;
+        draftBaselineSnapshot = null;
+        hideLoading();
+        showToast("Berhasil disimpan ✓");
+        switchTab("list", { draftAlreadySaved: true });
+      } catch (ex) {
+        hideLoading();
+        showToast(ex.message, "error");
+      }
+    }
+
+    // ─── Cetak Barcode dari Pembelian ───────────────────────────────────────
+    // Mengambil semua barang di satu pembelian, lalu membuka modal cetak yang
+    // menampilkan daftar barang dengan kotak jumlah label per barang. Jumlah
+    // default = qty diterima, tapi bisa diubah sebelum cetak; pratinjau ikut
+    // diperbarui. Layout dikunci 3 kolom (sama seperti "3 Lin" di barcode.html).
+    function getActiveBranchId() {
+      const raw = localStorage.getItem("active_branch_id");
+      const parsed = parseInt(raw || "", 10);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+    }
+
+    function blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = String(reader.result || "");
+          const base64 = result.includes(",") ? result.split(",", 2)[1] : "";
+          if (!base64) {
+            reject(new Error("Gagal konversi gambar cetak"));
+            return;
+          }
+          resolve(base64);
+        };
+        reader.onerror = () => reject(new Error("Gagal membaca gambar cetak"));
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    async function cetakBarcode(id) {
+      try {
+        showLoading();
+        const p = await api("GET", `/purchases/${id}`);
+        const items = p.items || [];
+
+        // Susun daftar barang unik; jumlah default = qty diterima (fallback qty).
+        const daftar = [];
+        for (const it of items) {
+          const kode = it.item?.barcode || it.item?.code || "";
+          if (!kode) continue; // barang tanpa barcode/kode dilewati
+          const jumlah = Math.max(1, Math.round(it.qty_received || it.qty || 1));
+          daftar.push({
+            nama: it.item?.name || "-",
+            kategori: it.item?.category?.name || "UMUM",
+            barcode: kode,
+            harga: it.item?.sell_price || 0,
+            qty: jumlah,
+          });
+        }
+
+        hideLoading();
+
+        if (!daftar.length) {
+          return showToast(
+            "Tidak ada barang dengan barcode untuk dicetak",
+            "warning",
+          );
+        }
+
+        bukaModalCetakBarcode(daftar);
+      } catch (ex) {
+        hideLoading();
+        showToast(ex.message, "error");
+      }
+    }
+
+    // Bangun payload stiker dari daftar barang: ulangi tiap barang sebanyak
+    // qty-nya. Layout dikunci 3 kolom (default sama seperti barcode.html).
+    function susunPayloadBarcode(daftar) {
+      const data_produk = [];
+      daftar.forEach((d) => {
+        const jumlah = Math.max(0, Math.round(d.qty || 0));
+        for (let i = 0; i < jumlah; i++) {
+          data_produk.push({
+            nama: d.nama || "-",
+            kategori: d.kategori || "UMUM",
+            barcode: d.barcode || "",
+            harga: d.harga || 0,
+          });
+        }
+      });
+      return {
+        data_produk,
+        jumlah_kolom: 3,
+        jumlah_kolom_sheet: 3,
+        gap_mm: 2,
+        gap_vertical_mm: 0,
+        lebar_mm: 33,
+        tinggi_mm: 15,
+        dpi_printer: 203,
+        font_harga_px: 14,
+        font_nama_px: 12,
+        barcode_scale_pct: 100,
+      };
+    }
+
+    // Render lembar barcode di backend → blob PNG + ukuran kertas (mm).
+    async function mintaLembarBarcode(payload, signal) {
+      const result = await apiBlob("POST", "/sticker/render-sheet", payload, {
+        signal,
+      });
+      if (!result) return null;
+      const widthMm =
+        parseFloat(result.headers.get("X-Sheet-Width-Mm")) || 0;
+      const heightMm =
+        parseFloat(result.headers.get("X-Sheet-Height-Mm")) || 0;
+      return { blob: result.blob, widthMm, heightMm };
+    }
+
+    // Modal cetak: daftar barang + kotak jumlah per barang di kiri, pratinjau
+    // di kanan. Ubah jumlah → pratinjau dirender ulang (debounce). Saat cetak,
+    // lembar dirender ulang sesuai jumlah terkini agar selalu sinkron.
+    function bukaModalCetakBarcode(daftar) {
+      let blobUrl = "";
+      let renderTimer = null;
+      let abortCtrl = null;
+      let renderSeq = 0;
+
+      const overlay = document.createElement("div");
+      overlay.style.cssText =
+        "position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,0.55);display:flex;align-items:center;justify-content:center;padding:20px";
+
+      const totalLabel = () =>
+        daftar.reduce((acc, d) => acc + Math.max(0, Math.round(d.qty || 0)), 0);
+
+      const tutup = () => {
+        if (blobUrl) URL.revokeObjectURL(blobUrl);
+        if (abortCtrl) abortCtrl.abort();
+        clearTimeout(renderTimer);
+        overlay.remove();
+      };
+
+      overlay.innerHTML = `
+        <div style="background:var(--card-bg,#fff);border-radius:12px;width:min(900px,94vw);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+          <div style="padding:14px 18px;border-bottom:1px solid var(--border-color,#e2e8f0);display:flex;justify-content:space-between;align-items:center;gap:16px">
+            <strong>🏷️ Cetak Barcode — atur jumlah per barang (3 kolom)</strong>
+            <button class="btn" data-act="batal" style="padding:4px 10px;font-size:13px;background:#e2e8f0;color:#475569;border:none">✕</button>
+          </div>
+          <div style="display:flex;gap:0;flex:1;overflow:hidden;min-height:280px">
+            <div style="flex:0 0 320px;display:flex;flex-direction:column;border-right:1px solid var(--border-color,#e2e8f0);overflow:hidden">
+              <div style="display:grid;grid-template-columns:1fr 70px;gap:8px;padding:10px 14px;background:var(--bg-color,#f8fafc);font-size:12px;font-weight:700;color:var(--text-muted,#64748b)">
+                <div>Barang</div><div style="text-align:center">Jumlah</div>
+              </div>
+              <div id="bcDaftarBody" style="overflow-y:auto"></div>
+            </div>
+            <div style="flex:1;padding:16px;overflow:auto;background:#f1f5f9;text-align:center">
+              <div id="bcPreviewArea"></div>
+            </div>
+          </div>
+          <div style="padding:14px 18px;border-top:1px solid var(--border-color,#e2e8f0);display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <div style="font-size:13px;font-weight:700">Total: <span id="bcTotal">0</span> label</div>
+            <div style="display:flex;gap:8px">
+              <button class="btn" data-act="batal" style="padding:8px 16px">Batal</button>
+              <button class="btn btn-primary" data-act="cetak" style="padding:8px 16px">🚀 Cetak ke Printer</button>
+            </div>
+          </div>
+        </div>`;
+
+      const renderDaftar = () => {
+        overlay.querySelector("#bcDaftarBody").innerHTML = daftar
+          .map(
+            (d, idx) => `
+            <div style="display:grid;grid-template-columns:1fr 70px;gap:8px;padding:8px 14px;border-top:1px solid var(--border-color,#e2e8f0);align-items:center">
+              <div style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${d.nama}">${d.nama}</div>
+              <input type="number" min="0" value="${d.qty}" data-idx="${idx}" class="input-control bc-qty" style="margin:0;height:34px;text-align:center;padding:0 6px" />
+            </div>`,
+          )
+          .join("");
+        overlay.querySelector("#bcTotal").textContent = totalLabel();
+      };
+
+      const schedulePreview = () => {
+        clearTimeout(renderTimer);
+        renderTimer = setTimeout(renderPreview, 150);
+      };
+
+      const renderPreview = async () => {
+        const area = overlay.querySelector("#bcPreviewArea");
+        if (totalLabel() < 1) {
+          area.innerHTML = `<div style="padding:40px;color:#64748b">Atur jumlah minimal 1 untuk melihat pratinjau.</div>`;
+          return;
+        }
+        if (abortCtrl) abortCtrl.abort();
+        abortCtrl = new AbortController();
+        const seq = ++renderSeq;
+        area.innerHTML = `<div style="padding:40px;color:#64748b">Menyiapkan pratinjau...</div>`;
+        try {
+          const sheet = await mintaLembarBarcode(
+            susunPayloadBarcode(daftar),
+            abortCtrl.signal,
+          );
+          if (!sheet) return;
+          const { blob } = sheet;
+          if (seq !== renderSeq) return;
+          if (blobUrl) URL.revokeObjectURL(blobUrl);
+          blobUrl = URL.createObjectURL(blob);
+          area.innerHTML = `<img src="${blobUrl}" alt="Pratinjau barcode" style="background:#fff;max-width:100%;box-shadow:0 1px 4px rgba(0,0,0,0.15)" />`;
+        } catch (e) {
+          if (e.name === "AbortError") return;
+          area.innerHTML = `<div style="padding:40px;color:#ef4444">Pratinjau gagal dibuat.</div>`;
+        }
+      };
+
+      overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) tutup();
+      });
+      overlay
+        .querySelectorAll('[data-act="batal"]')
+        .forEach((b) => b.addEventListener("click", tutup));
+      overlay.querySelector("#bcDaftarBody").addEventListener("input", (e) => {
+        const inp = e.target.closest(".bc-qty");
+        if (!inp) return;
+        const idx = parseInt(inp.dataset.idx, 10);
+        daftar[idx].qty = Math.max(0, parseInt(inp.value, 10) || 0);
+        overlay.querySelector("#bcTotal").textContent = totalLabel();
+        schedulePreview();
+      });
+      overlay
+        .querySelector('[data-act="cetak"]')
+        .addEventListener("click", async () => {
+          if (totalLabel() < 1) {
+            return showToast("Atur jumlah minimal 1 barang", "warning");
+          }
+          try {
+            showLoading();
+            // Render ulang sesuai jumlah terkini agar selalu sinkron.
+            const payload = susunPayloadBarcode(daftar);
+            const sheet = await mintaLembarBarcode(payload);
+            if (!sheet) {
+              hideLoading();
+              return;
+            }
+            const { blob, widthMm, heightMm } = sheet;
+            const imageBase64 = await blobToBase64(blob);
+            const rowCount = Math.ceil(
+              payload.data_produk.length / payload.jumlah_kolom,
+            );
+            const printResult = await api("POST", "/print/", {
+              content: JSON.stringify({
+                image_base64: imageBase64,
+                width_mm: widthMm,
+                height_mm: heightMm,
+                row_count: rowCount,
+                row_height_mm: payload.tinggi_mm,
+                gap_vertical_mm: payload.gap_vertical_mm,
+                total_labels: payload.data_produk.length,
+                col_count: payload.jumlah_kolom,
+              }),
+              content_type: "label_image",
+              branch_id: getActiveBranchId(),
+            });
+            if (printResult === undefined) {
+              hideLoading();
+              return;
+            }
+            hideLoading();
+            tutup();
+            showToast("Job barcode dikirim ke antrean printer", "success");
+          } catch (ex) {
+            hideLoading();
+            showToast("Kesalahan cetak: " + ex.message, "error");
+          }
+        });
+
+      document.body.appendChild(overlay);
+      renderDaftar();
+      renderPreview();
+    }
+
+    async function openPaymentTab() {
+      await loadPayments();
+    }
+    async function loadPayments() {
+      if (!paymentFilter) return;
+      const f = paymentFilter.getValues();
+      let url = `/purchases/?limit=500&start_date=${f.start_date}&end_date=${f.end_date}`;
+      if (f.entity_id) url += `&supplier_id=${f.entity_id}`;
+      if (f.status) url += `&status=${f.status}`;
+      try {
+        const data = await api("GET", url);
+        const tbody = document.getElementById("paymentTblBody");
+        tbody.innerHTML = data.length
+          ? data
+            .map(
+              (p) =>
+                `<tr><td>${p.number}</td><td>${fmtDate(p.date)}</td><td>${p.supplier?.name || "-"}</td><td style="text-align:right">${fmtRp(p.total)}</td><td style="text-align:right">${fmtRp(p.paid)}</td><td style="text-align:right">${fmtRp(p.total - p.paid)}</td><td>${sb(p.status, p)}</td><td><button class="btn btn-primary" onclick="startPaymentProcess(${p.id})">💸 Bayar</button></td></tr>`,
+            )
+            .join("")
+          : '<tr><td colspan="8" style="text-align:center">Tidak ada data</td></tr>';
+      } catch (ex) {
+        showToast(ex.message, "error");
+      }
+    }
+
+    const sb = (s, p) => {
+      let labels = "";
+      if (p && p.is_branch_request) {
+        labels +=
+          '<span style="background:rgba(37,99,235,0.15);color:#2563eb;padding:4px 10px;border-radius:6px;font-weight:700;margin-right:4px;">📦 PO</span>';
+      }
+
+      if (s === "paid")
+        return (
+          labels +
+          '<span style="background:rgba(16,185,129,0.15);color:#10b981;padding:4px 10px;border-radius:6px;font-weight:700;">✓ Lunas</span>'
+        );
+      if (s === "unpaid")
+        return (
+          labels +
+          '<span style="background:rgba(239,68,68,0.15);color:#ef4444;padding:4px 10px;border-radius:6px;font-weight:700;">✗ Belum Lunas</span>'
+        );
+      if (s === "draft")
+        return (
+          labels +
+          '<span style="background:rgba(100,116,139,0.15);color:#64748b;padding:4px 10px;border-radius:6px;font-weight:700;">📝 DRAFT</span>'
+        );
+      return (
+        labels +
+        `<span style="background:rgba(148,163,184,0.15);color:#94a3b8;padding:4px 10px;border-radius:6px;font-weight:700;">${String(s).toUpperCase()}</span>`
+      );
+    };
+
+    function today() {
+      return new Date().toISOString().split("T")[0];
+    }
+    function loadDraft(id) {
+      location.href = `catat-pembelian.html?id=${id}`;
+    }
+    function fmtRp(n) {
+      return new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        minimumFractionDigits: 0,
+      }).format(n || 0);
+    }
+    function fmtDate(d) {
+      if (!d) return "-";
+      return new Date(d + "T00:00:00").toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+    }
+
+    async function load() {
+      if (!mainFilter) return;
+      const f = mainFilter.getValues();
+      let url = `/purchases/?limit=200&start_date=${f.start_date}&end_date=${f.end_date}`;
+      if (f.status) url += `&status=${f.status}`;
+      if (f.entity_id) url += `&supplier_id=${f.entity_id}`;
+      try {
+        const d = await api("GET", url);
+        const tbody = document.getElementById("tblBody");
+        tbody.innerHTML = d.length
+          ? d
+            .map((p) => {
+              const canPay = isMainStore() || !p.is_branch_request;
+              const payBtn =
+                p.status === "draft" && canPay
+                  ? `<button class="btn" style="padding:4px 8px;font-size:12px;background:var(--primary);color:white;border:none" onclick="startPaymentProcess(${p.id})">💸 Bayar</button>`
+                  : "";
+              const prosesBtn =
+                p.status === "draft"
+                  ? `<button class="btn btn-primary" style="padding:4px 8px;font-size:12px" onclick="loadDraft(${p.id})">Proses</button>`
+                  : "";
+
+              return `<tr>
+              <td style="font-family:monospace;font-weight:700;color:var(--primary)">${p.number}</td>
+              <td>${fmtDate(p.date)}</td>
+              <td>${fmtDate(p.due_date)}</td>
+              <td>${p.supplier?.name || "-"}</td>
+              <td>${fmtRp(p.total)}</td>
+              <td>${fmtRp(p.paid)}</td>
+              <td>${sb(p.status, p)}</td>
+              <td>
+                <div style="display:flex;gap:4px">
+                  ${prosesBtn}
+                  ${payBtn}
+                  <button class="btn" style="padding:4px 8px;font-size:12px" onclick="showDetail(${p.id})">Detail</button>
+                  <button class="btn" style="padding:4px 8px;font-size:12px;background:#e2e8f0;color:#475569;border:none" onclick="exportPurchasePDF(${p.id})">📄 PDF</button>
+                  <button class="btn" style="padding:4px 8px;font-size:12px" onclick="cetakBarcode(${p.id})">Cetak Barcode</button>
+                </div>
+              </td>
+            </tr>`;
+            })
+            .join("")
+          : '<tr><td colspan="8" style="text-align:center">Tidak ada data</td></tr>';
+      } catch (ex) {
+        showToast(ex.message, "error");
+      }
+    }
+
+    async function initFilters() {
+      const suppliers = await api(
+        "GET",
+        "/suppliers/?limit=5000&active_only=true",
+      );
+      const statusOpts = [
+        { label: "Draft / Pesanan", value: "draft" },
+        { label: "Belum Lunas", value: "unpaid" },
+        { label: "Sebagian", value: "partial" },
+        { label: "Lunas", value: "paid" },
+      ];
+
+      mainFilter = createFilterBar("mainFilterContainer", {
+        onFilter: load,
+        statusOptions: statusOpts,
+        entities: suppliers,
+        useEntitySelect: true,
+        entityPlaceholder: "Semua Supplier",
+      });
+
+      paymentFilter = createFilterBar("paymentFilterContainer", {
+        onFilter: loadPayments,
+        statusOptions: statusOpts.slice(1),
+        entities: suppliers,
+        useEntitySelect: true,
+        entityPlaceholder: "Semua Supplier",
+      });
+
+      const params = new URLSearchParams(location.search);
+      const isDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || "");
+      const startDate = params.get("start_date");
+      const endDate = params.get("end_date");
+      const startInput = document.querySelector(
+        "#mainFilterContainer .f-start",
+      );
+      const endInput = document.querySelector("#mainFilterContainer .f-end");
+      if (startInput && isDate(startDate)) startInput.value = startDate;
+      if (endInput && isDate(endDate)) endInput.value = endDate;
+    }
+
+    function parseNum(s) {
+      return parseDesimal(s);
+    }
+    async function showDetail(id) {
+      try {
+        const p = await api("GET", `/purchases/${id}`);
+        document.getElementById("mDetailBody").innerHTML =
+          `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+            <div><div style="font-size:13px;color:var(--text-muted)">Tanggal</div><div style="font-weight:700">${fmtDate(p.date)}</div></div>
+            <div><div style="font-size:13px;color:var(--text-muted)">Supplier</div><div style="font-weight:700">${p.supplier?.name || "-"}</div></div>
+            <div><div style="font-size:13px;color:var(--text-muted)">Status</div>${sb(p.status, p)}</div>
+            <div><div style="font-size:13px;color:var(--text-muted)">Catatan</div><div>${p.notes || "-"}</div></div>
+          </div>
+          <table class="tbl" style="margin-bottom:16px">
+            <thead><tr><th>Barang</th><th style="text-align:center">Qty</th><th style="text-align:right">Harga Beli</th><th style="text-align:center">Margin</th><th style="text-align:right">Harga Jual</th><th style="text-align:center">Diskon</th><th style="text-align:right">Total</th></tr></thead>
+            <tbody>${(p.items || [])
+            .map((i) => {
+              const sellPrice = i.item?.sell_price || 0;
+              const hb = i.buy_price || 0;
+              const d1 = i.disc1 || 0;
+              const d2 = i.disc2 || 0;
+              const d3 = i.disc3 || 0;
+              const d4 = i.disc4 || 0;
+              // Potongan bertingkat: tampilkan yang terisi, dirangkai "a% + b% + ...".
+              const potTerisi = [d1, d2, d3, d4].filter((d) => d > 0);
+              const discText = potTerisi.length
+                ? potTerisi.map((d) => `${d}%`).join(" + ")
+                : "-";
+
+              const hargaNeto =
+                hb *
+                (1 - d1 / 100) *
+                (1 - d2 / 100) *
+                (1 - d3 / 100) *
+                (1 - d4 / 100);
+              const margin =
+                hargaNeto > 0
+                  ? (((sellPrice - hargaNeto) / hargaNeto) * 100).toFixed(1)
+                  : 0;
+
+              return `<tr>
+                    <td>${i.item?.name || "-"}</td>
+                    <td style="text-align:center">${i.qty}</td>
+                    <td style="text-align:right">${fmtRp(hb)}</td>
+                    <td style="text-align:center; color:var(--text-muted)">${margin}%</td>
+                    <td style="text-align:right">${fmtRp(sellPrice)}</td>
+                    <td style="text-align:center; color:var(--danger)">${discText}</td>
+                    <td style="text-align:right;font-weight:700">${fmtRp(i.total)}</td>
+                </tr>`;
+            })
+            .join("")}</tbody>
+          </table>
+          <div style="background:var(--bg-color);border-radius:12px;padding:16px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span>Subtotal</span><span>${fmtRp(p.subtotal)}</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:20px;font-weight:900;border-top:1px solid var(--border-color);padding-top:10px;margin-top:6px"><span>TOTAL</span><span style="color:var(--primary)">${fmtRp(p.total)}</span></div>
+            <div style="display:flex;justify-content:space-between;margin-top:8px"><span>Sudah Dibayar</span><span style="color:#10b981;font-weight:700">${fmtRp(p.paid)}</span></div>
+          </div>
+          <div style="margin-top:16px;display:flex;gap:12px">
+            ${p.status !== "paid" && p.status !== "draft" && (myBranchId == 1 || !p.is_branch_request) ? `<button onclick="startPaymentProcess(${p.id})" class="btn btn-primary">💸 Bayar Hutang</button>` : ""}
+            <button onclick="exportPurchasePDF(${p.id})" class="btn" style="background:var(--primary); color:white; border:none">📄 Export PDF</button>
+            <button onclick="hapus(${p.id})" class="btn btn-danger">🗑 Batalkan</button>
+          </div>`;
+        openModal("mDetail");
+      } catch (ex) {
+        showToast(ex.message, "error");
+      }
+    }
+
+    // --- LOGIKA VALIDASI MISMATCH & PEMBAYARAN CERDAS ---
+
+    async function startPaymentProcess(id) {
+      try {
+        showLoading("Mengecek data...");
+        const p = await api("GET", `/purchases/${id}`);
+        hideLoading();
+
+        const mismatchUnder = p.items.filter(
+          (it) => (it.qty_ordered || it.qty) > (it.qty_received || it.qty),
+        );
+        const mismatchOver = p.items.filter(
+          (it) => (it.qty_received || it.qty) > (it.qty_ordered || it.qty),
+        );
+
+        pendingPaymentData = p;
+
+        if (mismatchUnder.length > 0 || mismatchOver.length > 0) {
+          console.log("Mismatch detected:", {
+            under: mismatchUnder,
+            over: mismatchOver,
+          });
+          buildMismatchSummary(mismatchUnder, mismatchOver, p.supplier?.name);
+          openModal("mMismatch");
+        } else {
+          apModal.open({
+            id: p.id,
+            total: p.total,
+            paid: p.paid,
+            name: p.supplier?.name || "-",
+          });
+        }
+      } catch (ex) {
+        hideLoading();
+        showToast(ex.message, "error");
+      }
+    }
+
+    function buildMismatchSummary(under, over, supplierName) {
+      const hasUnder = under.length > 0;
+      const hasOver = over.length > 0;
+
+      let title = "⚠️ Mismatch Barang Ditemukan";
+      let titleColor = "var(--danger)";
+      let msg = `Ditemukan ketidaksesuaian jumlah barang untuk supplier <b>${supplierName || "-"}</b>.`;
+
+      if (hasOver && !hasUnder) {
+        title = "📦 Barang Diterima Berlebih";
+        titleColor = "var(--primary)";
+        msg =
+          "Barang yang diterima <b>lebih banyak</b> dari pesanan awal. Stok akan bertambah sesuai jumlah yang diterima. Anda yakin?";
+      }
+
+      document.querySelector("#mMismatch h2").textContent = title;
+      document.querySelector("#mMismatch h2").style.color = titleColor;
+
+      let html = `<p style="font-size: 14px; color: var(--text-muted); margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">${msg}</p>`;
+
+      // Perbaikan Tabel untuk Dark Mode
+      const tableStyle = `style="font-size: 13px; width: 100%; border-collapse: collapse; border: 1px solid var(--border-color);"`;
+      const thStyle = `style="background: var(--border-color); color: var(--text-main); padding: 8px; text-align: left;"`;
+      const tdStyle = `style="padding: 8px; border-bottom: 1px solid var(--border-color); color: var(--text-main);"`;
+
+      if (hasOver) {
+        html += `<div style="color:var(--success); font-weight:700; margin-bottom:6px; font-size:12px">BARANG LEBIH (STOK AKAN BERTAMBAH):</div>
+            <div class="tbl-wrap" style="max-height: 150px; overflow-y: auto; margin-bottom: 16px; border-radius: 8px; overflow: hidden;">
+                <table ${tableStyle}>
+                    <thead><tr style="background: var(--bg-color);"><th ${thStyle}>Barang</th><th ${thStyle} style="text-align:center">Pesan</th><th ${thStyle} style="text-align:center">Terima</th></tr></thead>
+                    <tbody>
+                        ${over.map((it) => `<tr><td ${tdStyle} style="font-weight: 600;">${it.item?.name || "Barang"}</td><td ${tdStyle} style="text-align:center">${it.qty_ordered || it.qty}</td><td ${tdStyle} style="text-align:center; color: var(--success); font-weight: 700;">${it.qty_received || it.qty}</td></tr>`).join("")}
+                    </tbody>
+                </table>
+            </div>`;
+      }
+
+      if (hasUnder) {
+        html += `<div style="color:var(--danger); font-weight:700; margin-bottom:6px; font-size:12px">BARANG KURANG:</div>
+            <div class="tbl-wrap" style="max-height: 150px; overflow-y: auto; margin-bottom: 16px; border-radius: 8px; overflow: hidden;">
+                <table ${tableStyle}>
+                    <thead><tr style="background: var(--bg-color);"><th ${thStyle}>Barang</th><th ${thStyle} style="text-align:center">Pesan</th><th ${thStyle} style="text-align:center">Terima</th></tr></thead>
+                    <tbody>
+                        ${under.map((it) => `<tr><td ${tdStyle} style="font-weight: 600;">${it.item?.name || "Barang"}</td><td ${tdStyle} style="text-align:center">${it.qty_ordered || it.qty}</td><td ${tdStyle} style="text-align:center; color: var(--danger); font-weight: 700;">${it.qty_received || it.qty}</td></tr>`).join("")}
+                    </tbody>
+                </table>
+            </div>`;
+      }
+
+      document.getElementById("mMismatchBody").innerHTML = html;
+
+      // Bangun Tombol Footer (Iya Yakin, Reorder, Tidak)
+      let footerHtml = ``;
+
+      if (hasUnder) {
+        footerHtml += `<button class="btn btn-primary" onclick="handleReorderToOtherSupplier()" style="width:100%">Simpan & Buat Order Baru</button>`;
+        footerHtml += `<button class="btn" onclick="handleContinuePayment()" style="width:100%; background: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-main);">Tetap Lanjutkan (Abaikan Kurang)</button>`;
+      } else if (hasOver) {
+        footerHtml += `<button class="btn btn-primary" onclick="handleContinuePayment()" style="width:100%">Iya, Saya Yakin (Catat Lebih)</button>`;
+      }
+
+      footerHtml += `<button class="btn" onclick="closeModal('mMismatch')" style="width:100%; background: transparent; border: 1px solid var(--danger); color: var(--danger);">Tidak, Cek Lagi</button>`;
+
+      document.getElementById("mMismatchFooter").innerHTML = footerHtml;
+    }
+
+    async function handleContinuePayment() {
+      closeModal("mMismatch");
+      const p = pendingPaymentData;
+      if (!p) return;
+
+      // Jika status masih DRAFT, kita harus memfinalisasi agar stok & jurnal tercatat
+      if (p.status === "draft") {
+        try {
+          showLoading("Memfinalisasi pesanan...");
+          // Filter hanya item yang benar-benar diterima (qty_received > 0)
+          const itemsToSave = p.items
+            .filter((it) => (it.qty_received || it.qty) > 0)
+            .map((it) => ({
+              item_id: it.item_id,
+              qty: it.qty_received || it.qty,
+              qty_ordered: it.qty_ordered || it.qty,
+              qty_received: it.qty_received || it.qty,
+              buy_price: it.buy_price,
+            }));
+
+          const payload = {
+            date: p.date,
+            supplier_id: p.supplier_id,
+            discount: p.subtotal > 0 ? (p.discount / p.subtotal) * 100 : 0,
+            tax:
+              p.subtotal - p.discount > 0
+                ? (p.tax / (p.subtotal - p.discount)) * 100
+                : 0,
+            notes: p.notes,
+            items: itemsToSave,
+            status: "unpaid", // Ubah jadi Unpaid agar masuk ke stok
+          };
+
+          const updated = await api("PUT", `/purchases/${p.id}`, payload);
+          pendingPaymentData = updated; // Update local data with finalized version
+          hideLoading();
+        } catch (ex) {
+          hideLoading();
+          return showToast("Gagal memfinalisasi: " + ex.message, "error");
+        }
+      }
+
+      const finalP = pendingPaymentData;
+      apModal.open({
+        id: finalP.id,
+        total: finalP.total,
+        paid: finalP.paid,
+        name: finalP.supplier?.name || "-",
+      });
+    }
+
+    async function handleReorderToOtherSupplier() {
+      const p = pendingPaymentData;
+      if (!p) return;
+
+      try {
+        showLoading("Memproses reorder...");
+
+        // 1. Jika masih DRAFT, finalisasi dulu yang sekarang (hanya item yang ada)
+        if (p.status === "draft") {
+          const itemsToSave = p.items
+            .filter((it) => (it.qty_received || it.qty) > 0)
+            .map((it) => ({
+              item_id: it.item_id,
+              qty: it.qty_received || it.qty,
+              qty_ordered: it.qty_ordered || it.qty,
+              qty_received: it.qty_received || it.qty,
+              buy_price: it.buy_price,
+            }));
+
+          const payload = {
+            date: p.date,
+            supplier_id: p.supplier_id,
+            discount: p.subtotal > 0 ? (p.discount / p.subtotal) * 100 : 0,
+            tax:
+              p.subtotal - p.discount > 0
+                ? (p.tax / (p.subtotal - p.discount)) * 100
+                : 0,
+            notes: p.notes,
+            items: itemsToSave,
+            status: "unpaid",
+          };
+          await api("PUT", `/purchases/${p.id}`, payload);
+        }
+
+        // 2. Buat draft reorder di backend untuk item yang kurang
+        const newPurchase = await api(
+          "POST",
+          `/purchases/${p.id}/reorder-missing`,
+        );
+        hideLoading();
+
+        showToast("Draft pesanan baru untuk sisa barang berhasil dibuat ✓");
+        closeModal("mMismatch");
+
+        // 3. Tanya apakah mau bayar yang sekarang dulu
+        if (
+          await showConfirm(
+            "Draft pesanan baru sudah siap. Selesaikan pembayaran faktur saat ini dulu?",
+          )
+        ) {
+          // Refresh data p karena mungkin sudah difinalisasi
+          const currentP = await api("GET", `/purchases/${p.id}`);
+          apModal.open({
+            id: currentP.id,
+            total: currentP.total,
+            paid: currentP.paid,
+            name: currentP.supplier?.name || "-",
+            onSuccess: () => {
+              setTimeout(() => {
+                location.href = `catat-pembelian.html?id=${newPurchase.id}`;
+              }, 1000);
+            },
+          });
+        } else {
+          location.href = `catat-pembelian.html?id=${newPurchase.id}`;
+        }
+      } catch (ex) {
+        hideLoading();
+        showToast(ex.message, "error");
+      }
+    }
+
+    async function hapus(id) {
+      if (
+        !(await showConfirm(
+          "Yakin ingin membatalkan pembelian ini? Stok akan dikurangi dan jurnal akan dibalik.",
+        ))
+      )
+        return;
+      try {
+        showLoading("Membatalkan...");
+        await api("POST", `/purchases/${id}/cancel`);
+        hideLoading();
+        showToast("Berhasil dibatalkan ✓");
+        closeModal("mDetail");
+        load();
+      } catch (ex) {
+        hideLoading();
+        showToast(ex.message, "error");
+      }
+    }
+
+    (async () => {
+      // Muat tarif PPN standar toko (dipakai popup "ubah ke X%"). Default 11 bila gagal.
+      try {
+        const st = await api("GET", "/accounting/pkp-status");
+        if (st && st.tarif_ppn != null)
+          tarifPpnStandar = parseFloat(st.tarif_ppn) || 11;
+      } catch (e) {
+        /* pakai default 11 */
+      }
+      await initFilters();
+      // Jika kembali dari detail_item.html, pulihkan form pembelian dari draft.
+      const kembaliDariDetail = sessionStorage.getItem(
+        "purchase_form_return",
+      );
+      const draftRaw = sessionStorage.getItem("purchase_form_draft");
+      if (kembaliDariDetail && draftRaw) {
+        sessionStorage.removeItem("purchase_form_return");
+        sessionStorage.removeItem("purchase_form_draft");
+        try {
+          await restoreFormFromDraft(JSON.parse(draftRaw));
+          return;
+        } catch (e) {
+          console.error("Gagal memulihkan form:", e);
+        }
+      }
+      load();
+    })();
+  </script>
+</body>
+
+</html>

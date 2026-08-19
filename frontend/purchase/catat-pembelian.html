@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Catat Pembelian - FPOS</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/components.css" />
+    <style>
+      #orderManagerContainer {
+        margin-top: 16px;
+      }
+      .pg-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 24px;
+      }
+      .fulfillment-mode-badge {
+        background: var(--primary-light);
+        color: var(--primary);
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 700;
+        margin-bottom: 8px;
+        display: inline-block;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-container">
+      <main class="main-content">
+        <div class="pg-header">
+          <div>
+            <div id="modeBadge"></div>
+            <h1>🛒 Catat Pembelian</h1>
+            <p>Masukkan detail faktur pembelian dari supplier.</p>
+          </div>
+          <div style="display: flex; gap: 10px">
+            <button class="btn" onclick="location.href = 'purchases.html'">
+              Batal
+            </button>
+            <div id="buttonACCOrFinal"></div>
+          </div>
+        </div>
+
+        <!-- Unified Order Manager Container -->
+        <div id="orderManagerContainer"></div>
+
+        <div class="card" style="padding: 24px; margin-top: 24px">
+          <label>Catatan</label>
+          <textarea
+            id="bNotes"
+            class="input-control"
+            rows="2"
+            placeholder="Keterangan tambahan..."
+          ></textarea>
+        </div>
+      </main>
+    </div>
+
+    <!-- Modal Mismatch -->
+    <div class="modal-overlay" id="mMismatch">
+      <div
+        class="modal-box"
+        style="max-width: 550px; border: 2px solid var(--border-color)"
+      >
+        <div class="modal-hdr">
+          <h2 style="color: var(--danger); font-size: 22px">
+            ⚠️ Mismatch Barang
+          </h2>
+          <button class="btn-x" onclick="closeModal('mMismatch')">×</button>
+        </div>
+        <div id="mMismatchBody" style="padding: 16px 0"></div>
+        <div
+          id="mMismatchFooter"
+          style="
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 16px;
+          "
+        >
+          <!-- Buttons dynamically built -->
+        </div>
+      </div>
+    </div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/theme.js"></script>
+    <script src="/js/components.js"></script>
+    <script>
+      requireAuth();
+      const user = getUser();
+      let orderManager = null,
+        currentEditId = null,
+        loadedPOId = null;
+      let pendingPayload = null,
+        poBranchId = null;
+      let originalItems = [];
+
+      async function init() {
+        // --- CEK ROLE ---
+        if (!(await can("purchase.transaction", "update"))) {
+          alert(
+            "Akses Ditolak: Hanya Admin yang bisa memproses/mengedit draft.",
+          );
+          return (location.href = "purchases.html");
+        }
+
+        const urlParams = new URLSearchParams(window.location.search);
+        let initialData = null;
+        const allowNameEdit = urlParams.get("allowNameEdit") === "true";
+
+        if (urlParams.has("po_id")) {
+          loadedPOId = urlParams.get("po_id");
+          initialData = await api("GET", `/purchases/${loadedPOId}`);
+          poBranchId = initialData.branch_id;
+
+          let btnHtml = "";
+          if (!initialData.is_branch_request && initialData.from_po_id) {
+            btnHtml = `<button class="btn btn-PO-success" onclick="terimaBarangCabang(${initialData.from_po_id})">ACC (Terima dari Pusat)</button>`;
+          } else if (initialData.is_branch_request) {
+            btnHtml = `<button class="btn btn-PO-success" onclick="terimaBarangCabang(${initialData.id})">ACC (Terima dari Pusat)</button>`;
+          } else {
+            btnHtml = `<button class="btn btn-PO-success" onclick="finalisasi('paid')">ACC (Simpan Invoice)</button>`;
+          }
+          document.getElementById("buttonACCOrFinal").innerHTML = btnHtml;
+          document.getElementById("modeBadge").innerHTML =
+            `<span class="fulfillment-mode-badge">MODE VERIFIKASI PO</span>`;
+        } else if (urlParams.has("id")) {
+          currentEditId = urlParams.get("id");
+          initialData = await api("GET", `/purchases/${currentEditId}`);
+          document.getElementById("buttonACCOrFinal").innerHTML =
+            `<button class="btn btn-primary" onclick="finalisasi('paid')">Finalisasi</button>`;
+          if (initialData.status !== "draft") {
+            alert("Hanya faktur draft yang bisa diedit.");
+            return (location.href = "purchases.html");
+          }
+        }
+        // Simpan data barang asli untuk perbandingan nanti
+        if (initialData && initialData.items) {
+          originalItems = initialData.items.map((it) => ({
+            item_id: it.item_id,
+            name: it.item?.name || "",
+            qty_ordered: it.qty_ordered || it.qty,
+            qty_received: it.qty_received || it.qty,
+          }));
+        }
+
+        orderManager = await createOrderManager("orderManagerContainer", {
+          initialData: initialData,
+          from_po: loadedPOId ? true : false,
+          allowNameEdit: allowNameEdit || !!loadedPOId,
+          readonlySelector: !!loadedPOId,
+        });
+
+        // LOCK SUPPLIER jika sedang edit draft atau verifikasi PO
+        if (currentEditId || loadedPOId) {
+          orderManager.supplierCombo.disable();
+          // Muat ulang data barang supplier tersebut agar Grid bisa menambah barang lain dari supplier yang sama
+          const sid = initialData.supplier_id;
+          if (sid) {
+            const supplierItems = await api(
+              "GET",
+              `/purchases/items/?supplier_id=${sid}`,
+            );
+            orderManager.itemsGrid.updateDataSource(supplierItems);
+          }
+        }
+      }
+
+      // Setup Global Barcode Scanner
+      setupBarcodeScanner(async (scode) => {
+        if (!orderManager || !orderManager.itemsGrid) return;
+
+        try {
+          // Cari item berdasarkan barcode/kode
+          const items = await api(
+            "GET",
+            "/items/?limit=20000&search=" + encodeURIComponent(scode),
+          );
+          const match = findItemByScanCode(items, scode);
+          if (match) {
+            const item = match.item;
+            orderManager.itemsGrid.addRow(item);
+            showToast("Berhasil menambah: " + item.name);
+          } else {
+            showToast("Barcode " + scode + " tidak ditemukan!", "error");
+          }
+        } catch (e) {
+          console.error("Scanner Error:", e);
+        }
+      });
+
+      async function finalisasi(status) {
+        if (!orderManager) return;
+        const data = orderManager.getData();
+
+        if (!data.supplier_id) return showToast("Pilih supplier", "error");
+        if (data.items.length === 0)
+          return showToast("Daftar barang kosong", "error");
+
+        // --- VALIDASI PERUBAHAN DRAFT / PO ---
+        if (currentEditId || loadedPOId) {
+          let changes = [];
+
+          // Cek barang yang dihapus
+          originalItems.forEach((orig) => {
+            const found = data.items.find((it) => it.item_id === orig.item_id);
+            if (!found)
+              changes.push(`- Barang dihapus dari list: ${orig.name}`);
+          });
+
+          // Cek perubahan qty, nama, atau barang baru
+          data.items.forEach((it) => {
+            const orig = originalItems.find((o) => o.item_id === it.item_id);
+            if (!orig) {
+              changes.push(`- Barang baru ditambahkan: ${it.name}`);
+            } else {
+              if (
+                it.qty_ordered !== orig.qty_ordered ||
+                it.qty_received !== orig.qty_received
+              ) {
+                changes.push(`- Perubahan jumlah pada barang: ${orig.name}`);
+              }
+              if (it.name !== orig.name) {
+                changes.push(
+                  `- Nama barang diubah: '${orig.name}' menjadi '${it.name}'`,
+                );
+              }
+            }
+          });
+
+          if (changes.length > 0) {
+            const uniqueChanges = [...new Set(changes)];
+            const confirmed = await showConfirm(
+              `Peringatan: Anda telah melakukan perubahan pada data asli:\n${uniqueChanges.join("\n")}\n\nApakah Anda yakin ingin melanjutkan?`,
+            );
+            if (!confirmed) return;
+          }
+        }
+
+        const payload = {
+          ...data,
+          notes: document.getElementById("bNotes").value || null,
+          status: status, // Status final akan menjadi 'paid' (Unpaid AP) sesuai tombol
+          paid: 0,
+          from_po_id: loadedPOId,
+          target_branch_id: poBranchId || data.target_branch_id,
+        };
+
+        pendingPayload = payload;
+
+        // --- CEK MISMATCH ---
+        const mismatchUnder = data.items.filter(
+          (it) => it.qty_ordered > it.qty_received,
+        );
+        const mismatchOver = data.items.filter(
+          (it) => it.qty_received > it.qty_ordered,
+        );
+
+        if (mismatchUnder.length > 0 || mismatchOver.length > 0) {
+          buildMismatchSummary(mismatchUnder, mismatchOver);
+          openModal("mMismatch");
+        } else {
+          prosesSimpanFinal(status);
+        }
+      }
+
+      function buildMismatchSummary(under, over) {
+        const hasUnder = under.length > 0;
+        const hasOver = over.length > 0;
+
+        let title = "⚠️ Mismatch Barang";
+        let msg = "Terdapat perbedaan antara pesanan dan barang yang diterima.";
+
+        if (hasOver && !hasUnder) {
+          title = "📦 Barang Lebih";
+          msg =
+            "Barang yang diterima melebihi jumlah yang dipesan. Apakah Anda yakin ingin mencatat stok sesuai barang masuk?";
+        }
+
+        document.querySelector("#mMismatch h2").textContent = title;
+        let html = `<p style="font-size: 14px; color: var(--text-muted); margin-bottom: 16px;">${msg}</p>`;
+
+        const tableStyle = `style="font-size: 13px; width: 100%; border-collapse: collapse; border: 1px solid var(--border-color);"`;
+        const thStyle = `style="background: var(--border-color); color: var(--text-main); padding: 8px; text-align: left;"`;
+        const tdStyle = `style="padding: 8px; border-bottom: 1px solid var(--border-color); color: var(--text-main);"`;
+
+        if (hasOver) {
+          html += `<div style="color:var(--primary); font-weight:700; margin-bottom:8px; font-size:11px">LEBIH (Kelebihan Kirim):</div>
+              <table ${tableStyle}>
+                  <thead><tr style="background:var(--bg-color)"><th ${thStyle}>Nama Barang</th><th ${thStyle} style="text-align:center">Pesan</th><th ${thStyle} style="text-align:center">Terima</th></tr></thead>
+                  <tbody>${over.map((it) => `<tr><td ${tdStyle}>${it.name} <br><small>${it.code || ""}</small></td><td ${tdStyle} style="text-align:center">${it.qty_ordered}</td><td ${tdStyle} style="text-align:center; color:var(--success); font-weight:700">${it.qty_received}</td></tr>`).join("")}</tbody>
+              </table><br>`;
+        }
+        if (hasUnder) {
+          html += `<div style="color:var(--danger); font-weight:700; margin-bottom:8px; font-size:11px">KURANG (Kekurangan Kirim):</div>
+              <table ${tableStyle}>
+                  <thead><tr style="background:var(--bg-color)"><th ${thStyle}>Nama Barang</th><th ${thStyle} style="text-align:center">Pesan</th><th ${thStyle} style="text-align:center">Terima</th></tr></thead>
+                  <tbody>${under.map((it) => `<tr><td ${tdStyle}>${it.name} <br><small>${it.code || ""}</small></td><td ${tdStyle} style="text-align:center">${it.qty_ordered}</td><td ${tdStyle} style="text-align:center; color:var(--danger); font-weight:700">${it.qty_received}</td></tr>`).join("")}</tbody>
+              </table>`;
+        }
+
+        document.getElementById("mMismatchBody").innerHTML = html;
+
+        let footerHtml = ``;
+        if (hasUnder) {
+          footerHtml += `<button class="btn btn-primary" onclick="prosesSimpanDanReorder()">Simpan & Buat Order Baru</button>`;
+          footerHtml += `<button class="btn" onclick="prosesSimpanFinal('paid')" style="background: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-main);">Tetap Simpan (Abaikan Kurang)</button>`;
+        } else if (hasOver) {
+          footerHtml += `<button class="btn btn-primary" onclick="prosesSimpanFinal('paid')">Iya, Saya Yakin</button>`;
+        }
+        footerHtml += `<button class="btn" onclick="closeModal('mMismatch')" style="border: 1px solid var(--danger); color: var(--danger);">Batal, Cek Lagi</button>`;
+        document.getElementById("mMismatchFooter").innerHTML = footerHtml;
+      }
+
+      async function prosesSimpanFinal(status) {
+        closeModal("mMismatch");
+        if (!pendingPayload) return;
+        pendingPayload.status = status;
+
+        try {
+          showLoading("Memproses Data...");
+
+          // --- LOGIKA CLONE BARANG JIKA NAMA BERUBAH ---
+          for (let it of pendingPayload.items) {
+            const orig = originalItems.find((o) => o.item_id === it.item_id);
+            if (orig && it.name !== orig.name) {
+              console.log(
+                `[CLONE] Mendeteksi perubahan nama: ${orig.name} -> ${it.name}`,
+              );
+              showLoading(`Membuat barang baru: ${it.name}...`);
+
+              // 1. Ambil detail barang asli
+              const originalDetail = await api("GET", `/items/${it.item_id}`);
+
+              // 2. Siapkan payload clone
+              const newName = it.name;
+              const clonePayload = {
+                ...originalDetail,
+                name: newName,
+                code: "AUTO",
+                barcode: "AUTO",
+                stock: 0, // Barang baru mulai dari stok 0
+                supplier_ids: [data.supplier_id],
+              };
+
+              // 3. Simpan barang baru
+              const newItem = await api("POST", "/items/", clonePayload);
+
+              // 4. Update item_id di payload pembelian
+              it.item_id = newItem.id;
+              console.log(
+                `[CLONE] Barang baru dibuat dengan ID: ${newItem.id}`,
+              );
+            }
+          }
+
+          showLoading("Menyimpan Invoice...");
+          const targetId = currentEditId;
+          if (targetId)
+            await api("PUT", `/purchases/${targetId}`, pendingPayload);
+          else await api("POST", "/purchases/", pendingPayload);
+
+          showToast("Berhasil disimpan ✓");
+          setTimeout(() => {
+            location.href = "purchases.html";
+          }, 1000);
+        } catch (e) {
+          hideLoading();
+          showToast(e.message, "error");
+        }
+      }
+
+      async function prosesSimpanDanReorder() {
+        try {
+          showLoading("Memproses...");
+          let res;
+          const targetId = currentEditId;
+          if (targetId)
+            res = await api("PUT", `/purchases/${targetId}`, pendingPayload);
+          else res = await api("POST", "/purchases/", pendingPayload);
+          await api("POST", `/purchases/${res.id || targetId}/reorder-missing`);
+          hideLoading();
+          showToast("Berhasil & Draft baru dibuat ✓");
+          closeModal("mMismatch");
+          setTimeout(() => {
+            location.href = "purchases.html";
+          }, 1000);
+        } catch (e) {
+          hideLoading();
+          showToast(e.message, "error");
+        }
+      }
+      async function terimaBarangCabang(targetPoId) {
+        if (!orderManager) return;
+        const data = orderManager.getData();
+        console.log("[TERIMA CABANG] Data yang akan diproses:", data);
+
+        // --- DETEKSI PERUBAHAN NAMA ---
+        let nameChanges = [];
+        data.items.forEach((it) => {
+          const orig = originalItems.find((o) => o.item_id === it.item_id);
+          if (orig && it.name.trim() !== orig.name.trim()) {
+            nameChanges.push({
+              oldName: orig.name,
+              newName: it.name,
+              item: it,
+            });
+          }
+        });
+
+        console.log(
+          "[TERIMA CABANG] Perubahan nama yang terdeteksi:",
+          nameChanges,
+        );
+
+        if (nameChanges.length > 0) {
+          const confirmed = await createItemChangeModal(nameChanges);
+          if (!confirmed) return;
+
+          showLoading("Memproses Barang Baru...");
+          for (let nc of nameChanges) {
+            try {
+              // 1. Ambil detail asli
+              const originalDetail = await api(
+                "GET",
+                `/items/${nc.item.item_id}`,
+              );
+              // 2. Siapkan payload clone
+              const clonePayload = {
+                ...originalDetail,
+                name: nc.newName,
+                code: "AUTO",
+                barcode: "AUTO",
+                stock: 0,
+                supplier_ids: [data.supplier_id],
+              };
+              // 3. Simpan baru
+              const newItem = await api("POST", "/items/", clonePayload);
+              // 4. Update ID di data lokal
+              nc.item.item_id = newItem.id;
+            } catch (err) {
+              console.error("Gagal clone barang:", err);
+            }
+          }
+        }
+
+        if (
+          !confirm(
+            "Apakah barang fisik sudah sampai dan sesuai dengan pesanan? Stok akan bertambah setelah Anda melakukan ACC.",
+          )
+        )
+          return;
+
+        try {
+          showLoading("Memproses Penerimaan Barang...");
+
+          // --- SIMPAN PERUBAHAN KE TRANSAKSI DAHULU ---
+          // Ini memastikan qty_received dan item_id baru tersimpan sebelum proses stok
+          const updatePayload = {
+            ...data,
+            notes: document.getElementById("bNotes").value || null,
+            from_po_id: loadedPOId,
+            target_branch_id: poBranchId || data.target_branch_id,
+          };
+          await api("PUT", `/purchases/${targetPoId}`, updatePayload);
+
+          // --- FINALIZE RECEIVE ---
+          const res = await api(
+            "POST",
+            `/purchases/${targetPoId}/receive-branch`,
+          );
+          hideLoading();
+          showToast(res.message || "Berhasil ACC ✓");
+          setTimeout(() => (location.href = "po.html"), 1500);
+        } catch (e) {
+          hideLoading();
+          showToast(e.message, "error");
+        }
+      }
+      init();
+    </script>
+  </body>
+</html>

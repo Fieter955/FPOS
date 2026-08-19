@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Surat Jalan - FPOS</title>
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body>
+    <div class="app-container">
+      <main class="main-content">
+        <button
+          class="btn"
+          style="
+            background: transparent;
+            color: var(--text-muted);
+            padding: 0;
+            margin-bottom: 16px;
+          "
+          onclick="location.href = '/dashboard'"
+        >
+          ← Kembali
+        </button>
+        <div class="pg-header">
+          <div>
+            <h1>🚚 Surat Jalan</h1>
+            <p>Dokumen pengiriman barang ke lokasi proyek atau pelanggan.</p>
+          </div>
+          <button class="btn btn-primary" onclick="openBuatModal()">
+            ➕ Buat Surat Jalan
+          </button>
+        </div>
+        <div class="filter-bar">
+          <select id="fStatus" class="input-control" onchange="load()">
+            <option value="">Semua Status</option>
+            <option value="pending">⏳ Menunggu</option>
+            <option value="delivered">✅ Terkirim</option>
+            <option value="signed">✍️ Ditandatangani</option>
+          </select>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>No. SJ</th>
+                <th>Tanggal</th>
+                <th>Penerima</th>
+                <th>Faktur Asal</th>
+                <th>Status</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="tblBody"></tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+
+    <!-- Modal Buat SJ -->
+    <div class="modal-overlay" id="mBuat">
+      <div class="modal-box wide">
+        <div class="modal-hdr">
+          <h2>🚚 Buat Surat Jalan</h2>
+          <button class="btn-x" onclick="closeModal('mBuat')">×</button>
+        </div>
+        <div class="row2" style="margin-bottom: 16px">
+          <div class="input-group">
+            <label>Tanggal *</label
+            ><input id="sjDate" type="date" class="input-control" />
+          </div>
+          <div class="input-group">
+            <label
+              >Import dari Faktur
+              <span style="color: var(--text-muted); font-weight: 400"
+                >(opsional)</span
+              ></label
+            >
+            <div style="display: flex; gap: 8px">
+              <input
+                id="sjFaktur"
+                class="input-control"
+                style="flex: 1; margin: 0"
+                placeholder="No. Faktur INV..."
+              />
+              <button
+                onclick="importFaktur()"
+                class="btn"
+                style="
+                  padding: 12px 16px;
+                  background: var(--primary-light);
+                  color: var(--primary);
+                  border: none;
+                  border-radius: 12px;
+                  font-weight: 700;
+                  white-space: nowrap;
+                "
+              >
+                Import
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="row2" style="margin-bottom: 16px">
+          <div class="input-group">
+            <label>Nama Penerima</label
+            ><input
+              id="sjPenerima"
+              class="input-control"
+              placeholder="Nama orang/perusahaan"
+            />
+          </div>
+          <div class="input-group">
+            <label>Alamat Tujuan</label
+            ><input
+              id="sjAlamat"
+              class="input-control"
+              placeholder="Alamat pengiriman"
+            />
+          </div>
+        </div>
+        <div class="row2" style="margin-bottom: 16px">
+          <div class="input-group">
+            <label>Pengemudi</label
+            ><input
+              id="sjDriver"
+              class="input-control"
+              placeholder="Nama supir"
+            />
+          </div>
+          <div class="input-group">
+            <label>No. Kendaraan</label
+            ><input
+              id="sjVehicle"
+              class="input-control"
+              placeholder="B 1234 XY"
+            />
+          </div>
+        </div>
+        <div style="margin-bottom: 12px">
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 8px;
+            "
+          >
+            <label style="font-weight: 700; color: var(--text-muted)"
+              >📦 Barang Dikirim</label
+            >
+            <button
+              onclick="addBarisSJ()"
+              class="btn"
+              style="
+                padding: 8px 14px;
+                background: var(--primary-light);
+                color: var(--primary);
+                border: none;
+                border-radius: 10px;
+                font-weight: 700;
+                font-size: 13px;
+              "
+            >
+              + Tambah
+            </button>
+          </div>
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 3fr 1fr 36px;
+              gap: 8px;
+              margin-bottom: 6px;
+              font-size: 12px;
+              font-weight: 600;
+              color: var(--text-muted);
+            "
+          >
+            <span>Barang</span><span>Qty</span><span></span>
+          </div>
+          <div id="sjRows"></div>
+        </div>
+        <div class="input-group">
+          <label>Catatan</label
+          ><textarea id="sjNote" class="input-control" rows="2"></textarea>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+          <button
+            onclick="closeModal('mBuat')"
+            class="btn"
+            style="
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              color: var(--text-main);
+            "
+          >
+            Batal
+          </button>
+          <button onclick="simpanSJ()" class="btn btn-primary">
+            ✓ Buat Surat Jalan
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Detail SJ -->
+    <div class="modal-overlay" id="mDetail">
+      <div class="modal-box wide">
+        <div class="modal-hdr">
+          <h2 id="mDetailTitle">Detail Surat Jalan</h2>
+          <button class="btn-x" onclick="closeModal('mDetail')">×</button>
+        </div>
+        <div id="mDetailBody"></div>
+      </div>
+    </div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/theme.js"></script>
+    <script>
+      requireAuth();
+      let allItems = [],
+        sjRowIdx = 0,
+        importedSaleId = null;
+
+      const statusBadge = (s) =>
+        ({
+          pending: '<span class="bo">⏳ Menunggu</span>',
+          delivered: '<span class="bl">✅ Terkirim</span>',
+          signed: '<span class="bi">✍️ TTD</span>',
+        })[s || "pending"] || `<span class="bg">${s}</span>`;
+
+      async function init() {
+        allItems = await api("GET", "/items/?limit=500");
+        subscribeItemMasterChanges(refreshDeliveryItems);
+        document.getElementById("sjDate").value = today();
+        load();
+      }
+
+      async function refreshDeliveryItems() {
+        try {
+          allItems = await api("GET", "/items/?limit=500");
+          document.querySelectorAll("#sjRows select").forEach((select) => {
+            const selected = select.value;
+            select.innerHTML =
+              "<option value=''>-- Pilih Barang --</option>" +
+              allItems
+                .map(
+                  (i) =>
+                    `<option value="${i.id}" ${String(i.id) === String(selected) ? "selected" : ""}>${i.name}</option>`,
+                )
+                .join("");
+          });
+        } catch (error) {
+          console.error("Gagal menyegarkan barang surat jalan", error);
+        }
+      }
+
+      async function load() {
+        const st = document.getElementById("fStatus").value;
+        let url = "/delivery/?limit=200";
+        if (st) url += `&status=${st}`;
+        try {
+          const d = await api("GET", url);
+          document.getElementById("tblBody").innerHTML = d.length
+            ? d
+                .map(
+                  (sj) => `<tr>
+      <td style="font-family:monospace;font-size:13px;font-weight:700;color:var(--primary)">${sj.number}</td>
+      <td style="font-size:13px">${fmtDate(sj.date)}</td>
+      <td><b>${sj.recipient_name || "-"}</b><div style="font-size:12px;color:var(--text-muted)">${sj.delivery_address || ""}</div></td>
+      <td style="font-family:monospace;font-size:13px">${sj.sale?.number || "-"}</td>
+      <td>${statusBadge(sj.status)}</td>
+      <td style="white-space:nowrap">
+        <button class="bsm bv" onclick="showDetail(${sj.id})">Detail</button>
+        ${!sj.status || sj.status === "pending" ? `<button class="bsm bl" onclick="updateStatus(${sj.id},'delivered')">✅ Kirim</button>` : ""}
+        ${sj.status === "delivered" ? `<button class="bsm bi" onclick="updateStatus(${sj.id},'signed')">✍️ TTD</button>` : ""}
+        ${sj.status !== "signed" ? `<button class="bsm bd" onclick="hapus(${sj.id})">Hapus</button>` : ""}
+      </td></tr>`,
+                )
+                .join("")
+            : "<tr><td colspan='6' style='text-align:center;padding:24px;color:var(--text-muted)'>Belum ada surat jalan</td></tr>";
+        } catch (e) {
+          showToast(e.message, "error");
+        }
+      }
+
+      function openBuatModal() {
+        importedSaleId = null;
+        sjRowIdx = 0;
+        document.getElementById("sjDate").value = today();
+        [
+          "sjFaktur",
+          "sjPenerima",
+          "sjAlamat",
+          "sjDriver",
+          "sjVehicle",
+          "sjNote",
+        ].forEach((id) => (document.getElementById(id).value = ""));
+        document.getElementById("sjRows").innerHTML = "";
+        addBarisSJ();
+        openModal("mBuat");
+      }
+
+      function addBarisSJ(itemId = "", qty = 1) {
+        const idx = sjRowIdx++;
+        const opts =
+          "<option value=''>-- Pilih Barang --</option>" +
+          allItems
+            .map(
+              (i) =>
+                `<option value="${i.id}" ${i.id == itemId ? "selected" : ""}>${i.name}</option>`,
+            )
+            .join("");
+        document.getElementById("sjRows").insertAdjacentHTML(
+          "beforeend",
+          `
+    <div style="display:grid;grid-template-columns:3fr 1fr 36px;gap:8px;margin-bottom:8px;align-items:center" id="sjrow${idx}">
+      <select class="input-control" style="margin:0;padding:10px 12px;font-size:14px">${opts}</select>
+      <input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" value="${qty}" class="input-control sj-qty" style="margin:0;padding:10px;font-size:15px;font-weight:700;text-align:center">
+      <button onclick="document.getElementById('sjrow${idx}').remove()" style="width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,.15);color:#ef4444;border:none;cursor:pointer;font-size:16px">✕</button>
+    </div>`,
+        );
+      }
+
+      async function importFaktur() {
+        const num = document.getElementById("sjFaktur").value.trim();
+        if (!num) {
+          showToast("Masukkan nomor faktur", "error");
+          return;
+        }
+        try {
+          showLoading("Mencari...");
+          const list = await api("GET", "/sales/?limit=500");
+          const found = list.find(
+            (x) => x.number === num || x.number.includes(num),
+          );
+          if (!found) {
+            hideLoading();
+            showToast("Faktur tidak ditemukan", "error");
+            return;
+          }
+          const sale = await api("GET", `/sales/${found.id}`);
+          hideLoading();
+          importedSaleId = sale.id;
+          document.getElementById("sjPenerima").value =
+            sale.customer?.name || "";
+          document.getElementById("sjRows").innerHTML = "";
+          sjRowIdx = 0;
+          (sale.items || []).forEach((it) =>
+            addBarisSJ(it.item_id || it.item?.id, it.qty),
+          );
+          showToast("Data diimport ✓");
+        } catch (e) {
+          hideLoading();
+          showToast(e.message, "error");
+        }
+      }
+
+      async function simpanSJ() {
+        const items = [];
+        document.querySelectorAll("#sjRows > div").forEach((row) => {
+          const sel = row.querySelector("select"),
+            inp = row.querySelector(".sj-qty");
+          if (sel.value)
+            items.push({
+              item_id: parseInt(sel.value),
+              qty: parseDesimal(inp) || 1,
+            });
+        });
+        if (!items.length) {
+          showToast("Tambahkan minimal 1 barang", "error");
+          return;
+        }
+        try {
+          showLoading("Menyimpan...");
+          await api("POST", "/delivery/", {
+            date: document.getElementById("sjDate").value,
+            sale_id: importedSaleId || null,
+            recipient_name: document.getElementById("sjPenerima").value || null,
+            delivery_address: document.getElementById("sjAlamat").value || null,
+            driver_name: document.getElementById("sjDriver").value || null,
+            vehicle_no: document.getElementById("sjVehicle").value || null,
+            notes: document.getElementById("sjNote").value || null,
+            items,
+          });
+          hideLoading();
+          showToast("Surat jalan dibuat ✓");
+          closeModal("mBuat");
+          load();
+        } catch (e) {
+          hideLoading();
+          showToast(e.message, "error");
+        }
+      }
+
+      async function showDetail(id) {
+        try {
+          const sj = await api("GET", `/delivery/${id}`);
+          document.getElementById("mDetailTitle").textContent =
+            `SJ ${sj.number}`;
+          document.getElementById("mDetailBody").innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+        <div><div style="font-size:13px;color:var(--text-muted)">Tanggal</div><div style="font-weight:700">${fmtDate(sj.date)}</div></div>
+        <div><div style="font-size:13px;color:var(--text-muted)">Status</div>${statusBadge(sj.status)}</div>
+        <div><div style="font-size:13px;color:var(--text-muted)">Penerima</div><div style="font-weight:700">${sj.recipient_name || "-"}</div></div>
+        <div><div style="font-size:13px;color:var(--text-muted)">Alamat</div><div style="font-weight:700">${sj.delivery_address || "-"}</div></div>
+        <div><div style="font-size:13px;color:var(--text-muted)">Pengemudi</div><div style="font-weight:700">${sj.driver_name || "-"}</div></div>
+        <div><div style="font-size:13px;color:var(--text-muted)">Kendaraan</div><div style="font-weight:700">${sj.vehicle_no || "-"}</div></div>
+      </div>
+      <table class="tbl" style="margin-bottom:20px">
+        <thead><tr><th>Barang</th><th style="text-align:right">Qty</th></tr></thead>
+        <tbody>${(sj.items || []).map((i) => `<tr><td><b>${i.item?.name || "-"}</b></td><td style="text-align:right;font-size:18px;font-weight:800">${i.qty}</td></tr>`).join("")}</tbody>
+      </table>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        ${!sj.status || sj.status === "pending" ? `<button onclick="updateStatus(${sj.id},'delivered')" class="btn btn-primary">✅ Tandai Terkirim</button>` : ""}
+        ${sj.status === "delivered" ? `<button onclick="updateStatus(${sj.id},'signed')" class="btn" style="background:rgba(99,102,241,.15);color:#818cf8;border:none;padding:12px 20px;border-radius:12px;font-weight:700;cursor:pointer;font-family:inherit">✍️ Ditandatangani</button>` : ""}
+        <button onclick="cetakSJ(${JSON.stringify(sj).replace(/"/g, "&quot;")})" class="btn" style="background:var(--bg-color);border:1px solid var(--border-color)">🖨️ Cetak</button>
+        ${sj.status !== "signed" ? `<button onclick="hapus(${sj.id})" class="btn-danger">🗑 Hapus</button>` : ""}
+      </div>`;
+          openModal("mDetail");
+        } catch (e) {
+          showToast(e.message, "error");
+        }
+      }
+
+      // Coba PUT dulu, fallback ke PATCH
+      async function updateStatus(id, status) {
+        const label = {
+          delivered: "Tandai sebagai Terkirim?",
+          signed: "Tandai sebagai Ditandatangani?",
+        }[status];
+        if (!(await showConfirm(label))) return;
+        showLoading("Memperbarui...");
+        try {
+          try {
+            await api("PUT", `/delivery/${id}`, { status });
+          } catch (e1) {
+            try {
+              await api("PATCH", `/delivery/${id}`, { status });
+            } catch (e2) {
+              await api("POST", `/delivery/${id}/update-status`, { status });
+            }
+          }
+          hideLoading();
+          showToast("Status diperbarui ✓");
+          closeModal("mDetail");
+          load();
+        } catch (e) {
+          hideLoading();
+          showToast("Gagal update status: " + e.message, "error");
+        }
+      }
+
+      function cetakSJ(sj) {
+        const win = window.open("", "_blank", "width=700,height=600");
+        const items = (sj.items || [])
+          .map(
+            (i) =>
+              `<tr><td>${i.item?.name || "-"}</td><td style="text-align:center">${i.qty}</td></tr>`,
+          )
+          .join("");
+        win.document.write(`<html><head><title>SJ ${sj.number}</title><style>
+    body{font-family:Arial,sans-serif;padding:24px}table{width:100%;border-collapse:collapse;margin-top:16px}
+    th,td{border:1px solid #ddd;padding:10px}th{background:#f5f5f5}
+    .footer{margin-top:56px;display:flex;justify-content:space-between;text-align:center}
+  </style></head><body>
+  <h2 style="margin:0">SURAT JALAN</h2>
+  <p>No: <b>${sj.number}</b> &nbsp;|&nbsp; Tanggal: <b>${fmtDate(sj.date)}</b></p>
+  <p>Kepada: <b>${sj.recipient_name || "-"}</b><br>Alamat: ${sj.delivery_address || "-"}</p>
+  <p>Pengemudi: ${sj.driver_name || "-"} &nbsp;|&nbsp; No. Kend: ${sj.vehicle_no || "-"}</p>
+  <table><thead><tr><th>Barang</th><th>Qty</th></tr></thead><tbody>${items}</tbody></table>
+  ${sj.notes ? `<p>Catatan: ${sj.notes}</p>` : ""}
+  <div class="footer">
+    <div><div style="margin-bottom:56px">Pengirim</div><u>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</u></div>
+    <div><div style="margin-bottom:56px">Penerima</div><u>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</u></div>
+  </div></body></html>`);
+        win.document.close();
+        setTimeout(() => win.print(), 400);
+      }
+
+      async function hapus(id) {
+        if (!(await showConfirm("Hapus surat jalan ini?"))) return;
+        try {
+          showLoading();
+          await api("DELETE", `/delivery/${id}`);
+          hideLoading();
+          showToast("Dihapus");
+          closeModal("mDetail");
+          load();
+        } catch (e) {
+          hideLoading();
+          showToast(e.message, "error");
+        }
+      }
+
+      init();
+    </script>
+  </body>
+</html>

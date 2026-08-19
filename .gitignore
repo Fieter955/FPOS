@@ -1,0 +1,57 @@
+# ── Rahasia & environment ──────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+*.key
+secret.key
+instance/
+backend/drive_api_key.json
+
+# ── Database & backup (jangan commit data client) ───────────────────────────
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+backups/
+
+# ── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# ── Build artifacts (PyInstaller, dll) ──────────────────────────────────────
+build/
+dist/
+*.spec
+!Printer.spec
+!iPos5_Printer.spec
+!backend/FPOS.spec
+!backend/FPOS-Updater.spec
+!backend/Server_iPos.spec
+
+# ── Log & runtime ────────────────────────────────────────────────────────────
+error_log.txt
+*.log
+.autostart_configured
+
+# ── Frontend build (Node) ────────────────────────────────────────────────────
+node_modules/
+frontend-dist/
+build-manifest.json
+
+# ── Paket rilis lokal (GitHub Releases adalah sumber distribusi) ────────────────────
+rilis/generated/
+rilis/FPOS-*-Windows-*/
+rilis/*.zip
+rilis/*.zip.sha256.txt
+
+# ── Editor / OS ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

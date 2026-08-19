@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- PWA & Mobile App Behavior -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#1a1a1a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Laporan - FPOS</title>
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body>
+    <div class="app-container">
+      <main class="main-content">
+        <button
+          class="btn"
+          style="
+            background: transparent;
+            color: var(--text-muted);
+            padding: 0;
+            margin-bottom: 16px;
+          "
+          onclick="location.href = '/dashboard'"
+        >
+          ← Kembali
+        </button>
+        <div class="pg-header">
+          <div>
+            <h1>📈 Laporan Toko</h1>
+            <p>Ringkasan omzet, laba rugi, piutang, dan hutang.</p>
+          </div>
+        </div>
+
+        <!-- Tab -->
+        <div
+          style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap"
+        >
+          <button
+            id="tbDash"
+            onclick="switchTab('dash')"
+            class="tab-active"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--primary);
+              background: var(--primary);
+              color: #fff;
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            📊 Dashboard
+          </button>
+          <button
+            id="tbPL"
+            onclick="switchTab('pl')"
+            class="tab-off"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            💹 Laba Rugi
+          </button>
+          <button
+            id="tbAR"
+            onclick="switchTab('ar')"
+            class="tab-off"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            💰 Piutang
+          </button>
+          <button
+            id="tbAP"
+            onclick="switchTab('ap')"
+            class="tab-off"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            💸 Hutang
+          </button>
+          <button
+            id="tbTop"
+            onclick="switchTab('top')"
+            class="tab-off"
+            style="
+              padding: 8px 20px;
+              border-radius: 100px;
+              border: 2px solid var(--border-color);
+              background: transparent;
+              color: var(--text-muted);
+              font-weight: 700;
+              cursor: pointer;
+              font-family: inherit;
+            "
+          >
+            🏆 Terlaris
+          </button>
+        </div>
+
+        <!-- DASHBOARD -->
+        <div id="pnlDash">
+          <div
+            id="kpiGrid"
+            style="
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+              gap: 16px;
+              margin-bottom: 24px;
+            "
+          ></div>
+          <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px">
+            <div class="card" style="padding: 20px">
+              <h3 style="margin: 0 0 16px">Penjualan 6 Bulan Terakhir</h3>
+              <canvas id="chartSales" height="160"></canvas>
+            </div>
+            <div class="card" style="padding: 20px">
+              <h3 style="margin: 0 0 16px">🏆 Top Barang Bulan Ini</h3>
+              <div id="topItemsDiv"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- LABA RUGI -->
+        <div id="pnlPL" style="display: none">
+          <div class="filter-bar">
+            <input id="plStart" type="date" class="input-control" />
+            <input id="plEnd" type="date" class="input-control" />
+            <button class="btn btn-primary" onclick="loadPL()">
+              📊 Hitung
+            </button>
+            <button
+              class="btn"
+              style="
+                background: var(--bg-color);
+                border: 1px solid var(--border-color);
+                color: var(--text-main);
+              "
+              onclick="exportExcel()"
+            >
+              📥 Export Excel
+            </button>
+          </div>
+          <div id="plResult"></div>
+        </div>
+
+        <!-- PIUTANG -->
+        <div id="pnlAR" style="display: none">
+          <div id="arSummary" style="margin-bottom: 16px"></div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>No. Faktur</th>
+                  <th>Tanggal</th>
+                  <th>Pelanggan</th>
+                  <th>Total</th>
+                  <th>Dibayar</th>
+                  <th>Sisa Piutang</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="tblAR"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- HUTANG -->
+        <div id="pnlAP" style="display: none">
+          <div id="apSummary" style="margin-bottom: 16px"></div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>No. Faktur</th>
+                  <th>Tanggal</th>
+                  <th>Supplier</th>
+                  <th>Total</th>
+                  <th>Dibayar</th>
+                  <th>Sisa Hutang</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="tblAP"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TOP ITEMS -->
+        <div id="pnlTop" style="display: none">
+          <div class="filter-bar">
+            <input id="topStart" type="date" class="input-control" />
+            <input id="topEnd" type="date" class="input-control" />
+            <button class="btn btn-primary" onclick="loadTop()">
+              📊 Tampilkan
+            </button>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Nama Barang</th>
+                  <th>Total Qty Terjual</th>
+                  <th>Total Omzet</th>
+                </tr>
+              </thead>
+              <tbody id="tblTop"></tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/theme.js"></script>
+    <script src="/js/components.js"></script>
+    <script>
+      requireAuth();
+      let chartInst = null;
+      let latestLiquidBalances = { cash_balance: 0, bank_balance: 0 };
+      let canViewFinancialReports = false;
+
+      // Initialize Shared Payment Modals
+      const arModal = createPaymentModal({ type: 'ar', onSuccess: loadAR });
+      const apModal = createPaymentModal({ type: 'ap', onSuccess: loadAP });
+
+      const ON =
+        "padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit";
+      const OFF =
+        "padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit";
+      const tabs = ["Dash", "PL", "AR", "AP", "Top"];
+
+      function formatNum(n) {
+        return new Intl.NumberFormat("id-ID").format(n || 0);
+      }
+      function parseNum(s) {
+        return parseDesimal(s);
+      }
+
+      function switchTab(t) {
+        if (t === "pl" && !canViewFinancialReports) {
+          showToast("Laba rugi hanya bisa dibuka oleh admin", "error");
+          t = "dash";
+        }
+        tabs.forEach((x) => {
+          document.getElementById("pnl" + x).style.display =
+            x.toLowerCase() === t ? "block" : "none";
+          document.getElementById("tb" + x).style.cssText =
+            x.toLowerCase() === t ? ON : OFF;
+        });
+        if (t === "dash") loadDash();
+        if (t === "ar") loadAR();
+        if (t === "ap") loadAP();
+      }
+
+      function applyRoleVisibility() {
+        if (!canViewFinancialReports) {
+          document.getElementById("tbPL").style.display = "none";
+          document.getElementById("pnlPL").style.display = "none";
+        }
+      }
+
+      // Chart.js di-host lokal & di-load saat dibutuhkan (lepas dari CDN, aman untuk Tailscale/offline)
+      function loadChartJs() {
+        if (window.Chart) return Promise.resolve();
+        if (window._chartJsPromise) return window._chartJsPromise;
+        window._chartJsPromise = new Promise((resolve, reject) => {
+          const s = document.createElement("script");
+          s.src = "/js/vendor/chart.umd.min.js";
+          s.onload = resolve;
+          s.onerror = reject;
+          document.head.appendChild(s);
+        });
+        return window._chartJsPromise;
+      }
+
+      async function loadDash() {
+        try {
+          const d = await api("GET", "/reports/dashboard");
+          document.getElementById("kpiGrid").innerHTML = `
+      <div class="card" style="padding:20px"><div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">Penjualan Hari Ini</div><div style="font-size:26px;font-weight:900;color:var(--primary)">${fmtRp(d.total_sales_today || 0)}</div></div>
+      <div class="card" style="padding:20px"><div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">Pembelian Hari Ini</div><div style="font-size:26px;font-weight:900">${fmtRp(d.total_purchases_today || 0)}</div></div>
+      <div class="card" style="padding:20px"><div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">Jumlah Transaksi</div><div style="font-size:26px;font-weight:900">${d.total_transactions_today || 0}</div></div>
+      <div class="card" style="padding:20px"><div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">Stok Menipis</div><div style="font-size:26px;font-weight:900;color:#ef4444">${d.low_stock_count || 0} item</div></div>`;
+
+          await loadChartJs();
+          if (chartInst) chartInst.destroy();
+          const isDark = document.body.classList.contains("dark-mode");
+          chartInst = new Chart(document.getElementById("chartSales"), {
+            type: "bar",
+            data: {
+              labels: d.monthly_sales.map((x) => x.month),
+              datasets: [
+                {
+                  label: "Penjualan",
+                  data: d.monthly_sales.map((x) => x.amount),
+                  backgroundColor: "rgba(249,115,22,.25)",
+                  borderColor: "#f97316",
+                  borderWidth: 2,
+                  borderRadius: 6,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              plugins: { legend: { display: false } },
+              scales: {
+                x: {
+                  grid: { color: isDark ? "#334155" : "#f1f5f9" },
+                  ticks: {
+                    color: isDark ? "#94a3b8" : "#64748b",
+                    font: { size: 11 },
+                  },
+                },
+                y: {
+                  grid: { color: isDark ? "#334155" : "#f1f5f9" },
+                  ticks: {
+                    color: isDark ? "#94a3b8" : "#64748b",
+                    font: { size: 11 },
+                    callback: (v) =>
+                      v >= 1000000
+                        ? "Rp " + (v / 1000000).toFixed(0) + "jt"
+                        : "Rp " + (v / 1000).toFixed(0) + "rb",
+                  },
+                },
+              },
+            },
+          });
+
+          const max = Math.max(...(d.top_items || []).map((x) => x.qty), 1);
+          document.getElementById("topItemsDiv").innerHTML = (d.top_items || [])
+            .length
+            ? d.top_items
+                .map(
+                  (x) =>
+                    `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:4px"><span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px">${x.name}</span><span style="color:var(--text-muted);flex-shrink:0;margin-left:8px">${x.qty} pcs</span></div><div style="height:8px;background:var(--border-color);border-radius:99px;overflow:hidden"><div style="height:100%;background:var(--primary);border-radius:99px;width:${((x.qty / max) * 100).toFixed(0)}%"></div></div></div>`,
+                )
+                .join("")
+            : '<p style="color:var(--text-muted)">Belum ada data</p>';
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function loadPL() {
+        const s = document.getElementById("plStart").value,
+          e = document.getElementById("plEnd").value;
+        if (!s || !e) {
+          showToast("Pilih rentang tanggal dulu", "error");
+          return;
+        }
+        try {
+          showLoading("Menghitung...");
+          const d = await api(
+            "GET",
+            `/reports/profit-loss?start_date=${s}&end_date=${e}`,
+          );
+          hideLoading();
+          const profit = d.gross_profit || 0,
+            isPos = profit >= 0;
+          document.getElementById("plResult").innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px">
+        <div class="card" style="padding:20px"><div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">Total Penjualan</div><div style="font-size:1.5rem;font-weight:900;color:#10b981;overflow-wrap:anywhere">${fmtRp(d.total_sales || 0)}</div></div>
+        <div class="card" style="padding:20px"><div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">Total HPP / Modal</div><div style="font-size:1.5rem;font-weight:900;color:#ef4444;overflow-wrap:anywhere">${fmtRp(d.total_cogs || 0)}</div></div>
+        <div class="card" style="padding:20px"><div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">Total Pembelian</div><div style="font-size:1.5rem;font-weight:900;overflow-wrap:anywhere">${fmtRp(d.total_purchases || 0)}</div></div>
+        <div class="card" style="padding:20px;border:2px solid ${isPos ? "#10b981" : "#ef4444"}">
+          <div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">Laba Kotor</div>
+          <div style="font-size:clamp(1.375rem,7vw,2rem);font-weight:900;color:${isPos ? "#10b981" : "#ef4444"};overflow-wrap:anywhere">${fmtRp(profit)}</div>
+          <div style="font-size:13px;margin-top:4px;color:${isPos ? "#10b981" : "#ef4444"}">${isPos ? "📈 Untung" : "📉 Rugi"}</div>
+        </div>
+      </div>`;
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function exportExcel() {
+        const s = document.getElementById("plStart").value,
+          e = document.getElementById("plEnd").value;
+        if (!s || !e) {
+          showToast("Pilih rentang tanggal dulu", "error");
+          return;
+        }
+        try {
+          showLoading("Membuat file...");
+          const resp = await fetch(
+            `/api/reports/export/full-report?start_date=${s}&end_date=${e}`,
+            { headers: { Authorization: `Bearer ${getToken()}` } },
+          );
+          if (!resp.ok) throw new Error("Gagal export");
+          const blob = await resp.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `laporan_${s}_${e}.xlsx`;
+          a.click();
+          URL.revokeObjectURL(url);
+          hideLoading();
+          showToast("File Excel berhasil didownload ✓");
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function loadAR() {
+        try {
+          const [unpaid, partial] = await Promise.all([
+            api("GET", "/sales/?status=unpaid&limit=300"),
+            api("GET", "/sales/?status=partial&limit=300"),
+          ]);
+          const all = [...unpaid, ...partial];
+          const total = all.reduce((a, x) => a + (x.total - x.paid), 0);
+          document.getElementById("arSummary").innerHTML =
+            `<div class="card" style="padding:16px;border:2px solid #ef4444"><b style="color:#ef4444;font-size:20px">Total Piutang: ${fmtRp(total)}</b> <span style="color:var(--text-muted)">(${all.length} faktur belum lunas)</span></div>`;
+          document.getElementById("tblAR").innerHTML = all.length
+            ? all
+                .map(
+                  (p) => `<tr>
+      <td style="font-family:monospace;font-size:13px;color:var(--primary)">${p.number}</td>
+      <td style="font-size:13px">${fmtDate(p.date)}</td>
+      <td><b>${p.customer?.name || "Umum"}</b></td>
+      <td>${fmtRp(p.total)}</td>
+      <td style="color:#10b981;font-weight:600">${fmtRp(p.paid)}</td>
+      <td style="color:#ef4444;font-weight:800;font-size:16px">${fmtRp(p.total - p.paid)}</td>
+      <td><button class="bsm bp" onclick="arModal.open({id:${p.id}, total:${p.total}, paid:${p.paid}, name:'${p.customer?.name || "Umum"}'})">Bayar</button></td>
+    </tr>`,
+                )
+                .join("")
+            : '<tr><td colspan="7" style="text-align:center;padding:24px;color:#10b981;font-weight:700">✓ Tidak ada piutang</td></tr>';
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function loadAP() {
+        try {
+          const [unpaid, partial] = await Promise.all([
+            api("GET", "/purchases/?status=unpaid&limit=300"),
+            api("GET", "/purchases/?status=partial&limit=300"),
+          ]);
+          const all = [...unpaid, ...partial];
+          const total = all.reduce((a, x) => a + (x.total - x.paid), 0);
+          document.getElementById("apSummary").innerHTML =
+            `<div class="card" style="padding:16px;border:2px solid #ef4444"><b style="color:#ef4444;font-size:20px">Total Hutang: ${fmtRp(total)}</b> <span style="color:var(--text-muted)">(${all.length} faktur belum lunas)</span></div>`;
+          document.getElementById("tblAP").innerHTML = all.length
+            ? all
+                .map(
+                  (p) => `<tr>
+      <td style="font-family:monospace;font-size:13px;color:var(--primary)">${p.number}</td>
+      <td style="font-size:13px">${fmtDate(p.date)}</td>
+      <td><b>${p.supplier?.name || "-"}</b></td>
+      <td>${fmtRp(p.total)}</td>
+      <td style="color:#10b981;font-weight:600">${fmtRp(p.paid)}</td>
+      <td style="color:#ef4444;font-weight:800;font-size:16px">${fmtRp(p.total - p.paid)}</td>
+      <td><button class="bsm bp" onclick="apModal.open({id:${p.id}, total:${p.total}, paid:${p.paid}, name:'${p.supplier?.name || "-"}'})">Bayar</button></td>
+    </tr>`,
+                )
+                .join("")
+            : '<tr><td colspan="7" style="text-align:center;padding:24px;color:#10b981;font-weight:700">✓ Tidak ada hutang</td></tr>';
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function loadTop() {
+        const s = document.getElementById("topStart").value,
+          e = document.getElementById("topEnd").value;
+        if (!s || !e) {
+          showToast("Pilih rentang tanggal", "error");
+          return;
+        }
+        try {
+          const d = await api(
+            "GET",
+            `/reports/top-items?start_date=${s}&end_date=${e}&limit=20`,
+          );
+          document.getElementById("tblTop").innerHTML = d.length
+            ? d
+                .map(
+                  (x, i) => `<tr>
+      <td style="font-size:18px;font-weight:900;color:${i < 3 ? "var(--primary)" : "var(--text-muted)"}">${i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}</td>
+      <td><b>${x.name}</b></td>
+      <td style="font-size:18px;font-weight:800">${x.qty} pcs</td>
+      <td style="font-size:18px;font-weight:800;color:var(--primary)">${fmtRp(x.revenue || 0)}</td>
+    </tr>`,
+                )
+                .join("")
+            : '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted)">Tidak ada data</td></tr>';
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      function today() { return new Date().toISOString().split('T')[0]; }
+      function fmtRp(n) { return "Rp " + Math.round(n).toLocaleString("id-ID"); }
+      function fmtDate(d) { if (!d) return "-"; return new Date(d + "T00:00:00").toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" }); }
+
+      // Init
+      const m = new Date();
+      const y = m.getFullYear(),
+        mo = String(m.getMonth() + 1).padStart(2, "0");
+      document.getElementById("plStart").value = `${y}-${mo}-01`;
+      document.getElementById("plEnd").value = today();
+      document.getElementById("topStart").value = `${y}-${mo}-01`;
+      document.getElementById("topEnd").value = today();
+      async function initReportPermissions() {
+        const permissionState = await loadMyPermissions();
+        canViewFinancialReports = hasPermission(
+          "report.financial",
+          "view",
+          permissionState,
+        );
+        applyRoleVisibility();
+        loadDash();
+      }
+      initReportPermissions().catch((error) =>
+        showToast(error.message, "error"),
+      );
+    </script>
+  </body>
+</html>

@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Tukar Tambah - iPos 5.0</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/components.css" />
+  </head>
+  <body>
+    <div class="app-container">
+      <main class="main-content">
+        <button
+          class="btn"
+          style="
+            background: transparent;
+            color: var(--text-muted);
+            padding: 0;
+            margin-bottom: 16px;
+          "
+          onclick="location.href = '/dashboard'"
+        >
+          ← Kembali
+        </button>
+        <div class="pg-header">
+          <div>
+            <h1>🔄 Tukar Tambah</h1>
+            <p>
+              Pelanggan kembalikan barang lama, beli barang baru — hitung
+              selisih otomatis.
+            </p>
+          </div>
+          <button class="btn btn-primary" onclick="openModal('mBuat')">
+            ➕ Transaksi Baru
+          </button>
+        </div>
+
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>No. Transaksi</th>
+                <th>Tanggal</th>
+                <th>Pelanggan</th>
+                <th>Nilai Kembali</th>
+                <th>Nilai Beli Baru</th>
+                <th>Selisih</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="tblBody"></tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+
+    <!-- Modal: Buat Tukar Tambah -->
+    <div class="modal-overlay" id="mBuat">
+      <div class="modal-box wide" style="max-width: 80vw; width: 80vw">
+        <div class="modal-hdr">
+          <h2>🔄 Buat Transaksi Tukar Tambah</h2>
+          <button class="btn-x" onclick="closeModal('mBuat')">×</button>
+        </div>
+        <div class="row2" style="margin-bottom: 16px">
+          <div class="input-group">
+            <label>Tanggal *</label
+            ><input id="ttDate" type="date" class="input-control" />
+          </div>
+          <div class="input-group">
+            <label>Pelanggan *</label>
+            <div id="custComboContainer"></div>
+          </div>
+        </div>
+
+        <!-- Barang Kembali -->
+        <div
+          style="
+            background: rgba(239, 68, 68, 0.06);
+            border: 1px solid rgba(239, 68, 68, 0.25);
+            border-radius: 14px;
+            padding: 16px;
+            margin-bottom: 14px;
+          "
+        >
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 12px;
+            "
+          >
+            <div style="font-size: 16px; font-weight: 800; color: #ef4444">
+              📤 Barang Dikembalikan (dari pelanggan)
+            </div>
+            <button
+              onclick="addReturnRow()"
+              class="btn"
+              style="
+                padding: 8px 14px;
+                background: rgba(239, 68, 68, 0.15);
+                color: #ef4444;
+                border: none;
+                border-radius: 10px;
+                font-weight: 700;
+                font-size: 13px;
+              "
+            >
+              + Tambah
+            </button>
+          </div>
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 3fr 1fr 2fr 1fr 36px;
+              gap: 8px;
+              margin-bottom: 6px;
+              font-size: 12px;
+              font-weight: 600;
+              color: var(--text-muted);
+            "
+          >
+            <span>Barang</span><span>Qty</span><span>Harga Kembali</span
+            ><span>Kondisi</span><span></span>
+          </div>
+          <div id="returnRows"></div>
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              font-size: 16px;
+              font-weight: 800;
+              margin-top: 12px;
+              padding-top: 10px;
+              border-top: 1px solid rgba(239, 68, 68, 0.2);
+            "
+          >
+            <span>Total Nilai Kembali</span>
+            <span id="returnTotal" style="color: #ef4444">Rp 0</span>
+          </div>
+        </div>
+
+        <!-- Barang Baru -->
+        <div
+          style="
+            background: rgba(16, 185, 129, 0.06);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            border-radius: 14px;
+            padding: 16px;
+            margin-bottom: 14px;
+          "
+        >
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 12px;
+            "
+          >
+            <div style="font-size: 16px; font-weight: 800; color: #10b981">
+              📥 Barang Baru (dibeli pelanggan)
+            </div>
+            <button
+              onclick="addNewRow()"
+              class="btn"
+              style="
+                padding: 8px 14px;
+                background: rgba(16, 185, 129, 0.15);
+                color: #10b981;
+                border: none;
+                border-radius: 10px;
+                font-weight: 700;
+                font-size: 13px;
+              "
+            >
+              + Tambah
+            </button>
+          </div>
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 3fr 1fr 2fr 36px;
+              gap: 8px;
+              margin-bottom: 6px;
+              font-size: 12px;
+              font-weight: 600;
+              color: var(--text-muted);
+            "
+          >
+            <span>Barang</span><span>Qty</span><span>Harga Jual</span
+            ><span></span>
+          </div>
+          <div id="newRows"></div>
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              font-size: 16px;
+              font-weight: 800;
+              margin-top: 12px;
+              padding-top: 10px;
+              border-top: 1px solid rgba(16, 185, 129, 0.2);
+            "
+          >
+            <span>Total Nilai Baru</span>
+            <span id="newTotal" style="color: #10b981">Rp 0</span>
+          </div>
+        </div>
+
+        <!-- Selisih & Pembayaran -->
+        <div
+          style="
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 16px;
+          "
+        >
+          <div
+            style="
+              background: var(--primary-light);
+              border: 2px solid var(--primary);
+              border-radius: 14px;
+              padding: 16px;
+              text-align: center;
+            "
+            id="selisihBox"
+          >
+            <div
+              style="
+                font-size: 12px;
+                color: var(--text-muted);
+                margin-bottom: 4px;
+              "
+            >
+              TOTAL SELISIH
+            </div>
+            <div
+              id="selisihVal"
+              style="font-size: clamp(1.375rem, 8vw, 2rem); font-weight: 900; color: var(--primary); overflow-wrap: anywhere"
+            >
+              Rp 0
+            </div>
+            <div
+              id="selisihLabel"
+              style="font-size: 13px; margin-top: 4px; font-weight: 700"
+            ></div>
+          </div>
+
+          <div
+            id="paymentArea"
+            style="
+              background: var(--card-bg);
+              border: 1px solid var(--border-color);
+              border-radius: 14px;
+              padding: 16px;
+            "
+          >
+            <div id="payExtra" style="display: none">
+              <div
+                style="font-weight: 700; margin-bottom: 8px; font-size: 14px"
+              >
+                Metode Pembayaran (Pelanggan Bayar)
+              </div>
+              <div
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px"
+              >
+                <div class="input-group">
+                  <label>Tunai (Kas)</label
+                  ><input
+                    type="text"
+                    inputmode="decimal"
+                    data-input-desimal
+                    data-min="0"
+                    id="payCash"
+                    class="input-control"
+                    placeholder="0"
+                    oninput="formatAndRecalc(this)"
+                  />
+                </div>
+                <div class="input-group">
+                  <label>Bank (Transfer)</label
+                  ><input
+                    type="text"
+                    inputmode="decimal"
+                    data-input-desimal
+                    data-min="0"
+                    id="payBank"
+                    class="input-control"
+                    placeholder="0"
+                    oninput="formatAndRecalc(this)"
+                  />
+                </div>
+              </div>
+              <div
+                id="payStatus"
+                style="
+                  font-size: 12px;
+                  font-weight: 700;
+                  margin-top: 4px;
+                  text-align: right;
+                "
+              ></div>
+            </div>
+            <div
+              id="payRefund"
+              style="
+                display: none;
+                height: 100%;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                text-align: center;
+              "
+            >
+              <div style="font-size: 24px; margin-bottom: 4px">📥</div>
+              <div style="font-weight: 800; color: var(--primary)">
+                Refund ke Saldo Pelanggan
+              </div>
+              <p style="font-size: 12px; color: var(--text-muted)">
+                Uang akan otomatis ditambahkan ke saldo deposit pelanggan.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label>Catatan</label
+          ><textarea
+            id="ttNote"
+            class="input-control"
+            rows="2"
+            placeholder="Keterangan transaksi tukar tambah..."
+          ></textarea>
+        </div>
+        <div
+          style="
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 8px;
+          "
+        >
+          <button
+            onclick="closeModal('mBuat')"
+            class="btn"
+            style="
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              color: var(--text-main);
+            "
+          >
+            Batal
+          </button>
+          <button id="btnSimpan" onclick="simpan()" class="btn btn-primary">
+            ✓ Proses Tukar Tambah
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Detail -->
+    <div class="modal-overlay" id="mDetail">
+      <div class="modal-box wide" style="max-width: 80vw; width: 80vw">
+        <div class="modal-hdr">
+          <h2 id="mDetailTitle">Detail Tukar Tambah</h2>
+          <button class="btn-x" onclick="closeModal('mDetail')">×</button>
+        </div>
+        <div id="mDetailBody"></div>
+      </div>
+    </div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/theme.js"></script>
+    <script src="/js/components.js"></script>
+    <script>
+      requireAuth();
+      let allItems = [],
+        allCusts = [],
+        retIdx = 0,
+        newIdx = 0,
+        custCombo = null;
+
+      async function init() {
+        [allItems, allCusts] = await Promise.all([
+          api("GET", "/items/?limit=2000"),
+          api("GET", "/customers/?limit=2000"),
+        ]);
+        subscribeItemMasterChanges(refreshTradeInItems);
+
+        custCombo = createPremiumCombo("custComboContainer", allCusts, {
+          placeholder: "Pilih Pelanggan (Wajib)...",
+          onSelect: (sel) => {
+            recalc();
+          },
+        });
+
+        load();
+      }
+
+      async function refreshTradeInItems() {
+        try {
+          allItems = await api("GET", "/items/?limit=2000");
+          document
+            .querySelectorAll("#returnRows select, #newRows select")
+            .forEach((select) => {
+              const selected = select.value;
+              select.innerHTML = makeItemOpts(selected);
+            });
+        } catch (error) {
+          console.error("Gagal menyegarkan barang tukar tambah", error);
+        }
+      }
+
+      async function load() {
+        try {
+          const d = await api("GET", "/trade-in/?limit=100");
+          document.getElementById("tblBody").innerHTML = d.length
+            ? d
+                .map((t) => {
+                  const diff = t.new_subtotal - t.return_subtotal;
+                  return `<tr>
+          <td style="font-family:monospace;font-size:13px;font-weight:700;color:var(--primary)">${t.number}</td>
+          <td style="font-size:13px">${fmtDate(t.date)}</td>
+          <td>${t.customer || "Umum"}</td>
+          <td style="color:#ef4444;font-weight:700">${fmtRp(t.return_subtotal)}</td>
+          <td style="color:#10b981;font-weight:700">${fmtRp(t.new_subtotal)}</td>
+          <td><span style="font-size:16px;font-weight:900;color:${diff >= 0 ? "var(--primary)" : "#3b82f6"}">${diff >= 0 ? "+" : ""} ${fmtRp(Math.abs(diff))}</span>
+            <div style="font-size:12px;color:var(--text-muted)">${diff > 0 ? "Pelanggan bayar" : diff < 0 ? "Masuk Saldo" : "Impas"}</div>
+          </td>
+          <td style="white-space:nowrap">
+            <button class="bsm bv" onclick="showDetail(${t.id})">Detail</button>
+            <button class="bsm bv" style="background:white" onclick="printReceipt(${t.id})">Cetak</button>
+          </td></tr>`;
+                })
+                .join("")
+            : '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada transaksi tukar tambah</td></tr>';
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      function makeItemOpts(defId = "") {
+        return (
+          `<option value="">-- Pilih Barang --</option>` +
+          allItems
+            .map(
+              (i) =>
+                `<option value="${i.id}" data-buy="${i.buy_price}" data-sell="${i.sell_price}" ${i.id == defId ? "selected" : ""}>${i.name}</option>`,
+            )
+            .join("")
+        );
+      }
+
+      function addReturnRow() {
+        const idx = retIdx++;
+        document.getElementById("returnRows").insertAdjacentHTML(
+          "beforeend",
+          `
+      <div style="display:grid;grid-template-columns:3fr 1fr 2fr 1fr 36px;gap:8px;margin-bottom:8px;align-items:center" id="rrow${idx}">
+        <select class="input-control" style="margin:0;padding:10px 12px;font-size:14px" onchange="fillReturnPrice(${idx},this);recalc()">${makeItemOpts()}</select>
+        <input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" value="1" class="input-control" style="margin:0;padding:10px;text-align:center;font-weight:700" oninput="recalc()">
+        <input type="text" inputmode="decimal" data-input-desimal data-min="0" value="0" class="input-control rp" style="margin:0;padding:10px;font-size:14px" oninput="recalc()">
+        <select class="input-control condition-sel" style="margin:0;padding:10px;font-size:12px">
+          <option value="good">Bagus</option>
+          <option value="damaged">Rusak (Broken)</option>
+          <option value="partial">Parsial</option>
+        </select>
+        <button onclick="document.getElementById('rrow${idx}').remove();recalc()" style="width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,.15);color:#ef4444;border:none;cursor:pointer;font-size:16px;font-weight:700">✕</button>
+      </div>`,
+        );
+      }
+      function fillReturnPrice(idx, sel) {
+        const opt = sel.options[sel.selectedIndex];
+        document.querySelector(`#rrow${idx} .rp`).value =
+          opt?.dataset?.sell || 0;
+        recalc();
+      }
+
+      function addNewRow() {
+        const idx = newIdx++;
+        document.getElementById("newRows").insertAdjacentHTML(
+          "beforeend",
+          `
+      <div style="display:grid;grid-template-columns:3fr 1fr 2fr 36px;gap:8px;margin-bottom:8px;align-items:center" id="nrow${idx}">
+        <select class="input-control" style="margin:0;padding:10px 12px;font-size:14px" onchange="fillNewPrice(${idx},this);recalc()">${makeItemOpts()}</select>
+        <input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" value="1" class="input-control" style="margin:0;padding:10px;text-align:center;font-weight:700" oninput="recalc()">
+        <input type="text" inputmode="decimal" data-input-desimal data-min="0" value="0" class="input-control np" style="margin:0;padding:10px;font-size:14px" oninput="recalc()">
+        <button onclick="document.getElementById('nrow${idx}').remove();recalc()" style="width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,.15);color:#ef4444;border:none;cursor:pointer;font-size:16px;font-weight:700">✕</button>
+      </div>`,
+        );
+      }
+      function fillNewPrice(idx, sel) {
+        const opt = sel.options[sel.selectedIndex];
+        document.querySelector(`#nrow${idx} .np`).value =
+          opt?.dataset?.sell || 0;
+        recalc();
+      }
+
+      function sumRows(containerId) {
+        let total = 0;
+        document.querySelectorAll(`#${containerId} > div`).forEach((row) => {
+          const inputs = row.querySelectorAll("input[data-input-desimal]");
+          total +=
+            parseDesimal(inputs[0]) * parseDesimal(inputs[1]);
+        });
+        return total;
+      }
+
+      function toAngka(s) {
+        return parseDesimal(s);
+      }
+      function toRibuan(n) {
+        return toDesimal(n);
+      }
+
+      function formatAndRecalc(inp) {
+        formatDesimal(inp);
+        recalc();
+      }
+
+      function recalc() {
+        const ret = sumRows("returnRows"),
+          nw = sumRows("newRows");
+        document.getElementById("returnTotal").textContent = fmtRp(ret);
+        document.getElementById("newTotal").textContent = fmtRp(nw);
+
+        const diff = nw - ret;
+        document.getElementById("selisihVal").textContent =
+          (diff >= 0 ? "+" : "") + fmtRp(Math.abs(diff));
+        document.getElementById("selisihLabel").textContent =
+          diff > 0
+            ? "💰 Pelanggan perlu tambah bayar"
+            : diff < 0
+              ? "💵 Refund ke Saldo Pelanggan"
+              : "✓ Impas";
+        document.getElementById("selisihVal").style.color =
+          diff >= 0 ? "var(--primary)" : "#3b82f6";
+
+        const payExtra = document.getElementById("payExtra");
+        const payRefund = document.getElementById("payRefund");
+        const payCash = document.getElementById("payCash");
+        const payBank = document.getElementById("payBank");
+        const btnSimpan = document.getElementById("btnSimpan");
+        const payStatus = document.getElementById("payStatus");
+
+        if (diff > 0) {
+          payExtra.style.display = "block";
+          payRefund.style.display = "none";
+
+          const c = toAngka(payCash.value),
+            b = toAngka(payBank.value);
+          const totalPay = c + b;
+          const sisa = diff - totalPay;
+
+          if (sisa > 0) {
+            payStatus.textContent = `Kurang: ${fmtRp(sisa)}`;
+            payStatus.style.color = "#ef4444";
+            btnSimpan.disabled = true;
+            btnSimpan.style.opacity = "0.5";
+          } else if (sisa < 0) {
+            payStatus.textContent = `Lebih: ${fmtRp(Math.abs(sisa))}`;
+            payStatus.style.color = "var(--primary)";
+            btnSimpan.disabled = false;
+            btnSimpan.style.opacity = "1";
+          } else {
+            payStatus.textContent = "✓ Pas";
+            payStatus.style.color = "#10b981";
+            btnSimpan.disabled = false;
+            btnSimpan.style.opacity = "1";
+          }
+        } else if (diff < 0) {
+          payExtra.style.display = "none";
+          payRefund.style.display = "flex";
+          btnSimpan.disabled = false;
+          btnSimpan.style.opacity = "1";
+        } else {
+          payExtra.style.display = "none";
+          payRefund.style.display = "none";
+          btnSimpan.disabled = false;
+          btnSimpan.style.opacity = "1";
+        }
+      }
+
+      const _origOM = openModal;
+      window.openModal = function (id) {
+        if (id === "mBuat") {
+          document.getElementById("ttDate").value = today();
+          if (custCombo) custCombo.clear();
+          document.getElementById("ttNote").value = "";
+          document.getElementById("returnRows").innerHTML = "";
+          retIdx = 0;
+          document.getElementById("newRows").innerHTML = "";
+          newIdx = 0;
+          document.getElementById("payCash").value = "0,00";
+          document.getElementById("payBank").value = "0,00";
+          addReturnRow();
+          addNewRow();
+          recalc();
+        }
+        _origOM(id);
+      };
+
+      async function simpan() {
+        const custId = custCombo?.val();
+        if (!custId) {
+          showToast("Pilih pelanggan dulu", "warning");
+          return;
+        }
+
+        const returnItems = [],
+          newItems = [];
+        document.querySelectorAll("#returnRows > div").forEach((row) => {
+          const sel = row.querySelector("select");
+          const inps = row.querySelectorAll("input[data-input-desimal]");
+          const cond = row.querySelector(".condition-sel").value;
+          if (sel.value)
+            returnItems.push({
+              item_id: parseInt(sel.value),
+              qty: parseDesimal(inps[0]) || 1,
+              return_price: parseDesimal(inps[1]),
+              condition: cond,
+            });
+        });
+        document.querySelectorAll("#newRows > div").forEach((row) => {
+          const sel = row.querySelector("select");
+          const inps = row.querySelectorAll("input[data-input-desimal]");
+          if (sel.value)
+            newItems.push({
+              item_id: parseInt(sel.value),
+              qty: parseDesimal(inps[0]) || 1,
+              sell_price: parseDesimal(inps[1]),
+            });
+        });
+
+        if (returnItems.length === 0) {
+          showToast("Barang lama wajib diisi minimal 1", "warning");
+          return;
+        }
+        if (newItems.length === 0) {
+          showToast("Barang baru wajib diisi minimal 1", "warning");
+          return;
+        }
+
+        try {
+          showLoading("Memproses...");
+          await api("POST", "/trade-in/", {
+            date: document.getElementById("ttDate").value,
+            customer_id: parseInt(custId),
+            notes: document.getElementById("ttNote").value || null,
+            cash_amount: toAngka(document.getElementById("payCash").value),
+            bank_amount: toAngka(document.getElementById("payBank").value),
+            return_items: returnItems,
+            new_items: newItems,
+          });
+          hideLoading();
+          showToast("Tukar tambah berhasil ✓");
+          closeModal("mBuat");
+          load();
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function showDetail(id) {
+        try {
+          const t = await api("GET", `/trade-in/${id}`);
+          const diff = t.new_subtotal - t.return_subtotal;
+          document.getElementById("mDetailTitle").textContent =
+            `Tukar Tambah ${t.number}`;
+          document.getElementById("mDetailBody").innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+          <div><div style="font-size:13px;color:var(--text-muted)">Tanggal</div><div style="font-weight:700">${fmtDate(t.date)}</div></div>
+          <div><div style="font-size:13px;color:var(--text-muted)">Pelanggan</div><div style="font-weight:700">${t.customer?.name || "Umum"}</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
+          <div style="background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:12px;padding:14px">
+            <div style="font-size:14px;font-weight:800;color:#ef4444;margin-bottom:10px">📤 Barang Dikembalikan</div>
+            ${(t.return_items || [])
+              .map(
+                (
+                  i,
+                ) => `<div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px">
+              <span>${i.item_name || "-"} ×${i.qty} <small>(${i.condition})</small></span>
+              <span style="font-weight:700">${fmtRp(i.return_price * i.qty)}</span>
+            </div>`,
+              )
+              .join("")}
+            <div style="font-weight:800;color:#ef4444;border-top:1px solid rgba(239,68,68,.2);padding-top:8px;margin-top:6px;display:flex;justify-content:space-between"><span>Total</span><span>${fmtRp(t.return_subtotal)}</span></div>
+          </div>
+          <div style="background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.2);border-radius:12px;padding:14px">
+            <div style="font-size:14px;font-weight:800;color:#10b981;margin-bottom:10px">📥 Barang Baru Dibeli</div>
+            ${(t.new_items || [])
+              .map(
+                (
+                  i,
+                ) => `<div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px">
+              <span>${i.item_name || "-"} ×${i.qty}</span>
+              <span style="font-weight:700">${fmtRp(i.sell_price * i.qty)}</span>
+            </div>`,
+              )
+              .join("")}
+            <div style="font-weight:800;color:#10b981;border-top:1px solid rgba(16,185,129,.2);padding-top:8px;margin-top:6px;display:flex;justify-content:space-between"><span>Total</span><span>${fmtRp(t.new_subtotal)}</span></div>
+          </div>
+        </div>
+        <div style="background:var(--primary-light);border:2px solid var(--primary);border-radius:12px;padding:16px;text-align:center;margin-bottom:16px">
+          <div style="font-size:13px;color:var(--text-muted)">SELISIH</div>
+          <div style="font-size:28px;font-weight:900;color:var(--primary)">${diff >= 0 ? "+" : ""}${fmtRp(Math.abs(diff))}</div>
+          <div style="font-size:14px;font-weight:700;margin-top:4px">${diff > 0 ? "💰 Pelanggan bayar selisih" : diff < 0 ? "💵 Refund ke Saldo Pelanggan" : "✓ Impas"}</div>
+        </div>
+        ${t.notes ? `<div style="color:var(--text-muted);font-size:14px">Catatan: ${t.notes}</div>` : ""}
+        <div style="margin-top:16px; display: flex; gap: 8px;">
+          <button onclick="printReceipt(${t.id})" class="btn" style="background:#3b82f6; color:white">🖨 Cetak Struk</button>
+        </div>`;
+          openModal("mDetail");
+        } catch (ex) {
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function hapus(id) {
+        if (
+          !(await showConfirm(
+            "Hapus transaksi tukar tambah ini? Semua stok akan dikembalikan.",
+          ))
+        )
+          return;
+        try {
+          showLoading();
+          await api("DELETE", `/trade-in/${id}`);
+          hideLoading();
+          showToast("Dihapus");
+          closeModal("mDetail");
+          load();
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function printReceipt(tradeId) {
+        try {
+          const ps = JSON.parse(
+            localStorage.getItem("ipos_print_settings") || "{}",
+          );
+          await api("POST", `/trade-in/print/${tradeId}`, { settings: ps });
+          showToast("Struk dikirim ke antrean printer!");
+        } catch (e) {
+          showToast("Gagal print: " + e.message, "error");
+        }
+      }
+
+      init();
+    </script>
+  </body>
+</html>

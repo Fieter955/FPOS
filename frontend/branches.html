@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Manajemen Cabang - FPOS</title>
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body>
+    <div class="app-container">
+      <main class="main-content">
+        <button
+          class="btn"
+          style="
+            background: transparent;
+            color: var(--text-muted);
+            padding: 0;
+            margin-bottom: 16px;
+          "
+          onclick="location.href = '/dashboard'"
+        >
+          ← Kembali
+        </button>
+        <div class="pg-header">
+          <div>
+            <h1>🏢 Manajemen Cabang</h1>
+            <p>Kelola daftar cabang toko dan status operasional.</p>
+          </div>
+          <button class="btn btn-primary" onclick="openModalTambah()">
+            ➕ Tambah Cabang
+          </button>
+        </div>
+        <div class="filter-bar">
+          <input
+            id="fSearch"
+            type="text"
+            class="input-control"
+            placeholder="Cari kode atau nama cabang..."
+            oninput="load()"
+          />
+          <select id="fStatus" class="input-control" onchange="load()">
+            <option value="">Semua Status</option>
+            <option value="true">Aktif</option>
+            <option value="false">Nonaktif</option>
+          </select>
+        </div>
+
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Kode</th>
+                <th>Nama Cabang</th>
+                <th>Telepon</th>
+                <th>Alamat</th>
+                <th>Status</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="tblBody"></tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+
+    <div class="modal-overlay" id="mCabang">
+      <div class="modal-box">
+        <div class="modal-hdr">
+          <h2 id="modalTitle">Tambah Cabang</h2>
+          <button class="btn-x" onclick="closeModal('mCabang')">×</button>
+        </div>
+        <input type="hidden" id="cId" />
+
+        <div class="input-group">
+          <label>Nama Cabang *</label>
+          <input
+            type="text"
+            id="cName"
+            class="input-control"
+            placeholder="Contoh: Eva Store Denpasar"
+          />
+        </div>
+        <div class="input-group">
+          <label>Telepon</label>
+          <input
+            type="text"
+            id="cPhone"
+            class="input-control"
+            placeholder="Opsional"
+          />
+        </div>
+        <div class="input-group">
+          <label>Alamat Lengkap *</label>
+          <textarea
+            id="cAddress"
+            class="input-control"
+            rows="2"
+            placeholder="Wajib diisi"
+          ></textarea>
+        </div>
+
+        <div class="input-group" id="cStatusGroup" style="display: none">
+          <label>Status Operasional</label>
+          <select id="cStatus" class="input-control">
+            <option value="true">🟢 Aktif</option>
+            <option value="false">🔴 Nonaktif</option>
+          </select>
+        </div>
+
+        <div
+          style="
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 16px;
+          "
+        >
+          <button
+            onclick="closeModal('mCabang')"
+            class="btn"
+            style="
+              background: var(--bg-color);
+              border: 1px solid var(--border-color);
+              color: var(--text-main);
+            "
+          >
+            Batal
+          </button>
+          <button onclick="simpanCabang()" class="btn btn-primary">
+            ✓ Simpan
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/theme.js"></script>
+    <script>
+      requireAuth();
+
+      const sb = (isActive) =>
+        isActive
+          ? '<span class="bl" style="background:rgba(16,185,129,0.15);color:#10b981;padding:4px 10px;border-radius:6px;font-weight:700;font-size:12px;">✓ Aktif</span>'
+          : '<span class="br" style="background:rgba(239,68,68,0.15);color:#ef4444;padding:4px 10px;border-radius:6px;font-weight:700;font-size:12px;">✗ Nonaktif</span>';
+
+      async function load() {
+        const search = document.getElementById("fSearch").value.toLowerCase();
+        const status = document.getElementById("fStatus").value;
+
+        let url = "/branches";
+
+        try {
+          let d = await api("GET", url);
+
+          if (search) {
+            d = d.filter(
+              (b) =>
+                b.name.toLowerCase().includes(search) ||
+                b.code.toLowerCase().includes(search),
+            );
+          }
+          if (status !== "") {
+            const isAct = status === "true";
+            d = d.filter((b) => b.is_active === isAct);
+          }
+
+          document.getElementById("tblBody").innerHTML = d.length
+            ? d
+                .map(
+                  (b) => `<tr>
+      <td style="font-family:monospace;font-size:13px;font-weight:700;color:var(--primary)">${b.code}</td>
+      <td style="font-weight:700">${b.name}</td>
+      <td>${b.phone || "-"}</td>
+      <td>${b.address || "-"}</td>
+      <td>${sb(b.is_active)}</td>
+      <td style="white-space:nowrap">
+        <button class="bsm bo" onclick='openEdit(${JSON.stringify(b)})'>✏️ Edit</button>
+        ${b.is_active ? `<button class="bsm bd" onclick="hapus(${b.id})">Nonaktifkan</button>` : ""}
+      </td></tr>`,
+                )
+                .join("")
+            : "<tr><td colspan='6' style='text-align:center;padding:24px;color:var(--text-muted)'>Tidak ada data cabang</td></tr>";
+        } catch (e) {
+          showToast(e.message, "error");
+        }
+      }
+
+      function openModalTambah() {
+        document.getElementById("modalTitle").textContent = "Tambah Cabang";
+        document.getElementById("cId").value = "";
+        document.getElementById("cName").value = "";
+        document.getElementById("cPhone").value = "";
+        document.getElementById("cAddress").value = "";
+        document.getElementById("cStatusGroup").style.display = "none";
+        openModal("mCabang");
+      }
+
+      function openEdit(b) {
+        document.getElementById("modalTitle").textContent = "Edit Cabang";
+        document.getElementById("cId").value = b.id;
+        document.getElementById("cName").value = b.name;
+        document.getElementById("cPhone").value = b.phone || "";
+        document.getElementById("cAddress").value = b.address || "";
+        document.getElementById("cStatusGroup").style.display = "block";
+        document.getElementById("cStatus").value = b.is_active
+          ? "true"
+          : "false";
+        openModal("mCabang");
+      }
+
+      async function simpanCabang() {
+        const id = document.getElementById("cId").value;
+        const name = document.getElementById("cName").value.trim();
+        const address = document.getElementById("cAddress").value.trim();
+
+        if (!name) {
+          showToast("Nama Cabang wajib diisi!", "error");
+          return;
+        }
+        if (!address) {
+          showToast("Alamat Cabang wajib diisi!", "error");
+          return;
+        }
+
+        const payload = {
+          code: "AUTO", // Kode dummy agar lolos validasi skema Pydantic di Backend
+          name: name,
+          phone: document.getElementById("cPhone").value.trim(),
+          address: address,
+        };
+
+        try {
+          showLoading();
+          if (id) {
+            payload.is_active =
+              document.getElementById("cStatus").value === "true";
+            await api("PUT", `/branches/${id}`, payload);
+            showToast("Cabang berhasil diupdate ✓");
+          } else {
+            await api("POST", "/branches/", payload);
+            showToast("Cabang baru dibuat ✓");
+          }
+          await notifyBranchListChanged();
+          hideLoading();
+          closeModal("mCabang");
+          load();
+        } catch (e) {
+          hideLoading();
+          showToast(e.message, "error");
+        }
+      }
+
+      async function hapus(id) {
+        if (
+          !(await showConfirm(
+            "Nonaktifkan cabang ini?\nCabang tidak akan dihapus dari sistem, hanya disembunyikan dari operasional.",
+          ))
+        ) {
+          return;
+        }
+        try {
+          showLoading();
+          await api("DELETE", `/branches/${id}`);
+          await notifyBranchListChanged();
+          hideLoading();
+          showToast("Cabang dinonaktifkan ✓");
+          load();
+        } catch (e) {
+          hideLoading();
+          showToast(e.message, "error");
+        }
+      }
+
+      load();
+    </script>
+  </body>
+</html>

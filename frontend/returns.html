@@ -1,0 +1,1339 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Retur - FPOS</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/components.css" />
+
+    <style>
+      input[type="number"]::-webkit-inner-spin-button,
+      input[type="number"]::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      input[type="number"] {
+        -moz-appearance: textfield;
+      }
+
+      .tabs .btn {
+        white-space: nowrap;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 14px;
+        padding: 8px 16px;
+      }
+      .tabs {
+        position: relative;
+        z-index: 100;
+        width: 100%;
+      }
+      .view-section {
+        animation: fadeIn 0.2s ease;
+      }
+
+      .badge {
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-weight: 700;
+        font-size: 11px;
+        text-transform: uppercase;
+      }
+      .badge-success {
+        background: rgba(16, 185, 129, 0.15);
+        color: #10b981;
+      }
+      .badge-warning {
+        background: rgba(245, 158, 11, 0.15);
+        color: #f59e0b;
+      }
+      .badge-danger {
+        background: rgba(239, 68, 68, 0.15);
+        color: #ef4444;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-container">
+      <main class="main-content">
+        <button
+          class="btn"
+          style="
+            background: transparent;
+            color: var(--text-muted);
+            padding: 0;
+            margin-bottom: 16px;
+          "
+          onclick="location.href = '/dashboard'"
+        >
+          ← Kembali
+        </button>
+
+        <div
+          class="pg-header"
+          style="flex-direction: column; align-items: flex-start; gap: 16px"
+        >
+          <div>
+            <h1>📥 Retur Barang</h1>
+            <p>Pilih barang dari riwayat transaksi untuk dilakukan retur.</p>
+          </div>
+          <div class="tabs">
+            <div
+              style="
+                display: flex;
+                gap: 8px;
+                overflow-x: auto;
+                width: 100%;
+                padding-bottom: 4px;
+              "
+            >
+              <button
+                id="btnTabSales"
+                class="btn btn-primary"
+                onclick="switchTab('sales')"
+              >
+                Retur Penjualan
+              </button>
+              <button
+                id="btnTabPurchase"
+                class="btn"
+                style="
+                  background: var(--bg-color);
+                  border: 1px solid var(--border-color);
+                  color: var(--text-main);
+                "
+                onclick="switchTab('purchase')"
+              >
+                Retur Pembelian
+              </button>
+              <button
+                id="btnTabBroken"
+                class="btn"
+                style="
+                  background: var(--bg-color);
+                  border: 1px solid var(--border-color);
+                  color: var(--text-main);
+                "
+                onclick="switchTab('broken')"
+              >
+                Retur Barang Rusak
+              </button>
+            </div>
+            <div id="tombolReturContainer">
+              <div
+                style="
+                  display: flex;
+                  justify-content: flex-end;
+                  gap: 10px;
+                  margin-bottom: 14px;
+                "
+              >
+                <button
+                  class="btn"
+                  style="
+                    background: #10b981;
+                    color: white;
+                    border: none;
+                    font-weight: bold;
+                  "
+                  onclick="buatReturPembelian()"
+                >
+                  ➕ Buat Retur Pembelian
+                </button>
+                <button class="btn btn-primary" onclick="buatReturPenjualan()">
+                  ➕ Buat Retur Penjualan
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="viewList" class="view-section">
+          <div id="mainFilterContainer"></div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr id="tblHeader">
+                  <!-- Dynamic headers -->
+                </tr>
+              </thead>
+              <tbody id="tblBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Modal Form Retur -->
+    <div class="modal-overlay" id="mReturn">
+      <div class="modal-box" style="max-width: 450px">
+        <div class="modal-hdr">
+          <h2 id="mReturnTitle">Retur Barang</h2>
+          <button class="btn-x" onclick="closeModal('mReturn')">×</button>
+        </div>
+        <div class="modal-body" style="padding: 16px 0">
+          <div
+            id="mReturnItemInfo"
+            style="
+              background: var(--bg-color);
+              padding: 14px;
+              border-radius: 12px;
+              margin-bottom: 16px;
+              border: 1px solid var(--border-color);
+            "
+          >
+            <!-- Item details built dynamically -->
+          </div>
+          <div class="input-group" style="margin-bottom: 12px">
+            <label
+              >Jumlah Retur * (Maks
+              <span
+                id="mReturnMax"
+                style="font-weight: 700; color: var(--primary)"
+                >0</span
+              >)</label
+            >
+            <input
+              type="text"
+              inputmode="decimal"
+              data-input-desimal
+              data-desimal-maks="4"
+              data-min="0.0001"
+              id="mReturnQty"
+              class="input-control"
+              value="1"
+              min="1"
+            />
+          </div>
+          <div class="input-group" style="margin-bottom: 12px">
+            <label>Alasan Retur</label>
+            <input
+              type="text"
+              id="mReturnReason"
+              class="input-control"
+              placeholder="Contoh: Barang Rusak, Salah Ukuran, dll"
+            />
+          </div>
+          <div class="input-group">
+            <label>Catatan (Opsional)</label>
+            <textarea
+              id="mReturnNotes"
+              class="input-control"
+              rows="2"
+              placeholder="Keterangan tambahan..."
+            ></textarea>
+          </div>
+        </div>
+        <div
+          style="
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 16px;
+          "
+        >
+          <button onclick="closeModal('mReturn')" class="btn">Batal</button>
+          <button
+            onclick="prosesRetur()"
+            class="btn btn-primary"
+            id="btnSimpanRetur"
+          >
+            ✓ Proses Retur
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Form Retur Manual -->
+    <div class="modal-overlay" id="mManualReturn">
+      <div class="modal-box" style="max-width: 80vw; width: 80vw">
+        <div class="modal-hdr">
+          <h2 id="mManualReturnTitle">Buat Retur Pembelian</h2>
+          <button class="btn-x" onclick="closeModal('mManualReturn')">×</button>
+        </div>
+        <div class="modal-body" style="padding: 16px 0">
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 16px;
+              margin-bottom: 16px;
+            "
+          >
+            <div class="input-group">
+              <label id="lblManualEntity">Pilih Supplier *</label>
+              <div id="mManualEntityCombo"></div>
+            </div>
+            <div class="input-group">
+              <label id="lblManualItemSearch"
+                >Cari Barang (Scan / Ketik) *</label
+              >
+              <input
+                type="text"
+                id="mManualItemSearch"
+                class="input-control"
+                placeholder="Pilih supplier dulu..."
+                disabled
+              />
+            </div>
+          </div>
+
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 16px;
+              margin-bottom: 16px;
+            "
+          >
+            <div class="input-group">
+              <label>Tanggal Retur *</label>
+              <input type="date" id="mManualDate" class="input-control" />
+            </div>
+            <div class="input-group">
+              <label>Alasan Retur</label>
+              <input
+                type="text"
+                id="mManualReason"
+                class="input-control"
+                placeholder="Contoh: Barang Rusak"
+              />
+            </div>
+          </div>
+
+          <div
+            id="mManualPpnInfo"
+            style="
+              background: rgba(16, 185, 129, 0.1);
+              color: #059669;
+              padding: 10px;
+              border-radius: 8px;
+              font-size: 13px;
+              margin-bottom: 16px;
+              display: none;
+              border: 1px solid rgba(16, 185, 129, 0.2);
+            "
+          >
+            <!-- Info PPN muncul di sini -->
+          </div>
+
+          <div
+            class="tbl-wrap"
+            style="border: 1px solid var(--border-color); border-radius: 8px"
+          >
+            <table
+              class="tbl"
+              style="margin-bottom: 0; table-layout: fixed; width: 100%"
+            >
+              <thead>
+                <tr>
+                  <th style="width: auto">Nama Barang</th>
+                  <th style="width: 8%; text-align: center">Sisa</th>
+                  <th style="width: 10%; text-align: center">Qty Retur</th>
+                  <th style="width: 18%; text-align: right">Harga Dasar</th>
+                  <th style="width: 10%; text-align: center">PPN (%)</th>
+                  <th style="width: 20%; text-align: right">Harga + PPN</th>
+                  <th style="width: 20%; text-align: right">Total</th>
+                  <th style="width: 40px"></th>
+                </tr>
+              </thead>
+              <tbody id="mManualGridBody">
+                <!-- Baris barang ditambahkan di sini -->
+              </tbody>
+            </table>
+            <div
+              style="
+                padding: 12px;
+                border-top: 1px solid var(--border-color);
+                background: var(--bg-color);
+              "
+            ></div>
+          </div>
+
+          <div
+            style="
+              margin-top: 16px;
+              display: flex;
+              justify-content: flex-end;
+              gap: 20px;
+              align-items: center;
+            "
+          >
+            <div style="text-align: right">
+              <div style="font-size: 12px; color: var(--text-muted)">
+                Grand Total Retur
+              </div>
+              <div
+                id="mManualGrandTotal"
+                style="font-size: 20px; font-weight: 800; color: var(--primary)"
+              >
+                Rp 0
+              </div>
+            </div>
+          </div>
+        </div>
+        <div
+          style="
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 16px;
+          "
+        >
+          <button onclick="closeModal('mManualReturn')" class="btn">
+            Batal
+          </button>
+          <button onclick="saveManualReturn()" class="btn btn-primary">
+            ✓ Proses Retur
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Swap Batch Antar-Supplier (FIFO — Fase 3) -->
+    <div class="modal-overlay" id="mSwap">
+      <div class="modal-box" style="max-width: 640px; width: 92vw">
+        <div class="modal-hdr">
+          <h2>🔁 Tukar Stok Antar-Supplier</h2>
+          <button class="btn-x" onclick="closeModal('mSwap')">×</button>
+        </div>
+        <div class="modal-body" id="mSwapBody" style="padding: 16px 0">
+          <!-- diisi oleh openSwapModal() -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Rincian hasil retur pembelian (keterlacakan: refund vs modal vs selisih + catatan swap) -->
+    <div class="modal-overlay" id="mReturnResult">
+      <div class="modal-box" style="max-width: 460px">
+        <div class="modal-hdr">
+          <h2>✅ Retur Pembelian Berhasil</h2>
+          <button class="btn-x" onclick="closeModal('mReturnResult')">×</button>
+        </div>
+        <div class="modal-body" id="mReturnResultBody" style="padding: 16px 0">
+          <!-- diisi oleh showPurchaseReturnResult() -->
+        </div>
+        <div style="padding-top: 8px">
+          <button class="btn btn-primary" style="width: 100%" onclick="closeModal('mReturnResult')">Tutup</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/theme.js"></script>
+    <script src="/js/components.js"></script>
+    <script>
+      requireAuth();
+      let currentTab = "sales"; // sales or purchase
+      let mainFilter = null;
+      let activeItem = null;
+      let allSuppliers = [];
+      let allCustomers = [];
+
+      let mManualMode = "purchase"; // 'purchase' or 'sales'
+      let mManualEntityCombo = null;
+      let mManualSelectedEntity = null;
+      let mManualValidItems = [];
+
+      // Fase 3 — swap batch antar-supplier (retur pembelian)
+      let pendingReturnPayload = null;
+      let pendingReturnType = null;
+      let swapSelectedBatchId = null;
+      let swapContext = null;
+      let pendingSwapNote = null; // hasil swap terakhir, untuk ditampilkan di rincian retur
+
+      function switchTab(tab) {
+        currentTab = tab;
+
+        // Update tab buttons style
+        document.querySelectorAll(".tabs .btn").forEach((btn) => {
+          btn.classList.remove("btn-primary");
+          btn.style.background = "var(--bg-color)";
+          btn.style.color = "var(--text-main)";
+        });
+
+        const activeBtn =
+          tab === "sales"
+            ? document.getElementById("btnTabSales")
+            : tab === "purchase"
+              ? document.getElementById("btnTabPurchase")
+              : document.getElementById("btnTabBroken");
+
+        activeBtn.classList.add("btn-primary");
+        activeBtn.style.background = ""; // Reset inline style to use class style
+        activeBtn.style.color = "";
+
+        // Update Filter Entities & Status Options
+        if (mainFilter) {
+          const filterContainer = document.getElementById(
+            "mainFilterContainer",
+          );
+          const entitySelectWrap = filterContainer.querySelector(
+            ".f-entity-container",
+          );
+
+          if (tab === "broken") {
+            if (entitySelectWrap) entitySelectWrap.style.display = "none";
+            mainFilter.updateStatusOptions([
+              { label: "Belum Diretur ke Suplier", value: "not_returned" },
+              { label: "Retur Sebagian", value: "partial" },
+              { label: "Retur Penuh", value: "returned" },
+            ]);
+          } else {
+            if (entitySelectWrap) entitySelectWrap.style.display = "block";
+            mainFilter.updateEntities(
+              tab === "sales" ? allCustomers : allSuppliers,
+            );
+            mainFilter.updateStatusOptions([
+              { label: "Belum Retur", value: "not_returned" },
+              { label: "Retur Sebagian", value: "partial" },
+              { label: "Retur Penuh", value: "returned" },
+            ]);
+          }
+        }
+
+        load();
+      }
+
+      function buatReturPembelian() {
+        mManualMode = "purchase";
+        openManualReturnModal();
+      }
+
+      function buatReturPenjualan() {
+        mManualMode = "sales";
+        openManualReturnModal();
+      }
+
+      let pendingBrokenItem = null;
+
+      function openBrokenReturnModal(item) {
+        pendingBrokenItem = item;
+        mManualMode = "purchase";
+        openManualReturnModal();
+        showToast("Pilih Supplier untuk meretur barang rusak ini", "info");
+      }
+
+      function openManualReturnModal() {
+        const isPurchase = mManualMode === "purchase";
+        document.getElementById("mManualReturnTitle").textContent = isPurchase
+          ? "Buat Retur Pembelian"
+          : "Buat Retur Penjualan";
+        document.getElementById("lblManualEntity").textContent = isPurchase
+          ? "Pilih Supplier *"
+          : "Pilih Pelanggan *";
+        document.getElementById("mManualDate").value = new Date()
+          .toISOString()
+          .split("T")[0];
+        document.getElementById("mManualReason").value = pendingBrokenItem
+          ? `Retur Barang Rusak: ${pendingBrokenItem.trade_in_number}`
+          : "";
+        document.getElementById("mManualGridBody").innerHTML = "";
+        document.getElementById("mManualGrandTotal").textContent = "Rp 0";
+        document.getElementById("mManualPpnInfo").style.display = "none";
+
+        const searchInp = document.getElementById("mManualItemSearch");
+        searchInp.value = "";
+        searchInp.disabled = true;
+        searchInp.placeholder =
+          "Pilih " + (isPurchase ? "supplier" : "pelanggan") + " dulu...";
+
+        mManualSelectedEntity = null;
+        mManualValidItems = [];
+
+        // Reset Combo
+        if (mManualEntityCombo) mManualEntityCombo.clear();
+
+        // Initialize Entity Combo
+        if (!mManualEntityCombo) {
+          mManualEntityCombo = createPremiumCombo(
+            "mManualEntityCombo",
+            isPurchase ? allSuppliers : allCustomers,
+            {
+              onSelect: (sel) => onManualEntitySelected(sel),
+            },
+          );
+        } else {
+          mManualEntityCombo.updateData(
+            isPurchase ? allSuppliers : allCustomers,
+          );
+        }
+
+        if (!pendingBrokenItem) {
+          openModal("mManualReturn");
+        } else {
+          // Jika dari broken item, pastikan modal terbuka dulu
+          openModal("mManualReturn");
+        }
+      }
+
+      async function onManualEntitySelected(entity) {
+        mManualSelectedEntity = entity;
+        const searchInp = document.getElementById("mManualItemSearch");
+
+        if (!entity) {
+          searchInp.disabled = true;
+          mManualValidItems = [];
+          return;
+        }
+
+        searchInp.disabled = false;
+        searchInp.placeholder = "Scan Barcode atau Ketik Nama...";
+        searchInp.focus();
+
+        showLoading("Mencari daftar barang...");
+        try {
+          if (mManualMode === "purchase") {
+            mManualValidItems = await api(
+              "GET",
+              `/suppliers/${entity.id}/purchased-items`,
+            );
+          } else {
+            mManualValidItems = await api(
+              "GET",
+              `/customers/${entity.id}/sold-items`,
+            );
+          }
+          hideLoading();
+
+          // Jika ada barang rusak yang menunggu, tambahkan otomatis
+          if (pendingBrokenItem) {
+            const itemMatch = mManualValidItems.find(
+              (i) => i.id === pendingBrokenItem.item_id,
+            );
+            if (itemMatch) {
+              await addManualReturnRow(itemMatch);
+              // Set trade_in_return_item_id ke row dataset
+              const row = document.querySelector(
+                `#mManualGridBody tr[data-item-id="${itemMatch.id}"]`,
+              );
+              if (row) {
+                row.dataset.tradeInReturnItemId =
+                  pendingBrokenItem.trade_in_return_item_id;
+                // Set qty retur sesuai qty rusak
+                const qtyInp = row.querySelector(".row-qty");
+                qtyInp.value = pendingBrokenItem.qty_available;
+                calculateManualReturnTotal();
+              }
+              pendingBrokenItem = null;
+            } else {
+              showToast(
+                "Barang ini tidak memiliki riwayat pembelian dari supplier terpilih.",
+                "warning",
+              );
+            }
+          }
+        } catch (ex) {
+          hideLoading();
+          showToast("Gagal memuat daftar barang.", "error");
+        }
+      }
+
+      // Scanner Hook for Manual Return
+      setupBarcodeScanner((scode) => {
+        const modal = document.getElementById("mManualReturn");
+        if (modal.style.display !== "flex") return;
+        handleManualItemInput(scode);
+      });
+
+      document.getElementById("mManualItemSearch").onkeydown = (e) => {
+        if (e.key === "Enter") {
+          handleManualItemInput(e.target.value);
+          e.target.value = "";
+        }
+      };
+
+      async function handleManualItemInput(query) {
+        if (!query) return;
+        const scode = query.toLowerCase().trim();
+        const item = mManualValidItems.find(
+          (i) =>
+            (i.barcode && i.barcode.toLowerCase() === scode) ||
+            (i.code && i.code.toLowerCase() === scode) ||
+            (i.name && i.name.toLowerCase().includes(scode)),
+        );
+
+        if (item) {
+          addManualReturnRow(item);
+        } else {
+          showToast(
+            "Barang tidak ditemukan dalam riwayat transaksi entity ini.",
+            "error",
+          );
+        }
+      }
+
+      async function addManualReturnRow(item) {
+        if (!item) {
+          document.getElementById("mManualItemSearch").focus();
+          return;
+        }
+
+        const body = document.getElementById("mManualGridBody");
+
+        // Cek jika sudah ada
+        const existing = Array.from(body.querySelectorAll("tr")).find(
+          (r) => r.dataset.itemId == item.id,
+        );
+        if (existing) {
+          const qtyInp = existing.querySelector(".row-qty");
+          qtyInp.value = toDesimal(parseDesimal(qtyInp) + 1, {
+            maximumFractionDigits: 4,
+          });
+          calculateManualReturnTotal();
+          return;
+        }
+
+        const row = document.createElement("tr");
+        row.dataset.itemId = item.id;
+        row.innerHTML = `
+          <td>
+            <div style="font-weight:600">${item.name}</div>
+            <div style="font-size:11px; color:var(--text-muted)">${item.code}</div>
+            <div class="row-factur-info" style="font-size:10px; color:var(--primary); margin-top:4px"></div>
+          </td>
+          <td style="text-align: center; font-weight: 700" class="row-avail">-</td>
+          <td><input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0" class="input-control row-qty" value="1" style="text-align: center; width: 100%; box-sizing: border-box;" oninput="calculateManualReturnTotal()" /></td>
+          <td style="text-align: right">
+            <div style="display:flex; align-items:center; gap:4px; justify-content:flex-end; width: 100%;">
+                <input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control row-price-awal" value="0" style="text-align:right; width: 100%; box-sizing: border-box; padding:4px" oninput="onPriceInput(this)" />
+                <button class="btn" onclick="showPriceHistory(${item.id}, this)" style="padding:4px; background:var(--bg-color); border:1px solid var(--border-color); flex-shrink: 0;" title="Cari Faktur">📜</button>
+            </div>
+          </td>
+          <td style="text-align: center"><input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" class="input-control row-ppn" value="0" style="text-align: center; width: 100%; box-sizing: border-box; padding:4px" oninput="calculateManualReturnTotal()" /></td>
+          <td style="text-align: right"><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control row-price-akhir" value="0" style="text-align:right; width: 100%; box-sizing: border-box; padding:4px; background:var(--bg-color)" readonly /></td>
+          <td style="text-align: right; font-weight: 700" class="row-total">Rp 0</td>
+          <td><button class="btn" style="color:var(--danger); background:transparent; padding:0" onclick="this.closest('tr').remove(); calculateManualReturnTotal()">✕</button></td>
+        `;
+        body.appendChild(row);
+
+        // Auto-fetch history and pick latest
+        try {
+          const endpoint =
+            mManualMode === "purchase"
+              ? `/suppliers/${mManualSelectedEntity.id}/items/${item.id}/history`
+              : `/customers/${mManualSelectedEntity.id}/items/${item.id}/history`;
+
+          console.log("Fetching history from:", endpoint);
+          const history = await api("GET", endpoint);
+          console.log("History received:", history);
+
+          if (history && history.length > 0) {
+            const latest = history[0];
+            row.querySelector(".row-price-awal").value = formatRibuan(
+              latest.price,
+            );
+            row.querySelector(".row-ppn").value = latest.tax_percent || 0;
+            row.querySelector(".row-avail").textContent = latest.qty_available;
+            row.querySelector(".row-factur-info").textContent = latest.number;
+            row.dataset.purchaseId = latest.purchase_id;
+          }
+        } catch (e) {
+          console.error("Gagal autofill riwayat:", e);
+        }
+
+        calculateManualReturnTotal();
+      }
+
+      async function showPriceHistory(itemId, btn) {
+        if (!mManualSelectedEntity) return;
+        const row = btn.closest("tr");
+        showLoading("Mengambil riwayat harga...");
+        try {
+          const endpoint =
+            mManualMode === "purchase"
+              ? `/suppliers/${mManualSelectedEntity.id}/items/${itemId}/history`
+              : `/customers/${mManualSelectedEntity.id}/items/${itemId}/history`;
+
+          const history = await api("GET", endpoint);
+          hideLoading();
+
+          if (!history || history.length === 0)
+            return showToast("Tidak ada riwayat transaksi.", "warning");
+
+          const listHtml = history
+            .map(
+              (h) => `
+                <div onclick="selectPrice(this, ${h.purchase_id}, ${h.price}, '${h.number}', ${h.qty_available}, ${h.tax_percent || 0})" 
+                     style="padding:10px; border-bottom:1px solid var(--border-color); cursor:pointer"
+                     onmouseover="this.style.background='rgba(0,0,0,0.05)'"
+                     onmouseout="this.style.background='transparent'">
+                    <div style="display:flex; justify-content:space-between">
+                        <strong>${h.number}</strong>
+                        <span style="color:var(--primary); font-weight:700">${fmtRp(h.price)}</span>
+                    </div>
+                    <div style="font-size:11px; color:var(--text-muted)">Tgl: ${fmtDate(h.date)} | Sisa: ${h.qty_available} / ${h.qty} | PPN: ${h.tax_percent || 0}%</div>
+                </div>
+              `,
+            )
+            .join("");
+
+          const div = document.createElement("div");
+          div.id = "tempHistoryModal";
+          div.className = "modal-overlay";
+          div.style.zIndex = "9999";
+          div.style.display = "flex";
+          div.innerHTML = `
+                <div class="modal-box" style="max-width:400px">
+                    <div class="modal-hdr">
+                        <h2>Pilih Faktur</h2>
+                        <button class="btn-x" onclick="document.getElementById('tempHistoryModal').remove()">×</button>
+                    </div>
+                    <div class="modal-body" style="max-height:300px; overflow-y:auto; padding:0">
+                        ${listHtml}
+                    </div>
+                </div>
+              `;
+          document.body.appendChild(div);
+
+          // Helper function global agar bisa dipanggil dari HTML string
+          window.selectPrice = (el, pid, price, num, avail, taxPercent) => {
+            row.querySelector(".row-price-awal").value = price;
+            row.querySelector(".row-ppn").value = taxPercent || 0;
+            row.querySelector(".row-avail").textContent = avail;
+            row.querySelector(".row-factur-info").textContent = num;
+            row.dataset.purchaseId = pid;
+
+            // Pastikan qty retur tidak melebihi sisa faktur yang baru dipilih
+            let currentQty = parseDesimal(row.querySelector(".row-qty"));
+            if (currentQty > avail) {
+              row.querySelector(".row-qty").value = avail;
+            }
+
+            calculateManualReturnTotal();
+            document.getElementById("tempHistoryModal").remove();
+          };
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      function calculateManualReturnTotal() {
+        let grand = 0;
+        document.querySelectorAll("#mManualGridBody tr").forEach((row) => {
+          const qty = parseDesimal(row.querySelector(".row-qty"));
+          const priceAwal = parseRibuan(
+            row.querySelector(".row-price-awal").value,
+          );
+          const ppn = parseDesimal(row.querySelector(".row-ppn"));
+
+          const priceAkhir = priceAwal + (priceAwal * ppn) / 100;
+          row.querySelector(".row-price-akhir").value =
+            formatRibuan(priceAkhir);
+
+          const total = qty * priceAkhir;
+          row.querySelector(".row-total").textContent = fmtRp(total);
+          grand += total;
+        });
+        document.getElementById("mManualGrandTotal").textContent = fmtRp(grand);
+      }
+
+      async function load() {
+        if (!mainFilter) return;
+        const f = mainFilter.getValues();
+        const type = currentTab; // sales, purchase, or broken
+        const entityParam = type === "sales" ? "customer_id" : "supplier_id";
+
+        let url = "";
+        if (type === "broken") {
+          url = `/returns/history/broken?start_date=${f.start_date}&end_date=${f.end_date}`;
+        } else {
+          url = `/returns/history/${type === "sales" ? "sales" : "purchases"}?start_date=${f.start_date}&end_date=${f.end_date}`;
+          if (f.entity_id && f.entity_id !== "all")
+            url += `&${entityParam}=${f.entity_id}`;
+        }
+        if (f.status && f.status !== "all") url += `&status=${f.status}`;
+
+        try {
+          showLoading();
+          const data = await api("GET", url);
+          hideLoading();
+          renderTable(data, type);
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      function renderTable(data, type) {
+        const header = document.getElementById("tblHeader");
+        const body = document.getElementById("tblBody");
+
+        if (type === "broken") {
+          header.innerHTML = `
+            <th>Nama Barang</th>
+            <th style="text-align:center">Tgl T.Tambah</th>
+            <th style="text-align:center">No. T.Tambah</th>
+            <th>Pelanggan</th>
+            <th style="text-align:center">Qty Rusak</th>
+            <th style="text-align:center">Belum Diretur</th>
+            <th style="text-align:right">Harga Terima</th>
+            <th style="text-align:center">Aksi</th>
+          `;
+        } else {
+          const isSales = type === "sales";
+          header.innerHTML = `
+            <th>Nama Barang</th>
+            <th style="text-align:center">Tgl Faktur</th>
+            <th style="text-align:center">No. Faktur</th>
+            <th>${isSales ? "Pelanggan" : "Supplier"}</th>
+            <th style="text-align:center">Qty Beli</th>
+            <th style="text-align:center">Tersisa</th>
+            <th style="text-align:right">Harga</th>
+            <th style="text-align:center">Aksi</th>
+          `;
+        }
+
+        if (!data || data.length === 0) {
+          body.innerHTML = `<tr><td colspan="8" style="text-align:center; padding: 40px; color: var(--text-muted)">Tidak ada riwayat barang yang ditemukan.</td></tr>`;
+          return;
+        }
+
+        body.innerHTML = data
+          .map((it) => {
+            let price,
+              date,
+              number,
+              entity,
+              qtyTotal,
+              qtyLeft,
+              statusBadge = "";
+
+            if (type === "broken") {
+              price = it.return_price;
+              date = it.date;
+              number = it.trade_in_number;
+              entity = it.customer_name || "Umum";
+              qtyTotal = it.qty;
+              qtyLeft = it.qty_available;
+            } else {
+              const isSales = type === "sales";
+              price = isSales ? it.sell_price : it.buy_price;
+              date = isSales ? it.sale_date : it.purchase_date;
+              number = isSales ? it.sale_number : it.purchase_number;
+              entity = isSales
+                ? it.customer_name || "Umum"
+                : it.supplier_name || "-";
+              qtyTotal = isSales ? it.qty_sold : it.qty_bought;
+              qtyLeft = it.qty_available;
+            }
+
+            `<button class="btn" disabled style="padding: 4px 10px; font-size: 12px; opacity: 0.5">Cetak Struk</button>`;
+
+            if (it.status === "returned")
+              statusBadge =
+                '<span class="badge badge-danger">Retur Full</span>';
+            else if (it.status === "partial")
+              statusBadge =
+                '<span class="badge badge-warning">Retur Sebagian</span>';
+
+            const canReturn = qtyLeft > 0;
+            const returBtn = canReturn
+              ? `<button class="btn btn-primary" style="padding: 4px 10px; font-size: 12px" onclick='${type === "broken" ? "openBrokenReturnModal" : "openReturnModal"}(${JSON.stringify(it).replace(/'/g, "&apos;")})'>↩ Retur</button>`
+              : `<button class="btn" disabled style="padding: 4px 10px; font-size: 12px; opacity: 0.5">Sudah Habis</button>`;
+
+            return `
+            <tr>
+              <td style="font-weight: 600">
+                ${it.item.name}
+                <div style="font-size: 11px; color: var(--text-muted); font-weight: normal">${it.item.code}</div>
+                ${statusBadge}
+              </td>
+              <td style="text-align:center; font-size: 13px">${fmtDate(date)}</td>
+              <td style="text-align:center; font-family: monospace; font-weight: 700; color: var(--primary)">${number}</td>
+              <td style="font-size: 13px">${entity}</td>
+              <td style="text-align:center">${qtyTotal}</td>
+              <td style="text-align:center; font-weight: 700; color: ${qtyLeft > 0 ? "var(--primary)" : "var(--text-muted)"}">${qtyLeft}</td>
+              <td style="text-align:right">${fmtRp(price)}</td>
+              <td style="text-align:center">${returBtn}</td>
+            </tr>
+          `;
+          })
+          .join("");
+      }
+
+      function openReturnModal(item) {
+        activeItem = item;
+        const isSales = currentTab === "sales";
+
+        document.getElementById("mReturnTitle").textContent = isSales
+          ? "Retur Penjualan"
+          : "Retur Pembelian";
+        document.getElementById("mReturnMax").textContent = item.qty_available;
+        document.getElementById("mReturnQty").value = toDesimal(
+          item.qty_available,
+          { maximumFractionDigits: 4 },
+        );
+        document.getElementById("mReturnQty").dataset.max = item.qty_available;
+        document.getElementById("mReturnReason").value = "";
+        document.getElementById("mReturnNotes").value = "";
+
+        const entityLabel = isSales ? "Pelanggan" : "Supplier";
+        const entityName = isSales
+          ? item.customer_name || "Umum"
+          : item.supplier_name || "-";
+        const basePrice = isSales ? item.sell_price : item.buy_price;
+        const tax = item.tax_percent || 0;
+        const price = item.is_tax_included
+          ? basePrice
+          : basePrice + (basePrice * tax) / 100;
+
+        document.getElementById("mReturnItemInfo").innerHTML = `
+          <div style="font-weight: 700; font-size: 16px; margin-bottom: 4px; color: var(--primary)">${item.item.name}</div>
+          <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px">${item.item.code} | ${item.item.barcode || "-"}</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 13px">
+            <div><span style="color:var(--text-muted)">Faktur:</span> <span style="font-weight:600">${isSales ? item.sale_number : item.purchase_number}</span></div>
+            <div><span style="color:var(--text-muted)">${entityLabel}:</span> <span style="font-weight:600">${entityName}</span></div>
+            <div><span style="color:var(--text-muted)">Harga:</span> <span style="font-weight:600">${fmtRp(price)}</span></div>
+            <div><span style="color:var(--text-muted)">Tersisa:</span> <span style="font-weight:600">${item.qty_available}</span></div>
+          </div>
+        `;
+
+        openModal("mReturn");
+      }
+
+      async function prosesRetur() {
+        const qty = parseDesimal(document.getElementById("mReturnQty"));
+        if (qty <= 0) return showToast("Jumlah retur tidak valid", "error");
+        if (qty > activeItem.qty_available)
+          return showToast("Jumlah melebihi batas tersisa", "error");
+
+        const reason = document.getElementById("mReturnReason").value;
+        const notes = document.getElementById("mReturnNotes").value;
+        const type = currentTab; // sales or purchase
+
+        const isSales = type === "sales";
+        const basePrice = isSales
+          ? activeItem.sell_price
+          : activeItem.buy_price;
+
+        const payload = {
+          date: new Date().toISOString().split("T")[0],
+          reason: reason,
+          notes: notes,
+          is_tax_included: activeItem.is_tax_included,
+          tax_percent: activeItem.tax_percent || 0,
+          items: [
+            {
+              item_id: activeItem.item_id,
+              qty: qty,
+              price: basePrice,
+            },
+          ],
+        };
+
+        if (type === "sales") {
+          payload.sale_id = activeItem.sale_id;
+        } else {
+          payload.purchase_id = activeItem.purchase_id;
+        }
+
+        // FASE 3 — Retur PEMBELIAN: bila batch supplier ini sudah "terjual" menurut
+        // FIFO, tawarkan tukar (swap) ke supplier lain dulu sebelum retur diproses.
+        if (type !== "sales") {
+          let swapInfo = null;
+          try {
+            swapInfo = await api(
+              "GET",
+              `/returns/swap-candidates?purchase_id=${activeItem.purchase_id}&item_id=${activeItem.item_id}&qty=${qty}`,
+            );
+          } catch (e) {
+            swapInfo = null; // backend lama / mode global → retur biasa
+          }
+          if (swapInfo && swapInfo.needs_swap) {
+            pendingReturnPayload = payload;
+            pendingReturnType = type;
+            openSwapModal(swapInfo, qty);
+            return; // tunggu user menukar stok dulu
+          }
+        }
+
+        await submitReturn(type, payload);
+      }
+
+      async function submitReturn(type, payload) {
+        try {
+          showLoading("Memproses retur...");
+          const res = await api(
+            "POST",
+            `/returns/${type === "sales" ? "sales" : "purchases"}`,
+            payload,
+          );
+          hideLoading();
+          closeModal("mReturn");
+          if (type !== "sales") {
+            // Retur pembelian → tampilkan rincian refund vs modal vs selisih (+ catatan swap)
+            showPurchaseReturnResult(res, pendingSwapNote);
+          } else {
+            showToast(`Berhasil! No. Retur: ${res.number}`);
+          }
+          pendingSwapNote = null;
+          load();
+        } catch (ex) {
+          hideLoading();
+          pendingSwapNote = null;
+          showToast(ex.message, "error");
+        }
+      }
+
+      // Keterlacakan retur pembelian: tunjukkan ke pemilik berapa refund yang disepakati,
+      // berapa modal NYATA barang yang keluar (FIFO), dan selisih untung/rugi-nya + ke akun mana.
+      function showPurchaseReturnResult(res, swapNote) {
+        const refund = res.total || 0;
+        const modal = res.total_carrying || 0;
+        const selisih = res.selisih || 0;
+        const untung = selisih > 0.005;
+        const rugi = selisih < -0.005;
+        const selisihLabel = untung
+          ? "Untung retur"
+          : rugi
+            ? "Rugi / selisih retur"
+            : "Selisih";
+        const selisihColor = untung
+          ? "#16a34a"
+          : rugi
+            ? "#dc2626"
+            : "var(--text-muted)";
+        const selisihAkun = untung
+          ? "Diskon / Untung Pembelian (4-2000)"
+          : rugi
+            ? "Beban Susut & Selisih Persediaan (5-1200)"
+            : "—";
+        let swapHtml = "";
+        if (swapNote && swapNote.swapped_qty) {
+          const n = (swapNote.affected_sales || []).length;
+          swapHtml = `
+            <div style="background:rgba(59,130,246,.10); border:1px solid rgba(59,130,246,.3); color:#1d4ed8; padding:10px 12px; border-radius:8px; font-size:12.5px; margin-top:12px">
+              🔁 ${swapNote.swapped_qty} unit ditukar dari supplier lain agar barang supplier asal bisa diretur.
+              HPP ${n} penjualan lama dikoreksi otomatis (${fmtRp(Math.abs(swapNote.total_cost_delta || 0))}).
+            </div>`;
+        }
+        document.getElementById("mReturnResultBody").innerHTML = `
+          <div style="font-size:13px; color:var(--text-muted); margin-bottom:10px">
+            No. Retur <b style="color:var(--primary); font-family:monospace">${res.number}</b>
+          </div>
+          <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--border-color)">
+            <span>Refund disepakati ke supplier</span><b>${fmtRp(refund)}</b>
+          </div>
+          <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--border-color)">
+            <span>Modal barang yang keluar (FIFO)</span><b>${fmtRp(modal)}</b>
+          </div>
+          <div style="display:flex; justify-content:space-between; padding:8px 0">
+            <span style="font-weight:600">${selisihLabel}</span>
+            <b style="color:${selisihColor}">${fmtRp(Math.abs(selisih))}</b>
+          </div>
+          <div style="font-size:11.5px; color:var(--text-muted)">Selisih dicatat ke akun: ${selisihAkun}</div>
+          ${swapHtml}`;
+        openModal("mReturnResult");
+      }
+
+      // ── Swap batch antar-supplier (Fase 3) ────────────────────────────────
+      function openSwapModal(info, returnQty) {
+        swapContext = { info, returnQty };
+        swapSelectedBatchId = null;
+        const need = info.shortfall;
+        const cands = info.candidates || [];
+        const rows = cands
+          .map((c) => {
+            const cukup = c.qty_remaining + 1e-6 >= need;
+            return `
+            <label style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--border-color); border-radius:8px; margin-bottom:8px; cursor:${cukup ? "pointer" : "not-allowed"}; opacity:${cukup ? 1 : 0.5}">
+              <span style="display:flex; align-items:center; gap:10px">
+                <input type="radio" name="swapCand" value="${c.batch_id}" ${cukup ? "" : "disabled"}
+                  onchange="swapSelectedBatchId=${c.batch_id}; document.getElementById('btnSwapConfirm').disabled=false;" />
+                <span>
+                  <div style="font-weight:700">${c.supplier_name}</div>
+                  <div style="font-size:12px; color:var(--text-muted)">Modal ${fmtRp(c.unit_cost)} • sisa ${c.qty_remaining} • diterima ${fmtDate(c.received_date)}</div>
+                </span>
+              </span>
+            </label>`;
+          })
+          .join("");
+        document.getElementById("mSwapBody").innerHTML = `
+          <div style="background:rgba(245,158,11,.12); border:1px solid rgba(245,158,11,.3); color:#b45309; padding:12px; border-radius:8px; font-size:13px; margin-bottom:14px">
+            Stok dari <b>${info.from_supplier_name}</b> sudah <b>terjual</b> menurut FIFO
+            (tersisa ${info.on_hand}, perlu ${returnQty}). Tukar <b>${need}</b> unit ke
+            supplier lain yang stoknya masih ada agar barangnya bisa diretur. HPP
+            penjualan lama akan dikoreksi otomatis — termasuk bila periode sudah tutup buku.
+          </div>
+          ${cands.length ? rows : '<div style="color:#dc2626; font-size:13px">Tidak ada batch supplier lain yang stoknya cukup untuk ditukar.</div>'}
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px">
+            <button class="btn" onclick="closeModal('mSwap')">Batal</button>
+            <button class="btn btn-primary" id="btnSwapConfirm" disabled onclick="confirmSwap()">🔁 Tukar &amp; Lanjut Retur</button>
+          </div>`;
+        openModal("mSwap");
+      }
+
+      async function confirmSwap() {
+        if (!swapSelectedBatchId || !swapContext) return;
+        const { info } = swapContext;
+        try {
+          showLoading("Menukar stok & mengoreksi HPP...");
+          const res = await api("POST", "/returns/swap-batch", {
+            from_batch_id: info.from_batch_id,
+            to_batch_id: swapSelectedBatchId,
+            qty: info.shortfall,
+            reason:
+              (pendingReturnPayload && pendingReturnPayload.reason) ||
+              "Swap untuk retur pembelian",
+          });
+          pendingSwapNote = res; // ditampilkan di rincian retur setelah submit
+          hideLoading();
+          closeModal("mSwap");
+          if (pendingReturnPayload) {
+            await submitReturn(pendingReturnType, pendingReturnPayload);
+            pendingReturnPayload = null;
+            pendingReturnType = null;
+          }
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      async function initFilters() {
+        allSuppliers = await api(
+          "GET",
+          "/suppliers/?limit=5000&active_only=true",
+        );
+        allCustomers = await api("GET", "/customers/?limit=5000");
+
+        const statusOpts = [
+          { label: "Belum Retur", value: "not_returned" },
+          { label: "Retur Sebagian", value: "partial" },
+          { label: "Retur Penuh", value: "returned" },
+        ];
+
+        mainFilter = createFilterBar("mainFilterContainer", {
+          onFilter: load,
+          entities: allCustomers, // Default to sales
+          statusOptions: statusOpts,
+          useEntitySelect: true,
+          entityPlaceholder: "Semua Supplier/Pelanggan",
+        });
+      }
+
+      function fmtRp(n) {
+        return new Intl.NumberFormat("id-ID", {
+          style: "currency",
+          currency: "IDR",
+          minimumFractionDigits: 0,
+        }).format(n || 0);
+      }
+
+      function formatRibuan(val) {
+        return toDesimal(val);
+      }
+
+      function parseRibuan(s) {
+        return parseDesimal(s);
+      }
+
+      function onPriceInput(inp) {
+        formatDesimal(inp);
+        calculateManualReturnTotal();
+      }
+
+      function fmtDate(d) {
+        if (!d) return "-";
+        return new Date(d + "T00:00:00").toLocaleDateString("id-ID", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        });
+      }
+
+      async function saveManualReturn() {
+        if (!mManualSelectedEntity)
+          return showToast("Pilih supplier/pelanggan terlebih dahulu", "error");
+
+        const rows = Array.from(
+          document.querySelectorAll("#mManualGridBody tr"),
+        );
+        if (rows.length === 0)
+          return showToast("Tambahkan minimal 1 barang", "error");
+
+        // Kelompokkan item berdasarkan purchase_id karena backend memproses per faktur
+        const groups = {};
+        let hasError = false;
+
+        rows.forEach((row) => {
+          const itemId = row.dataset.itemId;
+          const pid = row.dataset.purchaseId;
+          const qty = parseDesimal(row.querySelector(".row-qty"));
+          const priceAwal = parseRibuan(
+            row.querySelector(".row-price-awal").value,
+          );
+          const ppn = parseDesimal(row.querySelector(".row-ppn"));
+          const avail =
+            parseFloat(row.querySelector(".row-avail").textContent) || 0;
+
+          if (!itemId || qty <= 0) return;
+          if (!pid) {
+            hasError = true;
+            showToast(
+              "Ada barang yang belum dipilih fakturnya (klik icon 📜)",
+              "error",
+            );
+            return;
+          }
+          if (
+            row.querySelector(".row-avail").textContent !== "-" &&
+            qty > avail
+          ) {
+            hasError = true;
+            showToast("Qty retur melebihi sisa tersedia di faktur", "error");
+            return;
+          }
+
+          if (!groups[pid]) groups[pid] = [];
+          const itemData = {
+            item_id: parseInt(itemId),
+            qty: qty,
+            price: priceAwal,
+            tax_percent: ppn,
+          };
+          const tradeInReturnItemId = row.dataset.tradeInReturnItemId;
+          if (tradeInReturnItemId) {
+            itemData.trade_in_return_item_id = parseInt(tradeInReturnItemId);
+          }
+          groups[pid].push(itemData);
+        });
+
+        if (hasError) return;
+
+        showLoading("Memproses retur...");
+        try {
+          const type = mManualMode === "purchase" ? "purchases" : "sales";
+          // Proses setiap grup faktur secara berurutan
+          for (const pid in groups) {
+            const payload = {
+              date: document.getElementById("mManualDate").value,
+              reason: document.getElementById("mManualReason").value,
+              items: groups[pid],
+              is_tax_included: false, // UI hitung manual (Dasar + PPN)
+            };
+            if (mManualMode === "purchase") payload.purchase_id = parseInt(pid);
+            else payload.sale_id = parseInt(pid);
+
+            await api("POST", `/returns/${type}`, payload);
+          }
+          hideLoading();
+          showToast("Semua retur berhasil diproses!");
+          closeModal("mManualReturn");
+          load();
+        } catch (ex) {
+          hideLoading();
+          showToast(ex.message, "error");
+        }
+      }
+
+      (async () => {
+        await initFilters();
+        load();
+      })();
+    </script>
+  </body>
+</html>
