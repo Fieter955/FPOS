@@ -6,6 +6,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app import models, schemas
 from app.database import Base
+from app.routes.purchases import get_items_for_purchase
 from app.services.purchase_flow import calculate_purchase_totals
 from app.services.tax_context import normalize_purchase_tax_type, purchase_line_ppn_rates
 
@@ -95,6 +96,50 @@ class PurchasePpnCalculationTests(unittest.TestCase):
         self.db.commit()
         data = self.purchase("include", [self.line(self.item.id, 112_000)])
         self.assertEqual(purchase_line_ppn_rates(self.db, data), [12.0])
+
+    def test_purchase_item_list_uses_supplier_default_when_item_supplier_rate_is_empty(self):
+        self.supplier.PpnSupplier = 12
+        self.db.add(
+            models.ItemSupplier(
+                item_id=self.item.id,
+                supplier_id=self.supplier.id,
+                ppn_type="included",
+                ppn_percent=0,
+            )
+        )
+        self.db.commit()
+
+        rows = get_items_for_purchase(
+            supplier_id=self.supplier.id,
+            db=self.db,
+            current_user=None,
+        )
+
+        selected = next(row for row in rows if row["id"] == self.item.id)
+        self.assertEqual(selected["ppn_percent"], 12.0)
+        self.assertEqual(selected["ppn_type"], "included")
+
+    def test_purchase_item_list_keeps_explicit_no_ppn_override(self):
+        self.supplier.PpnSupplier = 12
+        self.db.add(
+            models.ItemSupplier(
+                item_id=self.item.id,
+                supplier_id=self.supplier.id,
+                ppn_type="none",
+                ppn_percent=0,
+            )
+        )
+        self.db.commit()
+
+        rows = get_items_for_purchase(
+            supplier_id=self.supplier.id,
+            db=self.db,
+            current_user=None,
+        )
+
+        selected = next(row for row in rows if row["id"] == self.item.id)
+        self.assertEqual(selected["ppn_percent"], 0)
+        self.assertEqual(selected["ppn_type"], "none")
 
     def test_legacy_mode_fallback_is_stable(self):
         self.assertEqual(normalize_purchase_tax_type(None, is_tax_included=True), "include")

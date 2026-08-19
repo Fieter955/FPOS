@@ -175,7 +175,24 @@ test("halaman pembelian memuat helper dan mengaitkan semua jalur keluar", () => 
   assert.match(html, /await formGrid\.addItem\(item\)/);
 });
 
-test("tipe PPN terkunci saat ada barang dan terbuka setelah semua barang dihapus", () => {
+test("non-PKP tidak memaksa validasi tarif barang menjadi 0%", () => {
+  assert.match(
+    sumberKomponen,
+    /const validasiTarif = tarifStandarRaw !== null && tarifStandarRaw !== undefined;/,
+  );
+  assert.match(
+    sumberKomponen,
+    /if \(validasiTarif && persen !== tarifStandar && typeof showConfirm === "function"\)/,
+  );
+  const html = readFileSync(
+    new URL("../frontend/purchase/purchases.html", import.meta.url),
+    "utf8",
+  );
+  assert.match(html, /tarifPpnStandar = null/);
+  assert.match(html, /tarif supplier\/barang tetap dipertahankan/);
+});
+
+test("tipe PPN memberi penjelasan saat ada barang dan terbuka setelah semua barang dihapus", () => {
   const html = readFileSync(
     new URL("../frontend/purchase/purchases.html", import.meta.url),
     "utf8",
@@ -186,6 +203,7 @@ test("tipe PPN terkunci saat ada barang dan terbuka setelah semua barang dihapus
   assert.ok(functionSource, "fungsi pengunci tipe PPN tidak ditemukan");
   assert.match(html, /onRowsChanged: updatePurchaseTaxTypeLock/);
   assert.match(html, /aria-describedby="taxTypeLockHint"/);
+  assert.match(html, /guardPurchaseTaxTypeClick\(event\)/);
 
   const taxType = {
     disabled: false,
@@ -206,7 +224,7 @@ test("tipe PPN terkunci saat ada barang dan terbuka setelah semua barang dihapus
   };
 
   vm.runInNewContext(`${functionSource}; updatePurchaseTaxTypeLock();`, sandbox);
-  assert.equal(taxType.disabled, true);
+  assert.equal(taxType.disabled, false);
   assert.equal(taxType.attributes["aria-disabled"], "true");
   assert.match(hint.textContent, /Hapus semua barang/);
 

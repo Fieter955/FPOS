@@ -112,6 +112,11 @@ def get_items_for_purchase(
     if supplier_id:
         query = query.join(models.ItemSupplier).filter(models.ItemSupplier.supplier_id == supplier_id)
 
+    supplier_default_ppn = 0.0
+    if supplier_id:
+        supplier = db.get(models.Supplier, supplier_id)
+        supplier_default_ppn = max(0.0, float(getattr(supplier, "PpnSupplier", 0) or 0)) if supplier else 0.0
+
     results = []
     for item in query.all():
         if is_virtual_variant(item):
@@ -151,7 +156,23 @@ def get_items_for_purchase(
                 if spec.barcode:
                     item_data["barcode"] = spec.barcode
                 item_data["ppn_type"] = spec.ppn_type or "included"
-                item_data["ppn_percent"] = spec.ppn_percent or 0
+                if (spec.ppn_type or "").lower() == "none":
+                    # Tanpa PPN adalah override eksplisit, bukan tarif yang belum diisi.
+                    item_data["ppn_type"] = "none"
+                    item_data["ppn_percent"] = 0
+                elif spec.ppn_percent and float(spec.ppn_percent) > 0:
+                    item_data["ppn_percent"] = float(spec.ppn_percent)
+                elif item.ppn_percent is not None:
+                    # Ikuti override tarif pada master barang, termasuk 0% eksplisit.
+                    item_data["ppn_percent"] = float(item.ppn_percent)
+                else:
+                    # Baris supplier lama sering masih 0 karena belum pernah diisi.
+                    # Dalam kasus ini gunakan default PPN supplier, bukan 0% palsu.
+                    item_data["ppn_percent"] = supplier_default_ppn
+            elif item.ppn_percent is not None:
+                item_data["ppn_percent"] = float(item.ppn_percent)
+            else:
+                item_data["ppn_percent"] = supplier_default_ppn
 
         results.append(item_data)
 

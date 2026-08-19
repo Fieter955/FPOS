@@ -60,7 +60,8 @@ class Settings(BaseSettings):
     TELEGRAM_CHAT_ID: str = "your_telegram_chat_id_here"
 
     # ── Update System ─────────────────────────────────────────────────────────
-    UPDATE_CHECK_URL: str = "https://raw.githubusercontent.com/Fieter955/FPOS/main/version.json"
+    # Manifest rilis berada di branch sumber yang memang menyimpan version.json.
+    UPDATE_CHECK_URL: str = "https://raw.githubusercontent.com/Fieter955/FPOS/run/10-juli-source/version.json"
     # HTTP is only useful for a controlled local test server. Production
     # installations must fetch both the manifest and package over HTTPS.
     UPDATE_ALLOW_HTTP: bool = False

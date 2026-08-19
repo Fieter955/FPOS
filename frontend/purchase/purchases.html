@@ -505,7 +505,7 @@
           </div>
           <div class="input-group">
             <label style="margin-bottom: 6px">Tipe PPN *</label>
-            <select id="bTaxType" class="input-control" aria-describedby="taxTypeLockHint" onchange="handleTaxTypeChange()">
+            <select id="bTaxType" class="input-control" aria-describedby="taxTypeLockHint" onmousedown="guardPurchaseTaxTypeClick(event)" onchange="handleTaxTypeChange()">
               <option value="" disabled selected>-- Pilih --</option>
               <option value="include">Include</option>
               <option value="exclude">Exclude</option>
@@ -842,7 +842,10 @@
       formGrid = null,
       allSuppliers = [];
     let pendingPaymentData = null; // To store data while mismatch modal is open
-    let tarifPpnStandar = 11; // Tarif PPN standar toko (dimuat dari setelan; default 11%)
+    let lastAllowedPurchaseTaxType = "include";
+    // Tarif validasi PPN per barang. null berarti non-PKP: jangan bandingkan
+    // tarif supplier/barang dengan 0% dan jangan memunculkan popup mismatch.
+    let tarifPpnStandar = null;
     let draftAutosaveTimer = null;
     let draftBaselineSnapshot = null;
     let lastPersistedSnapshot = null;
@@ -1037,7 +1040,9 @@
       if (!taxType) return;
       const hasItems = Boolean(formGrid?.getData?.().some((item) => item?.item_id));
       const hint = document.getElementById("taxTypeLockHint");
-      taxType.disabled = hasItems;
+      // Jangan men-disable kontrol: pengguna perlu bisa mengkliknya untuk
+      // mendapat penjelasan kenapa tipe PPN belum boleh diganti.
+      taxType.disabled = false;
       taxType.setAttribute("aria-disabled", String(hasItems));
       if (hint) {
         hint.textContent = hasItems
@@ -1046,8 +1051,35 @@
       }
     }
 
+    function adaBarangPembelian() {
+      return Boolean(formGrid?.getData?.().some((item) => item?.item_id));
+    }
+
+    function guardPurchaseTaxTypeClick(event) {
+      if (!adaBarangPembelian()) return;
+      event?.preventDefault?.();
+      showToast(
+        "Hapus semua barang terlebih dahulu dari tabel untuk mengganti Tipe PPN.",
+        "warning",
+      );
+    }
+
     function handleTaxTypeChange() {
-      const taxType = document.getElementById("bTaxType").value;
+      const taxTypeControl = document.getElementById("bTaxType");
+      if (!taxTypeControl) return;
+
+      if (adaBarangPembelian()) {
+        taxTypeControl.value = lastAllowedPurchaseTaxType;
+        showToast(
+          "Hapus semua barang terlebih dahulu dari tabel untuk mengganti Tipe PPN.",
+          "warning",
+        );
+        updatePurchaseTaxTypeLock();
+        return;
+      }
+
+      const taxType = taxTypeControl.value;
+      lastAllowedPurchaseTaxType = taxType;
       const bTax = document.getElementById("bTax");
 
       if (taxType === "include") {
@@ -1308,6 +1340,7 @@
       const bTaxType = document.getElementById("bTaxType");
       if (bTaxType) {
         bTaxType.value = "include";
+        lastAllowedPurchaseTaxType = "include";
         handleTaxTypeChange();
       }
 
@@ -1351,6 +1384,7 @@
           // lama yang hanya menyimpan is_tax_included tetap dapat dibuka.
           elTaxType.value = existing.tax_type ||
             (existing.is_tax_included ? "include" : "exclude");
+          lastAllowedPurchaseTaxType = elTaxType.value;
           handleTaxTypeChange();
         }
         const items = existing.items.map((it) => ({
@@ -2311,13 +2345,22 @@
     }
 
     (async () => {
-      // Muat tarif PPN standar toko (dipakai popup "ubah ke X%"). Default 11 bila gagal.
+      // Muat status PKP dan tarif standar toko untuk popup "ubah ke X%".
+      // Jika PKP mati atau status gagal dimuat, nonaktifkan validasi tarif;
+      // tarif supplier/barang tetap dipertahankan, bukan dipaksa ke 0%.
       try {
         const st = await api("GET", "/accounting/pkp-status");
-        if (st && st.tarif_ppn != null)
-          tarifPpnStandar = parseFloat(st.tarif_ppn) || 11;
+        const isPkp = st?.is_pkp === true;
+        const configuredRate = Number(st?.tarif_ppn);
+        if (isPkp) {
+          tarifPpnStandar = Number.isFinite(configuredRate) && configuredRate >= 0
+            ? configuredRate
+            : 11;
+        } else {
+          tarifPpnStandar = null;
+        }
       } catch (e) {
-        /* pakai default 11 */
+        tarifPpnStandar = null;
       }
       await initFilters();
       // Jika kembali dari detail_item.html, pulihkan form pembelian dari draft.

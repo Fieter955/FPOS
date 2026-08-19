@@ -958,7 +958,8 @@ function createPurchaseSummaryGrid(container, config = {}) {
   //  1) Tipe barang (include/exclude) harus sama dengan Tipe PPN transaksi.
   //     Bila beda → tanya "ubah jadi <tipe transaksi>?". Tolak = barang batal masuk.
   //  2) Persentase PPN harus sama dengan tarif standar toko.
-  //     Bila beda → tanya "ubah ke <tarif>% sesuai faktur?". Tolak = pakai apa adanya.
+  //     Bila beda dan validasi aktif → tanya "ubah ke <tarif>% sesuai faktur?".
+  //     Non-PKP tidak memvalidasi tarif terhadap 0%; tarif supplier/barang dipertahankan.
   // Return true bila barang boleh masuk tabel, false bila dibatalkan.
   const prosesPpnSaatPilih = async (row, sel) => {
     const tipeTransaksi =
@@ -976,8 +977,10 @@ function createPurchaseSummaryGrid(container, config = {}) {
     const tipeBarangAwal = tipeBarang;
     const hargaAwal = Number(row._detail.buy_price) || 0;
     let persen = sel.ppn_percent || 0;
-    const tarifStandar =
-      (typeof getTarifStandar === "function" ? getTarifStandar() : 11) || 11;
+    const tarifStandarRaw =
+      typeof getTarifStandar === "function" ? getTarifStandar() : null;
+    const validasiTarif = tarifStandarRaw !== null && tarifStandarRaw !== undefined;
+    const tarifStandar = validasiTarif ? Number(tarifStandarRaw) || 0 : 0;
     let perluSimpan = false;
     let tipeDiubah = false;
 
@@ -999,7 +1002,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
     }
 
     // 2) Cek persentase PPN terhadap tarif standar toko.
-    if (persen !== tarifStandar && typeof showConfirm === "function") {
+    if (validasiTarif && persen !== tarifStandar && typeof showConfirm === "function") {
       const ya = await showConfirm(
         `PPN barang "${sel.name}" tercatat ${persen}%, bukan ${tarifStandar}%.\n\nUbah ke ${tarifStandar}% sesuai faktur?`,
       );
