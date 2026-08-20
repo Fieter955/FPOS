@@ -381,6 +381,9 @@ class Purchase(Base):
     total = Column(Float, default=0)
     paid = Column(Float, default=0)
     status = Column(String(20), default="unpaid")
+    # purchase = transaksi pembelian, purchase_order = PO supplier,
+    # branch_request = request antar cabang (legacy flag tetap dipertahankan).
+    document_type = Column(String(20), default="purchase", nullable=False)
     notes = Column(Text)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

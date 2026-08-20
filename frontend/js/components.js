@@ -813,7 +813,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
   // Lebar kolom tetap (px) + Nama Barang dilebarkan. Tabel boleh scroll horizontal.
   // Kolom Diskon 210px agar muat 4 input potongan bertingkat tanpa meluber ke kolom Total.
   const kolom =
-    "40px minmax(260px, 1fr) 130px 70px 110px 120px 210px 150px 90px 120px";
+    "40px minmax(340px, 2fr) 130px 78px 110px 120px 210px 150px 90px 120px";
   const lebarMin = "1340px";
 
   // Daftar Jenis & Satuan (untuk combo per baris). Dimuat sekali saat init.
@@ -1064,7 +1064,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
       category_name: item?.category_name || "-",
       unit_id: item?.unit_id || null,
       unit_name: item?.unit_name || "-",
-      qty: item?.qty || item?.qty_ordered || 1,
+      qty: item?.qty ?? item?.qty_ordered ?? 0,
       buy_price: item?.buy_price || 0,
       sell_price: item?.sell_price || 0,
       profit_margin: item?.profit_margin || 0,
@@ -1082,7 +1082,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
             <div class="pg2-no" style="text-align:center; color:var(--text-muted); font-weight:600"></div>
             <div class="pg2-combo"></div>
             <div class="pg2-jenis"></div>
-            <input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0" class="combobox-input pg2-qty" value="${row._detail.qty}" style="text-align:center" />
+            <input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0" class="combobox-input pg2-qty" value="${toDesimal(row._detail.qty, { minimum: 2, maksimum: 4 })}" style="text-align:center" />
             <div class="pg2-satuan"></div>
             <input type="text" inputmode="decimal" data-input-desimal data-min="0" class="combobox-input pg2-beli" value="0" style="text-align:right" />
             <div class="pg2-disc disc-group"></div>
@@ -1102,6 +1102,13 @@ function createPurchaseSummaryGrid(container, config = {}) {
     const discCell = row.querySelector(".pg2-disc");
     const detailBtn = row.querySelector(".pg2-detail");
     const delBtn = row.querySelector(".pg2-del");
+
+    const fokusJumlah = () => {
+      qtyInp.focus();
+      const koma = qtyInp.value.indexOf(",");
+      const posisi = koma >= 0 ? koma : qtyInp.value.length;
+      qtyInp.setSelectionRange(posisi, posisi);
+    };
 
     // ── Diskon bertingkat (maks 4: disc1 lalu disc2 dari harga hasil disc1) ──
     const bacaDiskon = () => {
@@ -1283,7 +1290,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
     // Isi seluruh input/combo dari row._detail (dipakai saat pilih item / pulihkan baris)
     const isi = () => {
       const d = row._detail;
-      qtyInp.value = d.qty || 0;
+      qtyInp.value = toDesimal(d.qty || 0, { minimum: 2, maksimum: 4 });
       beliInp.value = toRibuan(d.buy_price || 0);
       taxInp.value = d.ppn || 0;
       const j = cariByName(daftarJenis, d.category_name);
@@ -1309,6 +1316,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
       hitungTotal(row);
       if (onChange) onChange();
     };
+    qtyInp.addEventListener("focus", fokusJumlah);
 
     // ── Harga Beli (format ribuan saat ketik, simpan ke supplier saat blur) ──
     beliInp.oninput = (e) => {

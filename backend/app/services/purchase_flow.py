@@ -395,6 +395,7 @@ def create_branch_request(db: Session, *, data: schemas.PurchaseCreate,
         total=totals["total"],
         paid=0,
         status="pending",
+        document_type="branch_request",
         notes=data.notes,
         created_by=current_user.id,
         is_branch_request=True,
@@ -444,6 +445,7 @@ def create_supplier_purchase(db: Session, *, data: schemas.PurchaseCreate,
         total=totals["total"],
         paid=data.paid or 0,
         status=status,
+        document_type=("purchase" if data.document_type == "branch_request" else data.document_type),
         notes=data.notes,
         created_by=current_user.id,
         is_branch_request=False,
@@ -576,6 +578,7 @@ def update_draft_purchase(db: Session, *, purchase: models.Purchase,
     purchase.status = status
     purchase.notes = data.notes
     purchase.is_branch_request = False
+    purchase.document_type = data.document_type
     purchase.target_branch_id = final_target_branch_id
 
     db.query(models.PurchaseItem).filter(models.PurchaseItem.purchase_id == purchase.id).delete()

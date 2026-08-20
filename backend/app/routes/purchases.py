@@ -47,6 +47,7 @@ def get_purchases(
     end_date: Optional[date] = None,
     supplier_id: Optional[int] = None,
     status: Optional[str] = None,
+    document_type: Optional[str] = None,
     is_branch_request: Optional[bool] = None,
     target_branch_id: Optional[int] = None,
     skip: int = 0,
@@ -73,6 +74,8 @@ def get_purchases(
         q = q.filter(models.Purchase.date <= end_date)
     if supplier_id:
         q = q.filter(models.Purchase.supplier_id == supplier_id)
+    if document_type:
+        q = q.filter(models.Purchase.document_type == document_type)
     if target_branch_id:
         q = q.filter(models.Purchase.target_branch_id == target_branch_id)
 
@@ -346,6 +349,7 @@ def create_purchase(
             total=totals["total"],
             paid=0,
             status="draft",
+            document_type=data.document_type,
             notes=data.notes,
             created_by=current_user.id,
             is_branch_request=False,
@@ -657,6 +661,12 @@ def update_purchase(
         return final_purchase
 
     assert_books_open(db, purchase.branch_id, tanggal, "Pembelian")
+    if purchase.document_type == "purchase" and purchase.status in ("unpaid", "partial"):
+        if float(purchase.paid or 0) > 0 or purchase.status == "partial":
+            raise HTTPException(400, "Pembelian yang sudah dibayar sebagian tidak dapat diedit.")
+        cancel_purchase_flow(db, purchase=purchase, current_user=current_user)
+        purchase.status = "draft"
+        purchase.paid = 0
     updated = update_draft_purchase(db, purchase=purchase, data=data, current_user=current_user)
     db.commit()
     db.refresh(updated)

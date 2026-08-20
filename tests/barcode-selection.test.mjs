@@ -21,6 +21,13 @@ function bacaSkripBarcode() {
       pilihItemById,
       renderSearch: renderItemSearchResults,
       getRequestedAddQty,
+      ubahQty,
+      selesaikanUbahQty,
+      ubahQtyDenganDelta,
+      hapusItem,
+      hapusSemuaItem,
+      ubahHargaGlobal,
+      ubahTampilanHarga,
       printStiker,
     };`;
 }
@@ -253,7 +260,10 @@ function buatSimulasi({ generateError = false, printAccepted = true } = {}) {
         return { barcode_value: `GEN-${body.item_id}` };
       }
       if (path === "/print/") {
-        return { success: printAccepted, job_id: printAccepted ? 91 : null };
+        return {
+          status: printAccepted ? "queued" : "rejected",
+          job_id: printAccepted ? 91 : null,
+        };
       }
       return {};
     },
@@ -436,7 +446,7 @@ test("klik satu baris hasil langsung menambahkan barang", async () => {
   assert.equal(daftar[0].name, "Pasir Halus");
 });
 
-test("kegagalan membuat barcode tidak menambahkan label kosong", async () => {
+test("barang langsung masuk daftar dan cetak ditahan jika pembuatan barcode gagal", async () => {
   const gagalGenerate = buatSimulasi({ generateError: true });
   gagalGenerate.sandbox.__barcodeTest.setItems(barang);
   const input = gagalGenerate.document.getElementById("itemSearch");
@@ -447,11 +457,25 @@ test("kegagalan membuat barcode tidak menambahkan label kosong", async () => {
   input.dispatch("keydown", { key: "Enter" });
   await tuntaskanPromise();
 
-  assert.equal(gagalGenerate.sandbox.__barcodeTest.getDaftar().length, 0);
+  const daftar = gagalGenerate.sandbox.__barcodeTest.getDaftar();
+  assert.equal(daftar.length, 1);
+  assert.equal(daftar[0].name, "Pasir Halus");
+  assert.equal(daftar[0].qty, 4);
+  assert.equal(daftar[0].barcode, "");
+  assert.equal(daftar[0].barcode_status, "error");
   assert.ok(
     gagalGenerate.toast.some(
       ({ message, type }) =>
         type === "error" && message.includes("Barcode duplikat"),
+    ),
+  );
+
+  await gagalGenerate.sandbox.__barcodeTest.printStiker();
+  assert.equal(gagalGenerate.panggilanFetch.length, 0);
+  assert.ok(
+    gagalGenerate.toast.some(
+      ({ message, type }) =>
+        type === "warning" && message.includes("belum siap"),
     ),
   );
 });
@@ -465,6 +489,104 @@ test("Qty global bersifat tambahan untuk barang yang sudah ada", async () => {
   const daftar = simulasi.sandbox.__barcodeTest.getDaftar();
   assert.equal(daftar.length, 1);
   assert.equal(daftar[0].qty, 8);
+
+  await simulasi.sandbox.__barcodeTest.pilihItemById(1, 9999);
+  assert.equal(simulasi.sandbox.__barcodeTest.getDaftar()[0].qty, 9999);
+});
+
+test("Qty pada daftar menjadi jumlah akhir label di payload", async () => {
+  const simulasi = buatSimulasi();
+  simulasi.sandbox.__barcodeTest.setItems(barang);
+  await simulasi.sandbox.__barcodeTest.pilihItemById(1, 8);
+
+  assert.equal(simulasi.sandbox.__barcodeTest.ubahQty(1, "4"), true);
+
+  const daftar = simulasi.sandbox.__barcodeTest.getDaftar();
+  const payload = simulasi.sandbox.__barcodeTest.getPayload();
+  assert.equal(daftar[0].qty, 4);
+  assert.equal(payload.data_produk.length, 4);
+  assert.ok(payload.data_produk.every((item) => item.barcode === "BC-001"));
+});
+
+test("Qty kosong atau desimal mempertahankan nilai sah terakhir dan batas diterapkan", async () => {
+  const simulasi = buatSimulasi();
+  simulasi.sandbox.__barcodeTest.setItems(barang);
+  await simulasi.sandbox.__barcodeTest.pilihItemById(1, 7);
+
+  assert.equal(simulasi.sandbox.__barcodeTest.ubahQty(1, ""), false);
+  assert.equal(simulasi.sandbox.__barcodeTest.ubahQty(1, "2.5"), false);
+  assert.equal(simulasi.sandbox.__barcodeTest.ubahQty(1, "abc"), false);
+  assert.equal(simulasi.sandbox.__barcodeTest.getDaftar()[0].qty, 7);
+
+  const input = { value: "" };
+  simulasi.sandbox.__barcodeTest.selesaikanUbahQty(1, input);
+  assert.equal(input.value, "7");
+
+  simulasi.sandbox.__barcodeTest.ubahQty(1, "0");
+  assert.equal(simulasi.sandbox.__barcodeTest.getDaftar()[0].qty, 1);
+  simulasi.sandbox.__barcodeTest.ubahQty(1, "10000");
+  assert.equal(simulasi.sandbox.__barcodeTest.getDaftar()[0].qty, 9999);
+});
+
+test("Qty lima pada layout tiga Lin menghasilkan lima label dan dua baris", async () => {
+  const simulasi = buatSimulasi();
+  simulasi.sandbox.__barcodeTest.setItems(barang);
+  await simulasi.sandbox.__barcodeTest.pilihItemById(1, 5);
+  simulasi.document.querySelector('input[name="colLayout"]:checked').value = "3";
+
+  await simulasi.sandbox.__barcodeTest.printStiker();
+
+  const renderPayload = simulasi.panggilanFetch[0].body;
+  const printCall = simulasi.panggilanApi.find(({ path }) => path === "/print/");
+  const printContent = JSON.parse(printCall.body.content);
+  assert.equal(renderPayload.data_produk.length, 5);
+  assert.equal(printContent.total_labels, 5);
+  assert.equal(printContent.row_count, 2);
+  assert.equal(printContent.col_count, 3);
+});
+
+test("daftar terpilih mendukung tombol kuantitas, batal per barang, dan batalkan semua", async () => {
+  const simulasi = buatSimulasi();
+  simulasi.sandbox.__barcodeTest.setItems(barang);
+  await simulasi.sandbox.__barcodeTest.pilihItemById(1, 2);
+  await simulasi.sandbox.__barcodeTest.pilihItemById(2, 3);
+
+  simulasi.sandbox.__barcodeTest.ubahQtyDenganDelta(1, 1);
+  assert.equal(simulasi.sandbox.__barcodeTest.getDaftar()[0].qty, 3);
+  assert.match(
+    simulasi.document.getElementById("daftarCetakBody").innerHTML,
+    /Batal/,
+  );
+
+  simulasi.sandbox.__barcodeTest.hapusItem(1);
+  assert.equal(
+    simulasi.sandbox.__barcodeTest.getDaftar().map((item) => item.id).join(","),
+    "2",
+  );
+
+  simulasi.sandbox.__barcodeTest.hapusSemuaItem();
+  assert.equal(simulasi.sandbox.__barcodeTest.getDaftar().length, 0);
+  assert.equal(
+    simulasi.document.getElementById("btnHapusSemuaBarcode").disabled,
+    true,
+  );
+});
+
+test("harga tidak dicetak sebelum checkbox harga diaktifkan", async () => {
+  const simulasi = buatSimulasi();
+  simulasi.sandbox.__barcodeTest.setItems(barang);
+  await simulasi.sandbox.__barcodeTest.pilihItemById(1);
+
+  let payload = simulasi.sandbox.__barcodeTest.getPayload();
+  assert.equal(payload.data_produk[0].tampilkan_harga, false);
+
+  simulasi.sandbox.__barcodeTest.ubahTampilanHarga(1, true);
+  payload = simulasi.sandbox.__barcodeTest.getPayload();
+  assert.equal(payload.data_produk[0].tampilkan_harga, true);
+
+  simulasi.sandbox.__barcodeTest.ubahTampilanHarga(1, false);
+  payload = simulasi.sandbox.__barcodeTest.getPayload();
+  assert.equal(payload.data_produk[0].tampilkan_harga, false);
 });
 
 test("satu label mempertahankan lebar media 1, 2, dan 3 Lin", async () => {

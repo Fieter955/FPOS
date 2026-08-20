@@ -181,19 +181,27 @@ function focusWorkspaceDashboard() {
   window.location.href = "/dashboard";
 }
 
-// Copot service worker lama + bersihkan cache-nya. SW lama (pass-through di sw.js &
-// cache-first di service-worker.js) hanya menambah overhead per-request dan bikin
-// loading/navigasi di browser lebih lambat dari versi .exe. Idempoten: setelah bersih,
-// jadi no-op. (Pendaftaran SW sudah dihapus dari index.html & pos.html.)
-if (!FPOS_WORKSPACE_EMBEDDED && "serviceWorker" in navigator) {
-  navigator.serviceWorker
-    .getRegistrations()
-    .then((rs) => rs.forEach((r) => r.unregister()))
-    .catch(() => {});
-  if (window.caches) {
-    caches
-      .keys()
-      .then((ks) => ks.forEach((k) => caches.delete(k)))
+// Copot service worker lama + bersihkan cache-nya. Pembersihan harus berjalan
+// juga di iframe Workspace: sebelumnya iframe melewati blok ini sehingga tab
+// Barcode lama dapat terus tampil walaupun backend sudah menyajikan HTML baru.
+// Reload satu kali setelah pembersihan agar dokumen yang sedang dikontrol SW
+// lama benar-benar diambil ulang dari server.
+const FPOS_CACHE_CLEANUP_REV = "20260821-barcode-cache-fix-1";
+if ("serviceWorker" in navigator) {
+  const cleanupMarker = `fpos_cache_cleanup:${FPOS_CACHE_CLEANUP_REV}`;
+  if (sessionStorage.getItem(cleanupMarker) !== "1") {
+    Promise.all([
+      navigator.serviceWorker.getRegistrations(),
+      window.caches ? caches.keys() : Promise.resolve([]),
+    ])
+      .then(async ([registrations, cacheKeys]) => {
+        const hadStaleState = registrations.length > 0 || cacheKeys.length > 0;
+        await Promise.all(registrations.map((registration) => registration.unregister()));
+        await Promise.all(cacheKeys.map((key) => caches.delete(key)));
+        if (!hadStaleState) return;
+        sessionStorage.setItem(cleanupMarker, "1");
+        window.location.reload();
+      })
       .catch(() => {});
   }
 }

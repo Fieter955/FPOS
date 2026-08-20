@@ -189,7 +189,7 @@
     }
 
     #viewForm .purchase-grid-container {
-      max-height: 205px;
+      max-height: min(52vh, 520px);
       overflow-y: auto;
       scrollbar-gutter: stable;
     }
@@ -1581,9 +1581,12 @@
           items: items,
           paid: 0,
           status: currentFormMode === "po" ? "draft" : "unpaid",
+          document_type: currentFormMode === "po" ? "purchase_order" : "purchase",
         };
-        if (draftId) await api("PUT", `/purchases/${draftId}`, payload);
-        else await api("POST", "/purchases/", payload);
+        const saved = draftId
+          ? await api("PUT", `/purchases/${draftId}`, payload)
+          : await api("POST", "/purchases/", payload);
+        draftId = saved?.id || draftId;
         getPurchaseDraftStore(currentFormMode)?.remove();
         sessionStorage.removeItem("purchase_form_draft");
         sessionStorage.removeItem("purchase_form_return");
@@ -1591,7 +1594,6 @@
         draftBaselineSnapshot = null;
         hideLoading();
         showToast("Berhasil disimpan ✓");
-        switchTab("list", { draftAlreadySaved: true });
       } catch (ex) {
         hideLoading();
         showToast(ex.message, "error");
@@ -1966,7 +1968,7 @@
 
     const sb = (s, p) => {
       let labels = "";
-      if (p && p.is_branch_request) {
+      if (p && (p.is_branch_request || p.document_type === "purchase_order")) {
         labels +=
           '<span style="background:rgba(37,99,235,0.15);color:#2563eb;padding:4px 10px;border-radius:6px;font-weight:700;margin-right:4px;">📦 PO</span>';
       }
@@ -2028,7 +2030,7 @@
             .map((p) => {
               const canPay = isMainStore() || !p.is_branch_request;
               const payBtn =
-                p.status === "draft" && canPay
+                p.status === "draft" && canPay && p.document_type !== "purchase_order"
                   ? `<button class="btn" style="padding:4px 8px;font-size:12px;background:var(--primary);color:white;border:none" onclick="startPaymentProcess(${p.id})">💸 Bayar</button>`
                   : "";
               const prosesBtn =

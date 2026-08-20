@@ -399,6 +399,7 @@ class PurchaseCreate(BaseModel):
     items: List[PurchaseItemCreate]
     paid: float = 0
     status: Optional[str] = None
+    document_type: Literal["purchase", "purchase_order", "branch_request"] = "purchase"
     is_branch_request: Optional[bool] = False
     target_branch_id: Optional[int] = None
     from_po_id: Optional[int] = None
@@ -437,6 +438,7 @@ class PurchaseOut(BaseModel):
     total: float
     paid: float
     status: str
+    document_type: str = "purchase"
     notes: Optional[str]
     is_branch_request: Optional[bool] = False
     target_branch_id: Optional[int] = None

@@ -225,6 +225,10 @@ def run_migrations():
     add_col("purchases", "branch_id", "INTEGER DEFAULT 1")
     add_col("purchases", "is_branch_request", "INTEGER DEFAULT 0")
     add_col("purchases", "target_branch_id", "INTEGER")
+    # Dokumen PO/permintaan cabang memakai tipe dokumen eksplisit. Database
+    # lama tidak memiliki kolom ini, sementara model ORM sudah memilihnya pada
+    # setiap query Purchase; tambahkan sebelum aplikasi menerima request.
+    add_col("purchases", "document_type", "TEXT DEFAULT 'purchase'")
     add_col("purchase_items", "qty_ordered", "FLOAT DEFAULT 0")
     add_col("purchase_items", "qty_received", "FLOAT DEFAULT 0")
     add_col("purchase_items", "ppn_percent", "REAL")  # tarif PPN per-baris beli; NULL → ikut tarif barang/toko (Included/PKP)
@@ -269,6 +273,15 @@ def run_migrations():
     # Retur lama tidak menyimpan cabang. Turunkan dari dokumen asal tanpa
     # mengarang identitas kasir yang memang tidak tersedia.
     try:
+        c.execute(
+            "UPDATE purchases SET document_type = 'branch_request' "
+            "WHERE is_branch_request = 1 AND "
+            "(document_type IS NULL OR document_type = 'purchase')"
+        )
+        c.execute(
+            "UPDATE purchases SET document_type = 'purchase' "
+            "WHERE document_type IS NULL OR TRIM(document_type) = ''"
+        )
         c.execute(
             "UPDATE sale_returns SET branch_id = "
             "(SELECT branch_id FROM sales WHERE sales.id = sale_returns.sale_id) "

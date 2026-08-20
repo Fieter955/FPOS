@@ -2,6 +2,9 @@
   "use strict";
 
   const MAX_TABS = 10;
+  // Ubah nilai ini setiap kali struktur halaman berubah. Tab Workspace
+  // disimpan di localStorage dan iframe lama tidak otomatis dibuat ulang.
+  const FRONTEND_CACHE_REV = "20260821-barcode-cache-fix-1";
   const DASHBOARD_ID = "dashboard";
   const DASHBOARD_URL = "/dashboard";
   const tabsElement = document.getElementById("workspaceTabs");
@@ -171,7 +174,7 @@
   function storageKey() {
     const user = getUser();
     const identity = user.id || user.username || "anonymous";
-    return `fpos_workspace_tabs:${identity}`;
+    return `fpos_workspace_tabs:${identity}:${FRONTEND_CACHE_REV}`;
   }
 
   function saveState() {
@@ -335,7 +338,9 @@
   function loadTab(tab) {
     if (!tab || tab.loaded) return;
     tab.loaded = true;
-    tab.frame.src = tab.url;
+    const frameUrl = new URL(tab.url, location.origin);
+    frameUrl.searchParams.set("__fpos_rev", FRONTEND_CACHE_REV);
+    tab.frame.src = `${frameUrl.pathname}${frameUrl.search}${frameUrl.hash}`;
   }
 
   function updateTabPresentation(tab) {
