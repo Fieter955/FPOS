@@ -32,7 +32,7 @@
     /* Hiding the PPN Included column when tax type is exclude */
     body.hide-tax-col .purchase-grid-header,
     body.hide-tax-col .purchase-grid-row {
-      grid-template-columns: 40px minmax(260px, 1fr) 130px 70px 110px 120px 210px 150px 120px !important;
+      grid-template-columns: 28px minmax(150px, 2fr) minmax(72px, .8fr) 58px 72px 92px minmax(112px, 1.2fr) 100px 82px !important;
     }
 
     body.hide-tax-col .purchase-grid-header>div:nth-child(9),
@@ -191,7 +191,29 @@
     #viewForm .purchase-grid-container {
       max-height: min(52vh, 520px);
       overflow-y: auto;
+      overflow-x: hidden;
       scrollbar-gutter: stable;
+    }
+
+    #viewForm #gridTarget,
+    #viewForm #gridTarget > div {
+      max-width: 100%;
+      overflow-x: hidden;
+    }
+
+    #viewForm .purchase-grid-header,
+    #viewForm .purchase-grid-row {
+      min-width: 0 !important;
+    }
+
+    #viewForm .purchase-grid-header > *,
+    #viewForm .purchase-grid-row > * {
+      min-width: 0;
+    }
+
+    #viewForm .purchase-grid-row .combobox-container,
+    #viewForm .purchase-grid-row .combobox-input {
+      max-width: 100%;
     }
 
     #viewForm .purchase-grid-header {
@@ -337,6 +359,12 @@
     }
 
     @media (max-width: 1023px) {
+      #viewForm .purchase-grid-header,
+      #viewForm .purchase-grid-row {
+        grid-template-columns: 24px minmax(0, 2fr) minmax(0, .9fr) 52px minmax(0, .9fr) 76px minmax(0, 1.1fr) 84px 68px 72px !important;
+        gap: 4px !important;
+      }
+
       .summary-box-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
@@ -364,6 +392,15 @@
       .purchase-primary-fields,
       .summary-box-grid {
         grid-template-columns: minmax(0, 1fr) !important;
+      }
+
+      #viewForm .purchase-grid-header,
+      #viewForm .purchase-grid-row {
+        grid-template-columns: 22px minmax(0, 1.7fr) minmax(0, .8fr) 46px minmax(0, .8fr) 64px minmax(0, 1fr) 72px 58px 62px !important;
+        gap: 3px !important;
+        padding-left: 4px !important;
+        padding-right: 4px !important;
+        font-size: 11px !important;
       }
 
       #viewForm .purchase-grid-container {
@@ -1391,6 +1428,10 @@
           id: it.item_id,
           name: it.item?.name,
           code: it.item?.code,
+          category_id: it.item?.category_id || it.item?.category?.id || null,
+          category_name: it.item?.category?.name || "-",
+          unit_id: it.item?.unit_id || it.item?.unit?.id || null,
+          unit_name: it.item?.unit?.name || "-",
           qty: it.qty,
           buy_price: it.buy_price,
           sell_price: it.item?.sell_price || 0,
@@ -1593,6 +1634,9 @@
         lastPersistedSnapshot = null;
         draftBaselineSnapshot = null;
         hideLoading();
+        // Setelah tersimpan, kembali ke daftar agar form tidak menampilkan
+        // transaksi yang sama ketika tab pembelian dibuka lagi.
+        switchTab("list", { draftAlreadySaved: true });
         showToast("Berhasil disimpan ✓");
       } catch (ex) {
         hideLoading();

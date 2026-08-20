@@ -246,7 +246,9 @@ def get_purchase(
     from sqlalchemy.orm import joinedload
     obj = get_query(db, models.Purchase, current_user).options(
         joinedload(models.Purchase.items).joinedload(models.PurchaseItem.item).joinedload(models.Item.suppliers),
-        joinedload(models.Purchase.items).joinedload(models.PurchaseItem.item).joinedload(models.Item.supplier_details)
+        joinedload(models.Purchase.items).joinedload(models.PurchaseItem.item).joinedload(models.Item.supplier_details),
+        joinedload(models.Purchase.items).joinedload(models.PurchaseItem.item).joinedload(models.Item.category),
+        joinedload(models.Purchase.items).joinedload(models.PurchaseItem.item).joinedload(models.Item.unit),
     ).filter(models.Purchase.id == pid).first()
     
     if not obj:

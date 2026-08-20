@@ -1,10 +1,10 @@
 ﻿{
-    "version":  "5.0.4",
+    "version":  "5.0.5",
     "minimum_version":  "0.0.0",
-    "release_date":  "2026-08-20",
-    "notes":  "Perbaikan validasi antrean cetak barcode.",
-    "download_url":  "https://github.com/Fieter955/FPOS/releases/download/v5.0.4/FPOS-5.0.4-Windows.zip",
-    "sha256":  "b17f496929e35a83f83a079efbeaaff20ea7a424793b72f282fe17092c033d2e",
-    "size_bytes":  93298199,
+    "release_date":  "2026-08-21",
+    "notes":  "Perbaikan barcode dan dokumen pembelian.",
+    "download_url":  "https://github.com/Fieter955/FPOS/releases/download/v5.0.5/FPOS-5.0.5-Windows.zip",
+    "sha256":  "5d4227a5eadf5dd7ac7881005a5aee217e776d5cf983241e3e5491498bf00560",
+    "size_bytes":  93609278,
     "mandatory":  false
 }

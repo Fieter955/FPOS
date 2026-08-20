@@ -810,11 +810,10 @@ function createPurchaseSummaryGrid(container, config = {}) {
   } = config;
 
   let currentData = [];
-  // Lebar kolom tetap (px) + Nama Barang dilebarkan. Tabel boleh scroll horizontal.
-  // Kolom Diskon 210px agar muat 4 input potongan bertingkat tanpa meluber ke kolom Total.
+  // Grid responsif agar seluruh kolom muat di area form tanpa scroll horizontal.
   const kolom =
-    "40px minmax(340px, 2fr) 130px 78px 110px 120px 210px 150px 90px 120px";
-  const lebarMin = "1340px";
+    "28px minmax(150px, 2fr) minmax(72px, .8fr) 58px 72px 92px minmax(112px, 1.2fr) 100px 82px 84px";
+  const lebarMin = "0";
 
   // Daftar Jenis & Satuan (untuk combo per baris). Dimuat sekali saat init.
   let daftarJenis = [];
@@ -847,8 +846,8 @@ function createPurchaseSummaryGrid(container, config = {}) {
   };
 
   target.innerHTML = `
-        <div style="overflow-x:auto">
-          <div class="purchase-grid-container" style="min-width:${lebarMin}">
+        <div style="overflow-x:hidden;width:100%">
+          <div class="purchase-grid-container" style="min-width:${lebarMin};width:100%">
             <div class="purchase-grid-header" style="display:grid; grid-template-columns:${kolom}; gap:10px; padding:10px; background:var(--bg-color); font-weight:700; font-size:12px; border-radius:8px 8px 0 0">
                 <div style="text-align:center">No</div>
                 <div>Nama Barang</div>
@@ -882,6 +881,20 @@ function createPurchaseSummaryGrid(container, config = {}) {
       const noCell = row.querySelector(".pg2-no");
       if (noCell) noCell.textContent = i + 1;
     });
+  };
+
+  // Pertahankan baris pertama untuk barang yang sama agar harga, diskon, dan
+  // PPN yang sudah diatur pengguna tidak tertimpa saat ada duplikasi.
+  const gabungkanBaris = (row, targetRow, qtyTambahan = 0) => {
+    if (!row || !targetRow || row === targetRow) return targetRow;
+    targetRow._detail.qty =
+      (Number(targetRow._detail.qty) || 0) + (Number(qtyTambahan) || 0);
+    row.remove();
+    renumber();
+    targetRow._isi?.();
+    if (onChange) onChange();
+    notifyRowsChanged();
+    return targetRow;
   };
 
   // Perbarui sel Total (qty × harga neto setelah diskon)
@@ -1165,6 +1178,16 @@ function createPurchaseSummaryGrid(container, config = {}) {
           ? () => fokusInput(qtyInp)
           : null,
         onSelect: async (sel) => {
+          const duplicate = Array.from(body.children).find(
+            (candidate) =>
+              candidate !== row &&
+              String(candidate._detail?.item_id || "") === String(sel.id),
+          );
+          if (duplicate) {
+            const merged = gabungkanBaris(row, duplicate, row._detail.qty);
+            setTimeout(() => fokusInput(merged.querySelector(".pg2-qty")), 0);
+            return;
+          }
           row._detail.item_id = sel.id;
           // Kunci tipe PPN sejak barang dipilih, termasuk ketika proses
           // konfirmasi PPN di bawah masih menunggu jawaban pengguna.
@@ -1400,7 +1423,21 @@ function createPurchaseSummaryGrid(container, config = {}) {
   const methods = {
     addRow,
     addItem: async (item) => {
-      const row = addRow(item);
+      const itemId = item?.id || item?.item_id;
+      const duplicate = Array.from(body.children).find(
+        (row) => String(row._detail?.item_id || "") === String(itemId || ""),
+      );
+      if (duplicate) {
+        // Satu hasil scan berarti satu unit tambahan.
+        duplicate._detail.qty = (Number(duplicate._detail.qty) || 0) + 1;
+        duplicate._isi?.();
+        if (onChange) onChange();
+        notifyRowsChanged();
+        return duplicate;
+      }
+
+      // Baris dari scanner dimulai dengan satu unit, bukan baris kosong.
+      const row = addRow({ ...item, qty: 1 });
       if (!row?._detail?.item_id) return row;
 
       const lanjut = await prosesPpnSaatPilih(row, item);
@@ -1429,7 +1466,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
         if (!d.item_id) return;
         const neto = hitungNeto(d);
         const discs = d.discs || [];
-        data.push({
+        const line = {
           item_id: parseInt(d.item_id),
           qty: d.qty || 0,
           qty_ordered: d.qty || 0,
@@ -1446,7 +1483,16 @@ function createPurchaseSummaryGrid(container, config = {}) {
           // Tarif PPN baris (kolom "PPN Include" mode Included). null → backend mundur
           // ke Item.ppn_percent / tarif toko.
           ppn_percent: d.ppn_percent ?? d.ppn ?? null,
-        });
+        };
+        const existing = data.find((entry) => entry.item_id === line.item_id);
+        if (existing) {
+          existing.qty += line.qty;
+          existing.qty_ordered += line.qty_ordered;
+          existing.qty_received += line.qty_received;
+          existing.total += line.total;
+        } else {
+          data.push(line);
+        }
       });
       return data;
     },
