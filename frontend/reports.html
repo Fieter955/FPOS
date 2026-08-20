@@ -549,7 +549,13 @@
           permissionState,
         );
         applyRoleVisibility();
-        loadDash();
+        setupRoutedTabs({
+          tabs: canViewFinancialReports
+            ? ["dash", "pl", "ar", "ap", "top"]
+            : ["dash", "ar", "ap", "top"],
+          defaultTab: "dash",
+          activate: (tab) => switchTab(tab),
+        });
       }
       initReportPermissions().catch((error) =>
         showToast(error.message, "error"),

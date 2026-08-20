@@ -8,10 +8,17 @@ from datetime import datetime, date
 from ..database import get_db
 from .. import models
 from ..auth import get_current_user, get_query 
-from ..schemas import AdjustmentCreate
+from ..schemas import (
+    AdjustmentCreate,
+    InventoryDocumentCancel,
+    InventoryDocumentCreate,
+    InventoryDocumentLineCreate,
+)
 from sqlalchemy import func 
 from ..services.low_stock import get_low_stock_items
 from ..services.virtual_units import is_virtual_variant
+from ..services import inventory_documents as inventory_document_service
+from ..permissions import has_permission
 
 router = APIRouter()
 
@@ -124,12 +131,277 @@ def get_low_stock(db: Session = Depends(get_db), current_user: models.User = Dep
 
 # ─── 3. PENYESUAIAN STOK MANUAL / OPNAME BARU DENGAN JURNAL ─────────────────
 # ─── 3. PENYESUAIAN STOK MANUAL / OPNAME BARU DENGAN JURNAL ─────────────────
-@router.post("/adjust")
+@router.get("/document-warehouses")
+def get_document_warehouses(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if not any(
+        has_permission(db, current_user, key, "view")
+        for key in inventory_document_service.TYPE_PERMISSION.values()
+    ):
+        raise HTTPException(403, "Akses dokumen persediaan ditolak")
+    rows = db.query(models.Warehouse).filter(
+        models.Warehouse.branch_id == current_user.active_branch_id,
+        models.Warehouse.is_active == True,
+    ).order_by(models.Warehouse.is_default.desc(), models.Warehouse.name).all()
+    return [
+        {"id": row.id, "name": row.name, "code": row.code, "is_default": row.is_default}
+        for row in rows
+    ]
+
+
+@router.get("/item-snapshot")
+def get_item_snapshot(
+    warehouse_id: int,
+    item_id: Optional[int] = None,
+    search: Optional[str] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if not any(
+        has_permission(db, current_user, key, "view")
+        for key in inventory_document_service.TYPE_PERMISSION.values()
+    ):
+        raise HTTPException(403, "Akses dokumen persediaan ditolak")
+    warehouse = db.query(models.Warehouse).filter(models.Warehouse.id == warehouse_id).first()
+    if not warehouse or warehouse.branch_id != current_user.active_branch_id:
+        raise HTTPException(403, "Gudang tidak tersedia pada cabang aktif")
+    q = db.query(models.Item).filter(
+        models.Item.is_active == True,
+        models.Item.is_virtual_variant == False,
+        models.Item.parent_item_id.is_(None),
+    )
+    if item_id:
+        q = q.filter(models.Item.id == item_id)
+    if search:
+        pattern = f"%{search.strip()}%"
+        q = q.filter(
+            models.Item.name.ilike(pattern)
+            | models.Item.code.ilike(pattern)
+            | models.Item.barcode.ilike(pattern)
+        )
+    show_stock = has_permission(db, current_user, "inventory.opname_show_stock", "view")
+    show_cost = has_permission(db, current_user, "inventory.show_cost_in", "view") or has_permission(
+        db, current_user, "inventory.show_cost_out", "view"
+    )
+    result = []
+    for item in q.order_by(models.Item.name).limit(min(max(limit, 1), 200)).all():
+        qty = inventory_document_service.warehouse_stock(db, warehouse.id, item.id)
+        result.append({
+            "id": item.id,
+            "code": item.code,
+            "barcode": item.barcode,
+            "name": item.name,
+            "unit": item.unit.abbreviation if item.unit else None,
+            "stock": qty if show_stock else None,
+            "buy_price": float(item.buy_price or 0) if show_cost else None,
+            "snapshot_token": inventory_document_service.snapshot_token(warehouse.id, item.id, qty),
+        })
+    return result
+
+
+@router.get("/document-accounts")
+def get_document_accounts(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if not any(
+        has_permission(db, current_user, key, "view")
+        for key in inventory_document_service.TYPE_PERMISSION.values()
+    ):
+        raise HTTPException(403, "Akses dokumen persediaan ditolak")
+    can_override = has_permission(db, current_user, "inventory.account_override", "view")
+    accounts = db.query(models.Account).filter(
+        models.Account.is_active == True,
+        models.Account.type.in_(["revenue", "equity", "expense"]),
+    ).order_by(models.Account.code).all()
+    return {
+        "can_override": can_override,
+        "defaults": {
+            key: {"surplus": plus, "shortage": minus}
+            for key, (plus, minus) in inventory_document_service.DEFAULT_ACCOUNT.items()
+        },
+        "accounts": [
+            {"id": account.id, "code": account.code, "name": account.name, "type": account.type}
+            for account in accounts
+        ] if can_override else [],
+    }
+
+
+@router.get("/documents")
+def list_inventory_documents(
+    type: Optional[str] = None,
+    status: Optional[str] = None,
+    warehouse_id: Optional[int] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    search: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    q = db.query(models.InventoryDocument).filter(
+        models.InventoryDocument.branch_id == current_user.active_branch_id
+    )
+    if type:
+        if type not in inventory_document_service.TYPE_PERMISSION:
+            raise HTTPException(400, "Tipe dokumen tidak dikenal")
+        if not has_permission(db, current_user, inventory_document_service.TYPE_PERMISSION[type], "view"):
+            raise HTTPException(403, "Akses daftar dokumen ditolak")
+        q = q.filter(models.InventoryDocument.type == type)
+    else:
+        allowed_types = [
+            doc_type
+            for doc_type, key in inventory_document_service.TYPE_PERMISSION.items()
+            if has_permission(db, current_user, key, "view")
+        ]
+        if not allowed_types:
+            raise HTTPException(403, "Akses daftar dokumen ditolak")
+        q = q.filter(models.InventoryDocument.type.in_(allowed_types))
+    if status:
+        q = q.filter(models.InventoryDocument.status == status)
+    if warehouse_id:
+        q = q.filter(models.InventoryDocument.warehouse_id == warehouse_id)
+    if start_date:
+        q = q.filter(models.InventoryDocument.date >= start_date)
+    if end_date:
+        q = q.filter(models.InventoryDocument.date <= end_date)
+    if search:
+        pattern = f"%{search.strip()}%"
+        q = q.outerjoin(models.InventoryDocumentLine).outerjoin(models.Item).filter(
+            models.InventoryDocument.number.ilike(pattern)
+            | models.InventoryDocument.notes.ilike(pattern)
+            | models.Item.name.ilike(pattern)
+            | models.Item.code.ilike(pattern)
+        ).distinct()
+    rows = q.order_by(models.InventoryDocument.id.desc()).offset(skip).limit(min(limit, 500)).all()
+    return [inventory_document_service.serialize_document(db, row, current_user) for row in rows]
+
+
+@router.get("/documents/{document_id}")
+def get_inventory_document(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    document = db.query(models.InventoryDocument).filter(
+        models.InventoryDocument.id == document_id,
+        models.InventoryDocument.branch_id == current_user.active_branch_id,
+    ).first()
+    if not document:
+        raise HTTPException(404, "Dokumen tidak ditemukan")
+    if not has_permission(db, current_user, inventory_document_service.TYPE_PERMISSION[document.type], "view"):
+        raise HTTPException(403, "Akses detail dokumen ditolak")
+    return inventory_document_service.serialize_document(db, document, current_user, detail=True)
+
+
+@router.post("/documents")
+def post_inventory_document(
+    data: InventoryDocumentCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    try:
+        document = inventory_document_service.create_document(db, data, current_user)
+        db.commit()
+        db.refresh(document)
+        return inventory_document_service.serialize_document(db, document, current_user, detail=True)
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.post("/documents/{document_id}/cancel")
+def cancel_inventory_document(
+    document_id: int,
+    data: InventoryDocumentCancel,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    document = db.query(models.InventoryDocument).filter(
+        models.InventoryDocument.id == document_id,
+        models.InventoryDocument.branch_id == current_user.active_branch_id,
+    ).with_for_update().first()
+    if not document:
+        raise HTTPException(404, "Dokumen tidak ditemukan")
+    try:
+        inventory_document_service.cancel_document(db, document, data.reason, current_user)
+        db.commit()
+        db.refresh(document)
+        return inventory_document_service.serialize_document(db, document, current_user, detail=True)
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.post("/adjust", deprecated=True)
+def legacy_stock_adjustment_adapter(
+    data: AdjustmentCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Adapter satu baris untuk build lama; UI baru menggunakan /documents."""
+    warehouse = db.query(models.Warehouse).filter(
+        models.Warehouse.branch_id == current_user.active_branch_id,
+        models.Warehouse.is_default == True,
+    ).first() or db.query(models.Warehouse).filter(
+        models.Warehouse.branch_id == current_user.active_branch_id
+    ).first()
+    if not warehouse:
+        raise HTTPException(400, "Cabang aktif belum memiliki gudang")
+
+    if (data.opname_mode or "").lower() in {"opening", "setup", "awal", "saldo_awal", "initial"}:
+        doc_type = "opening_stock"
+        line = InventoryDocumentLineCreate(item_id=data.item_id, qty=data.qty, notes=data.description)
+    elif data.type == "in":
+        doc_type = "item_in"
+        line = InventoryDocumentLineCreate(item_id=data.item_id, qty=data.qty, notes=data.description)
+    elif data.type == "out":
+        doc_type = "item_out"
+        line = InventoryDocumentLineCreate(item_id=data.item_id, qty=data.qty, notes=data.description)
+    elif data.type == "adjust":
+        doc_type = "stock_opname"
+        current = inventory_document_service.warehouse_stock(db, warehouse.id, data.item_id)
+        line = InventoryDocumentLineCreate(
+            item_id=data.item_id,
+            physical_qty=data.qty,
+            snapshot_token=inventory_document_service.snapshot_token(warehouse.id, data.item_id, current),
+            notes=data.description,
+        )
+    else:
+        raise HTTPException(400, "Tipe penyesuaian tidak dikenali")
+
+    payload = InventoryDocumentCreate(
+        type=doc_type,
+        date=get_local_date(),
+        warehouse_id=warehouse.id,
+        notes=data.description,
+        lines=[line],
+    )
+    try:
+        document = inventory_document_service.create_document(db, payload, current_user)
+        db.commit()
+        return {
+            "success": True,
+            "message": f"Dokumen {document.number} berhasil dicatat",
+            "document_id": document.id,
+            "new_stock": inventory_document_service.warehouse_stock(db, warehouse.id, data.item_id),
+        }
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.post("/adjust-direct-legacy", include_in_schema=False)
 def stock_adjustment(
     data: AdjustmentCreate,
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(get_current_user) 
 ):
+    raise HTTPException(410, "Gunakan dokumen persediaan; penyesuaian langsung sudah dinonaktifkan")
     item = db.query(models.Item).with_for_update().get(data.item_id) 
     if not item: 
         raise HTTPException(404, "Item tidak ditemukan")

@@ -89,8 +89,8 @@ html {
    menyediakan ukuran fisik layar (inci) secara andal, jadi lebar viewport
    dipakai sebagai pendekatan. Pointer/hover membatasi aturan ini ke perangkat
    desktop/laptop; HP dan tablet tetap memakai layout responsif normal. */
-@media screen and (min-width: 1024px) and (max-width: 1536px) and (hover: hover) and (pointer: fine) {
-  html {
+@media screen and (min-width: 1024px) and (max-width: 1920px) and (hover: hover) and (pointer: fine) {
+  html:not(.workspace-root):not(.workspace-embedded-root) {
     --zoomed-viewport-height: calc(100vh / 0.75);
     zoom: 75%;
   }
@@ -99,17 +99,17 @@ html {
      layout layar penuh tetap mengisi viewport secara vertikal, sama seperti
      ketika pengguna memilih browser zoom 75%. `!important` diperlukan untuk
      mengalahkan aturan per-halaman dan inline yang dimuat setelah style.css. */
-  body {
+  html:not(.workspace-root):not(.workspace-embedded-root) body {
     min-height: var(--zoomed-viewport-height) !important;
   }
-  body[style*="height: 100vh"],
-  .app-container,
-  .pos-layout,
-  .ipos-screen,
-  .barcode-container {
+  html:not(.workspace-root):not(.workspace-embedded-root) body[style*="height: 100vh"],
+  html:not(.workspace-root):not(.workspace-embedded-root) .app-container,
+  html:not(.workspace-root):not(.workspace-embedded-root) .pos-layout,
+  html:not(.workspace-root):not(.workspace-embedded-root) .ipos-screen,
+  html:not(.workspace-root):not(.workspace-embedded-root) .barcode-container {
     height: var(--zoomed-viewport-height) !important;
   }
-  .chat-wrap {
+  html:not(.workspace-root):not(.workspace-embedded-root) .chat-wrap {
     height: calc(var(--zoomed-viewport-height) - 200px) !important;
   }
 }

@@ -17,12 +17,10 @@ function bacaSkripBarcode() {
       setItems(items) { allItems = JSON.parse(JSON.stringify(items)); },
       getDaftar() { return JSON.parse(JSON.stringify(daftarCetak)); },
       getPayload: getStickerPayload,
-      getDraft() { return Object.fromEntries(itemSearchDraftQty); },
       tambahKeDaftar,
       pilihItemById,
-      setPickerQty,
-      applyPickerQuantities,
       renderSearch: renderItemSearchResults,
+      getRequestedAddQty,
       printStiker,
     };`;
 }
@@ -49,7 +47,6 @@ class ElemenPalsu {
       remove() {},
     };
     this._innerHTML = "";
-    this.qtyInputs = new Map();
   }
 
   set innerHTML(value) {
@@ -63,15 +60,6 @@ class ElemenPalsu {
         return row;
       },
     );
-    this.qtyInputs = new Map();
-    for (const match of this._innerHTML.matchAll(
-      /class="[^"]*barcode-picker-qty[^"]*" data-item-id="([^"]+)"/g,
-    )) {
-      const input = new ElemenPalsu("", this.document);
-      input.dataset.itemId = match[1];
-      input.parentElement = this;
-      this.qtyInputs.set(match[1], input);
-    }
   }
 
   get innerHTML() {
@@ -88,6 +76,8 @@ class ElemenPalsu {
       type,
       target: props.target || this,
       key: props.key,
+      ctrlKey: !!props.ctrlKey,
+      currentTarget: this,
       defaultPrevented: false,
       propagationStopped: false,
       preventDefault() {
@@ -112,28 +102,14 @@ class ElemenPalsu {
   }
 
   closest(selector) {
-    if (selector === ".barcode-picker-qty[data-item-id]") {
-      return this.dataset.itemId ? this : null;
-    }
-    if (selector === "button[data-qty-action]") {
-      return this.dataset.qtyAction ? this : null;
-    }
-    if (selector === '[data-action="apply-picker"]') {
-      return this.dataset.action === "apply-picker" ? this : null;
-    }
-    if (selector === "[data-focus-qty]") {
-      return this.dataset.focusQty ? this : null;
+    if (selector === "[data-item-row-id]") {
+      return this.dataset.itemRowId ? this : null;
     }
     return null;
   }
 
   querySelectorAll(selector) {
     return selector === "[data-item-row-id]" ? this.children : [];
-  }
-
-  querySelector(selector) {
-    const match = selector.match(/data-item-id="([^"]+)"/);
-    return match ? this.qtyInputs.get(match[1]) || null : null;
   }
 
   contains(element) {
@@ -149,9 +125,16 @@ class ElemenPalsu {
     this.attributes.set(name, String(value));
   }
 
+  removeAttribute(name) {
+    this.attributes.delete(name);
+  }
+
   scrollIntoView() {}
   focus() {
     this.document.activeElement = this;
+  }
+  select() {
+    this.selectionActive = true;
   }
 }
 
@@ -159,6 +142,7 @@ function buatSimulasi({ generateError = false, printAccepted = true } = {}) {
   const elemen = new Map();
   const document = {
     activeElement: null,
+    listeners: new Map(),
     documentElement: { style: { setProperty() {} } },
     getElementById(id) {
       if (!elemen.has(id)) elemen.set(id, new ElemenPalsu(id, document));
@@ -175,6 +159,23 @@ function buatSimulasi({ generateError = false, printAccepted = true } = {}) {
       }
       return [];
     },
+    addEventListener(type, callback) {
+      if (!this.listeners.has(type)) this.listeners.set(type, []);
+      this.listeners.get(type).push(callback);
+    },
+    dispatch(type, props = {}) {
+      const event = {
+        type,
+        key: props.key,
+        ctrlKey: !!props.ctrlKey,
+        defaultPrevented: false,
+        preventDefault() {
+          this.defaultPrevented = true;
+        },
+      };
+      for (const callback of this.listeners.get(type) || []) callback(event);
+      return event;
+    },
   };
   const radio = new ElemenPalsu("col2", document);
   radio.value = "2";
@@ -188,6 +189,7 @@ function buatSimulasi({ generateError = false, printAccepted = true } = {}) {
     slPrice: "14",
     slBarcode: "100",
     slName: "12",
+    itemAddQty: "1",
   };
   for (const [id, value] of Object.entries(nilaiAwal)) {
     document.getElementById(id).value = value;
@@ -323,7 +325,7 @@ const barang = [
   },
 ];
 
-test("pencarian Avian menampilkan semua hasil dan menerapkan qty massal", async () => {
+test("pencarian panjang dibatasi agar daftar pilihan tetap mudah dinavigasi", async () => {
   const simulasi = buatSimulasi();
   const avianItems = Array.from({ length: 49 }, (_, index) => ({
     id: 100 + index,
@@ -339,19 +341,9 @@ test("pencarian Avian menampilkan semua hasil dan menerapkan qty massal", async 
 
   input.value = "avian";
   input.dispatch("input");
-  assert.equal(hasil.children.length, 49);
-  assert.match(hasil.innerHTML, /Avian Warna 49/);
-
-  simulasi.sandbox.__barcodeTest.setPickerQty(100, 3);
-  simulasi.sandbox.__barcodeTest.setPickerQty(101, 2);
-  await simulasi.sandbox.__barcodeTest.applyPickerQuantities();
-
-  const daftar = simulasi.sandbox.__barcodeTest.getDaftar();
-  assert.equal(daftar.length, 2);
-  assert.equal(daftar[0].qty, 3);
-  assert.equal(daftar[1].qty, 2);
-  assert.equal(input.value, "");
-  assert.equal(simulasi.sandbox.__barcodeTest.getPayload().data_produk.length, 5);
+  assert.equal(hasil.children.length, 20);
+  assert.match(hasil.innerHTML, /Avian Warna 1/);
+  assert.match(hasil.innerHTML, /Menampilkan 20 dari 49 hasil/);
 });
 
 test("Enter scanner memprioritaskan barcode exact dan pilihan ulang menambah qty", async () => {
@@ -372,7 +364,7 @@ test("Enter scanner memprioritaskan barcode exact dan pilihan ulang menambah qty
   assert.equal(daftar[0].qty, 2);
 });
 
-test("pencarian nama menunggu qty, sedangkan kode exact tetap masuk cepat", async () => {
+test("Enter pada pencarian nama langsung menambahkan hasil yang disorot", async () => {
   const simulasi = buatSimulasi();
   simulasi.sandbox.__barcodeTest.setItems(barang);
   const input = simulasi.document.getElementById("itemSearch");
@@ -381,16 +373,17 @@ test("pencarian nama menunggu qty, sedangkan kode exact tetap masuk cepat", asyn
   input.dispatch("input");
   input.dispatch("keydown", { key: "Enter" });
   await tuntaskanPromise();
-  assert.equal(simulasi.sandbox.__barcodeTest.getDaftar().length, 0);
+  assert.equal(simulasi.sandbox.__barcodeTest.getDaftar().length, 1);
+  assert.equal(simulasi.sandbox.__barcodeTest.getDaftar()[0].name, "Semen Abu");
 
   input.value = "PSR-001";
   input.dispatch("keydown", { key: "Enter" });
   await tuntaskanPromise();
 
   const daftar = simulasi.sandbox.__barcodeTest.getDaftar();
-  assert.equal(daftar.length, 1);
-  assert.equal(daftar[0].id, 3);
-  assert.equal(daftar[0].barcode, "GEN-3");
+  assert.equal(daftar.length, 2);
+  assert.equal(daftar[1].id, 3);
+  assert.equal(daftar[1].barcode, "GEN-3");
   assert.ok(
     simulasi.panggilanApi.some(
       ({ path, body }) => path === "/barcode/generate" && body.item_id === 3,
@@ -398,12 +391,62 @@ test("pencarian nama menunggu qty, sedangkan kode exact tetap masuk cepat", asyn
   );
 });
 
-test("qty nol diabaikan dan kegagalan generate tidak membuat label kosong", async () => {
+test("panah memilih barang, panah kanan menuju Qty, dan Enter menambahkan", async () => {
+  const simulasi = buatSimulasi();
+  simulasi.sandbox.__barcodeTest.setItems(barang);
+  const input = simulasi.document.getElementById("itemSearch");
+  const qty = simulasi.document.getElementById("itemAddQty");
+
+  input.value = "semen";
+  input.dispatch("input");
+  input.dispatch("keydown", { key: "ArrowDown" });
+  input.dispatch("keydown", { key: "ArrowRight" });
+  assert.equal(simulasi.document.activeElement, qty);
+
+  qty.value = "3";
+  qty.dispatch("keydown", { key: "Enter" });
+  await tuntaskanPromise();
+
+  const daftar = simulasi.sandbox.__barcodeTest.getDaftar();
+  assert.equal(daftar.length, 1);
+  assert.equal(daftar[0].name, "Semen Putih");
+  assert.equal(daftar[0].qty, 3);
+  assert.equal(qty.value, "1");
+  assert.equal(simulasi.document.activeElement, input);
+
+  simulasi.document.activeElement = qty;
+  simulasi.document.dispatch("keydown", { key: "F2" });
+  assert.equal(simulasi.document.activeElement, input);
+  assert.equal(input.selectionActive, true);
+});
+
+test("klik satu baris hasil langsung menambahkan barang", async () => {
+  const simulasi = buatSimulasi();
+  simulasi.sandbox.__barcodeTest.setItems(barang);
+  const input = simulasi.document.getElementById("itemSearch");
+  const hasil = simulasi.document.getElementById("itemSearchResults");
+
+  input.value = "pasir";
+  input.dispatch("input");
+  hasil.children[0].click();
+  await tuntaskanPromise();
+
+  const daftar = simulasi.sandbox.__barcodeTest.getDaftar();
+  assert.equal(daftar.length, 1);
+  assert.equal(daftar[0].name, "Pasir Halus");
+});
+
+test("kegagalan membuat barcode tidak menambahkan label kosong", async () => {
   const gagalGenerate = buatSimulasi({ generateError: true });
   gagalGenerate.sandbox.__barcodeTest.setItems(barang);
-  gagalGenerate.sandbox.__barcodeTest.setPickerQty(1, 0);
-  gagalGenerate.sandbox.__barcodeTest.setPickerQty(3, 4);
-  await gagalGenerate.sandbox.__barcodeTest.applyPickerQuantities();
+  const input = gagalGenerate.document.getElementById("itemSearch");
+  const qty = gagalGenerate.document.getElementById("itemAddQty");
+  input.value = "pasir";
+  qty.value = "4";
+  input.dispatch("input");
+  input.dispatch("keydown", { key: "Enter" });
+  await tuntaskanPromise();
+
   assert.equal(gagalGenerate.sandbox.__barcodeTest.getDaftar().length, 0);
   assert.ok(
     gagalGenerate.toast.some(
@@ -413,51 +456,15 @@ test("qty nol diabaikan dan kegagalan generate tidak membuat label kosong", asyn
   );
 });
 
-test("qty menu bersifat tambahan terhadap jumlah yang sudah ada", async () => {
+test("Qty global bersifat tambahan untuk barang yang sudah ada", async () => {
   const simulasi = buatSimulasi();
   simulasi.sandbox.__barcodeTest.setItems(barang);
-  await simulasi.sandbox.__barcodeTest.pilihItemById(1);
-  await simulasi.sandbox.__barcodeTest.pilihItemById(1);
-  await simulasi.sandbox.__barcodeTest.pilihItemById(1);
-  simulasi.sandbox.__barcodeTest.setPickerQty(1, 5);
-  await simulasi.sandbox.__barcodeTest.applyPickerQuantities();
+  await simulasi.sandbox.__barcodeTest.pilihItemById(1, 3);
+  await simulasi.sandbox.__barcodeTest.pilihItemById(1, 5);
 
   const daftar = simulasi.sandbox.__barcodeTest.getDaftar();
   assert.equal(daftar.length, 1);
   assert.equal(daftar[0].qty, 8);
-});
-
-test("tombol plus minus mengubah draft dan penerapan ganda dicegah", async () => {
-  const simulasi = buatSimulasi();
-  simulasi.sandbox.__barcodeTest.setItems(barang);
-  simulasi.sandbox.__barcodeTest.renderSearch("pasir");
-  const hasil = simulasi.document.getElementById("itemSearchResults");
-  const plus = new ElemenPalsu("", simulasi.document);
-  plus.dataset.qtyAction = "plus";
-  plus.dataset.itemId = "3";
-  plus.parentElement = hasil;
-  const minus = new ElemenPalsu("", simulasi.document);
-  minus.dataset.qtyAction = "minus";
-  minus.dataset.itemId = "3";
-  minus.parentElement = hasil;
-
-  hasil.dispatch("click", { target: plus });
-  hasil.dispatch("click", { target: plus });
-  hasil.dispatch("click", { target: minus });
-  assert.equal(simulasi.sandbox.__barcodeTest.getDraft()[3], 1);
-
-  simulasi.sandbox.__barcodeTest.setPickerQty(3, 2);
-  const firstApply = simulasi.sandbox.__barcodeTest.applyPickerQuantities();
-  const secondApply = await simulasi.sandbox.__barcodeTest.applyPickerQuantities();
-  await firstApply;
-
-  assert.equal(secondApply, false);
-  assert.equal(simulasi.sandbox.__barcodeTest.getDaftar()[0].qty, 2);
-  assert.equal(
-    simulasi.panggilanApi.filter(({ path }) => path === "/barcode/generate")
-      .length,
-    1,
-  );
 });
 
 test("satu label mempertahankan lebar media 1, 2, dan 3 Lin", async () => {

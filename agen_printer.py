@@ -26,39 +26,58 @@ def get_app_dir():
 
 APP_DIR = get_app_dir()
 CONFIG_FILE = os.path.join(APP_DIR, "printer_config.json")
-API_URL = "https://desktop-b0e6dv6.balinese-alhena.ts.net/api/print"
+DEFAULT_SERVER_URL = "https://desktop-b0e6dv6.balinese-alhena.ts.net"
 APP_NAME = "FPOS_Printer_Agent"
 
 
 def set_autostart(enable=True):
-    exe_path = (
-        sys.executable if getattr(sys, "frozen", False) else os.path.abspath(sys.argv[0])
-    )
+    if getattr(sys, "frozen", False):
+        launch_command = f'"{sys.executable}"'
+    else:
+        launch_command = f'"{sys.executable}" "{os.path.abspath(sys.argv[0])}"'
     key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
-    key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_ALL_ACCESS)
-    if enable:
-        winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, f'"{exe_path}"')
-    else:
+    try:
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_ALL_ACCESS)
         try:
-            winreg.DeleteValue(key, APP_NAME)
-        except FileNotFoundError:
-            pass
-    winreg.CloseKey(key)
+            if enable:
+                winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, launch_command)
+            else:
+                try:
+                    winreg.DeleteValue(key, APP_NAME)
+                except FileNotFoundError:
+                    pass
+        finally:
+            winreg.CloseKey(key)
+        return True
+    except OSError:
+        return False
 
 
 def load_or_setup():
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            config = json.load(f)
-            return config.get("branch_id"), config.get("printer_name")
+    force_setup = "--setup" in sys.argv
+    if os.path.exists(CONFIG_FILE) and not force_setup:
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                config = json.load(f)
+            if all(config.get(key) for key in ("server_url", "agent_token", "printer_name")):
+                return config
+        except (OSError, ValueError):
+            pass
 
     root = tk.Tk()
     root.withdraw()
 
-    branch_id = simpledialog.askinteger(
+    server_url = simpledialog.askstring(
         "Setup Printer",
-        "Masukkan ID Cabang (contoh: 1, 2, 3):",
+        "Alamat server FPOS:",
+        initialvalue=DEFAULT_SERVER_URL,
+        parent=root,
+    )
+
+    agent_token = simpledialog.askstring(
+        "Setup Printer",
+        "Tempel token agen dari menu Pengaturan > Printer:",
         parent=root,
     )
 
@@ -71,24 +90,87 @@ def load_or_setup():
         parent=root,
     )
 
-    auto_start = messagebox.askyesno("Auto Start", "Jalankan otomatis saat Windows nyala?")
-    set_autostart(auto_start)
+    if not server_url or not agent_token or not printer_name:
+        messagebox.showerror("Setup belum lengkap", "Server, token agen, dan printer wajib diisi.")
+        root.destroy()
+        raise SystemExit(1)
 
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "branch_id": branch_id,
-                "printer_name": printer_name,
-                "autostart": auto_start,
-            },
-            f,
+    auto_start = messagebox.askyesno("Auto Start", "Jalankan otomatis saat Windows nyala?")
+    autostart_saved = set_autostart(auto_start)
+    if auto_start and not autostart_saved:
+        messagebox.showwarning(
+            "Auto Start",
+            "Konfigurasi printer tersimpan, tetapi Auto Start gagal dibuat. Tambahkan shortcut agen ke folder Startup secara manual.",
         )
 
-    messagebox.showinfo("Berhasil", f"Cabang {branch_id} -> Printer: {printer_name}")
-    return branch_id, printer_name
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump({
+            "server_url": server_url.strip().rstrip("/"),
+            "agent_token": agent_token.strip(),
+            "printer_name": printer_name.strip(),
+            "autostart": auto_start and autostart_saved,
+        }, f, indent=2)
+
+    messagebox.showinfo("Berhasil", f"Agen terhubung ke printer: {printer_name}")
+    root.destroy()
+    return {
+        "server_url": server_url.strip().rstrip("/"),
+        "agent_token": agent_token.strip(),
+        "printer_name": printer_name.strip(),
+        "autostart": auto_start and autostart_saved,
+    }
 
 
-BRANCH_ID, PRINTER_NAME = load_or_setup()
+CONFIG = load_or_setup()
+SERVER_URL = CONFIG["server_url"].rstrip("/")
+API_URL = SERVER_URL if SERVER_URL.endswith("/api/print") else f"{SERVER_URL}/api/print"
+AGENT_TOKEN = CONFIG["agent_token"]
+PRINTER_NAME = CONFIG["printer_name"]
+AGENT_HEADERS = {"X-Printer-Token": AGENT_TOKEN}
+PENDING_RESULTS_FILE = os.path.join(APP_DIR, "printer_pending_results.json")
+
+
+def load_pending_results():
+    try:
+        with open(PENDING_RESULTS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_pending_results(results):
+    tmp_file = f"{PENDING_RESULTS_FILE}.tmp"
+    with open(tmp_file, "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2)
+    os.replace(tmp_file, PENDING_RESULTS_FILE)
+
+
+PENDING_RESULTS = load_pending_results()
+
+
+def flush_pending_results():
+    for job_id, payload in list(PENDING_RESULTS.items()):
+        try:
+            result = requests.post(
+                f"{API_URL}/agent/jobs/{job_id}/result",
+                json=payload,
+                headers=AGENT_HEADERS,
+                timeout=10,
+            )
+            if result.status_code in (404, 409):
+                print(f"Hasil Job #{job_id} tidak lagi diterima server; data lokal dibersihkan")
+                del PENDING_RESULTS[job_id]
+                save_pending_results(PENDING_RESULTS)
+                continue
+            result.raise_for_status()
+            del PENDING_RESULTS[job_id]
+            save_pending_results(PENDING_RESULTS)
+            print(f"Hasil Job #{job_id} diterima server")
+        except requests.exceptions.RequestException as e:
+            print(f"Hasil Job #{job_id} belum dapat dilaporkan: {e}")
+            return False
+    return True
 
 
 def cek_printer(printer_name):
@@ -438,7 +520,6 @@ def print_windows(text):
 
         print("===================================")
         print("PRINT JOB")
-        print("Branch :", BRANCH_ID)
         print("Printer:", printer_name)
         print("Length :", len(text))
 
@@ -466,11 +547,20 @@ def print_windows(text):
         return False
 
 
-print(f"Printer Agent Hybrid jalan | Cabang {BRANCH_ID} | Printer: {PRINTER_NAME}")
+print(f"Printer Agent Hybrid jalan | Server: {SERVER_URL} | Printer: {PRINTER_NAME}")
+print("Jalankan dengan --setup untuk mengganti server, token, atau printer.")
 
 while True:
     try:
-        res = requests.get(f"{API_URL}/", params={"branch_id": BRANCH_ID}, timeout=5)
+        if not flush_pending_results():
+            time.sleep(2)
+            continue
+        res = requests.post(
+            f"{API_URL}/agent/claim",
+            json={"limit": 1},
+            headers=AGENT_HEADERS,
+            timeout=10,
+        )
 
         if res.status_code == 200:
             jobs = res.json()
@@ -491,22 +581,24 @@ while True:
                     print(f"Memproses Job #{job['id']} (Mode: RAW ESC/POS / Struk)")
                     success = print_windows(job["content"])
 
+                PENDING_RESULTS[str(job["id"])] = {
+                    "success": success,
+                    "error": None if success else f"Printer '{PRINTER_NAME}' gagal mencetak",
+                }
+                save_pending_results(PENDING_RESULTS)
+                flush_pending_results()
                 if success:
-                    requests.post(f"{API_URL}/done/{job['id']}", timeout=5)
                     print(f"Job #{job['id']} selesai")
                 else:
-                    print(f"Gagal print Job #{job['id']}, status tidak diubah")
-                    try:
-                        requests.post(
-                            f"{API_URL}/reset-stuck",
-                            params={"branch_id": BRANCH_ID},
-                            timeout=5,
-                        )
-                    except Exception:
-                        pass
+                    print(f"Gagal print Job #{job['id']}; server akan mencoba ulang sesuai batas")
+        elif res.status_code == 401:
+            print("Token agen tidak valid. Rotasi token di Pengaturan lalu jalankan agen dengan --setup.")
+            time.sleep(10)
+        else:
+            print(f"Server menolak claim: HTTP {res.status_code} {res.text[:200]}")
 
-    except requests.exceptions.RequestException:
-        pass
+    except requests.exceptions.RequestException as e:
+        print(f"Koneksi server gagal: {e}")
     except Exception as e:
         print(f"LOOP ERROR: {e}")
 

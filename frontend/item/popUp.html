@@ -97,8 +97,11 @@
   /* `html { zoom:75% }` juga mengecilkan fixed overlay dan aturan 100vw/100vh.
      Kompensasi harus ditempatkan di fragmen ini (setelah style modal dasar),
      supaya tidak kalah oleh urutan CSS ketika popUp.html disisipkan dinamis. */
-  @media screen and (min-width: 1024px) and (max-width: 1536px) and (hover: hover) and (pointer: fine) {
-    #mBarang.modal-overlay {
+  @media screen and (min-width: 1024px) and (max-width: 1920px) and (hover: hover) and (pointer: fine) {
+    /* Kompensasi HANYA untuk halaman standalone yang ter-zoom.
+       Di dalam iframe workspace (workspace-embedded-root) zoom tidak aktif,
+       jadi tidak perlu kompensasi — malah bikin overlay meluber. */
+    html:not(.workspace-embedded-root) #mBarang.modal-overlay {
       inset: 0 auto auto 0 !important;
       width: calc(100vw / 0.75) !important;
       height: calc(100vh / 0.75) !important;
@@ -108,7 +111,7 @@
       z-index: 9500 !important;
     }
 
-    #mBarang > .modal-box.wide {
+    html:not(.workspace-embedded-root) #mBarang > .modal-box.wide {
       width: 100% !important;
       height: 100% !important;
       flex: 1 1 auto;

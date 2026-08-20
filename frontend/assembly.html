@@ -352,7 +352,13 @@
     function lineTable(lines,type){let heads="",body="";if(type==="order"){heads="<th>Produk</th><th>Dipesan</th><th>Diproses</th><th>Sisa</th>";body=lines.map(l=>`<tr><td>${esc(l.product_name)}</td><td>${qty(l.qty_ordered)}</td><td>${qty(l.qty_processed)}</td><td>${qty(l.qty_remaining)}</td></tr>`).join("");}else if(type==="process"){heads="<th>Produk</th><th>Target</th><th>Sudah Jadi</th><th>Biaya Proses</th>";body=lines.map(l=>`<tr><td>${esc(l.product_name)}</td><td>${qty(l.qty_target)}</td><td>${qty(l.qty_completed)}</td><td>${money(num(l.material_cost)+num(l.operational_cost))}</td></tr>`).join("");}else{heads="<th>Produk</th><th>Qty Aktual</th><th>HPP/unit</th><th>Nilai</th>";body=lines.map(l=>`<tr><td>${esc(l.product_name)}</td><td>${qty(l.qty_finished)}</td><td>${money(l.unit_cost)}</td><td>${money(l.allocated_cost)}</td></tr>`).join("");}return `<div class="tbl-wrap"><table class="tbl"><thead><tr>${heads}</tr></thead><tbody>${body}</tbody></table></div>`;}
     function showDetail(title,html){document.getElementById("detailTitle").textContent=title;document.getElementById("detailBody").innerHTML=html;openModal("mDetail");}
 
-    init();
+    init().then(() =>
+      setupRoutedTabs({
+        tabs: ["bom", "orders", "processes", "results"],
+        defaultTab: "bom",
+        activate: (tab) => switchTab(tab),
+      }),
+    );
   </script>
 </body>
 </html>

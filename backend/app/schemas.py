@@ -578,6 +578,7 @@ class SaleCreate(BaseModel):
     cash_received: Optional[float] = None
     payment_method: str = "cash"
     payments: Optional[List[SplitBayar]] = None   # rincian tender bayar campur; None → pakai logika lama (payment_method + paid)
+    receipt_requested: bool = False  # tombol "Simpan + Cetak"; auto-print cabang diputuskan server
     notes: Optional[str] = None
     items: List[SaleItemCreate]
 
@@ -595,6 +596,14 @@ class SaleItemOut(BaseModel):
     item: Optional[ItemOut] = None
     model_config = {"from_attributes": True}
 
+
+class SalePaymentOut(BaseModel):
+    id: int
+    method: str
+    amount: float
+    model_config = {"from_attributes": True}
+
+
 class SaleOut(BaseModel):
     id: int
     number: str
@@ -609,11 +618,17 @@ class SaleOut(BaseModel):
     total: float
     paid: float
     change: float
+    cash_received: Optional[float] = None
+    invoice_discount_gross: Optional[float] = None
     payment_method: str
     status: str
     notes: Optional[str]
+    branch_id: int
+    created_by: Optional[int] = None
+    created_at: Optional[datetime] = None
     customer: Optional[CustomerOut] = None
     items: List[SaleItemOut] = []
+    payments: List[SalePaymentOut] = []
     model_config = {"from_attributes": True}
 
 
@@ -646,6 +661,28 @@ class AdjustmentCreate(BaseModel):
     qty: float
     description: str
     opname_mode: str = "running"  # 'opening' (setup awal) | 'running' (opname berjalan)
+
+
+class InventoryDocumentLineCreate(BaseModel):
+    item_id: int
+    qty: Optional[float] = None
+    physical_qty: Optional[float] = None
+    snapshot_token: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class InventoryDocumentCreate(BaseModel):
+    type: Literal["item_in", "item_out", "opening_stock", "stock_opname"]
+    date: date
+    warehouse_id: int
+    notes: Optional[str] = None
+    surplus_account_id: Optional[int] = None
+    shortage_account_id: Optional[int] = None
+    lines: List[InventoryDocumentLineCreate]
+
+
+class InventoryDocumentCancel(BaseModel):
+    reason: str
 
 
 # ─── Cash Transaction ─────────────────────────────────────────────────────────

@@ -44,6 +44,47 @@ class StickerPriceVisibilityTests(unittest.TestCase):
         self.assertGreater(image.height, 0)
 
 
+class StickerBarcodeRenderingTests(unittest.TestCase):
+    def test_code128_render_uses_requested_dpi_and_stays_within_bounds(self):
+        dpi = 203
+        max_width = sticker_gen.mm_to_px(31, dpi)
+        max_height = sticker_gen.mm_to_px(8, dpi)
+
+        image = sticker_gen.render_code128_fit(
+            code_text="8991234567890",
+            max_w_px=max_width,
+            max_h_px=max_height,
+            dpi=dpi,
+        )
+
+        self.assertIsNotNone(image)
+        self.assertLessEqual(image.width, max_width)
+        self.assertLessEqual(image.height, max_height)
+
+    def test_sheet_renders_real_barcode_without_writer_constructor_error(self):
+        request = sticker_gen.StikerBatchRequest(
+            data_produk=[
+                sticker_gen.ProdukItem(
+                    nama="Barang Barcode",
+                    barcode="8991234567890",
+                    tampilkan_harga=False,
+                )
+            ],
+            jumlah_kolom=1,
+            lebar_mm=33,
+            tinggi_mm=15,
+            dpi_printer=203,
+        )
+
+        response = sticker_gen.render_stiker_sheet(request)
+        image = Image.open(BytesIO(response.body))
+
+        self.assertEqual(response.media_type, "image/png")
+        self.assertEqual(image.format, "PNG")
+        self.assertEqual(image.width, sticker_gen.mm_to_px(33, 203))
+        self.assertEqual(image.height, sticker_gen.mm_to_px(15, 203))
+
+
 class StickerColumnLayoutTests(unittest.TestCase):
     def _render(self, columns, item_count=1, legacy_sheet_columns=None):
         request = sticker_gen.StikerBatchRequest(

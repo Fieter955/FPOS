@@ -7,79 +7,29 @@
 const pdfRp = (n) => "Rp " + Math.round(n || 0).toLocaleString("id-ID");
 const pdfFmtDate = (d) => d ? new Date(d + "T00:00:00").toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" }) : "-";
 
-function getPrintSettings() {
+async function getPrintSettings() {
   try {
-    return JSON.parse(localStorage.getItem("ipos_print_settings") || "{}");
-  } catch (e) {
-    return {};
+    const server = await api("GET", "/print/settings");
+    return {
+      storeName: server.receipt_name,
+      storeAddr: server.address,
+      storePhone: server.phone,
+    };
+  } catch (_) {
+    try {
+      return JSON.parse(localStorage.getItem("ipos_print_settings") || "{}");
+    } catch (_) {
+      return {};
+    }
   }
 }
 
-// --- THERMAL PRINTER (POS) ---
-function printReceipt(sale) {
-  const s = getPrintSettings();
-  const STORE_NAME   = s.storeName   || "iPos 5.0";
-  const STORE_ADDR   = s.storeAddr   || "";
-  const STORE_PHONE  = s.storePhone  || "";
-  const STORE_FOOTER = s.storeFooter || "Terima kasih telah berbelanja!";
-  const PAPER_WIDTH  = s.paperWidth  || "80mm";
-
-  const items = sale.items || [];
-  const saleDate = new Date((sale.date || new Date().toISOString().slice(0,10)) + "T00:00:00");
-  const dateStr = saleDate.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
-  const timeStr = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
-
-  const itemRows = items.map(i => `
-    <tr>
-      <td class="item-name">${i.item?.name || i.name || "Item"}</td>
-      <td class="item-qty">${i.qty}</td>
-      <td class="item-price">${pdfRp(i.sell_price || i.price || 0)}</td>
-    </tr>
-    <tr>
-      <td colspan="2"></td>
-      <td class="item-price" style="border-bottom:1px dashed #ccc">${pdfRp(i.total)}</td>
-    </tr>`).join("");
-
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-  @page { margin: 0; size: ${PAPER_WIDTH} auto; }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Courier New', Courier, monospace; font-size: 11px; width: ${PAPER_WIDTH === "58mm" ? "54mm" : "76mm"}; padding: 3mm; color: #000; }
-  .center { text-align: center; } .right { text-align: right; } .bold { font-weight: bold; } .big { font-size: 14px; font-weight: bold; }
-  .sep { border-top: 1px dashed #000; margin: 4px 0; } .sep-solid { border-top: 2px solid #000; margin: 4px 0; }
-  table { width: 100%; border-collapse: collapse; } td { padding: 1px 0; vertical-align: top; }
-  .item-name { width: 55%; } .item-qty { width: 10%; text-align: right; } .item-price { width: 35%; text-align: right; }
-  .grand-total { font-size: 13px; font-weight: bold; }
-  @media print { body { -webkit-print-color-adjust: exact; } }
-</style></head><body>
-  <div class="center"><div class="big">${STORE_NAME}</div>${STORE_ADDR ? `<div>${STORE_ADDR}</div>` : ""}${STORE_PHONE ? `<div>Telp: ${STORE_PHONE}</div>` : ""}</div>
-  <div class="sep"></div>
-  <table><tr><td>No.</td><td class="right">${sale.number || "-"}</td></tr><tr><td>Tgl</td><td class="right">${dateStr} ${timeStr}</td></tr><tr><td>Kasir</td><td class="right">${sale.cashier || "Kasir"}</td></tr>
-    ${sale.customer?.name ? `<tr><td>Pelanggan</td><td class="right">${sale.customer.name}</td></tr>` : ""}
-  </table>
-  <div class="sep"></div>
-  <table><tr><td class="item-name bold">Barang</td><td class="item-qty bold">Qty</td><td class="item-price bold">Harga</td></tr></table>
-  <div class="sep"></div><table>${itemRows}</table><div class="sep"></div>
-  <table><tr><td>Subtotal</td><td class="right">${pdfRp(sale.subtotal)}</td></tr>
-    ${sale.discount > 0 ? `<tr><td>Diskon</td><td class="right">-${pdfRp(sale.discount)}</td></tr>` : ""}
-    ${sale.tax > 0 ? `<tr><td>PPN</td><td class="right">${pdfRp(sale.tax)}</td></tr>` : ""}
-  </table>
-  <div class="sep-solid"></div>
-  <table><tr class="grand-total"><td>TOTAL</td><td class="right">${pdfRp(sale.total)}</td></tr>
-    <tr><td>Bayar (${(sale.payment_method || "cash").toUpperCase()})</td><td class="right">${pdfRp(sale.paid)}</td></tr>
-    <tr class="bold"><td>Kembalian</td><td class="right">${pdfRp(sale.change)}</td></tr>
-  </table>
-  <div class="sep"></div><div class="center" style="font-size:10px">${STORE_FOOTER}<br><span style="font-size:9px">Powered by iPos 5.0</span></div>
-</body></html>`;
-
-  const win = window.open("", "_blank", "width=350,height=600");
-  if (!win) { alert("Pop-up diblokir browser. Izinkan pop-up untuk mencetak struk."); return; }
-  win.document.write(html); win.document.close(); win.focus();
-  setTimeout(() => { win.print(); setTimeout(() => win.close(), 1500); }, 300);
-}
-
 // --- SHIFT REPORT ---
-function printShiftReport(shift) {
-  const s = getPrintSettings();
+async function printShiftReport(shift) {
+  const win = window.open("", "_blank", "width=350,height=600");
+  if (!win) { alert("Pop-up diblokir browser."); return; }
+  win.document.write("<p style='font-family:sans-serif;text-align:center;margin-top:40px'>Menyiapkan laporan shift...</p>");
+  const s = await getPrintSettings();
   const STORE_NAME = s.storeName || "iPos 5.0";
   const openTime  = shift.opened_at ? new Date(shift.opened_at).toLocaleString("id-ID") : "-";
   const closeTime = shift.closed_at ? new Date(shift.closed_at).toLocaleString("id-ID") : "-";
@@ -103,9 +53,7 @@ function printShiftReport(shift) {
   </table><div class="sep"></div><div class="center" style="font-size:10px">iPos 5.0</div>
 </body></html>`;
 
-  const win = window.open("", "_blank", "width=350,height=600");
-  if (!win) { alert("Pop-up diblokir browser."); return; }
-  win.document.write(html); win.document.close(); win.focus();
+  win.document.open(); win.document.write(html); win.document.close(); win.focus();
   setTimeout(() => { win.print(); setTimeout(() => win.close(), 1500); }, 300);
 }
 
@@ -205,5 +153,4 @@ async function exportPurchasePDF(id) {
 
 // Global scope assignment
 window.exportPurchasePDF = exportPurchasePDF;
-window.printReceipt = printReceipt;
 window.printShiftReport = printShiftReport;

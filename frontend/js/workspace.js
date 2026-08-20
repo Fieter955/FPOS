@@ -118,6 +118,20 @@
     "/supplier/tambahsuplier": "Tambah Supplier",
   };
 
+  const routedTabPaths = new Set([
+    "/item/items",
+    "/purchases",
+    "/purchase/purchases",
+    "/inventory",
+    "/warehouse",
+    "/assembly",
+    "/konsinyasi",
+    "/reports",
+    "/accounting",
+    "/settings",
+    "/users",
+  ]);
+
   let tabs = [];
   let activeTabId = DASHBOARD_ID;
   let nextTabNumber = Date.now();
@@ -382,7 +396,21 @@
       );
     });
     if (existing) {
+      const routeChanged =
+        existing.url !== url && routedTabPaths.has(requestedPath);
+      if (routeChanged) {
+        existing.url = url;
+        existing.title = cleanDocumentTitle(requestedTitle, url);
+        updateTabPresentation(existing);
+      }
       activateTab(existing.id);
+      if (routeChanged && existing.loaded && existing.frame?.contentWindow) {
+        existing.frame.contentWindow.postMessage(
+          { type: "fpos-route-state", url },
+          location.origin,
+        );
+        saveState();
+      }
       return existing;
     }
     if (tabs.length >= MAX_TABS) {

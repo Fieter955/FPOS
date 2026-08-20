@@ -1167,6 +1167,11 @@
             return;
           }
           await initData();
+          setupRoutedTabs({
+            tabs: ["user", "role", "permission", "log"],
+            defaultTab: "user",
+            activate: (tab) => switchTab(tab),
+          });
         } catch (error) {
           showToast("Gagal memuat hak akses: " + error.message, "error");
         }

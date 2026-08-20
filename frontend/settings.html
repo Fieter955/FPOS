@@ -234,6 +234,46 @@
               ✓ Simpan Pengaturan Printer
             </button>
           </div>
+          <div class="card" style="padding: 28px; margin-top: 20px">
+            <h3 style="margin: 0 0 10px">Agen Printer Cabang</h3>
+            <p style="color: var(--text-muted); margin-top: 0">
+              Satu token menghubungkan komputer printer ke cabang aktif. Token hanya
+              ditampilkan ketika dibuat atau dirotasi.
+            </p>
+            <div class="row2" style="margin-bottom: 12px">
+              <div class="input-group">
+                <label>Nama Agen</label>
+                <input id="agentName" class="input-control" value="Printer Utama" />
+              </div>
+              <div class="input-group">
+                <label>Status</label>
+                <div id="agentStatus" style="padding: 11px 0">Belum dikonfigurasi</div>
+              </div>
+            </div>
+            <button onclick="rotateAgentToken()" class="btn">Buat / Rotasi Token Agen</button>
+            <div id="agentTokenBox" style="display:none;margin-top:14px;padding:14px;background:var(--bg-color);border:1px solid var(--border-color);border-radius:10px">
+              <b>Salin token ini ke agen printer:</b>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <input id="agentToken" readonly class="input-control" style="font-family:monospace" />
+                <button onclick="copyAgentToken()" class="btn">Salin</button>
+              </div>
+            </div>
+          </div>
+          <div class="card" style="padding: 28px; margin-top: 20px">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+              <div>
+                <h3 style="margin:0">Antrean Cetak</h3>
+                <div id="printJobCounts" style="color:var(--text-muted);margin-top:5px">Memuat...</div>
+              </div>
+              <button onclick="loadPrintJobs()" class="btn">Refresh</button>
+            </div>
+            <div style="overflow:auto;margin-top:14px">
+              <table style="width:100%;border-collapse:collapse">
+                <thead><tr><th style="text-align:left">Job</th><th style="text-align:left">Dokumen</th><th style="text-align:left">Status</th><th style="text-align:left">Percobaan</th><th style="text-align:left">Aksi</th></tr></thead>
+                <tbody id="printJobsBody"><tr><td colspan="5">Memuat...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
         <div id="pnlPwd" class="tab-panel" style="display: none">
@@ -467,7 +507,6 @@
 
     <script src="/js/api.js"></script>
     <script src="/js/theme.js"></script>
-    <script src="/js/print.js"></script>
     <script>
       requireAuth();
 
@@ -510,6 +549,10 @@
         if (t.toLowerCase() === "backup") loadSysInfo();
         if (t.toLowerCase() === "update") loadUpdateInfo();
         if (t.toLowerCase() === "developer") loadPembayaran();
+        if (t.toLowerCase() === "printer") {
+          loadPrintSettings();
+          loadPrintJobs();
+        }
       }
 
       let latestUpdate = null;
@@ -594,62 +637,168 @@
         } catch (_) {}
       }
 
-      /* ── CRUD Settings (Toko & Printer) ── */
-      function loadToko() {
-        const ps = JSON.parse(
-          localStorage.getItem("ipos_print_settings") || "{}",
-        );
-        document.getElementById("storeName").value = ps.storeName || "";
-        document.getElementById("storePhone").value = ps.storePhone || "";
-        document.getElementById("storeAddr").value = ps.storeAddr || "";
-        document.getElementById("storeFooter").value =
-          ps.storeFooter || "Terima kasih telah berbelanja!";
+      /* ── Pengaturan struk tersimpan per cabang di server ── */
+      let printSettings = null;
+
+      function collectPrintSettings() {
+        return {
+          receipt_name: document.getElementById("storeName").value.trim(),
+          phone: document.getElementById("storePhone").value.trim(),
+          address: document.getElementById("storeAddr").value.trim(),
+          footer: document.getElementById("storeFooter").value.trim(),
+          paper_width_mm: Number(document.getElementById("paperWidth").value),
+          auto_print: document.getElementById("autoPrint").checked,
+        };
       }
-      function saveToko() {
-        const ps = JSON.parse(
-          localStorage.getItem("ipos_print_settings") || "{}",
-        );
-        ps.storeName = document.getElementById("storeName").value;
-        ps.storePhone = document.getElementById("storePhone").value;
-        ps.storeAddr = document.getElementById("storeAddr").value;
-        ps.storeFooter = document.getElementById("storeFooter").value;
-        localStorage.setItem("ipos_print_settings", JSON.stringify(ps));
-        showToast("Info Toko disimpan ✓");
+
+      function applyPrintSettings(ps) {
+        printSettings = ps;
+        document.getElementById("storeName").value = ps.receipt_name || "";
+        document.getElementById("storePhone").value = ps.phone || "";
+        document.getElementById("storeAddr").value = ps.address || "";
+        document.getElementById("storeFooter").value =
+          ps.footer || "Terima kasih telah berbelanja!";
+        document.getElementById("paperWidth").value = String(ps.paper_width_mm || 80);
+        document.getElementById("autoPrint").checked = Boolean(ps.auto_print);
+        const agent = ps.agent;
+        document.getElementById("agentName").value = agent?.name || "Printer Utama";
+        document.getElementById("agentStatus").textContent = agent
+          ? `${agent.is_active ? "Aktif" : "Nonaktif"} · token …${agent.token_last4 || ""} · terakhir terhubung ${agent.last_seen_at ? new Date(agent.last_seen_at).toLocaleString("id-ID") : "belum pernah"}`
+          : "Belum dikonfigurasi";
+      }
+
+      async function loadPrintSettings() {
+        try {
+          const ps = await api("GET", "/print/settings");
+          applyPrintSettings(ps);
+          if (!ps.configured) {
+            const legacy = JSON.parse(localStorage.getItem("ipos_print_settings") || "null");
+            if (legacy) {
+              document.getElementById("storeName").value = legacy.storeName || "";
+              document.getElementById("storePhone").value = legacy.storePhone || "";
+              document.getElementById("storeAddr").value = legacy.storeAddr || "";
+              document.getElementById("storeFooter").value = legacy.storeFooter || "Terima kasih telah berbelanja!";
+              document.getElementById("paperWidth").value = String(legacy.paperWidth || "80").replace("mm", "");
+              document.getElementById("autoPrint").checked = Boolean(legacy.autoPrint);
+              showToast("Pengaturan lama ditemukan. Klik Simpan agar berlaku untuk seluruh cabang.");
+            }
+          }
+        } catch (e) {
+          showToast("Gagal memuat pengaturan struk: " + e.message, "error");
+        }
+      }
+
+      function loadToko() {
+        if (!printSettings) loadPrintSettings();
       }
       function loadPrinter() {
-        const ps = JSON.parse(
-          localStorage.getItem("ipos_print_settings") || "{}",
-        );
-        document.getElementById("paperWidth").value = ps.paperWidth || "80";
-        document.getElementById("autoPrint").checked = ps.autoPrint || false;
+        if (!printSettings) loadPrintSettings();
+      }
+      async function saveAllPrintSettings(message) {
+        try {
+          const saved = await api("PUT", "/print/settings", collectPrintSettings());
+          applyPrintSettings(saved);
+          localStorage.removeItem("ipos_print_settings");
+          showToast(message);
+        } catch (e) {
+          showToast(e.message, "error");
+        }
+      }
+      function saveToko() {
+        return saveAllPrintSettings("Info toko cabang disimpan ✓");
       }
       function savePrinter() {
-        const ps = JSON.parse(
-          localStorage.getItem("ipos_print_settings") || "{}",
-        );
-        ps.paperWidth = document.getElementById("paperWidth").value;
-        ps.autoPrint = document.getElementById("autoPrint").checked;
-        localStorage.setItem("ipos_print_settings", JSON.stringify(ps));
-        showToast("Pengaturan Printer disimpan ✓");
+        return saveAllPrintSettings("Pengaturan printer cabang disimpan ✓");
       }
-      function testPrint() {
-        const fakeSale = {
-          number: "TEST-01",
-          date: today(),
-          items: [
-            {
-              item: { name: "Test Barang" },
-              qty: 1,
-              sell_price: 1000,
-              total: 1000,
-            },
-          ],
-          subtotal: 1000,
-          total: 1000,
-          paid: 1000,
-          change: 0,
-        };
-        if (typeof printReceipt === "function") printReceipt(fakeSale);
+      async function testPrint() {
+        try {
+          const result = await api("POST", "/print/test", {});
+          showToast(`Test print masuk antrean (job #${result.job_id})`);
+          loadPrintJobs();
+        } catch (e) {
+          showToast("Test print gagal: " + e.message, "error");
+        }
+      }
+
+      async function rotateAgentToken() {
+        if (!(await showConfirm("Token lama akan langsung tidak berlaku. Lanjutkan?"))) return;
+        try {
+          const result = await api("POST", "/print/agent-token/rotate", {
+            name: document.getElementById("agentName").value.trim() || "Printer Utama",
+          });
+          document.getElementById("agentToken").value = result.token;
+          document.getElementById("agentTokenBox").style.display = "block";
+          showToast("Token agen dibuat. Salin sekarang.");
+          await loadPrintSettings();
+        } catch (e) {
+          showToast(e.message, "error");
+        }
+      }
+
+      async function copyAgentToken() {
+        const token = document.getElementById("agentToken").value;
+        try {
+          await navigator.clipboard.writeText(token);
+          showToast("Token disalin ✓");
+        } catch (_) {
+          document.getElementById("agentToken").select();
+          showToast("Tekan Ctrl+C untuk menyalin token");
+        }
+      }
+
+      function printJobActions(job) {
+        if (["failed", "cancelled"].includes(job.status))
+          return `<button class="btn" style="padding:5px 9px" onclick="retryPrintJob(${job.id})">Retry</button>`;
+        if (job.status === "pending")
+          return `<button class="btn" style="padding:5px 9px" onclick="cancelPrintJob(${job.id})">Batal</button>`;
+        return "-";
+      }
+
+      function escapePrintText(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      async function loadPrintJobs() {
+        const body = document.getElementById("printJobsBody");
+        if (!body) return;
+        try {
+          const result = await api("GET", "/print/jobs?limit=30");
+          const c = result.counts;
+          document.getElementById("printJobCounts").textContent =
+            `Menunggu ${c.pending} · Diproses ${c.processing} · Gagal ${c.failed} · Selesai ${c.done}`;
+          body.innerHTML = result.jobs.length
+            ? result.jobs.map((job) => `<tr style="border-top:1px solid var(--border-color)">
+                <td style="padding:9px 4px">#${job.id}</td>
+                <td style="padding:9px 4px">${escapePrintText(job.document_type || "manual")}${job.document_id ? ` #${job.document_id}` : ""}</td>
+                <td style="padding:9px 4px" title="${escapePrintText(job.last_error)}">${escapePrintText(job.status)}</td>
+                <td style="padding:9px 4px">${job.attempt_count}</td>
+                <td style="padding:9px 4px">${printJobActions(job)}</td>
+              </tr>`).join("")
+            : '<tr><td colspan="5" style="padding:12px 4px">Belum ada job cetak.</td></tr>';
+        } catch (e) {
+          body.innerHTML = `<tr><td colspan="5" style="color:#ef4444;padding:12px 4px">${escapePrintText(e.message)}</td></tr>`;
+        }
+      }
+
+      async function retryPrintJob(id) {
+        try {
+          await api("POST", `/print/jobs/${id}/retry`, {});
+          showToast(`Job #${id} diantrekan ulang`);
+          loadPrintJobs();
+        } catch (e) { showToast(e.message, "error"); }
+      }
+
+      async function cancelPrintJob(id) {
+        try {
+          await api("POST", `/print/jobs/${id}/cancel`, {});
+          showToast(`Job #${id} dibatalkan`);
+          loadPrintJobs();
+        } catch (e) { showToast(e.message, "error"); }
       }
 
       /* ── Akun & Data ── */
@@ -819,8 +968,11 @@
       }
 
       // Init
-      loadToko();
-      loadPrinter();
+      loadPrintSettings();
+      setInterval(() => {
+        const panel = document.getElementById("pnlPrinter");
+        if (panel && panel.style.display !== "none") loadPrintJobs();
+      }, 10000);
       if (currentUserIsAdmin) loadUpdateInfo();
       const curTheme = localStorage.getItem("ipos_theme") || "light";
       document.getElementById(
@@ -829,6 +981,11 @@
       document.getElementById(
         curTheme === "dark" ? "optDark" : "optLight",
       ).style.background = "var(--primary-light)";
+      setupRoutedTabs({
+        tabs: ACTIVE_TABS.map((tab) => tab.toLowerCase()),
+        defaultTab: "toko",
+        activate: (tab) => switchTab(tab),
+      });
     </script>
   </body>
 </html>

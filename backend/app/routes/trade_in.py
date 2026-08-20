@@ -9,20 +9,18 @@ Flow:
   3. Hitung selisih
   4. Stok: barang kembali + ke stok, barang baru - dari stok
 """
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional, List
-from datetime import date, datetime
-import pytz
-import unicodedata
-import textwrap
+from datetime import date
 from pydantic import BaseModel
 
 from ..database import get_db
 from ..auth import get_current_user, write_audit
 from .. import models
 from .accounting import create_auto_journal, resolve_active_branch_id
+from ..services.receipt_renderer import build_trade_in_receipt, settings_from_branch
+from .print_queue import enqueue_print_job
 
 router = APIRouter()
 
@@ -67,9 +65,10 @@ def get_trade_ins(
     end_date: Optional[date] = None,
     skip: int = 0, limit: int = 50,
     db: Session = Depends(get_db),
-    _=Depends(get_current_user)
+    current_user=Depends(get_current_user)
 ):
-    q = db.query(models.TradeIn)
+    branch_id = resolve_active_branch_id(db, current_user)
+    q = db.query(models.TradeIn).filter(models.TradeIn.branch_id == branch_id)
     if start_date: q = q.filter(models.TradeIn.date >= start_date)
     if end_date:   q = q.filter(models.TradeIn.date <= end_date)
     trades = q.order_by(models.TradeIn.id.desc()).offset(skip).limit(limit).all()
@@ -89,9 +88,13 @@ def get_trade_ins(
 def get_trade_in(
     trade_id: int,
     db: Session = Depends(get_db),
-    _=Depends(get_current_user)
+    current_user=Depends(get_current_user)
 ):
-    t = db.query(models.TradeIn).get(trade_id)
+    branch_id = resolve_active_branch_id(db, current_user)
+    t = db.query(models.TradeIn).filter(
+        models.TradeIn.id == trade_id,
+        models.TradeIn.branch_id == branch_id,
+    ).first()
     if not t:
         raise HTTPException(404, "Tukar tambah tidak ditemukan")
 
@@ -178,6 +181,8 @@ def create_trade_in(
         difference=difference,
         created_by=current_user.id,
         branch_id=b_id,
+        cash_amount=data.cash_amount,
+        bank_amount=data.bank_amount,
     )
     db.add(trade)
     db.flush()
@@ -317,167 +322,29 @@ def delete_trade_in(
     return {"message": "Tukar tambah dibatalkan, stok dikembalikan"}
 
 
-# ── Helper Printer ────────────────────────────────────────────────────────────
-WITA = pytz.timezone("Asia/Makassar")
-
-def printer_safe(text: str, max_len: int = None) -> str:
-    """Konversi string agar aman untuk printer thermal ESC/POS."""
-    if not text:
-        return ""
-    text = str(text).replace('\xa0', ' ')
-    text = unicodedata.normalize('NFKD', text)
-    text = text.encode('ascii', errors='ignore').decode('ascii')
-    text = text.strip()
-    if max_len:
-        text = text[:max_len]
-    return text
-
-
 @router.post("/print/{trade_id}")
-async def print_trade_in_receipt(
+def print_trade_in_receipt(
     trade_id: int,
-    request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
-    try:
-        try:
-            data = await request.json()
-        except Exception:
-            data = {}
-
-        settings_toko = data.get("settings", {})
-
-        trade = db.query(models.TradeIn).get(trade_id)
-        if not trade:
-            return JSONResponse(status_code=404, content={"detail": "Transaksi tidak ditemukan"})
-
-        branch_id = trade.branch_id or 1
-
-        # ── Helper Formatter ──────────────────────────────────────────────────
-        def format_rp(val):
-            try:
-                return f"{int(float(val)):,}".replace(",", ".") + ",00"
-            except Exception:
-                return "0,00"
-
-        def format_qty(val):
-            try:
-                v = float(val)
-                return f"{int(v)},00" if v.is_integer() else f"{v}".replace(".", ",")
-            except Exception:
-                return "0,00"
-
-        W = 48
-        def lr(left, right):
-            spaces = W - len(left) - len(right)
-            if spaces < 1: spaces = 1
-            return f"{left}{' ' * spaces}{right}\n"
-
-        # ── Header & Footer ───────────────────────────────────────────────────
-        nama_toko = printer_safe(settings_toko.get("storeName", "TOKO")).upper()
-        alamat    = printer_safe(settings_toko.get("storeAddr", ""))
-        footer    = printer_safe(settings_toko.get("storeFooter", "Terima Kasih!"))
-
-        try:
-            parsed_date = trade.date.strftime("%d-%m-%Y") if hasattr(trade.date, 'strftime') else str(trade.date)
-        except Exception:
-            parsed_date = datetime.now(WITA).strftime("%d-%m-%Y")
-
-        try:
-            time_str = trade.created_at.strftime("%H:%M:%S") if hasattr(trade.created_at, 'strftime') else datetime.now(WITA).strftime("%H:%M:%S")
-        except Exception:
-            time_str = "-"
-
-        no_str    = str(trade.number)
-        kasir     = trade.creator.username.upper() if trade.creator else "ADMIN"
-        pelanggan = trade.customer.name.upper() if trade.customer else "UMUM"
-
-        # ── Rakit Struk ───────────────────────────────────────────────────────
-        struk  = "\x1B\x61\x01\x1D\x21\x11"
-        struk += f"{nama_toko}\n\n"
-        struk += "\x1D\x21\x00\x1B\x61\x00"
-
-        for line in alamat.split('\n'):
-            struk += f"{line}\n"
-        struk += "\n"
-
-        struk += "\x1B\x61\x01" # Center
-        struk += "NOTA TUKAR TAMBAH\n"
-        struk += "\x1B\x61\x00" # Left
-
-        struk += lr(f"No.  : {no_str}", parsed_date)
-        struk += lr(f"Kasir: {kasir}", time_str)
-        struk += f"Pel. : {pelanggan}\n"
-
-        garis  = "-" * W
-        struk += f"{garis}\n"
-
-        # === BARANG KEMBALI ===
-        if trade.return_items:
-            struk += "\x1B\x61\x01" # Center
-            struk += "=== BARANG KEMBALI ===\n"
-            struk += "\x1B\x61\x00" # Left
-            for item in trade.return_items:
-                nama_barang = printer_safe(item.item.name).upper() if item.item else "BARANG"
-                wrapped     = textwrap.wrap(nama_barang, width=W)
-                struk += "\n".join(wrapped) + "\n"
-                
-                qty        = float(item.qty)
-                harga_str  = format_rp(item.return_price)
-                qty_str    = format_qty(qty)
-                total_str  = format_rp(item.total)
-                cond_str   = f"({item.condition})"
-                left_part  = f"{harga_str:<12} x {qty_str:<5} {cond_str:<10} ="
-                struk     += lr(left_part, total_str)
-            struk += f"{garis}\n"
-            struk += lr("TOTAL KEMBALI", format_rp(trade.return_subtotal))
-            struk += f"{garis}\n\n"
-
-        # === BARANG BARU ===
-        if trade.new_items:
-            struk += "\x1B\x61\x01" # Center
-            struk += "=== BARANG BARU ===\n"
-            struk += "\x1B\x61\x00" # Left
-            for item in trade.new_items:
-                nama_barang = printer_safe(item.item.name).upper() if item.item else "BARANG"
-                wrapped     = textwrap.wrap(nama_barang, width=W)
-                struk += "\n".join(wrapped) + "\n"
-                
-                qty        = float(item.qty)
-                harga_str  = format_rp(item.sell_price)
-                qty_str    = format_qty(qty)
-                total_str  = format_rp(item.total)
-                left_part  = f"{harga_str:<14} x {qty_str:<5} ="
-                struk     += lr(left_part, total_str)
-            struk += f"{garis}\n"
-            struk += lr("TOTAL BARU", format_rp(trade.new_subtotal))
-            struk += f"{garis}\n\n"
-
-        # SUMMARY SELISIH
-        diff = trade.difference
-        struk += lr("SELISIH", format_rp(abs(diff)))
-        if diff > 0:
-            struk += lr("", "PELANGGAN BAYAR")
-        elif diff < 0:
-            struk += lr("", "MASUK SALDO PELANGGAN")
-        else:
-            struk += lr("", "IMPAS")
-
-        struk += "\n\x1B\x61\x01"
-        struk += f"{footer}\n\n\n"
-
-        # ── Simpan ke Print Queue ─────────────────────────────────────────────
-        db.add(models.PrintJob(
-            branch_id=branch_id,
-            content=struk,
-            content_type="raw",
-            status="pending"
-        ))
-        db.commit()
-
-        return {"status": "success", "message": f"Struk masuk ke antrean cetak!"}
-
-    except Exception as e:
-        print(f"🔥 ERROR PRINT TRADE-IN: {str(e)}")
-        return JSONResponse(status_code=500, content={"detail": f"Gagal mencetak: {str(e)}"})
-
+    branch_id = resolve_active_branch_id(db, current_user)
+    trade = db.query(models.TradeIn).filter(
+        models.TradeIn.id == trade_id,
+        models.TradeIn.branch_id == branch_id,
+    ).first()
+    if not trade:
+        raise HTTPException(404, "Transaksi tidak ditemukan")
+    branch = db.query(models.Branch).filter(models.Branch.id == branch_id).first()
+    if not branch:
+        raise HTTPException(400, "Cabang transaksi tidak valid")
+    job = enqueue_print_job(
+        db,
+        branch_id=branch_id,
+        content=build_trade_in_receipt(trade, settings_from_branch(branch)),
+        document_type="trade_in",
+        document_id=trade.id,
+        created_by=current_user.id,
+    )
+    db.commit()
+    return {"status": "queued", "job_id": job.id, "branch_id": branch_id}

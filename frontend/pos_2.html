@@ -1707,7 +1707,7 @@
     // =======================================================================
     // API TRANSAKSI
     // =======================================================================
-    async function prosesBayar() {
+    async function prosesBayar(receiptRequested = false) {
       const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
       const tendered = parseDesimal(document.getElementById("paidInp").value);
       if (payMethod === "cash" && tendered < total)
@@ -1728,6 +1728,7 @@
           paid: paid,
           cash_received: payMethod === "cash" ? tendered : null,
           payment_method: payMethod,
+          receipt_requested: receiptRequested,
           items: cart.map((c) => ({
             item_id: c.id,
             qty: c.qty,
@@ -1755,14 +1756,17 @@
       activeModal = "rcpt";
       rcptIdx = 2;
 
-      // Panggil API Print secara otomatis jika diperlukan, atau isi Box struk
       const box = document.getElementById("rcptBox");
+      const queueInfo = s.receipt_job
+        ? `<p style="text-align:center;color:#10b981;font-weight:700">Struk masuk antrean printer (job #${s.receipt_job.id}).</p>`
+        : "";
       box.innerHTML = `
           <h2 style="text-align:center; margin-top:0;">Transaksi Berhasil!</h2>
           <p style="text-align:center;">Kembalian: <b>${fmtRp(s.change)}</b></p>
+          ${queueInfo}
           <div style="display:flex; gap:10px; margin-top:20px;">
             <button id="btnRcptTutup" class="rcpt-btn" style="flex:1; background:transparent; color:#ef4444; border: 2px solid #ef4444;" onclick="closeModals()">✕ Tutup</button>
-            <button id="btnRcptCetak" class="rcpt-btn" style="flex:1; background:var(--primary); color:white; border:none;" onclick='printReceipt(${JSON.stringify(s)})'>🖨️ Cetak</button>
+            <button id="btnRcptCetak" class="rcpt-btn" style="flex:1; background:var(--primary); color:white; border:none;" ${s.receipt_job ? "disabled" : ""} onclick="printReceipt({id:${Number(s.id)}})">${s.receipt_job ? "✓ Diantrekan" : "🖨️ Cetak"}</button>
             <button id="btnRcptSelesai" class="rcpt-btn" style="flex:1; background:#10b981; color:white; border:none;" onclick="closeModals()">✓ Selesai</button>
           </div>
         `;
@@ -1789,18 +1793,15 @@
     }
 
     async function printReceipt(saleData) {
+      const button = document.getElementById("btnRcptCetak");
       try {
-        const ps = JSON.parse(
-          localStorage.getItem("ipos_print_settings") || "{}",
-        );
-
-        // 👇 INI YANG BENAR: Harus bawa ID penjualannya! 👇
-        await api("POST", `/sales/print/${saleData.id}`, { settings: ps });
-
-        showToast("Struk dikirim ke antrean printer!");
-        closeModals();
+        if (button) button.disabled = true;
+        const result = await api("POST", `/sales/print/${saleData.id}`, {});
+        showToast(`Struk masuk antrean printer (job #${result.job_id})`);
+        if (button) button.textContent = "✓ Diantrekan";
       } catch (e) {
         showToast("Gagal print: " + e.message, "error");
+        if (button) button.disabled = false;
       }
     }
 

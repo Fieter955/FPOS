@@ -129,6 +129,9 @@
                   margin-bottom: 14px;
                 "
               >
+                <button class="btn" onclick="openReturnHistory()">
+                  Riwayat Retur &amp; Cetak
+                </button>
                 <button
                   class="btn"
                   style="
@@ -408,14 +411,30 @@
     <div class="modal-overlay" id="mReturnResult">
       <div class="modal-box" style="max-width: 460px">
         <div class="modal-hdr">
-          <h2>✅ Retur Pembelian Berhasil</h2>
+          <h2 id="mReturnResultTitle">✅ Retur Berhasil</h2>
           <button class="btn-x" onclick="closeModal('mReturnResult')">×</button>
         </div>
         <div class="modal-body" id="mReturnResultBody" style="padding: 16px 0">
           <!-- diisi oleh showPurchaseReturnResult() -->
         </div>
-        <div style="padding-top: 8px">
-          <button class="btn btn-primary" style="width: 100%" onclick="closeModal('mReturnResult')">Tutup</button>
+        <div style="padding-top: 8px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <button class="btn" onclick="closeModal('mReturnResult')">Tutup</button>
+          <button class="btn btn-primary" id="btnPrintReturnResult" onclick="printCurrentReturn()">Cetak Struk</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="mReturnHistory">
+      <div class="modal-box" style="max-width: 900px; width: 92vw">
+        <div class="modal-hdr">
+          <h2>Riwayat Retur &amp; Cetak Struk</h2>
+          <button class="btn-x" onclick="closeModal('mReturnHistory')">×</button>
+        </div>
+        <div style="overflow:auto;max-height:65vh">
+          <table class="tbl" style="width:100%">
+            <thead><tr><th>No. Retur</th><th>Jenis</th><th>Faktur</th><th>Tanggal</th><th>Total</th><th>Aksi</th></tr></thead>
+            <tbody id="returnHistoryBody"><tr><td colspan="6">Memuat...</td></tr></tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -442,6 +461,7 @@
       let swapSelectedBatchId = null;
       let swapContext = null;
       let pendingSwapNote = null; // hasil swap terakhir, untuk ditampilkan di rincian retur
+      let currentPrintedReturn = null;
 
       function switchTab(tab) {
         currentTab = tab;
@@ -1067,7 +1087,7 @@
             // Retur pembelian → tampilkan rincian refund vs modal vs selisih (+ catatan swap)
             showPurchaseReturnResult(res, pendingSwapNote);
           } else {
-            showToast(`Berhasil! No. Retur: ${res.number}`);
+            showSaleReturnResult(res);
           }
           pendingSwapNote = null;
           load();
@@ -1078,9 +1098,26 @@
         }
       }
 
+      function showSaleReturnResult(res) {
+        currentPrintedReturn = { type: "sales", id: res.id };
+        document.getElementById("mReturnResultTitle").textContent = "✅ Retur Penjualan Berhasil";
+        document.getElementById("mReturnResultBody").innerHTML = `
+          <div style="font-size:13px;color:var(--text-muted);margin-bottom:10px">
+            No. Retur <b style="color:var(--primary);font-family:monospace">${escapeReturnText(res.number)}</b>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px dashed var(--border-color)">
+            <span>Total dikreditkan ke pelanggan</span><b>${fmtRp(res.total || 0)}</b>
+          </div>`;
+        document.getElementById("btnPrintReturnResult").disabled = false;
+        document.getElementById("btnPrintReturnResult").textContent = "Cetak Struk";
+        openModal("mReturnResult");
+      }
+
       // Keterlacakan retur pembelian: tunjukkan ke pemilik berapa refund yang disepakati,
       // berapa modal NYATA barang yang keluar (FIFO), dan selisih untung/rugi-nya + ke akun mana.
       function showPurchaseReturnResult(res, swapNote) {
+        currentPrintedReturn = { type: "purchases", id: res.id };
+        document.getElementById("mReturnResultTitle").textContent = "✅ Retur Pembelian Berhasil";
         const refund = res.total || 0;
         const modal = res.total_carrying || 0;
         const selisih = res.selisih || 0;
@@ -1126,7 +1163,68 @@
           </div>
           <div style="font-size:11.5px; color:var(--text-muted)">Selisih dicatat ke akun: ${selisihAkun}</div>
           ${swapHtml}`;
+        document.getElementById("btnPrintReturnResult").disabled = false;
+        document.getElementById("btnPrintReturnResult").textContent = "Cetak Struk";
         openModal("mReturnResult");
+      }
+
+      function escapeReturnText(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      async function queueReturnReceipt(type, id, button = null) {
+        try {
+          if (button) button.disabled = true;
+          const result = await api("POST", `/returns/${type}/${id}/print`, {});
+          showToast(`Struk retur masuk antrean (job #${result.job_id})`);
+          if (button) button.textContent = "✓ Diantrekan";
+          return result;
+        } catch (e) {
+          if (button) button.disabled = false;
+          showToast("Gagal cetak struk retur: " + e.message, "error");
+        }
+      }
+
+      function printCurrentReturn() {
+        if (!currentPrintedReturn) return;
+        queueReturnReceipt(
+          currentPrintedReturn.type,
+          currentPrintedReturn.id,
+          document.getElementById("btnPrintReturnResult"),
+        );
+      }
+
+      async function openReturnHistory() {
+        openModal("mReturnHistory");
+        const body = document.getElementById("returnHistoryBody");
+        body.innerHTML = '<tr><td colspan="6">Memuat...</td></tr>';
+        try {
+          const [sales, purchases] = await Promise.all([
+            api("GET", "/returns/sales?limit=100"),
+            api("GET", "/returns/purchases?limit=100"),
+          ]);
+          const rows = [
+            ...sales.map((r) => ({ ...r, type: "sales", label: "Penjualan", invoice: r.sale_number })),
+            ...purchases.map((r) => ({ ...r, type: "purchases", label: "Pembelian", invoice: r.purchase_number })),
+          ].sort((a, b) => String(b.created_at || b.date).localeCompare(String(a.created_at || a.date)));
+          body.innerHTML = rows.length
+            ? rows.map((r) => `<tr>
+                <td style="font-family:monospace;font-weight:700">${escapeReturnText(r.number)}</td>
+                <td>${r.label}</td>
+                <td>${escapeReturnText(r.invoice || "-")}</td>
+                <td>${fmtDate(r.date)}</td>
+                <td style="text-align:right">${fmtRp(r.total || 0)}</td>
+                <td><button class="btn" style="padding:5px 10px" onclick="queueReturnReceipt('${r.type}', ${r.id}, this)">Cetak</button></td>
+              </tr>`).join("")
+            : '<tr><td colspan="6">Belum ada retur.</td></tr>';
+        } catch (e) {
+          body.innerHTML = `<tr><td colspan="6" style="color:#ef4444">${escapeReturnText(e.message)}</td></tr>`;
+        }
       }
 
       // ── Swap batch antar-supplier (Fase 3) ────────────────────────────────
@@ -1307,6 +1405,7 @@
         showLoading("Memproses retur...");
         try {
           const type = mManualMode === "purchase" ? "purchases" : "sales";
+          const createdReturns = [];
           // Proses setiap grup faktur secara berurutan
           for (const pid in groups) {
             const payload = {
@@ -1318,11 +1417,17 @@
             if (mManualMode === "purchase") payload.purchase_id = parseInt(pid);
             else payload.sale_id = parseInt(pid);
 
-            await api("POST", `/returns/${type}`, payload);
+            createdReturns.push(await api("POST", `/returns/${type}`, payload));
           }
           hideLoading();
           showToast("Semua retur berhasil diproses!");
           closeModal("mManualReturn");
+          if (createdReturns.length === 1) {
+            if (type === "purchases") showPurchaseReturnResult(createdReturns[0], null);
+            else showSaleReturnResult(createdReturns[0]);
+          } else if (createdReturns.length > 1) {
+            openReturnHistory();
+          }
           load();
         } catch (ex) {
           hideLoading();

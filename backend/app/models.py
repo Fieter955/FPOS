@@ -46,6 +46,20 @@ class AuditLog(Base):
     user = relationship("User")
 
 
+class DataSeedRun(Base):
+    """Status seed data bawaan yang harus idempoten lintas restart."""
+    __tablename__ = "data_seed_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    seed_key = Column(String(100), unique=True, nullable=False)
+    version = Column(String(50), nullable=False)
+    status = Column(String(30), nullable=False, default="pending")
+    counts_json = Column(Text)
+    error = Column(Text)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+
 class LoginAttempt(Base):
     __tablename__ = "login_attempts"
     id = Column(Integer, primary_key=True, index=True)
@@ -98,6 +112,12 @@ class Branch(Base):
     is_setup_complete = Column(Boolean, default=False)
     is_pkp = Column(Boolean, default=False)  # Toko sudah PKP? → PPN pembelian dipisah ke PPN Masukan (1-1550), bukan dilebur ke modal
     tarif_ppn = Column(Float, default=11)    # Tarif PPN penjualan (%) saat PKP — harga jual dianggap SUDAH termasuk PPN ini
+    # Identitas dan perilaku struk disimpan per cabang agar seluruh kasir dan
+    # cetak ulang memakai sumber yang sama (bukan localStorage perangkat).
+    receipt_name = Column(String(150), nullable=True)
+    receipt_footer = Column(String(500), default="Terima kasih telah berbelanja!")
+    receipt_paper_width_mm = Column(Integer, default=80)
+    receipt_auto_print = Column(Boolean, default=False)
 
     # Relasi ke tabel lain
     users = relationship("User", back_populates="branch")
@@ -199,7 +219,8 @@ class Item(Base):
     )
     id = Column(Integer, primary_key=True, index=True)
     code = Column(String(50), unique=True, nullable=False)
-    name = Column(String(200), unique=True, nullable=False)
+    # Nama boleh sama; KODEITEM/Item.code adalah identitas unik barang.
+    name = Column(String(200), nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     brand_id = Column(Integer, ForeignKey("brands.id"), nullable=True)
     unit_id = Column(Integer, ForeignKey("units.id"), nullable=True)
@@ -418,8 +439,12 @@ class PurchaseReturn(Base):
     selisih = Column(Float, default=0)         # untung(+)/rugi(-) retur = refund − modal nyata
     reason = Column(String(200))
     notes = Column(Text)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     purchase = relationship("Purchase", back_populates="returns")
+    branch = relationship("Branch")
+    creator = relationship("User", foreign_keys=[created_by])
     items = relationship("PurchaseReturnItem", back_populates="return_", cascade="all, delete-orphan")
 
 
@@ -432,6 +457,7 @@ class PurchaseReturnItem(Base):
     price = Column(Float, nullable=False)
     total = Column(Float, nullable=False)
     return_ = relationship("PurchaseReturn", back_populates="items")
+    item = relationship("Item")
 
 
 # ─── Penjualan ────────────────────────────────────────────────────────────────
@@ -460,6 +486,8 @@ class Sale(Base):
     total = Column(Float, default=0)
     paid = Column(Float, default=0)
     change = Column(Float, default=0)
+    cash_received = Column(Float, nullable=True)
+    invoice_discount_gross = Column(Float, nullable=True)
     payment_method = Column(String(20), default="cash")
     status = Column(String(20), default="paid")
     notes = Column(Text)
@@ -467,6 +495,7 @@ class Sale(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     customer = relationship("Customer", back_populates="sales")
     items = relationship("SaleItem", back_populates="sale", cascade="all, delete-orphan")
+    payments = relationship("SalePayment", back_populates="sale", cascade="all, delete-orphan")
     returns = relationship("SaleReturn", back_populates="sale")
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     branch = relationship("Branch", back_populates="sales")
@@ -491,6 +520,20 @@ class SaleItem(Base):
     item = relationship("Item", back_populates="sale_items")
 
 
+class SalePayment(Base):
+    """Snapshot tender yang diterapkan pada satu transaksi penjualan."""
+    __tablename__ = "sale_payments"
+    __table_args__ = (Index("ix_sale_payments_sale_id", "sale_id"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    sale_id = Column(Integer, ForeignKey("sales.id", ondelete="CASCADE"), nullable=False)
+    method = Column(String(30), nullable=False)
+    amount = Column(Float, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    sale = relationship("Sale", back_populates="payments")
+
+
 class SaleReturn(Base):
     __tablename__ = "sale_returns"
     id = Column(Integer, primary_key=True, index=True)
@@ -502,8 +545,12 @@ class SaleReturn(Base):
     total = Column(Float, default=0)
     reason = Column(String(200))
     notes = Column(Text)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     sale = relationship("Sale", back_populates="returns")
+    branch = relationship("Branch")
+    creator = relationship("User", foreign_keys=[created_by])
     items = relationship("SaleReturnItem", back_populates="return_", cascade="all, delete-orphan")
 
 
@@ -516,6 +563,7 @@ class SaleReturnItem(Base):
     price = Column(Float, nullable=False)
     total = Column(Float, nullable=False)
     return_ = relationship("SaleReturn", back_populates="items")
+    item = relationship("Item")
 
 
 # ─── Persediaan ───────────────────────────────────────────────────────────────
@@ -538,6 +586,93 @@ class StockMovement(Base):
     notes = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     item = relationship("Item", back_populates="stock_movements")
+
+
+class InventoryDocument(Base):
+    """Dokumen persediaan non-pembelian/penjualan yang dapat diaudit."""
+    __tablename__ = "inventory_documents"
+    __table_args__ = (
+        Index("ix_inventory_documents_branch_date", "branch_id", "date"),
+        Index("ix_inventory_documents_warehouse_id", "warehouse_id"),
+        Index("ix_inventory_documents_type_status", "type", "status"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    number = Column(String(50), unique=True, nullable=False)
+    type = Column(String(20), nullable=False)  # item_in | item_out | opening_stock | stock_opname
+    date = Column(Date, nullable=False)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    status = Column(String(20), default="posted", nullable=False)  # posted | cancelled
+    notes = Column(Text)
+    surplus_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
+    shortage_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
+    journal_id = Column(Integer, ForeignKey("journals.id"), nullable=True)
+    reversal_journal_id = Column(Integer, ForeignKey("journals.id"), nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    cancelled_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+    cancellation_reason = Column(Text)
+
+    warehouse = relationship("Warehouse")
+    branch = relationship("Branch")
+    creator = relationship("User", foreign_keys=[created_by])
+    canceller = relationship("User", foreign_keys=[cancelled_by])
+    surplus_account = relationship("Account", foreign_keys=[surplus_account_id])
+    shortage_account = relationship("Account", foreign_keys=[shortage_account_id])
+    journal = relationship("Journal", foreign_keys=[journal_id])
+    reversal_journal = relationship("Journal", foreign_keys=[reversal_journal_id])
+    lines = relationship(
+        "InventoryDocumentLine",
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="InventoryDocumentLine.id",
+    )
+
+
+class InventoryDocumentLine(Base):
+    __tablename__ = "inventory_document_lines"
+    __table_args__ = (
+        UniqueConstraint("document_id", "item_id", name="uq_inventory_document_item"),
+        Index("ix_inventory_document_lines_item_id", "item_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("inventory_documents.id"), nullable=False)
+    item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    system_qty = Column(Float, nullable=False, default=0)
+    physical_qty = Column(Float, nullable=True)
+    qty_delta = Column(Float, nullable=False, default=0)
+    unit_cost = Column(Float, nullable=False, default=0)
+    total_cost = Column(Float, nullable=False, default=0)
+    notes = Column(Text)
+
+    document = relationship("InventoryDocument", back_populates="lines")
+    item = relationship("Item")
+    allocations = relationship(
+        "InventoryDocumentBatchAllocation",
+        back_populates="line",
+        cascade="all, delete-orphan",
+    )
+
+
+class InventoryDocumentBatchAllocation(Base):
+    """Batch FIFO yang dikonsumsi sebuah baris agar reversal dapat presisi."""
+    __tablename__ = "inventory_document_batch_allocations"
+    __table_args__ = (
+        Index("ix_inventory_doc_batch_line_id", "line_id"),
+        Index("ix_inventory_doc_batch_batch_id", "batch_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    line_id = Column(Integer, ForeignKey("inventory_document_lines.id"), nullable=False)
+    batch_id = Column(Integer, ForeignKey("stock_batches.id"), nullable=True)
+    qty = Column(Float, nullable=False)
+    unit_cost = Column(Float, nullable=False, default=0)
+
+    line = relationship("InventoryDocumentLine", back_populates="allocations")
+    batch = relationship("StockBatch", foreign_keys=[batch_id])
 
 class CashTransaction(Base):
     __tablename__ = "cash_transactions"
@@ -829,6 +964,9 @@ class StockBatch(Base):
     warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
     supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
     purchase_item_id = Column(Integer, ForeignKey("purchase_items.id"), nullable=True)
+    source_inventory_line_id = Column(
+        Integer, ForeignKey("inventory_document_lines.id"), nullable=True
+    )
     unit_cost = Column(Float, default=0)        # harga modal per satuan dasar
     qty_received = Column(Float, default=0)     # jumlah awal saat diterima
     qty_remaining = Column(Float, default=0)    # sisa yang belum terjual
@@ -837,6 +975,9 @@ class StockBatch(Base):
 
     item = relationship("Item")
     supplier = relationship("Supplier")
+    source_inventory_line = relationship(
+        "InventoryDocumentLine", foreign_keys=[source_inventory_line_id]
+    )
 
 
 class SaleItemBatch(Base):
@@ -1309,6 +1450,8 @@ class TradeIn(Base):
     # Selisih yang dibayar/dikembalikan ke pelanggan
     difference = Column(Float, default=0)  # positif = pelanggan bayar, negatif = toko kembalikan uang
     payment_method = Column(String(20), default="cash")
+    cash_amount = Column(Float, default=0)
+    bank_amount = Column(Float, default=0)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -1451,10 +1594,37 @@ class PrintJob(Base):
     __tablename__ = "print_jobs"
 
     id = Column(Integer, primary_key=True, index=True)
-    branch_id = Column(Integer)
-    content = Column(Text)
-    status = Column(String, default="pending")  
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    status = Column(String, default="pending", nullable=False, index=True)
     content_type = Column(String, default="raw")
-    
-    # 👇 PERBAIKAN: Hilangkan tanda () di get_local_datetime
+    document_type = Column(String(40), nullable=True)
+    document_id = Column(Integer, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    attempt_count = Column(Integer, default=0, nullable=False)
+    claimed_at = Column(DateTime(timezone=True), nullable=True)
+    lease_until = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    last_error = Column(Text, nullable=True)
+
     created_at = Column(DateTime, default=get_local_datetime)
+
+    branch = relationship("Branch")
+    creator = relationship("User", foreign_keys=[created_by])
+
+
+class PrinterAgent(Base):
+    """Satu agen printer utama per cabang, diautentikasi token acak."""
+    __tablename__ = "printer_agents"
+    __table_args__ = (UniqueConstraint("branch_id", name="uq_printer_agents_branch_id"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True)
+    name = Column(String(100), nullable=False, default="Printer Utama")
+    token_hash = Column(String(64), nullable=False, unique=True)
+    token_last4 = Column(String(4), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
+
+    branch = relationship("Branch")

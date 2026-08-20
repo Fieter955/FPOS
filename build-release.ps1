@@ -5,7 +5,7 @@ param(
     [string]$DownloadUrl,
     [string]$Notes = "",
     [string]$MinimumVersion = "0.0.0",
-    [string]$CondaEnv = "ipos",
+    [string]$CondaEnv = "base",
     [string]$OutputRoot = "rilis\generated"
 )
 
@@ -32,8 +32,6 @@ New-Item -ItemType Directory -Path $outputPath -Force | Out-Null
 $pushed = $false
 
 try {
-    npm run build
-    if ($LASTEXITCODE -ne 0) { throw "Build frontend gagal" }
 
     Push-Location (Join-Path $repoRoot "backend")
     $pushed = $true

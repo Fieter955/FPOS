@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Dashboard - FPOS</title>
-    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/style.css?v=20260820-workspace-hit-test" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#0f172a" />
 
@@ -30,6 +30,133 @@
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
         gap: 20px;
+      }
+      .module-ribbon {
+        margin-top: 32px;
+        overflow: hidden;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        background: var(--card-bg);
+        box-shadow: var(--shadow-sm);
+      }
+      .module-ribbon-header {
+        padding: 20px 22px 12px;
+      }
+      .module-ribbon-header h2 {
+        margin: 0;
+        color: var(--text-main);
+        font-size: 20px;
+      }
+      .module-ribbon-header p {
+        margin: 5px 0 0;
+        color: var(--text-muted);
+        font-size: 13px;
+      }
+      .menu-category-tabs {
+        display: flex;
+        gap: 4px;
+        overflow-x: auto;
+        padding: 0 14px;
+        border-bottom: 1px solid var(--border-color);
+        scrollbar-width: thin;
+      }
+      .menu-category-tab {
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 48px;
+        padding: 0 15px;
+        border: 0;
+        border-bottom: 3px solid transparent;
+        background: transparent;
+        color: var(--text-muted);
+        cursor: pointer;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .menu-category-tab:hover {
+        color: var(--primary);
+        background: var(--primary-light);
+      }
+      .menu-category-tab.is-active {
+        color: var(--primary);
+        border-bottom-color: var(--primary);
+      }
+      .menu-category-tab:focus-visible {
+        outline: 3px solid var(--primary-light);
+        outline-offset: -3px;
+      }
+      .menu-category-panel {
+        display: grid;
+        gap: 24px;
+        padding: 22px;
+      }
+      .menu-category-panel[hidden] {
+        display: none;
+      }
+      .menu-group-title {
+        margin: 0 0 11px;
+        color: var(--text-muted);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .menu-group-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+        gap: 12px;
+      }
+      .menu-group-grid .menu-card {
+        position: relative;
+        min-height: 144px;
+        padding: 18px 14px;
+      }
+      .menu-group-grid .menu-card h3 {
+        margin: 10px 0 4px;
+        font-size: 15px;
+      }
+      .menu-group-grid .icon-w {
+        width: 52px;
+        height: 52px;
+        font-size: 24px;
+      }
+      .menu-badge {
+        position: absolute;
+        top: 9px;
+        right: 9px;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        min-width: 25px;
+        height: 25px;
+        padding: 0 6px;
+        border: 2px solid var(--card-bg);
+        border-radius: 999px;
+        background: #ef4444;
+        color: #fff;
+        box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3);
+        font-size: 12px;
+        font-weight: 900;
+      }
+      @media (max-width: 640px) {
+        .module-ribbon-header,
+        .menu-category-panel {
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+        .menu-category-tab {
+          padding: 0 12px;
+        }
+        .menu-group-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .menu-group-grid .menu-card {
+          min-height: 132px;
+        }
       }
       .menu-card {
         background: var(--card-bg);
@@ -259,155 +386,361 @@
           </div>
         </div>
 
-        <h2 class="section-title">🛍️ Kasir & Penjualan</h2>
-        <div class="grid-cards">
+        <section class="module-ribbon" aria-labelledby="moduleRibbonTitle">
+          <div class="module-ribbon-header">
+            <h2 id="moduleRibbonTitle">Menu Modul</h2>
+            <p>Pilih kategori, lalu buka fitur yang dibutuhkan.</p>
+          </div>
           <div
-            class="menu-card"
-            onclick="location.href = '/pos'"
-            style="
-              border-color: var(--primary);
-              background: var(--primary-light);
-            "
-          >
-            <div class="icon-w">🛒</div>
-            <h3>Kasir (POS)</h3>
-            <p>Buka transaksi kasir</p>
-          </div>
-          <div class="menu-card" onclick="location.href = '/shifts'">
-            <div class="icon-w">🕒</div>
-            <h3>Shift Kasir</h3>
-            <p>Buka / tutup laci uang</p>
-          </div>
-          <div class="menu-card" onclick="location.href = '/sales'">
-            <div class="icon-w">🧾</div>
-            <h3>Riwayat Jual</h3>
-            <p>Cek & cetak ulang nota</p>
-          </div>
-          <div class="menu-card" onclick="location.href = '/delivery'">
-            <div class="icon-w">🚚</div>
-            <h3>Surat Jalan</h3>
-            <p>Kirim barang ke proyek</p>
-          </div>
-          <div class="menu-card" onclick="location.href = '/returns'">
-            <div class="icon-w">🔙</div>
-            <h3>Retur</h3>
-            <p>Pengembalian barang</p>
-          </div>
-          <div class="menu-card" onclick="location.href = '/trade_in'">
-            <div class="icon-w">🔄</div>
-            <h3>Tukar Tambah</h3>
-            <p>Tukar barang + uang</p>
-          </div>
-          <div class="menu-card" onclick="location.href = '/po'" style="position:relative">
-            <div id="poBadge" style="display:none; position:absolute; top:-10px; right:-10px; background:#ef4444; color:white; min-width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:14px; border:3px solid var(--card-bg); box-shadow:0 4px 10px rgba(239,68,68,0.3)">0</div>
-            <div class="icon-w">🔄</div>
-            <h3>Pre-Order</h3>
-            <p>Pre-order barang</p>
-          </div>
-          <div class="menu-card" onclick="location.href = '/setoran'">
-            <div class="icon-w">🔄</div>
-            <h3>Setoran</h3>
-            <p>Setoran uang ke kas</p>
-          </div>
-        </div>
-
-        <h2 class="section-title">📦 Inventaris & Pembelian</h2>
-        <div class="grid-cards">
-          <div class="menu-card" onclick="location.href = '/item/items'">
-            <div class="icon-w">🧱</div>
-            <h3>Data Barang</h3>
-            <p>Kelola stok & harga</p>
-          </div>
-          <div class="menu-card" onclick="location.href = '/purchases'">
-            <div class="icon-w">📥</div>
-            <h3>Pembelian</h3>
-            <p>Kulakan dari supplier</p>
-          </div>
-          <div class="menu-card" onclick="location.href = '/inventory'">
-            <div class="icon-w">📋</div>
-            <h3>Mutasi Stok</h3>
-            <p>Cek fisik & riwayat stok</p>
-          </div>
-          <div class="menu-card" onclick="location.href = '/warehouse'">
-            <div class="icon-w">🏢</div>
-            <h3>Multi Gudang</h3>
-            <p>Transfer antar gudang</p>
-          </div>
-          <div class="menu-card" onclick="location.href = '/assembly'">
-            <div class="icon-w">🔧</div>
-            <h3>Perakitan (BOM)</h3>
-            <p>Rakit material jadi paket</p>
-          </div>
-          <div class="menu-card" onclick="location.href = '/unit_conversion'">
-            <div class="icon-w">📐</div>
-            <h3>Konversi Satuan</h3>
-            <p>Pecah Dus ke Pcs/Lembar</p>
-          </div>
-          <div class="menu-card" onclick="location.href = '/konsinyasi'">
-            <div class="icon-w">🤝</div>
-            <h3>Konsinyasi</h3>
-            <p>Barang titipan supplier</p>
-          </div>
-        </div>
-
-        <h2 class="section-title">💼 Keuangan & Relasi</h2>
-        <div class="grid-cards">
-          <div class="menu-card" onclick="location.href = '/reports'">
-            <div class="icon-w">📈</div>
-            <h3>Laporan</h3>
-            <p>Omzet & barang terlaris</p>
-          </div>
-          <div class="menu-card" onclick="location.href = '/accounting'">
-            <div class="icon-w">📒</div>
-            <h3>Akuntansi</h3>
-            <p>Buku kas & jurnal</p>
-          </div>
-          <div class="menu-card" onclick="location.href = '/customers'">
-            <div class="icon-w">👥</div>
-            <h3>Pelanggan</h3>
-            <p>Data piutang & poin</p>
-          </div>
-          <div class="menu-card" onclick="location.href = '/supplier/dashboard'">
-            <div class="icon-w">🏭</div>
-            <h3>Supplier</h3>
-            <p>Daftar pemasok</p>
-          </div>
-          <div class="menu-card" onclick="location.href = '/supplier/tambahSuplier'">
-            <div class="icon-w">➕</div>
-            <h3>Tambah Supplier</h3>
-            <p>Registrasi pemasok baru</p>
-          </div>
-          <div class="menu-card" onclick="location.href = '/discounts'">
-            <div class="icon-w">🏷️</div>
-            <h3>Diskon & Promo</h3>
-            <p>Harga grosir otomatis</p>
-          </div>
-
-          <div class="menu-card" onclick="location.href = '/branches'">
-            <div class="icon-w">🏪</div>
-            <h3>Cabang Toko</h3>
-            <p>Manajemen multi cabang</p>
-          </div>
-
-          <div class="menu-card" onclick="location.href = '/users'">
-            <div class="icon-w">👥</div>
-            <h3>Manajemen User</h3>
-            <p>Kelola akun & hak akses</p>
-          </div>
-
-          <div class="menu-card" onclick="location.href = '/barcode'">
-            <div class="icon-w">🏷️</div>
-            <h3>Barcode</h3>
-            <p>Buat & kelola barcode produk</p>
-          </div>
-        </div>
+            id="menuCategoryTabs"
+            class="menu-category-tabs"
+            role="tablist"
+            aria-label="Kategori modul FPOS"
+          ></div>
+          <div id="menuCategoryPanels"></div>
+        </section>
       </main>
     </div>
 
-    <script src="/js/api.js"></script>
+    <script src="/js/api.js?v=20260820-inventory-documents"></script>
     <script src="/js/theme.js"></script>
     <script>
       requireAuth();
+
+      const menuItem = (label, url, icon, description, permission, action = "view", options = {}) => ({
+        label,
+        url,
+        icon,
+        description,
+        permission,
+        action,
+        ...options,
+      });
+
+      const MENU_CATEGORIES = [
+        {
+          key: "master",
+          label: "Master Data",
+          icon: "🗂️",
+          menuPermission: "menu.master",
+          groups: [
+            {
+              label: "Data Item",
+              items: [
+                menuItem("Data Barang", "/item/items?tab=brg", "📦", "Daftar dan harga barang", "master.item"),
+                menuItem("Kategori", "/item/items?tab=kat", "🏷️", "Kelompok barang", "master.type", "view", { requires: [["master.item", "view"]] }),
+                menuItem("Merek", "/item/items?tab=merek", "🏢", "Daftar merek barang", "master.brand", "view", { requires: [["master.item", "view"]] }),
+                menuItem("Satuan", "/item/items?tab=sat", "📏", "Satuan dasar barang", "master.unit", "view", { requires: [["master.item", "view"]] }),
+                menuItem("Multi Satuan", "/unit_conversion", "📐", "Konversi dus, pcs, dan lainnya", "master.unit"),
+              ],
+            },
+            {
+              label: "Relasi",
+              items: [
+                menuItem("Pelanggan", "/customers", "👥", "Data pelanggan dan deposit", "master.customer"),
+                menuItem("Supplier", "/supplier/dashboard", "🏭", "Daftar pemasok", "master.supplier"),
+                menuItem("Tambah Supplier", "/supplier/tambahSuplier", "➕", "Registrasi pemasok baru", "master.supplier", "create"),
+              ],
+            },
+            {
+              label: "Data Pendukung",
+              items: [
+                menuItem("Diskon & Promo", "/discounts", "💯", "Atur diskon periode", "master.discount_period"),
+                menuItem("Barcode", "/barcode", "▥", "Cetak barcode barang", "master.barcode"),
+              ],
+            },
+          ],
+        },
+        {
+          key: "purchase",
+          label: "Pembelian",
+          icon: "📥",
+          menuPermission: "menu.purchase",
+          groups: [
+            {
+              label: "Pesanan & Transaksi",
+              items: [
+                menuItem("Pesanan Pembelian", "/po", "📝", "Pesanan dan permintaan cabang", "purchase.order", "view", { badgeId: "poBadge" }),
+                menuItem("Daftar Pembelian", "/purchases?tab=list", "📋", "Riwayat pembelian supplier", "purchase.transaction"),
+                menuItem("Catat Pesanan", "/purchases?tab=po", "🛒", "Buat pesanan ke supplier", "purchase.transaction", "create"),
+                menuItem("Catat Pembelian", "/purchases?tab=purchase", "📦", "Terima pembelian barang", "purchase.transaction", "create"),
+                menuItem("Pembayaran Hutang", "/purchases?tab=payment", "💸", "Bayar tagihan supplier", "purchase.payable"),
+              ],
+            },
+          ],
+        },
+        {
+          key: "sales",
+          label: "Penjualan",
+          icon: "🛒",
+          menuPermission: "menu.sales",
+          groups: [
+            {
+              label: "Kasir & Penjualan",
+              items: [
+                menuItem("Kasir (POS)", "/pos", "🛒", "Buka transaksi kasir", "sales.cashier"),
+                menuItem("Shift Kasir", "/shifts", "🕒", "Buka dan tutup laci", "sales.cashier"),
+                menuItem("Daftar Penjualan", "/sales", "🧾", "Riwayat dan cetak nota", "sales.transaction"),
+                menuItem("Surat Jalan", "/delivery", "🚚", "Pengiriman barang", "sales.transaction"),
+                menuItem("Retur Penjualan", "/returns", "↩️", "Pengembalian barang", "sales.return"),
+                menuItem("Tukar Tambah", "/trade_in", "🔄", "Tukar barang dan uang", "sales.trade_in"),
+                menuItem("AI Bangunan", "/ai_bangunan", "🏗️", "Estimasi material proyek", "sales.transaction"),
+              ],
+            },
+          ],
+        },
+        {
+          key: "assembly",
+          label: "Perakitan",
+          icon: "🧩",
+          menuPermission: "menu.assembly",
+          groups: [
+            {
+              label: "Produksi",
+              items: [
+                menuItem("Formula / BOM", "/assembly?tab=bom", "📋", "Komposisi barang rakitan", "assembly.transaction"),
+                menuItem("Pesanan Perakitan", "/assembly?tab=orders", "🧾", "Daftar pesanan produksi", "assembly.order"),
+                menuItem("Proses Perakitan", "/assembly?tab=processes", "⚙️", "Pemakaian bahan", "assembly.transaction"),
+                menuItem("Proses Jadi", "/assembly?tab=results", "✅", "Posting barang jadi", "assembly.finished_goods"),
+              ],
+            },
+          ],
+        },
+        {
+          key: "inventory",
+          label: "Persediaan",
+          icon: "📦",
+          menuPermission: "menu.inventory",
+          groups: [
+            {
+              label: "Stok",
+              items: [
+                menuItem("Mutasi Stok", "/inventory?tab=mutasi", "📋", "Riwayat barang masuk dan keluar", "master.stock_card"),
+                menuItem("Stok Menipis", "/inventory?tab=low", "⚠️", "Barang di bawah stok minimum", "inventory.item_in"),
+                menuItem("Item Masuk", "/inventory?tab=item_in", "⬇️", "Barang masuk non-pembelian", "inventory.item_in"),
+                menuItem("Item Keluar", "/inventory?tab=item_out", "⬆️", "Barang rusak atau operasional", "inventory.item_out"),
+                menuItem("Saldo Awal", "/inventory?tab=opening_stock", "🏁", "Stok awal penggunaan sistem", "inventory.opening_stock"),
+                menuItem("Stok Opname", "/inventory?tab=stock_opname", "✅", "Penyesuaian stok fisik", "inventory.stock_opname"),
+              ],
+            },
+            {
+              label: "Gudang & Titipan",
+              items: [
+                menuItem("Data Gudang", "/warehouse?tab=gudang", "🏢", "Kelola gudang cabang", "inventory.transfer"),
+                menuItem("Transfer Gudang", "/warehouse?tab=transfer", "🔁", "Pindahkan stok antar gudang", "inventory.transfer"),
+                menuItem("Stok per Gudang", "/warehouse?tab=stok", "📊", "Lihat stok per lokasi", "inventory.transfer"),
+                menuItem("Semua Stok Cabang", "/warehouse?tab=semuabarang", "🏬", "Ringkasan stok cabang", "inventory.transfer"),
+                menuItem("Mutasi Antar Gudang", "/warehouse?tab=mutasi", "🚚", "Riwayat transfer lokasi", "inventory.transfer"),
+                menuItem("Konsinyasi Masuk", "/konsinyasi?tab=in", "📥", "Barang titipan supplier", "inventory.item_in"),
+                menuItem("Konsinyasi Keluar", "/konsinyasi?tab=out", "📤", "Penjualan barang titipan", "inventory.item_out"),
+              ],
+            },
+          ],
+        },
+        {
+          key: "accounting",
+          label: "Akuntansi",
+          icon: "📒",
+          menuPermission: "menu.accounting",
+          groups: [
+            {
+              label: "Kas & Buku Besar",
+              items: [
+                menuItem("Buku Kas", "/accounting?tab=kas", "💵", "Kas masuk dan keluar", "accounting.cash_in"),
+                menuItem("Setoran Pendapatan", "/setoran", "💰", "Setoran uang ke kas", "accounting.cash_in"),
+                menuItem("Jurnal", "/accounting?tab=jurnal", "📓", "Jurnal transaksi", "accounting.journal"),
+                menuItem("Daftar Akun", "/accounting?tab=coa", "📑", "Chart of accounts", "accounting.accounts"),
+                menuItem("Arus Kas", "/accounting?tab=cashflow", "🌊", "Laporan aliran kas", "accounting.cash_flow_category"),
+                menuItem("Neraca", "/accounting?tab=neraca", "⚖️", "Posisi keuangan", "report.financial"),
+                menuItem("Tutup Buku", "/accounting?tab=tutup", "🔒", "Proses akhir periode", "accounting.annual_process"),
+              ],
+            },
+          ],
+        },
+        {
+          key: "report",
+          label: "Laporan",
+          icon: "📊",
+          menuPermission: "menu.report",
+          groups: [
+            {
+              label: "Analisis",
+              items: [
+                menuItem("Ringkasan", "/reports?tab=dash", "📊", "Dashboard laporan toko", "report.sales"),
+                menuItem("Laba Rugi", "/reports?tab=pl", "📈", "Pendapatan dan beban", "report.financial"),
+                menuItem("Piutang", "/reports?tab=ar", "💰", "Tagihan pelanggan", "report.receivable"),
+                menuItem("Hutang", "/reports?tab=ap", "💸", "Tagihan supplier", "report.payable"),
+                menuItem("Barang Terlaris", "/reports?tab=top", "🏆", "Peringkat penjualan barang", "report.inventory"),
+                menuItem("AI Advisor", "/ai_advisor", "✨", "Analisis bisnis berbantuan AI", "report.sales"),
+              ],
+            },
+          ],
+        },
+        {
+          key: "settings",
+          label: "Pengaturan",
+          icon: "⚙️",
+          menuPermission: "menu.settings",
+          groups: [
+            {
+              label: "Sistem",
+              items: [
+                menuItem("Informasi Toko", "/settings?tab=toko", "🏪", "Identitas perusahaan", "settings.company", "access"),
+                menuItem("Printer", "/settings?tab=printer", "🖨️", "Printer struk", "settings.general", "access"),
+                menuItem("Ganti Password", "/settings?tab=pwd", "🔑", "Keamanan akun", "settings.general", "access"),
+                menuItem("Backup & Import", "/settings?tab=backup", "💾", "Cadangkan dan pulihkan data", "settings.backup", "access"),
+                menuItem("Update Aplikasi", "/settings?tab=update", "⬆️", "Versi aplikasi", "settings.general", "access", { adminOnly: true }),
+                menuItem("Tema", "/settings?tab=tema", "🎨", "Tampilan terang atau gelap", "settings.general", "access"),
+                menuItem("Setup Awal", "/onboarding", "🧭", "Konfigurasi awal toko", "settings.company", "access"),
+              ],
+            },
+            {
+              label: "Pengguna & Cabang",
+              items: [
+                menuItem("Manajemen User", "/users?tab=user", "👤", "Kelola akun pengguna", "settings.user_management", "access"),
+                menuItem("Role", "/users?tab=role", "🪪", "Kelola peran pengguna", "settings.user_management", "access"),
+                menuItem("Hak Akses", "/users?tab=permission", "🛡️", "Atur izin tiap role", "settings.user_management", "access"),
+                menuItem("Log Aktivitas", "/users?tab=log", "🧾", "Riwayat aktivitas sistem", "settings.activity_log", "access"),
+                menuItem("Cabang Toko", "/branches", "🏬", "Manajemen multi cabang", "master.warehouse"),
+              ],
+            },
+          ],
+        },
+      ];
+
+      function menuItemAllowed(item, category, state) {
+        return (
+          (!item.adminOnly || state?.is_admin) &&
+          hasPermission(category.menuPermission, "show", state) &&
+          hasPermission(item.permission, item.action, state) &&
+          (item.requires || []).every(([key, action = "view"]) =>
+            hasPermission(key, action, state),
+          )
+        );
+      }
+
+      function activateMenuCategory(categoryKey, { focus = false } = {}) {
+        const tabs = Array.from(document.querySelectorAll(".menu-category-tab"));
+        const panels = Array.from(document.querySelectorAll(".menu-category-panel"));
+        tabs.forEach((tab) => {
+          const active = tab.dataset.category === categoryKey;
+          tab.classList.toggle("is-active", active);
+          tab.setAttribute("aria-selected", String(active));
+          tab.tabIndex = active ? 0 : -1;
+          if (active && focus) tab.focus({ preventScroll: true });
+        });
+        panels.forEach((panel) => {
+          panel.hidden = panel.dataset.category !== categoryKey;
+        });
+      }
+
+      function createMenuCard(item) {
+        const card = document.createElement("div");
+        card.className = "menu-card";
+        card.dataset.url = item.url;
+        card.dataset.title = item.label;
+        card.setAttribute("role", "link");
+        card.tabIndex = 0;
+        card.title = `Buka ${item.label}`;
+
+        const icon = document.createElement("div");
+        icon.className = "icon-w";
+        icon.setAttribute("aria-hidden", "true");
+        icon.textContent = item.icon;
+
+        const title = document.createElement("h3");
+        title.textContent = item.label;
+        const description = document.createElement("p");
+        description.textContent = item.description;
+        card.append(icon, title, description);
+
+        if (item.badgeId) {
+          const badge = document.createElement("span");
+          badge.id = item.badgeId;
+          badge.className = "menu-badge";
+          badge.textContent = "0";
+          card.appendChild(badge);
+        }
+
+        card.addEventListener("click", () =>
+          openWorkspaceTab(item.url, item.label),
+        );
+        return card;
+      }
+
+      function renderModuleRibbon(state) {
+        const tabsRoot = document.getElementById("menuCategoryTabs");
+        const panelsRoot = document.getElementById("menuCategoryPanels");
+        tabsRoot.replaceChildren();
+        panelsRoot.replaceChildren();
+
+        const visibleCategories = MENU_CATEGORIES.map((category) => ({
+          ...category,
+          groups: category.groups
+            .map((group) => ({
+              ...group,
+              items: group.items.filter((item) =>
+                menuItemAllowed(item, category, state),
+              ),
+            }))
+            .filter((group) => group.items.length),
+        })).filter((category) => category.groups.length);
+
+        visibleCategories.forEach((category) => {
+          const tab = document.createElement("button");
+          tab.type = "button";
+          tab.className = "menu-category-tab";
+          tab.dataset.category = category.key;
+          tab.id = `menu-tab-${category.key}`;
+          tab.setAttribute("role", "tab");
+          tab.setAttribute("aria-controls", `menu-panel-${category.key}`);
+          tab.innerHTML = `<span aria-hidden="true">${category.icon}</span><span>${category.label}</span>`;
+          tab.addEventListener("click", () =>
+            activateMenuCategory(category.key),
+          );
+          tab.addEventListener("keydown", (event) => {
+            const tabs = Array.from(
+              tabsRoot.querySelectorAll(".menu-category-tab"),
+            );
+            const index = tabs.indexOf(tab);
+            let nextIndex = null;
+            if (event.key === "ArrowRight") nextIndex = (index + 1) % tabs.length;
+            if (event.key === "ArrowLeft") nextIndex = (index - 1 + tabs.length) % tabs.length;
+            if (event.key === "Home") nextIndex = 0;
+            if (event.key === "End") nextIndex = tabs.length - 1;
+            if (nextIndex === null) return;
+            event.preventDefault();
+            activateMenuCategory(tabs[nextIndex].dataset.category, { focus: true });
+            tabs[nextIndex].scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+          });
+          tabsRoot.appendChild(tab);
+
+          const panel = document.createElement("section");
+          panel.className = "menu-category-panel";
+          panel.dataset.category = category.key;
+          panel.id = `menu-panel-${category.key}`;
+          panel.setAttribute("role", "tabpanel");
+          panel.setAttribute("aria-labelledby", tab.id);
+          category.groups.forEach((group) => {
+            const groupElement = document.createElement("section");
+            const heading = document.createElement("h3");
+            heading.className = "menu-group-title";
+            heading.textContent = group.label;
+            const grid = document.createElement("div");
+            grid.className = "menu-group-grid";
+            group.items.forEach((item) => grid.appendChild(createMenuCard(item)));
+            groupElement.append(heading, grid);
+            panel.appendChild(groupElement);
+          });
+          panelsRoot.appendChild(panel);
+        });
+
+        if (visibleCategories.length) {
+          activateMenuCategory(visibleCategories[0].key);
+        } else {
+          document.querySelector(".module-ribbon").hidden = true;
+        }
+      }
 
       const kpiDestinations = {
         sales: {
@@ -457,7 +790,7 @@
       }
 
       function moveDashboardCard(card, key, event) {
-        const container = card.closest(".grid-cards, .kpi-grid");
+        const container = card.closest(".menu-group-grid, .grid-cards, .kpi-grid");
         if (!container) return;
         const selector = container.classList.contains("kpi-grid")
           ? ".kpi-card.is-clickable"
@@ -683,6 +1016,7 @@
 
       async function loadPOCount() {
           const badge = document.getElementById("poBadge");
+          if (!badge) return;
           try {
               const res = await api("GET", "/po/count-pending");
               if (res.count > 0) {
@@ -709,54 +1043,11 @@
         }
       }
 
-      const dashboardPermissions = {
-        "/pos": ["sales.cashier", "view", "menu.sales"],
-        "/shifts": ["sales.cashier", "view", "menu.sales"],
-        "/sales": ["sales.transaction", "view", "menu.sales"],
-        "/delivery": ["sales.transaction", "view", "menu.sales"],
-        "/returns": ["sales.return", "view", "menu.sales"],
-        "/trade_in": ["sales.trade_in", "view", "menu.sales"],
-        "/po": ["purchase.order", "view", "menu.purchase"],
-        "/setoran": ["accounting.cash_in", "view", "menu.accounting"],
-        "/item/items": ["master.item", "view", "menu.master"],
-        "/purchases": ["purchase.transaction", "view", "menu.purchase"],
-        "/inventory": ["inventory.item_in", "view", "menu.inventory"],
-        "/warehouse": ["inventory.transfer", "view", "menu.inventory"],
-        "/assembly": ["assembly.transaction", "view", "menu.assembly"],
-        "/unit_conversion": ["master.unit", "view", "menu.master"],
-        "/konsinyasi": ["inventory.item_in", "view", "menu.inventory"],
-        "/reports": ["report.sales", "view", "menu.report"],
-        "/accounting": ["accounting.journal", "view", "menu.accounting"],
-        "/customers": ["master.customer", "view", "menu.master"],
-        "/supplier/dashboard": ["master.supplier", "view", "menu.master"],
-        "/supplier/tambahSuplier": ["master.supplier", "create", "menu.master"],
-        "/discounts": ["master.discount_period", "view", "menu.master"],
-        "/branches": ["master.warehouse", "view", "menu.settings"],
-        "/users": ["settings.user_management", "access", "menu.settings"],
-        "/barcode": ["master.barcode", "view", "menu.master"],
-      };
-
       async function initializeDashboardPermissions() {
         const state = await loadMyPermissions();
         configureKpiCards(state);
-        document.querySelectorAll(".menu-card").forEach((card) => {
-          const match = (card.getAttribute("onclick") || "").match(/['"](\/[^'"]+)['"]/);
-          if (!match) return;
-          const rule = dashboardPermissions[match[1]];
-          if (!rule) return;
-          const moduleAllowed = hasPermission(rule[0], rule[1], state);
-          const menuAllowed = hasPermission(rule[2], "show", state);
-          card.style.display = moduleAllowed && menuAllowed ? "" : "none";
-        });
+        renderModuleRibbon(state);
         configureMenuCardsKeyboard();
-
-        document.querySelectorAll(".section-title").forEach((title) => {
-          const grid = title.nextElementSibling;
-          if (grid && !Array.from(grid.querySelectorAll(".menu-card")).some((card) => card.style.display !== "none")) {
-            title.style.display = "none";
-            grid.style.display = "none";
-          }
-        });
 
         const settingsButton = document.querySelector(".topbar button[onclick*='/settings']");
         if (settingsButton) {
@@ -773,7 +1064,6 @@
         if (hasPermission("accounting.journal", "view", state)) checkGatekeeper();
       }
 
-      configureMenuCardsKeyboard();
       initializeDashboardPermissions().catch((error) =>
         console.error("Gagal menerapkan hak akses dashboard", error),
       );

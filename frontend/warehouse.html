@@ -1169,7 +1169,13 @@
         }
       }
 
-      init();
+      init().then(() =>
+        setupRoutedTabs({
+          tabs: ["gudang", "transfer", "stok", "semuabarang", "mutasi"],
+          defaultTab: "gudang",
+          activate: (tab) => switchTab(tab),
+        }),
+      );
     </script>
   </body>
 </html>

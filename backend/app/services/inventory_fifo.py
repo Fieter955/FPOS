@@ -40,6 +40,7 @@ def add_batch(
     received_date: date,
     supplier_id: Optional[int] = None,
     purchase_item_id: Optional[int] = None,
+    source_inventory_line_id: Optional[int] = None,
 ) -> models.StockBatch:
     """Buat satu lapisan persediaan baru (saat barang diterima)."""
     qty = float(qty or 0)
@@ -48,6 +49,7 @@ def add_batch(
         warehouse_id=warehouse_id,
         supplier_id=supplier_id,
         purchase_item_id=purchase_item_id,
+        source_inventory_line_id=source_inventory_line_id,
         unit_cost=float(unit_cost or 0),
         qty_received=qty,
         qty_remaining=qty,
@@ -299,6 +301,7 @@ def transfer_batches(
             received_date=batch.received_date if batch else date.today(),
             supplier_id=batch.supplier_id if batch else None,
             purchase_item_id=batch.purchase_item_id if batch else None,
+            source_inventory_line_id=batch.source_inventory_line_id if batch else None,
         )
 
 

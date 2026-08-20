@@ -3,15 +3,12 @@
 # Versi: Fixed — Journal Diskon, Piutang, & Duplikasi Kode
 # ══════════════════════════════════════════════════════════════════════════════
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional
 from datetime import datetime, date
 import pytz
-import unicodedata
-import textwrap
 
 from ..database import get_db
 from .. import models, schemas
@@ -27,6 +24,8 @@ from ..services.inventory_fifo import consume_fifo, record_allocations, restore_
 from ..services.shift_service import require_single_open_branch_shift
 from ..services.tax_context import _sale_line_ppn_rates, _sales_ppn_context
 from ..services.payment_change import calculate_change
+from ..services.receipt_renderer import build_sale_receipt, settings_from_branch
+from .print_queue import enqueue_print_job
 from .accounting import create_auto_journal, pastikan_akun_ada  # ✅ Import di atas, sekali saja
 
 router = APIRouter()
@@ -169,20 +168,6 @@ def get_local_date():
 
 def get_local_datetime():
     return datetime.now(WITA)
-
-
-# ── Helper Printer ────────────────────────────────────────────────────────────
-def printer_safe(text: str, max_len: int = None) -> str:
-    """Konversi string agar aman untuk printer thermal ESC/POS."""
-    if not text:
-        return ""
-    text = str(text).replace('\xa0', ' ')
-    text = unicodedata.normalize('NFKD', text)
-    text = text.encode('ascii', errors='ignore').decode('ascii')
-    text = text.strip()
-    if max_len:
-        text = text[:max_len]
-    return text
 
 
 def _get_locked_stock_item(db: Session, item: models.Item, require_active: bool = True):
@@ -351,6 +336,8 @@ def create_sale(
         total=total,
         paid=data.paid,
         change=change,
+        cash_received=data.cash_received,
+        invoice_discount_gross=data.discount or 0,
         payment_method=data.payment_method,
         status=status,
         notes=data.notes
@@ -467,6 +454,7 @@ def create_sale(
             if jml <= 0:
                 continue
             total_tender += jml
+            db.add(models.SalePayment(sale=sale, method=p.metode, amount=round(jml, 2)))
             if p.metode == "deposit":
                 if not cust:
                     raise HTTPException(400, "Bayar pakai Saldo Pelanggan butuh pelanggan dipilih")
@@ -484,6 +472,11 @@ def create_sale(
             raise HTTPException(400, f"Rincian pembayaran ({total_tender:.2f}) tidak sama dengan total dibayar ({sale.paid:.2f})")
     # Fallback (pemanggil lama tanpa rincian `payments`): logika lama deposit-vs-Kas
     elif sale.paid > 0:
+        db.add(models.SalePayment(
+            sale=sale,
+            method=data.payment_method or "cash",
+            amount=round(float(sale.paid or 0), 2),
+        ))
         if data.payment_method == "deposit" and cust:
             deduct = min(sale.paid, cust.deposit_balance or 0)
             cust.deposit_balance -= deduct
@@ -539,9 +532,27 @@ def create_sale(
         branch_id=current_user.active_branch_id
     )
 
+    receipt_job = None
+    branch = db.query(models.Branch).filter(models.Branch.id == sale.branch_id).first()
+    if branch and (bool(data.receipt_requested) or bool(branch.receipt_auto_print)):
+        db.flush()
+        receipt_job = enqueue_print_job(
+            db,
+            branch_id=sale.branch_id,
+            content=build_sale_receipt(sale, settings_from_branch(branch), current_user),
+            document_type="sale",
+            document_id=sale.id,
+            created_by=current_user.id,
+        )
+
     db.commit()
     db.refresh(sale)
-    return _sale_out_for_user(sale, current_user, db)
+    result = _sale_out_for_user(sale, current_user, db)
+    result["receipt_job"] = (
+        {"status": "queued", "job_id": receipt_job.id, "branch_id": sale.branch_id}
+        if receipt_job else None
+    )
+    return result
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -691,150 +702,25 @@ def cancel_sale(
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.post("/print/{sale_id}")
-async def print_receipt_api(
+def print_receipt_api(
     sale_id: int,
-    request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
-    try:
-        try:
-            data = await request.json()
-        except Exception:
-            data = {}
-
-        settings_toko = data.get("settings", {})
-
-        sale = db.query(models.Sale).get(sale_id)
-        if not sale:
-            return JSONResponse(status_code=404, content={"detail": "Transaksi tidak ditemukan"})
-
-        if not sale.branch_id:
-            return JSONResponse(status_code=400, content={"detail": "Branch ID tidak valid"})
-
-        branch_id = sale.branch_id
-
-        # ── Helper Formatter ──────────────────────────────────────────────────
-        def format_rp(val):
-            try:
-                return f"{int(float(val)):,}".replace(",", ".") + ",00"
-            except Exception:
-                return "0,00"
-
-        def format_qty(val):
-            try:
-                v = float(val)
-                return f"{int(v)},00" if v.is_integer() else f"{v}".replace(".", ",")
-            except Exception:
-                return "0,00"
-
-        W = 48
-        def lr(left, right):
-            spaces = W - len(left) - len(right)
-            if spaces < 1: spaces = 1
-            return f"{left}{' ' * spaces}{right}\n"
-
-        # ── Header & Footer ───────────────────────────────────────────────────
-        nama_toko = printer_safe(settings_toko.get("storeName", "TOKO")).upper()
-        alamat    = printer_safe(settings_toko.get("storeAddr", ""))
-        footer    = printer_safe(settings_toko.get("storeFooter", "Terima Kasih!"))
-
-        try:
-            parsed_date = sale.date.strftime("%d-%m-%Y") if hasattr(sale.date, 'strftime') else str(sale.date)
-        except Exception:
-            parsed_date = datetime.now(WITA).strftime("%d-%m-%Y")
-
-        try:
-            time_str = sale.created_at.strftime("%H:%M:%S") if hasattr(sale.created_at, 'strftime') else datetime.now(WITA).strftime("%H:%M:%S")
-        except Exception:
-            time_str = "-"
-
-        no_str    = str(sale.number)
-        kasir     = "ADMIN"
-        pelanggan = "UMUM"
-        payment   = str(getattr(sale, 'payment_method', 'CASH')).upper()
-
-        if getattr(sale, 'created_by', None):
-            user = db.query(models.User).filter(models.User.id == sale.created_by).first()
-            if user:
-                kasir = printer_safe(user.username).upper()
-
-        if getattr(sale, 'customer_id', None):
-            cust = db.query(models.Customer).filter(models.Customer.id == sale.customer_id).first()
-            if cust:
-                pelanggan = printer_safe(cust.name).upper()
-
-        # ── Rakit Struk ───────────────────────────────────────────────────────
-        struk  = "\x1B\x61\x01\x1D\x21\x11"
-        struk += f"{nama_toko}\n\n"
-        struk += "\x1D\x21\x00\x1B\x61\x00"
-
-        for line in alamat.split('\n'):
-            struk += f"{line}\n"
-        struk += "\n"
-
-        struk += lr(f"No.  : {no_str}", parsed_date)
-        struk += lr(f"Kasir: {kasir}", time_str)
-        struk += f"Pel. : {pelanggan}/{payment}\n"
-
-        garis  = "-" * W
-        struk += f"{garis}\n"
-
-        brs       = len(sale.items) if getattr(sale, 'items', None) else 0
-        total_qty = 0.0
-
-        if brs > 0:
-            for item in sale.items:
-                nama_barang = "BARANG"
-                unit_name   = "PCS"
-                if getattr(item, 'item', None):
-                    raw_nama    = printer_safe(item.item.name).upper()
-                    wrapped     = textwrap.wrap(raw_nama, width=W)
-                    nama_barang = "\n".join(wrapped)
-                    if getattr(item.item, 'unit', None):
-                        unit_name = printer_safe(item.item.unit.name).upper()
-
-                struk += f"{nama_barang}\n"
-
-                qty        = float(item.qty)
-                total_qty += qty
-                harga_str  = format_rp(item.sell_price)
-                qty_str    = format_qty(qty)
-                total_str  = format_rp(item.total)
-                left_part  = f"{harga_str:<14} x {qty_str:<5} {unit_name:<4} ="
-                struk     += lr(left_part, total_str)
-
-        struk += f"{garis}\n"
-        _oc = float(getattr(sale, 'other_cost', 0) or 0)
-        if _oc > 0:
-            # Rincikan: subtotal barang → biaya lain → total (yang dibayar pelanggan)
-            _sub_barang = float(getattr(sale, 'total', 0) or 0) - _oc
-            struk += lr(f"BRS={brs}  , QTY={format_qty(total_qty)}", format_rp(_sub_barang))
-            struk += lr("Biaya Lain =", format_rp(_oc))
-            struk += lr("TOTAL =", format_rp(getattr(sale, 'total', 0)))
-        else:
-            struk += lr(f"BRS={brs}  , QTY={format_qty(total_qty)}", format_rp(getattr(sale, 'total', 0)))
-        # Mode PKP: harga sudah termasuk PPN → tampilkan porsinya (info; tidak menambah total).
-        if float(getattr(sale, 'tax', 0) or 0) > 0:
-            _tp = float(getattr(sale, 'tax_percent', 0) or 0)
-            _lbl = f"Termasuk PPN({_tp:g}%) =" if _tp else "Termasuk PPN ="
-            struk += lr(_lbl, format_rp(sale.tax))
-        struk += lr("Tunai    =", format_rp(getattr(sale, 'paid', 0)))
-        struk += f"{'-' * 22:>{W}}\n"
-        struk += lr("Kembali  =", format_rp(getattr(sale, 'change', 0)))
-        struk += "\n\x1B\x61\x01"
-        struk += f"{footer}\n\n\n"
-
-        # ── Simpan ke Print Queue ─────────────────────────────────────────────
-        db.add(models.PrintJob(
-            branch_id=branch_id,
-            content=struk,
-            content_type="raw",
-            status="pending"
-        ))
-        db.commit()
-
-        return {"status": "success", "message": f"Struk masuk ke antrean cetak Cabang {branch_id}!"}
-
-    except Exception as e:
-        print(f"🔥 ERROR PRINT FATAL: {str(e)}")
-        return JSONResponse(status_code=500, content={"detail": f"Gagal mencetak: {str(e)}"})
+    sale = get_query(db, models.Sale, current_user).filter(models.Sale.id == sale_id).first()
+    if not sale:
+        raise HTTPException(404, "Transaksi tidak ditemukan")
+    branch = db.query(models.Branch).filter(models.Branch.id == sale.branch_id).first()
+    if not branch:
+        raise HTTPException(400, "Cabang transaksi tidak valid")
+    creator = db.query(models.User).filter(models.User.id == sale.created_by).first() if sale.created_by else None
+    job = enqueue_print_job(
+        db,
+        branch_id=sale.branch_id,
+        content=build_sale_receipt(sale, settings_from_branch(branch), creator),
+        document_type="sale_reprint",
+        document_id=sale.id,
+        created_by=current_user.id,
+    )
+    db.commit()
+    return {"status": "queued", "job_id": job.id, "branch_id": job.branch_id}

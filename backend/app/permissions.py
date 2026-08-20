@@ -99,6 +99,26 @@ def seed_roles_and_permissions(db: Session) -> None:
             for key, action in sorted(grants)
         )
         role.description = f"[permissions-seeded] {role.description or 'Role hasil migrasi FPOS'}"
+
+    # Kompatibilitas modul opname lama: sebelumnya tombol posting dilindungi oleh
+    # Item Masuk, sedangkan katalog Opname hanya memiliki Buka/Kunci Tanggal.
+    # Beri izin create satu kali kepada role lama yang memang memiliki KEDUANYA;
+    # izin pembatalan tetap harus diberikan admin secara eksplisit.
+    for role in roles.values():
+        grants = {
+            (row.permission_key, row.action)
+            for row in db.query(models.RolePermission).filter(
+                models.RolePermission.role_id == role.id
+            ).all()
+        }
+        additions = []
+        if ("inventory.item_in", "create") in grants and ("inventory.stock_opname", "view") in grants:
+            additions.append(("inventory.stock_opname", "create"))
+        if ("inventory.item_in", "create") in grants and ("inventory.opening_stock", "view") in grants:
+            additions.append(("inventory.opening_stock", "create"))
+        for key, action in additions:
+            if (key, action) not in grants:
+                db.add(models.RolePermission(role_id=role.id, permission_key=key, action=action))
     db.commit()
 
 
@@ -125,8 +145,18 @@ def request_permission(path: str, method: str) -> tuple[str, str] | None:
         tail == "generate-key" or tail.startswith("developer/")
     ):
         return ("__admin__", "access")
-    # Agen printer Windows memakai antrean lokal tanpa sesi browser.
+    # Agen printer Windows tidak memakai JWT browser, tetapi endpoint agent/*
+    # memvalidasi X-Printer-Token sendiri. Endpoint print lainnya tetap RBAC.
     if prefix == "print":
+        if tail.startswith("agent/"):
+            return None
+    # Dokumen persediaan menentukan izin dari tipe dokumen di payload/record.
+    # Endpoint ini melakukan pemeriksaan granular di route/service agar user
+    # Item Keluar tidak salah diwajibkan memiliki izin Item Masuk.
+    if prefix == "inventory" and (
+        tail.startswith("documents")
+        or tail in {"item-snapshot", "document-accounts", "document-warehouses", "adjust"}
+    ):
         return None
 
     action = {
@@ -197,6 +227,7 @@ def request_permission(path: str, method: str) -> tuple[str, str] | None:
         "sticker": "master.barcode",
         "stiker": "master.barcode",
         "po": "purchase.order",
+        "print": "settings.general",
     }.get(prefix)
 
     if prefix == "items":
@@ -230,6 +261,8 @@ def request_permission(path: str, method: str) -> tuple[str, str] | None:
             key, action = "sales.cancel_detail", "view"
         elif method.upper() == "POST" and not tail:
             key = "sales.cashier"
+    elif prefix == "print" and not tail:
+        key = "master.barcode"
     elif prefix == "returns":
         key = "purchase.return" if "purchase" in tail else "sales.return"
         if "swap" in tail:

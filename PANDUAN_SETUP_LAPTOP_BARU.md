@@ -240,6 +240,31 @@ Konfigurasi `--bg` membuat Funnel tetap tersimpan pada Tailscale. Namun FPOS jug
 
 Jika pertanyaan auto-start pernah dijawab **No**, hapus file `C:\FPOS\.autostart_configured`, lalu buka kembali FPOS agar pertanyaannya muncul lagi.
 
+### 7.1 Hubungkan agen printer struk
+
+Struk transaksi diproses oleh agen printer Windows, bukan dialog print browser.
+Lakukan langkah ini pada setiap cabang yang memiliki printer kasir:
+
+1. Login sebagai administrator, pilih cabang aktif, lalu buka **Pengaturan > Printer**.
+2. Isi identitas toko, footer, lebar kertas 58/80 mm, dan pilihan cetak otomatis,
+   lalu simpan. Pengaturan berlaku untuk seluruh kasir pada cabang aktif.
+3. Klik **Buat / Rotasi Token Agen** dan salin token saat ditampilkan. Token lama
+   langsung tidak berlaku setelah rotasi.
+4. Jalankan `iPos5_Printer.exe` pada komputer yang tersambung ke printer. Isi URL
+   server FPOS (cukup sampai nama host), tempel token, pilih nama printer Windows,
+   lalu aktifkan auto-start bila diperlukan.
+5. Kembali ke **Pengaturan > Printer**, klik **Test Print**, dan pastikan status job
+   berubah dari `pending`/`processing` menjadi `done`.
+
+Untuk mengganti URL, token, atau printer pada agen yang sudah dikonfigurasi, jalankan:
+
+```powershell
+.\iPos5_Printer.exe --setup
+```
+
+Gunakan token berbeda untuk setiap cabang. Jangan mengirim token melalui grup publik
+atau menyalin `printer_config.json` ke komputer yang tidak dipercaya.
+
 ## 8. Backup
 
 Instalasi ini memakai database sendiri di:
@@ -348,3 +373,5 @@ Tutup FPOS sepenuhnya, simpan `.env`, lalu buka kembali aplikasi. Konfigurasi di
 - [ ] FPOS dan Tailscale kembali berjalan setelah Windows restart.
 - [ ] Prosedur backup database dan folder `uploads` sudah disiapkan.
 - [ ] URL, lokasi aplikasi, dan penanggung jawab laptop sudah dicatat.
+- [ ] Token agen printer dibuat untuk cabang yang benar dan disimpan hanya di komputer printer.
+- [ ] Test Print selesai dengan status `done` dan cetak otomatis sudah diuji.

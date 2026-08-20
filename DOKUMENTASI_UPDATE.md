@@ -7,10 +7,21 @@
 
 ```powershell
 .\build-release.ps1 `
-  -Version 5.0.1 `
-  -DownloadUrl "https://github.com/Fieter955/FPOS/releases/download/v5.0.1/FPOS-5.0.1-Windows.zip" `
-  -Notes "Perbaikan laporan dan stok"
+  -Version 5.0.3 `
+  -DownloadUrl "https://github.com/Fieter955/FPOS/releases/download/v5.0.3/FPOS-5.0.3-Windows.zip" `
+  -Notes "Inventory documents, receipt renderer, dashboard categories" `
+  -CondaEnv base
 ```
+
+Build release menggunakan environment Conda `base`. Jika dependensi belum ada,
+pasang terlebih dahulu dari root project:
+
+```powershell
+conda run -n base python -m pip install -r backend\requirements.txt pyinstaller
+```
+
+Script release memakai isi `frontend-dist` yang sudah ada; pastikan folder itu
+sudah berisi frontend terbaru sebelum build.
 
 3. Upload ZIP ke URL yang sama dengan `DownloadUrl`.
 4. Commit dan push `version.json` di root repository ke branch `main`; script

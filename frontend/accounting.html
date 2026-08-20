@@ -817,10 +817,7 @@
 
       async function applyAccountingDeepLink() {
         const params = new URLSearchParams(window.location.search);
-        const tab = params.get("tab");
         const openKas = params.get("openKas") === "1";
-
-        switchTab(tab || "jurnal");
 
         if (!openKas) return;
 
@@ -1552,7 +1549,12 @@
         bkEnd.value = lastPrevMonth.toLocaleDateString("en-CA");
       }
 
-      // Default Tab yang terbuka / deep link
+      // Default tab dan pembaruan rute dari ribbon Dashboard.
+      setupRoutedTabs({
+        tabs: ["kas", "jurnal", "coa", "cashflow", "neraca", "tutup"],
+        defaultTab: "jurnal",
+        activate: (tab) => switchTab(tab),
+      });
       applyAccountingDeepLink();
     </script>
   </body>

@@ -9,6 +9,65 @@ else:
 os.chdir(BASE_DIR)
 # 👆 BATAS PENAWAR 👆
 
+
+def _jalankan_prompt_autostart_saja():
+    """Jalankan dialog auto-start tanpa mengimpor dan menyalakan server FPOS."""
+    import tkinter as _tk
+    import winreg as _winreg
+    from tkinter import messagebox as _messagebox
+
+    if getattr(sys, "frozen", False):
+        root_dir = BASE_DIR
+        startup_command = f'"{sys.executable}"'
+    else:
+        root_dir = os.path.dirname(BASE_DIR)
+        startup_command = f'"{sys.executable}" "{os.path.abspath(__file__)}"'
+
+    flag_file = os.path.join(root_dir, ".autostart_configured")
+    if os.path.exists(flag_file):
+        return
+
+    root = _tk.Tk()
+    root.attributes("-topmost", True)
+    root.withdraw()
+    try:
+        enabled = _messagebox.askyesno(
+            "Auto-Start Windows",
+            "Apakah Anda ingin Sistem Utama FPOS ini otomatis terbuka setiap kali komputer dinyalakan?",
+            parent=root,
+        )
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        try:
+            key = _winreg.OpenKey(
+                _winreg.HKEY_CURRENT_USER, key_path, 0, _winreg.KEY_ALL_ACCESS
+            )
+            try:
+                if enabled:
+                    _winreg.SetValueEx(
+                        key, "EvaStore_FPOS", 0, _winreg.REG_SZ, startup_command
+                    )
+                else:
+                    try:
+                        _winreg.DeleteValue(key, "EvaStore_FPOS")
+                    except FileNotFoundError:
+                        pass
+            finally:
+                _winreg.CloseKey(key)
+        except OSError:
+            pass
+
+        with open(flag_file, "w", encoding="utf-8") as flag:
+            flag.write("done")
+    finally:
+        root.destroy()
+
+
+# Dialog berjalan sebagai proses helper setelah server sehat. Cabang ini sengaja
+# diletakkan sebelum import aplikasi/database agar popup tidak pernah menahan port.
+if __name__ == "__main__" and "--autostart-prompt" in sys.argv:
+    _jalankan_prompt_autostart_saja()
+    raise SystemExit(0)
+
 # 👇 AMANKAN STDOUT/STDERR (sebelum print apa pun di modul ini) 👇
 # Frozen windowed: sys.stdout/stderr = None → print() menggagalkan seluruh startup.
 # Frozen console : encoding default cp1252 → print emoji (✓ 👑 ⚠️) → UnicodeEncodeError → crash.
@@ -27,9 +86,6 @@ if getattr(sys, 'frozen', False):
 # 👆 BATAS AMAN STDOUT 👆
 import subprocess
 import os, threading, time, sys
-import winreg
-import tkinter as tk
-from tkinter import messagebox
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -125,9 +181,9 @@ def run_migrations():
         if not col_exists(table, col):
             try:
                 c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {definition}")
-                print(f"  ✓ Migration: {table}.{col} ditambahkan")
+                print(f"  OK Migration: {table}.{col} ditambahkan")
             except Exception as e:
-                print(f"  ⚠ Skip {table}.{col}: {e}")
+                print(f"  WARNING Skip {table}.{col}: {e}")
 
     add_col("customers", "credit_limit", "REAL DEFAULT 0")
     add_col("customers", "points",       "REAL DEFAULT 0")
@@ -180,6 +236,8 @@ def run_migrations():
     add_col("items", "ppn_percent", "REAL")               # tarif PPN per-barang; NULL → ikut tarif toko (data lama tak berubah)
     add_col("sale_items", "ppn_percent", "REAL DEFAULT 0")  # tarif PPN baris penjualan → untuk balik PPN per-baris saat retur
     add_col("sales", "other_cost", "REAL DEFAULT 0")  # biaya lain ditagihkan ke pelanggan → Pendapatan Lain-lain (4-1500)
+    add_col("sales", "cash_received", "REAL")
+    add_col("sales", "invoice_discount_gross", "REAL")
     add_col("suppliers", "ppn_type", "TEXT")
     add_col("branches", "is_pkp", "INTEGER DEFAULT 0")
     add_col("branches", "tarif_ppn", "REAL DEFAULT 11")
@@ -188,6 +246,50 @@ def run_migrations():
     add_col("purchases", "due_date", "DATE")  # tanggal jatuh tempo pembayaran (data lama tetap NULL)
     add_col("purchase_returns", "total_carrying", "REAL DEFAULT 0")
     add_col("purchase_returns", "selisih", "REAL DEFAULT 0")
+    add_col("purchase_returns", "branch_id", "INTEGER")
+    add_col("purchase_returns", "created_by", "INTEGER")
+    add_col("sale_returns", "branch_id", "INTEGER")
+    add_col("sale_returns", "created_by", "INTEGER")
+    add_col("trade_ins", "cash_amount", "REAL DEFAULT 0")
+    add_col("trade_ins", "bank_amount", "REAL DEFAULT 0")
+    add_col("branches", "receipt_name", "TEXT")
+    add_col("branches", "receipt_footer", "TEXT DEFAULT 'Terima kasih telah berbelanja!'")
+    add_col("branches", "receipt_paper_width_mm", "INTEGER DEFAULT 80")
+    add_col("branches", "receipt_auto_print", "INTEGER DEFAULT 0")
+    add_col("print_jobs", "document_type", "TEXT")
+    add_col("print_jobs", "document_id", "INTEGER")
+    add_col("print_jobs", "created_by", "INTEGER")
+    add_col("print_jobs", "attempt_count", "INTEGER DEFAULT 0")
+    add_col("print_jobs", "claimed_at", "TEXT")
+    add_col("print_jobs", "lease_until", "TEXT")
+    add_col("print_jobs", "completed_at", "TEXT")
+    add_col("print_jobs", "last_error", "TEXT")
+    add_col("stock_batches", "source_inventory_line_id", "INTEGER")
+
+    # Retur lama tidak menyimpan cabang. Turunkan dari dokumen asal tanpa
+    # mengarang identitas kasir yang memang tidak tersedia.
+    try:
+        c.execute(
+            "UPDATE sale_returns SET branch_id = "
+            "(SELECT branch_id FROM sales WHERE sales.id = sale_returns.sale_id) "
+            "WHERE branch_id IS NULL"
+        )
+        c.execute(
+            "UPDATE purchase_returns SET branch_id = "
+            "(SELECT branch_id FROM purchases WHERE purchases.id = purchase_returns.purchase_id) "
+            "WHERE branch_id IS NULL"
+        )
+        c.execute(
+            "UPDATE print_jobs SET branch_id = (SELECT MIN(id) FROM branches) "
+            "WHERE branch_id IS NULL"
+        )
+        c.execute("UPDATE print_jobs SET attempt_count = 0 WHERE attempt_count IS NULL")
+        c.execute(
+            "UPDATE print_jobs SET status = 'pending' "
+            "WHERE status = 'processing' AND lease_until IS NULL"
+        )
+    except Exception as e:
+        print(f"  WARNING Skip backfill cabang retur: {e}")
 
     # ─── Index performa (idempotent; aman dijalankan berulang) ─────────────────
     # SQLite TIDAK meng-index foreign key otomatis → tanpa ini, filter/join jadi
@@ -197,7 +299,7 @@ def run_migrations():
         try:
             c.execute(f"CREATE INDEX IF NOT EXISTS {name} ON {table} ({cols})")
         except Exception as e:
-            print(f"  ⚠ Skip index {name}: {e}")
+            print(f"  WARNING Skip index {name}: {e}")
 
     # Penjualan (tabel tersibuk)
     add_index("ix_sales_branch_id", "sales", "branch_id")
@@ -211,6 +313,7 @@ def run_migrations():
     add_index("ix_sale_returns_sale_id", "sale_returns", "sale_id")
     add_index("ix_sale_return_items_return_id", "sale_return_items", "return_id")
     add_index("ix_sale_return_items_item_id", "sale_return_items", "item_id")
+    add_index("ix_sale_payments_sale_id", "sale_payments", "sale_id")
     # Pembelian
     add_index("ix_purchases_branch_id", "purchases", "branch_id")
     add_index("ix_purchases_supplier_id", "purchases", "supplier_id")
@@ -246,6 +349,7 @@ def run_migrations():
     add_index("ix_warehouse_transfers_to_wh", "warehouse_transfers", "to_warehouse_id")
     add_index("ix_wh_transfer_items_transfer_id", "warehouse_transfer_items", "transfer_id")
     add_index("ix_wh_transfer_items_item_id", "warehouse_transfer_items", "item_id")
+    add_index("ix_stock_batches_source_inventory_line_id", "stock_batches", "source_inventory_line_id")
     # Akuntansi
     add_index("ix_cash_transactions_account_id", "cash_transactions", "account_id")
     add_index("ix_cash_transactions_branch_id", "cash_transactions", "branch_id")
@@ -272,6 +376,9 @@ def run_migrations():
     add_index("ix_users_branch_id", "users", "branch_id")
     add_index("ix_login_attempts_username", "login_attempts", "username")
     add_index("ix_print_jobs_status", "print_jobs", "status")
+    add_index("ix_print_jobs_branch_id", "print_jobs", "branch_id")
+    add_index("ix_print_jobs_branch_status", "print_jobs", "branch_id, status")
+    add_index("ix_printer_agents_branch_id", "printer_agents", "branch_id")
     add_index("ix_license_payments_license_id", "license_payments", "license_id")
     # Konsinyasi
     add_index("ix_cons_in_items_cons_id", "consignment_in_items", "consignment_id")
@@ -388,8 +495,17 @@ def email_backup_scheduler():
         except Exception:
             pass
 
-threading.Thread(target=local_backup_loop, daemon=True).start()
-threading.Thread(target=email_backup_scheduler, daemon=True).start()
+_background_tasks_started = False
+
+
+def start_background_tasks_once():
+    """Scheduler hanya boleh hidup pada proses yang benar-benar menjadi server."""
+    global _background_tasks_started
+    if _background_tasks_started:
+        return
+    _background_tasks_started = True
+    threading.Thread(target=local_backup_loop, daemon=True).start()
+    threading.Thread(target=email_backup_scheduler, daemon=True).start()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -460,6 +576,21 @@ async def lifespan(app: FastAPI):
             print("📦 ✓ Seed Unit: Pcs")
         db.commit()
 
+        # Data master toko dibundel bersama aplikasi dan hanya dimasukkan untuk
+        # database yang benar-benar belum memiliki barang. Marker DataSeedRun
+        # membuat proses aman terhadap restart serta dapat dilihat di onboarding.
+        from app.services.ipos_seed import run_automatic_seed
+        ipos_seed_result = run_automatic_seed(db)
+        if ipos_seed_result["status"] == "completed":
+            counts = ipos_seed_result.get("counts") or {}
+            print(
+                "Data awal iPos selesai: "
+                f"{counts.get('items', 0)} barang, "
+                f"{counts.get('opening_stock_lines', 0)} saldo stok."
+            )
+        elif ipos_seed_result["status"] == "failed":
+            print(f"Data awal iPos gagal: {ipos_seed_result.get('error')}")
+
         # ── Guard keamanan: password default + akses publik (Funnel) ──────────
         # Di mode publik, kredensial bawaan bisa ditebak SEKALI coba dari internet;
         # throttle login (429) tidak menolong bila tebakan pertama sudah benar.
@@ -487,7 +618,8 @@ async def lifespan(app: FastAPI):
         print(f"⚠️ Gagal inisialisasi data awal: {e}")
     finally:
         db.close()
-        
+
+    start_background_tasks_once()
     yield 
     print("Server mematikan proses...")
 
@@ -801,47 +933,34 @@ def jalankan_tailscale(port: int, publik: bool) -> bool:
     return code == 0 or "already exists" in err
 
 
-# 👇 SENSOR POP-UP AUTO-START (Hanya jalan 1x) 👇
-def cek_dan_tanya_autostart():
+def buka_prompt_autostart_terpisah():
+    """Tampilkan prompt sesudah server siap, di proses terpisah agar tidak memblok."""
     flag_file = os.path.join(ROOT_DIR, ".autostart_configured")
-    if not os.path.exists(flag_file):
-        root = tk.Tk()
-        root.attributes('-topmost', True) # Pastikan popup muncul di depan
-        root.withdraw()
-        
-        ans = messagebox.askyesno(
-            "Auto-Start Windows", 
-            "Apakah Anda ingin Sistem Utama FPOS ini otomatis terbuka setiap kali komputer dinyalakan?",
-            parent=root
+    if os.path.exists(flag_file) or os.environ.get("FPOS_SKIP_BROWSER") == "1":
+        return
+
+    if getattr(sys, "frozen", False):
+        args = [sys.executable, "--autostart-prompt"]
+    else:
+        args = [sys.executable, os.path.abspath(__file__), "--autostart-prompt"]
+
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    try:
+        subprocess.Popen(
+            args,
+            cwd=BASE_DIR,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=creationflags,
         )
-        
-        if getattr(sys, 'frozen', False):
-            exe_path = sys.executable
-        else:
-            exe_path = os.path.abspath(sys.argv[0])
-            
-        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-        try:
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_ALL_ACCESS)
-            if ans:
-                winreg.SetValueEx(key, "EvaStore_FPOS", 0, winreg.REG_SZ, f'"{exe_path}"')
-            else:
-                try:
-                    winreg.DeleteValue(key, "EvaStore_FPOS")
-                except Exception:
-                    pass
-            winreg.CloseKey(key)
-        except Exception:
-            pass
-            
-        # Tandai bahwa sudah pernah ditanya
-        with open(flag_file, "w") as f:
-            f.write("done")
+    except Exception as error:
+        print(f"WARNING Gagal membuka pengaturan auto-start: {error}")
 
 
 if __name__ == "__main__":
     import multiprocessing
-    import socket
+    import json
+    import urllib.request
     import webbrowser
 
     multiprocessing.freeze_support()
@@ -851,9 +970,6 @@ if __name__ == "__main__":
         log_file = open(log_path, "w", encoding="utf-8")
         sys.stdout = log_file
         sys.stderr = log_file
-
-    # Jalankan sensor pop-up autostart sebelum server menyala
-    cek_dan_tanya_autostart()
 
     # Produksi selalu memakai 8010. Override hanya untuk smoke test build agar
     # tidak mengganggu server FPOS lain yang sedang berjalan di komputer build.
@@ -865,9 +981,23 @@ if __name__ == "__main__":
     # di .env HANYA jika cabang berada di luar tailnet dan benar-benar butuh akses publik.
     PUBLIK = settings.TAILSCALE_PUBLIC
 
-    def is_server_running(port: int) -> bool:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            return s.connect_ex(('127.0.0.1', port)) == 0
+    def is_server_healthy(port: int) -> bool:
+        """Pastikan port benar-benar melayani FPOS, bukan sekadar sedang terbuka."""
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{port}/health",
+                headers={"Cache-Control": "no-cache"},
+            )
+            with urllib.request.urlopen(request, timeout=0.75) as response:
+                if response.status != 200:
+                    return False
+                payload = json.loads(response.read().decode("utf-8"))
+                return (
+                    payload.get("status") == "ok"
+                    and payload.get("app") == settings.APP_NAME
+                )
+        except Exception:
+            return False
 
     def jalankan_server():
         jalankan_tailscale(PORT, PUBLIK)
@@ -919,14 +1049,18 @@ if __name__ == "__main__":
 
     def buka_setelah_server_siap(port: int):
         for _ in range(120):  # Maksimal 30 detik, termasuk waktu setup Tailscale.
-            if is_server_running(port):
+            if is_server_healthy(port):
                 buka_tampilan_fpos(port)
+                buka_prompt_autostart_terpisah()
                 return
             time.sleep(0.25)
         print(f"⚠️ Server tidak aktif di port {port} setelah 30 detik.")
 
-    if is_server_running(PORT):
+    if is_server_healthy(PORT):
         buka_tampilan_fpos(PORT)
+        # Proses ini hanya peluncur kedua. Keluar langsung agar thread milik
+        # library yang diimpor tidak meninggalkan proses Python tanpa listener.
+        os._exit(0)
     else:
         # Browser dibuka setelah server siap. Uvicorn berjalan di thread utama agar
         # tetap hidup meski jendela browser ditutup dan Funnel masih bisa diakses.

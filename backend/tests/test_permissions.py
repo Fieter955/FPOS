@@ -161,7 +161,17 @@ class PermissionServiceTests(unittest.TestCase):
             ("assembly.finished_goods", "update"),
         )
         self.assertIsNone(request_permission("/api/auth/login", "POST"))
-        self.assertIsNone(request_permission("/api/print/", "GET"))
+        self.assertEqual(
+            request_permission("/api/print/settings", "GET"),
+            ("settings.general", "access"),
+        )
+        self.assertEqual(
+            request_permission("/api/print/", "POST"),
+            ("master.barcode", "view"),
+        )
+        self.assertIsNone(request_permission("/api/print/agent/claim", "POST"))
+        self.assertIsNone(request_permission("/api/inventory/documents", "POST"))
+        self.assertIsNone(request_permission("/api/inventory/documents/1/cancel", "POST"))
         self.assertEqual(
             request_permission("/api/license/developer/kill-switch", "POST"),
             ("__admin__", "access"),

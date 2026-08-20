@@ -15,3 +15,32 @@ Merek, Satuan, atau Supplier), setelah data berhasil disimpan:
 Jangan membuka Form Barang sebelum modal master ditutup dan jangan membiarkan fokus
 hilang setelah proses simpan. Pola ini memastikan penekanan Enter berikutnya tetap
 berada di bagian form yang sedang dikerjakan, bukan kembali ke Nama Barang.
+
+## Build release Windows
+
+Build release wajib menggunakan environment Conda `base`. Environment `ipos` dan
+`freelance` tidak digunakan lagi.
+
+Pastikan dependensi backend dan PyInstaller sudah terpasang di `base`:
+
+```powershell
+conda run -n base python -m pip install -r backend\requirements.txt pyinstaller
+```
+
+Dari root project, jalankan build dengan versi dan URL ZIP yang sesuai:
+
+```powershell
+.\build-release.ps1 `
+  -Version 5.0.3 `
+  -DownloadUrl "https://github.com/Fieter955/FPOS/releases/download/v5.0.3/FPOS-5.0.3-Windows.zip" `
+  -Notes "Update PPN setting non PKP" `
+  -CondaEnv base
+```
+
+Script release memakai isi `frontend-dist` yang sudah ada dan tidak menjalankan
+build frontend dengan Node/npm. Pastikan folder tersebut sudah berisi frontend
+terbaru sebelum membuat release.
+
+Hasil build berada di `rilis\generated`. Paket update hanya berisi executable,
+folder `_internal`, `frontend-dist`, dan `FPOS-Updater.exe`; jangan memasukkan
+database, `.env`, `secret.key`, `uploads`, atau `backups`.

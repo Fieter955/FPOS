@@ -41,7 +41,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('app/ipos_seed_v1.json.gz', 'app')],
     hiddenimports=_hidden,
     hookspath=[],
     hooksconfig={},

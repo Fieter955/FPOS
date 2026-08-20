@@ -742,11 +742,8 @@
 
       async function printReceipt(tradeId) {
         try {
-          const ps = JSON.parse(
-            localStorage.getItem("ipos_print_settings") || "{}",
-          );
-          await api("POST", `/trade-in/print/${tradeId}`, { settings: ps });
-          showToast("Struk dikirim ke antrean printer!");
+          const result = await api("POST", `/trade-in/print/${tradeId}`, {});
+          showToast(`Struk masuk antrean printer (job #${result.job_id})`);
         } catch (e) {
           showToast("Gagal print: " + e.message, "error");
         }

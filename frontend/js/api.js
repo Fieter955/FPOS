@@ -108,6 +108,13 @@ const FPOS_WORKSPACE_EMBEDDED = (() => {
   }
 })();
 
+// CSS `zoom` pada dokumen yang berada di dalam iframe Workspace membuat
+// koordinat hit-test mouse meleset di Chromium/Edge. Tandai elemen root sedini
+// mungkin agar style desktop tidak menerapkan zoom kedua pada halaman iframe.
+if (FPOS_WORKSPACE_EMBEDDED) {
+  document.documentElement.classList.add("workspace-embedded-root");
+}
+
 function markSessionExpired() {
   try {
     sessionStorage.setItem(SESSION_EXPIRED_NOTICE_KEY, "1");
@@ -610,6 +617,38 @@ function applyPermissionVisibility(root = document) {
   });
 }
 
+function setupRoutedTabs({ tabs, defaultTab, activate, parameter = "tab" }) {
+  const allowedTabs = new Set(tabs || []);
+  const fallbackTab = allowedTabs.has(defaultTab)
+    ? defaultTab
+    : allowedTabs.values().next().value;
+  if (!fallbackTab || typeof activate !== "function") return () => {};
+
+  const currentPath = location.pathname.replace(/\.html$/, "").replace(/\/$/, "") || "/";
+  const applyRoute = (rawUrl, updateAddress = false) => {
+    const target = new URL(rawUrl, location.origin);
+    const targetPath = target.pathname.replace(/\.html$/, "").replace(/\/$/, "") || "/";
+    if (targetPath !== currentPath) return;
+    const requested = target.searchParams.get(parameter);
+    const tab = allowedTabs.has(requested) ? requested : fallbackTab;
+    if (updateAddress) {
+      history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
+    }
+    Promise.resolve(activate(tab)).catch((error) =>
+      console.error(`Gagal membuka tab ${tab}`, error),
+    );
+  };
+
+  const onMessage = (event) => {
+    if (event.origin !== location.origin || event.source !== window.parent) return;
+    if (event.data?.type !== "fpos-route-state") return;
+    applyRoute(event.data.url, true);
+  };
+  window.addEventListener("message", onMessage);
+  applyRoute(location.href);
+  return () => window.removeEventListener("message", onMessage);
+}
+
 const PAGE_PERMISSIONS = {
   "/pos": ["sales.cashier", "view"],
   "/pos_2": ["sales.cashier", "view"],
@@ -633,7 +672,7 @@ const PAGE_PERMISSIONS = {
   "/catat-pembelian": ["purchase.transaction", "create"],
   "/purchase/detail_item": ["purchase.transaction", "view"],
   "/detail_item": ["purchase.transaction", "view"],
-  "/inventory": ["inventory.item_in", "view"],
+  "/inventory": ["menu.inventory", "show"],
   "/warehouse": ["inventory.transfer", "view"],
   "/assembly": ["assembly.transaction", "view"],
   "/unit_conversion": ["master.unit", "view"],

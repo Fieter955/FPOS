@@ -491,12 +491,6 @@
   }
 }
 
-@media screen and (min-width: 1024px) and (max-width: 1536px) and (hover: hover) and (pointer: fine) {
-  .workspace-shell {
-    height: var(--zoomed-viewport-height);
-  }
-}
-
 @media (max-width: 640px) {
   .workspace-shell {
     grid-template-rows: 3.15rem minmax(0, 1fr);

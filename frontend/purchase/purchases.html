@@ -1644,6 +1644,8 @@
             barcode: kode,
             harga: it.item?.sell_price || 0,
             qty: jumlah,
+            tampilkan_harga: true,
+            harga_override: false,
           });
         }
 
@@ -1675,6 +1677,7 @@
             kategori: d.kategori || "UMUM",
             barcode: d.barcode || "",
             harga: d.harga || 0,
+            tampilkan_harga: d.tampilkan_harga !== false,
           });
         }
       });
@@ -1691,6 +1694,26 @@
         font_nama_px: 12,
         barcode_scale_pct: 100,
       };
+    }
+
+    function terapkanHargaGlobalBarcode(daftar, tampil) {
+      daftar.forEach((d) => {
+        if (!d.harga_override) d.tampilkan_harga = !!tampil;
+      });
+    }
+
+    function terapkanHargaBarangBarcode(daftar, index, tampil) {
+      const item = daftar[index];
+      if (!item) return;
+      item.tampilkan_harga = !!tampil;
+      item.harga_override = true;
+    }
+
+    function resetHargaBarangBarcode(daftar, index, tampilDefault) {
+      const item = daftar[index];
+      if (!item) return;
+      item.tampilkan_harga = !!tampilDefault;
+      item.harga_override = false;
     }
 
     // Render lembar barcode di backend → blob PNG + ukuran kertas (mm).
@@ -1714,6 +1737,22 @@
       let renderTimer = null;
       let abortCtrl = null;
       let renderSeq = 0;
+      let tampilkanHargaDefault = true;
+
+      daftar.forEach((d) => {
+        if (typeof d.tampilkan_harga !== "boolean") {
+          d.tampilkan_harga = tampilkanHargaDefault;
+        }
+        d.harga_override = !!d.harga_override;
+      });
+
+      const escapeHtmlBarcode = (value) =>
+        String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
 
       const overlay = document.createElement("div");
       overlay.style.cssText =
@@ -1736,9 +1775,13 @@
             <button class="btn" data-act="batal" style="padding:4px 10px;font-size:13px;background:#e2e8f0;color:#475569;border:none">✕</button>
           </div>
           <div style="display:flex;gap:0;flex:1;overflow:hidden;min-height:280px">
-            <div style="flex:0 0 320px;display:flex;flex-direction:column;border-right:1px solid var(--border-color,#e2e8f0);overflow:hidden">
-              <div style="display:grid;grid-template-columns:1fr 70px;gap:8px;padding:10px 14px;background:var(--bg-color,#f8fafc);font-size:12px;font-weight:700;color:var(--text-muted,#64748b)">
-                <div>Barang</div><div style="text-align:center">Jumlah</div>
+            <div style="flex:0 0 410px;max-width:48%;display:flex;flex-direction:column;border-right:1px solid var(--border-color,#e2e8f0);overflow:hidden">
+              <label style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border-color,#e2e8f0);font-size:13px;font-weight:700;cursor:pointer">
+                <input type="checkbox" id="bcShowPriceDefault" checked style="width:16px;height:16px" />
+                Tampilkan harga pada label
+              </label>
+              <div style="display:grid;grid-template-columns:minmax(0,1fr) 88px 64px 32px;gap:8px;padding:10px 14px;background:var(--bg-color,#f8fafc);font-size:12px;font-weight:700;color:var(--text-muted,#64748b)">
+                <div>Barang</div><div style="text-align:center">Harga</div><div style="text-align:center">Jumlah</div><div></div>
               </div>
               <div id="bcDaftarBody" style="overflow-y:auto"></div>
             </div>
@@ -1759,9 +1802,15 @@
         overlay.querySelector("#bcDaftarBody").innerHTML = daftar
           .map(
             (d, idx) => `
-            <div style="display:grid;grid-template-columns:1fr 70px;gap:8px;padding:8px 14px;border-top:1px solid var(--border-color,#e2e8f0);align-items:center">
-              <div style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${d.nama}">${d.nama}</div>
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) 88px 64px 32px;gap:8px;padding:8px 14px;border-top:1px solid var(--border-color,#e2e8f0);align-items:center">
+              <div style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtmlBarcode(d.nama)}">${escapeHtmlBarcode(d.nama)}</div>
+              <label style="display:flex;align-items:center;justify-content:center;gap:4px;font-size:11px;cursor:pointer" title="${d.harga_override ? "Harga diatur khusus untuk barang ini" : "Mengikuti pengaturan harga umum"}">
+                <input type="checkbox" class="bc-harga" data-idx="${idx}" ${d.tampilkan_harga ? "checked" : ""} style="width:15px;height:15px" />
+                <span>${d.harga_override ? "Khusus" : "Default"}</span>
+              </label>
               <input type="number" min="0" value="${d.qty}" data-idx="${idx}" class="input-control bc-qty" style="margin:0;height:34px;text-align:center;padding:0 6px" />
+              <button type="button" class="btn" data-act="reset-harga" data-idx="${idx}" title="Kembalikan ke pengaturan harga umum" ${d.harga_override ? "" : "disabled"}
+                style="padding:0;width:32px;height:26px;font-size:13px;background:var(--border-color,#e2e8f0);color:var(--text-main);border:none;opacity:${d.harga_override ? "1" : ".45"}">↺</button>
             </div>`,
           )
           .join("");
@@ -1806,12 +1855,36 @@
       overlay
         .querySelectorAll('[data-act="batal"]')
         .forEach((b) => b.addEventListener("click", tutup));
+      overlay
+        .querySelector("#bcShowPriceDefault")
+        .addEventListener("change", (e) => {
+          tampilkanHargaDefault = !!e.target.checked;
+          terapkanHargaGlobalBarcode(daftar, tampilkanHargaDefault);
+          renderDaftar();
+          schedulePreview();
+        });
       overlay.querySelector("#bcDaftarBody").addEventListener("input", (e) => {
         const inp = e.target.closest(".bc-qty");
         if (!inp) return;
         const idx = parseInt(inp.dataset.idx, 10);
         daftar[idx].qty = Math.max(0, parseInt(inp.value, 10) || 0);
         overlay.querySelector("#bcTotal").textContent = totalLabel();
+        schedulePreview();
+      });
+      overlay.querySelector("#bcDaftarBody").addEventListener("change", (e) => {
+        const inp = e.target.closest(".bc-harga");
+        if (!inp) return;
+        const idx = parseInt(inp.dataset.idx, 10);
+        terapkanHargaBarangBarcode(daftar, idx, inp.checked);
+        renderDaftar();
+        schedulePreview();
+      });
+      overlay.querySelector("#bcDaftarBody").addEventListener("click", (e) => {
+        const tombol = e.target.closest('[data-act="reset-harga"]');
+        if (!tombol) return;
+        const idx = parseInt(tombol.dataset.idx, 10);
+        resetHargaBarangBarcode(daftar, idx, tampilkanHargaDefault);
+        renderDaftar();
         schedulePreview();
       });
       overlay
@@ -2378,7 +2451,11 @@
           console.error("Gagal memulihkan form:", e);
         }
       }
-      load();
+      setupRoutedTabs({
+        tabs: ["list", "po", "purchase", "payment"],
+        defaultTab: "list",
+        activate: (tab) => switchTab(tab),
+      });
     })();
   </script>
 </body>

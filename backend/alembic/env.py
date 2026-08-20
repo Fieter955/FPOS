@@ -18,6 +18,11 @@ from alembic import context
 # access to the values within the .ini file in use.
 config = context.config
 
+# Pengujian/migrasi lokal dapat menunjuk database sementara tanpa mengubah
+# alembic.ini atau DATABASE_URL aplikasi produksi.
+if os.environ.get("LOCAL_DATABASE_URL"):
+    config.set_main_option("sqlalchemy.url", os.environ["LOCAL_DATABASE_URL"])
+
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:

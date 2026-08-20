@@ -2079,18 +2079,6 @@
 
           if (detectedType) {
             loadAdvancedContent(detectedType);
-            const activeId =
-              "btnAdv" +
-              (detectedType === "levelHarga"
-                ? "Harga"
-                : detectedType === "levelJumlah"
-                  ? "Jumlah"
-                  : "Satuan");
-            advButtons.forEach((id) => {
-              if (id !== activeId) {
-                document.getElementById(id).classList.add("disabled");
-              }
-            });
           }
         });
 
@@ -2173,30 +2161,30 @@
             min_qty: 1,
           });
 
-        if (currentAdvancedType === "levelHarga") {
-          for (const [lowerName, price] of Object.entries(groupPrices)) {
-            if (price > 0 && lowerName !== "harga diskon") {
-              const g = allGroups.find(
-                (x) => x.name.toLowerCase() === lowerName,
-              );
-              multi_prices.push({
-                name: g ? g.name : lowerName,
-                price: price,
-                min_qty: 1,
-              });
-            }
-          }
-        } else if (currentAdvancedType === "levelJumlah") {
-          if (satuanRows.length > 0 && satuanRows[0].tier_prices) {
-            satuanRows[0].tier_prices.forEach((t) => {
-              if (t.min_qty > 0 && t.price > 0)
-                multi_prices.push({
-                  name: "Grosir",
-                  price: t.price,
-                  min_qty: t.min_qty,
-                });
+        // Harga grup dan harga berdasarkan jumlah boleh hidup bersamaan. Selalu
+        // kirim keduanya agar membuka salah satu tab tidak menghapus konfigurasi
+        // lain (penting untuk data iPos seperti TC0491).
+        for (const [lowerName, price] of Object.entries(groupPrices)) {
+          if (price > 0 && lowerName !== "harga diskon") {
+            const g = allGroups.find(
+              (x) => x.name.toLowerCase() === lowerName,
+            );
+            multi_prices.push({
+              name: g ? g.name : lowerName,
+              price: price,
+              min_qty: 1,
             });
           }
+        }
+        if (satuanRows.length > 0 && satuanRows[0].tier_prices) {
+          satuanRows[0].tier_prices.forEach((t) => {
+            if (t.min_qty > 0 && t.price > 0)
+              multi_prices.push({
+                name: "Grosir",
+                price: t.price,
+                min_qty: t.min_qty,
+              });
+          });
         }
 
         let settingsArr = [];
@@ -3560,6 +3548,14 @@
         refreshSelects();
         loadItems();
         subscribeItemMasterChanges(() => loadItems());
+        setupRoutedTabs({
+          tabs: ["brg", "kat", "merek", "sat"],
+          defaultTab: "brg",
+          activate: async (tab) => {
+            if (tab !== "brg") await loadComponents();
+            switchTab(tab);
+          },
+        });
 
         // Non-kritis (komponen modal/tab + data supplier & grup): tunda sampai browser idle
         // agar tidak berebut bandwidth dengan daftar barang saat pertama buka (terasa di Tailscale).

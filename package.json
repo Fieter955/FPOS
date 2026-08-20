@@ -9,6 +9,7 @@
     "test:numeric": "node --test tests/input-desimal.test.mjs",
     "test:master-data": "node --test tests/master-data-loading.test.mjs",
     "test:purchase-draft": "node --test tests/purchase-draft.test.mjs",
+    "test:dashboard": "node --test tests/dashboard-categories.test.mjs",
     "watch": "node build.mjs --watch"
   },
   "devDependencies": {

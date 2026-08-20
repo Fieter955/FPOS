@@ -144,7 +144,6 @@
 
     <script src="/js/api.js"></script>
     <script src="/js/theme.js"></script>
-    <script src="/js/print.js"></script>
     <script>
       requireAuth();
       const sb = (s) =>
@@ -271,10 +270,10 @@
 
       async function cetakNota(id) {
         try {
-          const s = await api("GET", `/sales/${id}`);
-          printReceipt(s);
+          const result = await api("POST", `/sales/print/${id}`, {});
+          showToast(`Struk masuk antrean printer (job #${result.job_id})`);
         } catch (e) {
-          showToast(e.message, "error");
+          showToast("Gagal cetak: " + e.message, "error");
         }
       }
 

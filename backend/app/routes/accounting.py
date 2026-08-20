@@ -1628,7 +1628,16 @@ def get_opening_inventory_value(
     current_user: models.User = Depends(get_current_user)
 ):
     branch_id = resolve_active_branch_id(db, current_user)
-    return get_branch_inventory_snapshot(db, branch_id)
+    snapshot = get_branch_inventory_snapshot(db, branch_id)
+    snapshot["already_posted"] = bool(
+        db.query(models.InventoryDocument.id).filter(
+            models.InventoryDocument.branch_id == branch_id,
+            models.InventoryDocument.type == "opening_stock",
+            models.InventoryDocument.status == "posted",
+            models.InventoryDocument.journal_id.isnot(None),
+        ).first()
+    )
+    return snapshot
 
 
 @router.get("/setup-status")
@@ -1803,8 +1812,23 @@ def setup_initial_balance(
         return obj.id
 
     inventory_snapshot = get_branch_inventory_snapshot(db, b_id)
-    inventory_amount = float(data.inventory or 0)
-    if inventory_amount <= 0 and inventory_snapshot["inventory_value"] > 0:
+    opening_stock_already_posted = bool(
+        db.query(models.InventoryDocument.id).filter(
+            models.InventoryDocument.branch_id == b_id,
+            models.InventoryDocument.type == "opening_stock",
+            models.InventoryDocument.status == "posted",
+            models.InventoryDocument.journal_id.isnot(None),
+        ).first()
+    )
+    # Dokumen Saldo Awal persediaan sudah membuat Dr Persediaan / Cr Modal
+    # Transisi. Jangan jurnal ulang nilai yang sama saat wizard menyimpan kas,
+    # bank, dan aset lainnya.
+    inventory_amount = 0.0 if opening_stock_already_posted else float(data.inventory or 0)
+    if (
+        not opening_stock_already_posted
+        and inventory_amount <= 0
+        and inventory_snapshot["inventory_value"] > 0
+    ):
         inventory_amount = inventory_snapshot["inventory_value"]
 
     entries = []

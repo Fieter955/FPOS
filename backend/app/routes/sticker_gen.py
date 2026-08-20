@@ -209,7 +209,7 @@ def render_code128_fit(
         return None
 
     bc_class = barcode.get_barcode_class("code128")
-    writer = ImageWriter(dpi=dpi)
+    writer = ImageWriter()
 
     module_width_candidates = [0.30, 0.27, 0.25, 0.22, 0.20, 0.18, 0.16]
     quiet_zone_candidates = [1.2, 1.0, 0.8, 0.6]
@@ -230,6 +230,7 @@ def render_code128_fit(
                     "quiet_zone": qz,
                     "font_size": 0,
                     "text_distance": 0,
+                    "dpi": dpi,
                 }
 
                 buf = io.BytesIO()

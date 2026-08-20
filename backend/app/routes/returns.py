@@ -9,6 +9,13 @@ from .. import models
 from ..auth import get_current_user, write_audit, require_admin
 from ..services.virtual_units import get_required_stock_qty, is_virtual_variant
 from ..services.tax_context import purchase_tax_type
+from ..services.receipt_renderer import (
+    build_purchase_return_receipt,
+    build_sale_return_receipt,
+    settings_from_branch,
+)
+from .accounting import resolve_active_branch_id
+from .print_queue import enqueue_print_job
 
 router = APIRouter()
 WITA = pytz.timezone("Asia/Makassar")
@@ -31,8 +38,8 @@ def get_purchase_history_items(
         models.Purchase.status != 'cancelled'
     )
     
-    if current_user.active_branch_id:
-        query = query.filter(models.Purchase.branch_id == current_user.active_branch_id)
+    branch_id = resolve_active_branch_id(db, current_user)
+    query = query.filter(models.Purchase.branch_id == branch_id)
     
     if supplier_id:
         query = query.filter(models.Purchase.supplier_id == supplier_id)
@@ -100,8 +107,8 @@ def get_sale_history_items(
         models.Sale.status != 'cancelled'
     )
     
-    if current_user.active_branch_id:
-        query = query.filter(models.Sale.branch_id == current_user.active_branch_id)
+    branch_id = resolve_active_branch_id(db, current_user)
+    query = query.filter(models.Sale.branch_id == branch_id)
     
     if customer_id:
         query = query.filter(models.Sale.customer_id == customer_id)
@@ -167,8 +174,8 @@ def get_broken_history_items(
         models.TradeInReturnItem.condition != 'good'
     )
     
-    if current_user.active_branch_id:
-        query = query.filter(models.TradeIn.branch_id == current_user.active_branch_id)
+    branch_id = resolve_active_branch_id(db, current_user)
+    query = query.filter(models.TradeIn.branch_id == branch_id)
         
     if start_date:
         query = query.filter(models.TradeIn.date >= start_date)
@@ -228,9 +235,8 @@ def _next_number(db, prefix, model):
 @router.get("/sales")
 def get_sale_returns(skip: int = 0, limit: int = 100,
                      db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    query = db.query(models.SaleReturn).join(models.Sale)
-    if current_user.active_branch_id:
-        query = query.filter(models.Sale.branch_id == current_user.active_branch_id)
+    branch_id = resolve_active_branch_id(db, current_user)
+    query = db.query(models.SaleReturn).filter(models.SaleReturn.branch_id == branch_id)
         
     returns = query.order_by(models.SaleReturn.id.desc()).offset(skip).limit(limit).all()
     result = []
@@ -259,7 +265,11 @@ def get_sale_returns(skip: int = 0, limit: int = 100,
 def create_sale_return(data: dict, db: Session = Depends(get_db),
                        current_user: models.User = Depends(get_current_user)):
     sale_id = data.get("sale_id")
-    sale = db.query(models.Sale).get(sale_id)
+    branch_id = resolve_active_branch_id(db, current_user)
+    sale = db.query(models.Sale).filter(
+        models.Sale.id == sale_id,
+        models.Sale.branch_id == branch_id,
+    ).first()
     if not sale: raise HTTPException(404, "Penjualan tidak ditemukan")
 
     gudang_aktif = None
@@ -292,6 +302,8 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
         number=number,
         date=get_local_date(),
         sale_id=sale_id,
+        branch_id=branch_id,
+        created_by=current_user.id,
         tax_percent=tax_percent,
         is_tax_included=is_tax_included,
         reason=data.get("reason"),
@@ -436,9 +448,8 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
 @router.get("/purchases")
 def get_purchase_returns(skip: int = 0, limit: int = 100,
                           db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    query = db.query(models.PurchaseReturn).join(models.Purchase)
-    if current_user.active_branch_id:
-        query = query.filter(models.Purchase.branch_id == current_user.active_branch_id)
+    branch_id = resolve_active_branch_id(db, current_user)
+    query = db.query(models.PurchaseReturn).filter(models.PurchaseReturn.branch_id == branch_id)
         
     returns = query.order_by(models.PurchaseReturn.id.desc()).offset(skip).limit(limit).all()
     result = []
@@ -460,7 +471,8 @@ def get_purchase_returns(skip: int = 0, limit: int = 100,
             "total": r.total,
             "total_carrying": r.total_carrying, "selisih": r.selisih,
             "reason": r.reason, "notes": r.notes,
-            "items": items_out
+            "items": items_out,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
         })
     return result
 
@@ -469,7 +481,11 @@ def get_purchase_returns(skip: int = 0, limit: int = 100,
 def create_purchase_return(data: dict, db: Session = Depends(get_db),
                             current_user: models.User = Depends(get_current_user)):
     purchase_id = data.get("purchase_id")
-    purchase = db.query(models.Purchase).get(purchase_id)
+    branch_id = resolve_active_branch_id(db, current_user)
+    purchase = db.query(models.Purchase).filter(
+        models.Purchase.id == purchase_id,
+        models.Purchase.branch_id == branch_id,
+    ).first()
     if not purchase: raise HTTPException(404, "Pembelian tidak ditemukan")
 
     gudang_aktif = None
@@ -505,6 +521,8 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
         number=number,
         date=get_local_date(),
         purchase_id=purchase_id,
+        branch_id=branch_id,
+        created_by=current_user.id,
         tax_percent=tax_percent,
         is_tax_included=is_tax_included,
         reason=data.get("reason"),
@@ -647,6 +665,60 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
         "selisih": round(retur.selisih or 0, 2),
         "message": "Retur pembelian berhasil",
     }
+
+
+@router.post("/sales/{return_id}/print")
+def print_sale_return(
+    return_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    branch_id = resolve_active_branch_id(db, current_user)
+    return_doc = db.query(models.SaleReturn).filter(
+        models.SaleReturn.id == return_id,
+        models.SaleReturn.branch_id == branch_id,
+    ).first()
+    if not return_doc:
+        raise HTTPException(404, "Retur penjualan tidak ditemukan")
+    branch = db.query(models.Branch).filter(models.Branch.id == branch_id).first()
+    job = enqueue_print_job(
+        db,
+        branch_id=branch_id,
+        content=build_sale_return_receipt(return_doc, settings_from_branch(branch)),
+        document_type="sale_return",
+        document_id=return_doc.id,
+        created_by=current_user.id,
+    )
+    write_audit(db, current_user.id, "PRINT", "sale_returns", return_doc.id, "Antre cetak struk retur")
+    db.commit()
+    return {"status": "queued", "job_id": job.id, "branch_id": branch_id}
+
+
+@router.post("/purchases/{return_id}/print")
+def print_purchase_return(
+    return_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    branch_id = resolve_active_branch_id(db, current_user)
+    return_doc = db.query(models.PurchaseReturn).filter(
+        models.PurchaseReturn.id == return_id,
+        models.PurchaseReturn.branch_id == branch_id,
+    ).first()
+    if not return_doc:
+        raise HTTPException(404, "Retur pembelian tidak ditemukan")
+    branch = db.query(models.Branch).filter(models.Branch.id == branch_id).first()
+    job = enqueue_print_job(
+        db,
+        branch_id=branch_id,
+        content=build_purchase_return_receipt(return_doc, settings_from_branch(branch)),
+        document_type="purchase_return",
+        document_id=return_doc.id,
+        created_by=current_user.id,
+    )
+    write_audit(db, current_user.id, "PRINT", "purchase_returns", return_doc.id, "Antre cetak struk retur")
+    db.commit()
+    return {"status": "queued", "job_id": job.id, "branch_id": branch_id}
 
 
 # ══════════════════════════════════════════════════════════════════════════════

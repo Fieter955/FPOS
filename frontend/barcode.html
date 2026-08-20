@@ -133,46 +133,132 @@
       #itemSearchResults {
         overflow: hidden;
       }
-      .barcode-picker-list {
-        max-height: 360px;
-        overflow-y: auto;
+      .barcode-add-panel {
+        position: relative;
+        z-index: 30;
+        margin-bottom: 16px;
+        padding: 14px;
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        background: var(--bg-color);
       }
-      .barcode-picker-row {
+      .barcode-add-grid {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 112px;
+        grid-template-columns: minmax(220px, 1fr) 88px 132px;
         gap: 10px;
-        align-items: center;
-        padding: 9px 11px;
-        border-bottom: 1px solid var(--border-color);
+        align-items: end;
       }
-      .barcode-picker-row.is-highlighted {
-        background: var(--primary-light);
+      .barcode-search-field {
+        position: relative;
+        min-width: 0;
       }
-      .barcode-picker-qty-wrap {
-        display: grid;
-        grid-template-columns: 30px 46px 30px;
-        gap: 3px;
-        align-items: center;
-      }
-      .barcode-picker-qty-wrap button,
-      .barcode-picker-qty {
-        height: 30px;
-        margin: 0;
-        padding: 0;
-        text-align: center;
-      }
-      .barcode-picker-footer {
+      .barcode-field-label {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 6px;
+        color: var(--text-main);
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .barcode-add-grid .input-control,
+      .barcode-add-grid .btn {
+        height: 42px;
+        margin: 0;
+      }
+      .barcode-add-qty {
+        width: 100%;
+        padding-inline: 8px;
+        text-align: center;
+        font-weight: 700;
+      }
+      .keyboard-key {
+        display: inline-flex;
+        min-width: 22px;
+        min-height: 20px;
+        align-items: center;
+        justify-content: center;
+        padding: 1px 5px;
+        border: 1px solid var(--border-color);
+        border-bottom-width: 2px;
+        border-radius: 5px;
+        background: var(--card-bg);
+        color: var(--text-main);
+        font-family: inherit;
+        font-size: 10px;
+        font-weight: 700;
+      }
+      .barcode-keyboard-help {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 12px;
+        align-items: center;
+        margin-top: 10px;
+        color: var(--text-muted);
+        font-size: 11px;
+      }
+      .barcode-picker-list {
+        max-height: 320px;
+        overflow-y: auto;
+      }
+      .barcode-picker-row {
+        display: flex;
+        justify-content: space-between;
         gap: 10px;
-        padding: 10px 11px;
-        background: var(--bg-color);
+        align-items: center;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border-color);
+        cursor: pointer;
+        outline: none;
+      }
+      .barcode-picker-row:hover,
+      .barcode-picker-row.is-highlighted {
+        background: var(--primary-light);
+      }
+      .barcode-picker-row.is-highlighted {
+        box-shadow: inset 3px 0 0 var(--primary);
+      }
+      .barcode-picker-row::after {
+        content: "Enter tambah";
+        flex: 0 0 auto;
+        color: var(--primary);
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .barcode-queue-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 84px 70px 36px;
+        gap: 8px;
+        align-items: center;
+        padding: 8px 14px;
         border-top: 1px solid var(--border-color);
       }
+      .barcode-queue-row:focus-within {
+        background: var(--primary-light);
+      }
+      @media (max-width: 1000px) {
+        .barcode-container {
+          height: auto;
+          min-height: 100vh;
+          flex-direction: column;
+          overflow: visible;
+        }
+        .panel-left,
+        .panel-right {
+          overflow: visible;
+        }
+      }
       @media (max-width: 680px) {
-        .barcode-picker-row {
-          grid-template-columns: minmax(0, 1fr) 106px;
+        .barcode-container {
+          gap: 12px;
+          padding: 12px;
+        }
+        .barcode-add-grid {
+          grid-template-columns: 84px minmax(0, 1fr);
+        }
+        .barcode-search-field {
+          grid-column: 1 / -1;
         }
       }
     </style>
@@ -198,40 +284,72 @@
           <h1 style="margin: 0; font-size: 22px">🖨️ Cetak Barcode</h1>
         </div>
 
-        <div style="display: flex; gap: 8px; margin-bottom: 12px">
-          <div style="position: relative; flex: 1">
-            <input
-              type="text"
-              id="itemSearch"
-              class="input-control"
-            placeholder="Ketik nama / kode / barcode lalu Enter..."
-              autocomplete="off"
-              style="width: 100%; margin: 0"
-            />
-            <div
-              id="itemSearchResults"
-              style="
-                display: none;
-                position: absolute;
-                z-index: 20;
-                top: calc(100% + 4px);
-                left: 0;
-                right: 0;
-                background: var(--card-bg);
-                border: 1px solid var(--border-color);
-                border-radius: 8px;
-                box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
-              "
-            ></div>
+        <div class="barcode-add-panel" id="barcodeItemPicker">
+          <div class="barcode-add-grid">
+            <div class="barcode-search-field">
+              <label class="barcode-field-label" for="itemSearch">
+                Cari barang
+                <span><span class="keyboard-key">F2</span> fokus</span>
+              </label>
+              <input
+                type="text"
+                id="itemSearch"
+                class="input-control"
+                placeholder="Nama, kode, atau scan barcode..."
+                autocomplete="off"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-controls="itemSearchResults"
+                aria-expanded="false"
+                aria-describedby="barcodeKeyboardHelp itemSearchStatus"
+                style="width: 100%"
+              />
+              <div
+                id="itemSearchResults"
+                role="listbox"
+                style="
+                  display: none;
+                  position: absolute;
+                  z-index: 40;
+                  top: calc(100% + 5px);
+                  left: 0;
+                  right: 0;
+                  background: var(--card-bg);
+                  border: 1px solid var(--border-color);
+                  border-radius: 10px;
+                  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.25);
+                "
+              ></div>
+            </div>
+            <div>
+              <label class="barcode-field-label" for="itemAddQty">Qty</label>
+              <input
+                type="number"
+                id="itemAddQty"
+                class="input-control barcode-add-qty"
+                min="1"
+                max="9999"
+                value="1"
+                aria-label="Jumlah label yang ditambahkan"
+              />
+            </div>
+            <button
+              type="button"
+              class="btn btn-primary"
+              id="btnTambahBarang"
+              onclick="tambahKeDaftar()"
+            >
+              + Tambah
+            </button>
           </div>
-          <button
-            class="btn btn-primary"
-            id="btnTambahBarang"
-            onclick="tambahKeDaftar()"
-            style="white-space: nowrap"
-          >
-            Tambahkan Pilihan
-          </button>
+          <div class="barcode-keyboard-help" id="barcodeKeyboardHelp">
+            <span><span class="keyboard-key">↑</span> <span class="keyboard-key">↓</span> pilih barang</span>
+            <span><span class="keyboard-key">→</span> ke Qty</span>
+            <span><span class="keyboard-key">Enter</span> tambah</span>
+            <span><span class="keyboard-key">Tab</span> pindah kolom</span>
+            <span><span class="keyboard-key">Ctrl</span> + <span class="keyboard-key">Enter</span> cetak</span>
+          </div>
+          <div id="itemSearchStatus" role="status" aria-live="polite" style="position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0)"></div>
         </div>
 
         <div
@@ -475,8 +593,7 @@
         previewAbortController = null,
         previewRenderSeq = 0,
         itemSearchHighlightedIndex = -1,
-        itemSelectionInProgress = false,
-        itemSearchDraftQty = new Map();
+        itemSelectionInProgress = false;
 
       function cleanupPreviewBlob() {
         if (previewBlobUrl) {
@@ -522,6 +639,13 @@
         return Math.min(9999, Math.max(0, parseInt(value, 10) || 0));
       }
 
+      function getRequestedAddQty() {
+        const input = document.getElementById("itemAddQty");
+        const qty = Math.min(9999, Math.max(1, parseInt(input?.value, 10) || 1));
+        if (input) input.value = String(qty);
+        return qty;
+      }
+
       function addItemQuantity(item, quantity) {
         const qty = normalizePickerQty(quantity);
         if (!item || qty < 1) return false;
@@ -552,7 +676,7 @@
         return !!(await generateBarcode(item));
       }
 
-      async function tambahItemTerpilih(item) {
+      async function tambahItemTerpilih(item, quantity = getRequestedAddQty()) {
         if (!item || itemSelectionInProgress) return false;
         itemSelectionInProgress = true;
         const input = document.getElementById("itemSearch");
@@ -560,12 +684,18 @@
         if (addButton) addButton.disabled = true;
         try {
           if (!(await ensureItemBarcode(item))) return false;
-          addItemQuantity(item, 1);
+          addItemQuantity(item, quantity);
           input.value = "";
-          sembunyikanHasilPencarian(true);
+          const qtyInput = document.getElementById("itemAddQty");
+          if (qtyInput) qtyInput.value = "1";
+          sembunyikanHasilPencarian();
           input.focus();
           renderDaftar();
           schedulePreviewRender();
+          const status = document.getElementById("itemSearchStatus");
+          if (status) {
+            status.textContent = `${item.name} ditambahkan, ${normalizePickerQty(quantity)} label`;
+          }
           return true;
         } finally {
           itemSelectionInProgress = false;
@@ -573,128 +703,43 @@
         }
       }
 
-      function pilihItemById(itemId) {
+      function pilihItemById(itemId, quantity = getRequestedAddQty()) {
         const id = Number(itemId);
         if (!Number.isFinite(id)) return Promise.resolve(false);
         const item = allItems.find((candidate) => Number(candidate.id) === id);
-        return tambahItemTerpilih(item);
-      }
-
-      function setPickerQty(itemId, value, inputElement = null) {
-        const id = Number(itemId);
-        if (!Number.isFinite(id)) return 0;
-        const qty = normalizePickerQty(value);
-        if (qty > 0) itemSearchDraftQty.set(id, qty);
-        else itemSearchDraftQty.delete(id);
-        if (inputElement) inputElement.value = String(qty);
-        updatePickerSummary();
-        return qty;
-      }
-
-      function updatePickerSummary() {
-        const summary = document.getElementById("itemSearchSelectionSummary");
-        const button = document.getElementById("btnApplyItemSearch");
-        const productCount = itemSearchDraftQty.size;
-        const labelCount = Array.from(itemSearchDraftQty.values()).reduce(
-          (total, qty) => total + qty,
-          0,
-        );
-        if (summary) {
-          summary.textContent = `${productCount} produk · ${labelCount} label`;
-        }
-        if (button) button.disabled = labelCount < 1 || itemSelectionInProgress;
-        const mainButton = document.getElementById("btnTambahBarang");
-        if (mainButton) {
-          mainButton.textContent = labelCount
-            ? `Tambahkan (${labelCount})`
-            : "Tambahkan Pilihan";
-        }
-      }
-
-      async function applyPickerQuantities() {
-        if (itemSelectionInProgress) return false;
-        const selections = Array.from(itemSearchDraftQty.entries()).filter(
-          ([, qty]) => normalizePickerQty(qty) > 0,
-        );
-        if (!selections.length) {
-          showToast("Atur jumlah barcode minimal 1", "warning");
-          return false;
-        }
-
-        itemSelectionInProgress = true;
-        const addButton = document.getElementById("btnTambahBarang");
-        const applyButton = document.getElementById("btnApplyItemSearch");
-        if (addButton) addButton.disabled = true;
-        if (applyButton) {
-          applyButton.disabled = true;
-          applyButton.textContent = "Menambahkan...";
-        }
-
-        let addedProducts = 0;
-        let addedLabels = 0;
-        let failedProducts = 0;
-        try {
-          for (const [itemId, rawQty] of selections) {
-            const item = allItems.find(
-              (candidate) => Number(candidate.id) === Number(itemId),
-            );
-            const qty = normalizePickerQty(rawQty);
-            if (!item || qty < 1) continue;
-            if (!(await ensureItemBarcode(item))) {
-              failedProducts += 1;
-              continue;
-            }
-            addItemQuantity(item, qty);
-            addedProducts += 1;
-            addedLabels += qty;
-          }
-
-          if (addedProducts) {
-            const input = document.getElementById("itemSearch");
-            input.value = "";
-            sembunyikanHasilPencarian(true);
-            input.focus();
-            renderDaftar();
-            schedulePreviewRender();
-            showToast(
-              `${addedProducts} produk (${addedLabels} label) ditambahkan`,
-              "success",
-            );
-          }
-          if (failedProducts) {
-            showToast(
-              `${failedProducts} produk gagal ditambahkan karena barcode bermasalah`,
-              "warning",
-            );
-          }
-          return addedProducts > 0;
-        } finally {
-          itemSelectionInProgress = false;
-          if (addButton) addButton.disabled = false;
-          if (applyButton) applyButton.textContent = "Tambahkan ke Daftar";
-          updatePickerSummary();
-        }
+        return tambahItemTerpilih(item, quantity);
       }
 
       async function tambahKeDaftar() {
-        if (itemSearchDraftQty.size) return applyPickerQuantities();
-        const keyword = document.getElementById("itemSearch").value.trim();
-        const scannable = findExactScannableItem(keyword);
-        if (scannable) return tambahItemTerpilih(scannable);
-        if (!keyword) return false;
-        renderItemSearchResults(keyword);
-        showToast("Atur jumlah produk yang ingin dicetak", "warning");
-        return false;
+        if (itemSelectionInProgress) return false;
+        const input = document.getElementById("itemSearch");
+        const keyword = input.value.trim();
+        if (!keyword) {
+          input.focus();
+          showToast("Ketik atau scan barang terlebih dahulu", "warning");
+          return false;
+        }
+        let item = findExactScannableItem(keyword) || getHighlightedSearchItem();
+        if (!item) {
+          renderItemSearchResults(keyword);
+          item = getHighlightedSearchItem();
+        }
+        if (!item) {
+          showToast("Barang tidak ditemukan", "warning");
+          return false;
+        }
+        return tambahItemTerpilih(item, getRequestedAddQty());
       }
 
-      function sembunyikanHasilPencarian(clearDraft = false) {
+      function sembunyikanHasilPencarian() {
         const results = document.getElementById("itemSearchResults");
         if (!results) return;
         itemSearchHighlightedIndex = -1;
         results.style.display = "none";
         results.innerHTML = "";
-        if (clearDraft) itemSearchDraftQty.clear();
-        updatePickerSummary();
+        const input = document.getElementById("itemSearch");
+        input?.setAttribute("aria-expanded", "false");
+        input?.removeAttribute("aria-activedescendant");
       }
 
       function getItemSearchOptions() {
@@ -718,7 +763,29 @@
           option.classList.toggle("is-highlighted", active);
           option.setAttribute("aria-selected", String(active));
         });
-        options[itemSearchHighlightedIndex].scrollIntoView({ block: "nearest" });
+        const selected = options[itemSearchHighlightedIndex];
+        selected.scrollIntoView({ block: "nearest" });
+        const input = document.getElementById("itemSearch");
+        input?.setAttribute(
+          "aria-activedescendant",
+          `barcode-option-${selected.dataset.itemRowId}`,
+        );
+        const item = allItems.find(
+          (candidate) =>
+            Number(candidate.id) === Number(selected.dataset.itemRowId),
+        );
+        const status = document.getElementById("itemSearchStatus");
+        if (status && item) status.textContent = `${item.name} dipilih`;
+      }
+
+      function getHighlightedSearchItem() {
+        const options = getItemSearchOptions();
+        if (!options.length) return null;
+        const option = options[
+          itemSearchHighlightedIndex >= 0 ? itemSearchHighlightedIndex : 0
+        ];
+        const id = Number(option?.dataset.itemRowId);
+        return allItems.find((item) => Number(item.id) === id) || null;
       }
 
       function renderItemSearchResults(keyword) {
@@ -726,7 +793,7 @@
         if (!results) return;
         const normalized = normalizeSearchValue(keyword);
         if (!normalized) {
-          sembunyikanHasilPencarian(true);
+          sembunyikanHasilPencarian();
           return;
         }
 
@@ -746,93 +813,57 @@
             return Number(bExact) - Number(aExact) ||
               String(a.name).localeCompare(String(b.name), "id");
           });
-        const matches = allMatches.slice(0, 100);
+        const matches = allMatches.slice(0, 20);
         if (!matches.length) {
-          sembunyikanHasilPencarian(false);
-          showToast("Barang tidak ditemukan", "warning");
+          itemSearchHighlightedIndex = -1;
+          results.innerHTML = `<div style="padding:14px; text-align:center; color:var(--text-muted); font-size:12px">Barang tidak ditemukan</div>`;
+          results.style.display = "block";
+          document.getElementById("itemSearch")?.setAttribute("aria-expanded", "true");
           return;
         }
 
         itemSearchHighlightedIndex = -1;
         const limitHint =
           allMatches.length > matches.length
-            ? `<div style="padding:7px 11px; color:var(--text-muted); font-size:11px">Menampilkan 100 dari ${allMatches.length} hasil. Persempit kata pencarian untuk melihat sisanya.</div>`
+            ? `<div style="padding:7px 11px; color:var(--text-muted); font-size:11px">Menampilkan 20 dari ${allMatches.length} hasil. Persempit kata pencarian untuk melihat sisanya.</div>`
             : "";
         results.innerHTML = `
-          <div class="barcode-picker-list" role="listbox">
+          <div class="barcode-picker-list">
             ${matches
               .map((item) => {
-                const qty = itemSearchDraftQty.get(Number(item.id)) || 0;
                 return `
-                  <div class="barcode-picker-row" role="option" aria-selected="false" data-item-row-id="${item.id}">
-                    <div style="min-width:0; cursor:pointer" data-focus-qty="${item.id}">
+                  <div id="barcode-option-${item.id}" class="barcode-picker-row" role="option" aria-selected="false" data-item-row-id="${item.id}">
+                    <div style="min-width:0">
                       <span style="display:block; font-size:13px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(item.name)}</span>
                       <small style="display:block; margin-top:2px; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml([item.code, item.barcode].filter(Boolean).join(" • ") || "Barcode akan dibuat otomatis")}</small>
-                    </div>
-                    <div class="barcode-picker-qty-wrap">
-                      <button type="button" class="btn" data-qty-action="minus" data-item-id="${item.id}" aria-label="Kurangi jumlah ${escapeHtml(item.name)}">−</button>
-                      <input type="number" min="0" max="9999" value="${qty}" class="input-control barcode-picker-qty" data-item-id="${item.id}" aria-label="Jumlah barcode ${escapeHtml(item.name)}" />
-                      <button type="button" class="btn" data-qty-action="plus" data-item-id="${item.id}" aria-label="Tambah jumlah ${escapeHtml(item.name)}">+</button>
                     </div>
                   </div>`;
               })
               .join("")}
           </div>
           ${limitHint}
-          <div class="barcode-picker-footer">
-            <span id="itemSearchSelectionSummary" style="font-size:12px; font-weight:700">0 produk · 0 label</span>
-            <button type="button" class="btn btn-primary" id="btnApplyItemSearch" data-action="apply-picker">Tambahkan ke Daftar</button>
-          </div>`;
+          `;
         results.style.display = "block";
-        updatePickerSummary();
+        document.getElementById("itemSearch")?.setAttribute("aria-expanded", "true");
+        highlightItemSearchOption(0);
       }
 
       const itemSearchResults = document.getElementById("itemSearchResults");
       itemSearchResults.addEventListener("click", (event) => {
-        const applyButton = event.target.closest('[data-action="apply-picker"]');
-        if (applyButton) {
+        const row = event.target.closest("[data-item-row-id]");
+        if (row) {
           event.preventDefault();
-          applyPickerQuantities();
+          pilihItemById(row.dataset.itemRowId);
           return;
         }
-        const qtyButton = event.target.closest("button[data-qty-action]");
-        if (qtyButton) {
-          event.preventDefault();
-          const id = Number(qtyButton.dataset.itemId);
-          const current = itemSearchDraftQty.get(id) || 0;
-          const delta = qtyButton.dataset.qtyAction === "plus" ? 1 : -1;
-          const input = itemSearchResults.querySelector(
-            `.barcode-picker-qty[data-item-id="${id}"]`,
-          );
-          setPickerQty(id, current + delta, input);
-          return;
-        }
-        const focusTarget = event.target.closest("[data-focus-qty]");
-        if (focusTarget) {
-          itemSearchResults
-            .querySelector(
-              `.barcode-picker-qty[data-item-id="${focusTarget.dataset.focusQty}"]`,
-            )
-            ?.focus();
-        }
-      });
-      itemSearchResults.addEventListener("input", (event) => {
-        const input = event.target.closest(".barcode-picker-qty[data-item-id]");
-        if (!input) return;
-        setPickerQty(input.dataset.itemId, input.value);
-      });
-      itemSearchResults.addEventListener("change", (event) => {
-        const input = event.target.closest(".barcode-picker-qty[data-item-id]");
-        if (!input) return;
-        setPickerQty(input.dataset.itemId, input.value, input);
       });
 
       document
         .getElementById("itemSearch")
         .addEventListener("keydown", function (event) {
           const dropdownOpen = itemSearchResults.style.display === "block";
-          const next = event.key === "ArrowDown" || event.key === "ArrowRight";
-          const previous = event.key === "ArrowUp" || event.key === "ArrowLeft";
+          const next = event.key === "ArrowDown";
+          const previous = event.key === "ArrowUp";
           if (next || previous) {
             if (!dropdownOpen) renderItemSearchResults(this.value);
             if (!getItemSearchOptions().length) return;
@@ -842,30 +873,22 @@
             );
             return;
           }
+          if (event.key === "ArrowRight" && dropdownOpen) {
+            event.preventDefault();
+            const qtyInput = document.getElementById("itemAddQty");
+            qtyInput?.focus();
+            qtyInput?.select();
+            return;
+          }
           if (event.key === "Escape" && dropdownOpen) {
             event.preventDefault();
-            sembunyikanHasilPencarian(true);
+            sembunyikanHasilPencarian();
             return;
           }
-          if (event.key !== "Enter") return;
+          if (event.key !== "Enter" || event.ctrlKey) return;
           event.preventDefault();
           event.stopPropagation();
-          const scannable = findExactScannableItem(this.value);
-          if (scannable) {
-            pilihItemById(scannable.id);
-            return;
-          }
-          if (!dropdownOpen) renderItemSearchResults(this.value);
-          const options = getItemSearchOptions();
-          const target = options[
-            itemSearchHighlightedIndex >= 0 ? itemSearchHighlightedIndex : 0
-          ];
-          if (!target) return;
-          itemSearchResults
-            .querySelector(
-              `.barcode-picker-qty[data-item-id="${target.dataset.itemRowId}"]`,
-            )
-            ?.focus();
+          tambahKeDaftar();
         });
       document
         .getElementById("itemSearch")
@@ -874,8 +897,9 @@
         });
       document.getElementById("itemSearch").addEventListener("blur", () => {
         setTimeout(() => {
-          if (itemSearchResults.contains(document.activeElement)) return;
-          sembunyikanHasilPencarian(true);
+          const picker = document.getElementById("barcodeItemPicker");
+          if (picker?.contains(document.activeElement)) return;
+          sembunyikanHasilPencarian();
         }, 180);
       });
       itemSearchResults.addEventListener("focusout", () => {
@@ -887,8 +911,37 @@
           ) {
             return;
           }
-          sembunyikanHasilPencarian(true);
+          sembunyikanHasilPencarian();
         }, 180);
+      });
+
+      const itemAddQty = document.getElementById("itemAddQty");
+      itemAddQty.addEventListener("change", function () {
+        this.value = String(getRequestedAddQty());
+      });
+      itemAddQty.addEventListener("keydown", function (event) {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          tambahKeDaftar();
+        } else if (event.key === "ArrowLeft") {
+          event.preventDefault();
+          document.getElementById("itemSearch").focus();
+        } else if (event.key === "ArrowRight") {
+          event.preventDefault();
+          document.getElementById("btnTambahBarang").focus();
+        }
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "F2") {
+          event.preventDefault();
+          const input = document.getElementById("itemSearch");
+          input.focus();
+          input.select();
+        } else if (event.ctrlKey && event.key === "Enter") {
+          event.preventDefault();
+          printStiker();
+        }
       });
 
       function ubahQty(id, nilai) {
@@ -897,6 +950,22 @@
         d.qty = Math.max(1, parseInt(nilai, 10) || 1);
         document.getElementById("totalLabelCount").textContent = totalLabel();
         schedulePreviewRender();
+      }
+
+      function handleDaftarQtyKeydown(event, id) {
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+          event.preventDefault();
+          const delta = event.key === "ArrowRight" ? 1 : -1;
+          const nextQty = Math.max(1, (parseInt(event.currentTarget.value, 10) || 1) + delta);
+          event.currentTarget.value = String(nextQty);
+          ubahQty(id, nextQty);
+          event.currentTarget.select();
+        } else if (event.key === "Enter") {
+          event.preventDefault();
+          const search = document.getElementById("itemSearch");
+          search.focus();
+          search.select();
+        }
       }
 
       function hapusItem(id) {
@@ -958,7 +1027,7 @@
         body.innerHTML = daftarCetak
           .map(
             (d) => `
-            <div style="display:grid; grid-template-columns:1fr 84px 70px 36px; gap:8px; padding:8px 14px; border-top:1px solid var(--border-color); align-items:center">
+            <div class="barcode-queue-row">
               <div style="min-width:0; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" title="${escapeHtml(d.name)}">
                 ${escapeHtml(d.name)}
                 <small style="display:block; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(d.code || d.barcode || "")}</small>
@@ -967,8 +1036,8 @@
                 <input type="checkbox" ${d.tampilkan_harga ? "checked" : ""} onchange="ubahTampilanHarga(${d.id}, this.checked)" style="width:15px; height:15px" />
                 <span>${d.harga_override ? "Khusus" : "Default"}</span>
               </label>
-              <input type="number" min="1" value="${d.qty}" class="input-control" style="margin:0; height:34px; text-align:center; padding:0 6px"
-                oninput="ubahQty(${d.id}, this.value)" />
+              <input type="number" min="1" value="${d.qty}" class="input-control" aria-label="Jumlah label ${escapeHtml(d.name)}" style="margin:0; height:34px; text-align:center; padding:0 6px"
+                oninput="ubahQty(${d.id}, this.value)" onkeydown="handleDaftarQtyKeydown(event, ${d.id})" />
               <div style="display:flex; flex-direction:column; gap:3px; align-items:center">
                 <button class="btn" title="Kembalikan ke pengaturan harga umum" onclick="resetTampilanHarga(${d.id})"
                   style="padding:0; width:34px; height:16px; line-height:14px; font-size:12px; background:var(--border-color); color:var(--text-main); border:none; border-radius:5px">↺</button>
@@ -1238,6 +1307,7 @@
       renderDaftar();
       updateSliderVars();
       loadItems();
+      document.getElementById("itemSearch").focus();
       subscribeItemMasterChanges(() => loadItems());
     </script>
   </body>

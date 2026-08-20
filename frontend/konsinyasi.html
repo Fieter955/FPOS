@@ -734,7 +734,13 @@
         return new Date().toISOString().split("T")[0];
       }
 
-      init();
+      init().then(() =>
+        setupRoutedTabs({
+          tabs: ["in", "out"],
+          defaultTab: "in",
+          activate: (tab) => switchTab(tab),
+        }),
+      );
     </script>
   </body>
 </html>

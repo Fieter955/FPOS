@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     # App
     APP_NAME: str = "iPos 5.0"
-    APP_VERSION: str = "5.0.1"
+    APP_VERSION: str = "5.0.3"
 
     # CORS
     ALLOWED_ORIGINS: str = "*"

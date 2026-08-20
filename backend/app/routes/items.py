@@ -35,24 +35,6 @@ _ITEM_IMG_DIR = _ROOT_DIR / "uploads" / "items"
 MAKS_FOTO_BYTES = 3 * 1024 * 1024  # 3 MB (foto sudah dikecilkan di browser; ini hanya batas aman)
 
 
-def _normalize_item_name(value: str) -> str:
-    """Normalisasi nama hanya untuk validasi duplikat."""
-    return " ".join(str(value or "").split()).casefold()
-
-
-def _find_duplicate_item_name(db: Session, name: str, exclude_id: Optional[int] = None):
-    """Cari nama item yang sama tanpa membedakan kapitalisasi/spasi berlebih."""
-    query = db.query(models.Item)
-    if exclude_id is not None:
-        query = query.filter(models.Item.id != exclude_id)
-
-    target = _normalize_item_name(name)
-    for existing in query.yield_per(500):
-        if _normalize_item_name(existing.name) == target:
-            return existing
-    return None
-
-
 def _validate_supplier_barcodes(
     db: Session,
     supplier_settings,
@@ -379,15 +361,6 @@ def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db), current
     # Ambil data form, kecuali prices dan supplier_ids
     item_data = item.model_dump(exclude={"prices", "supplier_ids", "supplier_settings", "group_discounts"})
 
-    # Beri respons yang bisa ditampilkan sebagai popup di frontend, bukan error 500
-    # dari constraint UNIQUE ketika proses flush berlangsung.
-    duplicate = _find_duplicate_item_name(db, item_data["name"])
-    if duplicate:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Nama barang '{item_data['name']}' sudah ada. Silakan gunakan nama lain.",
-        )
-
     # 1. Pastikan Kode ter-generate otomatis dengan aman di backend
     if not item_data.get("code") or item_data["code"] == "AUTO":
         item_data["code"] = f"ITM-{uuid.uuid4().hex[:6].upper()}"
@@ -428,14 +401,8 @@ def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db), current
     try:
         db.flush() # Simpan sementara untuk dapatkan ID Resmi
     except IntegrityError as exc:
-        # Tetap aman bila ada dua request bersamaan yang lolos pengecekan awal.
         db.rollback()
-        if "items.name" in str(exc):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Nama barang '{item_data['name']}' sudah ada. Silakan gunakan nama lain.",
-            ) from exc
-        raise
+        raise HTTPException(400, "Kode barang atau barcode sudah digunakan.") from exc
     # 3. Auto-Generate Barcode
     need_barcode_gen = False
     if not obj.barcode or obj.barcode == "AUTO":
@@ -501,16 +468,6 @@ def update_item(item_id: int, item: schemas.ItemUpdate, db: Session = Depends(ge
         )
     
     data = item.model_dump(exclude_unset=True, exclude={"prices", "supplier_ids", "supplier_settings", "group_discounts"})
-
-    # Cegah bentrok nama (Item.name unik) agar tidak jatuh ke error 500 yang membingungkan
-    nama_baru = data.get("name")
-    if nama_baru:
-        bentrok = _find_duplicate_item_name(db, nama_baru, exclude_id=item_id)
-        if bentrok:
-            raise HTTPException(
-                400,
-                f"Nama barang '{nama_baru}' sudah ada. Silakan gunakan nama lain.",
-            )
 
     need_barcode_gen = False
     if data.get("barcode") == "AUTO":
@@ -732,7 +689,7 @@ async def import_items_from_excel(
     - Otomatis normalisasi nama kolom (SUPPLIER1 → SUPPLIER)
     - Otomatis deteksi Kategori, Satuan, Supplier
     - AUTO-CREATE Gudang jika belum ada
-    - SKIP duplikat nama barang (case-insensitive, whitespace-safe)
+    - Nama barang boleh sama; baris hanya dilewati bila kode barang sudah ada
     - Aman per-baris: 1 baris gagal tidak rollback semua
     """
     if not file.filename.endswith(('.xlsx', '.xls', '.csv')):
@@ -789,14 +746,18 @@ def _import_items_sync(contents: bytes, filename: str, db: Session, current_user
         existing_units     = {u.name.upper(): u.id for u in db.query(models.Unit).all()}
         existing_suppliers = {s.name.upper(): s    for s in db.query(models.Supplier).all()}
 
-        # ✅ Cache nama barang dari DB — key sudah di-normalize
-        def normalize(text: str) -> str:
-            """Collapse spasi ganda, strip, uppercase — biar perbandingan konsisten."""
-            return " ".join(str(text).split()).upper()
-
-        existing_item_names = {
-            normalize(i.name): i for i in db.query(models.Item).all()
+        # Nama boleh sama; kode barang adalah identitas unik.
+        existing_item_codes = {
+            str(code or "").strip().casefold()
+            for (code,) in db.query(models.Item.code).all()
         }
+
+        def cell_text(value) -> str:
+            if pd.isnull(value):
+                return ""
+            if isinstance(value, float) and value.is_integer():
+                return str(int(value))
+            return str(value).strip()
 
         wita_time      = datetime.now(pytz.timezone("Asia/Makassar"))
         items_imported = 0
@@ -809,22 +770,15 @@ def _import_items_sync(contents: bytes, filename: str, db: Session, current_user
                 continue
 
             # ✅ Normalize nama: collapse spasi ganda & strip invisible chars
-            nama_item    = " ".join(raw_nama.split())
-            nama_key     = normalize(nama_item)
+            nama_item = " ".join(raw_nama.split())
+            kode_barcode = cell_text(row.get('KODEBARCODE', ''))
+            kode_sumber = cell_text(row.get('KODEITEM', '')) or kode_barcode
+            barcode_valid = bool(kode_barcode and kode_barcode.lower() != 'nan')
+            item_code = kode_sumber if kode_sumber else f"ITM-{uuid.uuid4().hex[:6].upper()}"
 
             # ✅ Cek cache dulu — kalau sudah ada, langsung skip (tanpa query ke DB)
-            if nama_key in existing_item_names:
+            if item_code.casefold() in existing_item_codes:
                 items_skipped += 1
-                continue
-
-            # ✅ Double-check langsung ke DB untuk tangkap case yang lolos cache
-            # (misal: spasi/dash berbeda tapi constraint tetap UNIQUE di DB)
-            row_in_db = db.query(models.Item).filter(
-                models.Item.name == nama_item
-            ).first()
-            if row_in_db:
-                items_skipped += 1
-                existing_item_names[nama_key] = row_in_db  # update cache
                 continue
 
             # ── Kategori ──
@@ -865,10 +819,6 @@ def _import_items_sync(contents: bytes, filename: str, db: Session, current_user
                     item_suppliers.append(existing_suppliers[s_key])
 
             # ── Field lain ──
-            kode_barcode   = str(row['KODEBARCODE']).strip()
-            barcode_valid  = kode_barcode and kode_barcode.lower() != 'nan'
-            item_code      = kode_barcode if barcode_valid else f"ITM-{uuid.uuid4().hex[:6].upper()}"
-
             merek = " ".join(str(row['MEREK']).split())
             merek = "" if merek.lower() == 'nan' else merek
             ket   = " ".join(str(row['KETERANGAN']).split())
@@ -898,7 +848,7 @@ def _import_items_sync(contents: bytes, filename: str, db: Session, current_user
             db.flush()  # dapat ID resmi sekarang
 
             # ✅ Update cache agar baris berikutnya di file yang sama ikut ter-skip
-            existing_item_names[nama_key] = new_item
+            existing_item_codes.add(item_code.casefold())
 
             # ── 5. HUBUNGKAN SUPPLIER ──────────────────────────────────────
             for sup_obj in item_suppliers:

@@ -3,746 +3,212 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Persediaan Stok - FPOS</title>
-    <link rel="stylesheet" href="/css/style.css" />
+    <title>Persediaan - FPOS</title>
+    <script>
+      if (window.self !== window.top) {
+        document.documentElement.classList.add("workspace-embedded-root");
+      }
+    </script>
+    <link rel="stylesheet" href="/css/style.css?v=20260820-workspace-hit-test" />
     <style>
-      .autocomplete-container {
-        position: relative;
-        flex: 1;
-        margin: 0;
-      }
-      .autocomplete-list {
-        position: absolute;
-        top: 100%;
-        left: 0;
-        right: 0;
-        z-index: 99;
-        background: var(--card-bg, #fff);
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        max-height: 300px;
-        overflow-y: auto;
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
-        display: none;
-        margin-top: 4px;
-      }
-      .ac-item {
-        padding: 12px 16px;
-        cursor: pointer;
-        border-bottom: 1px solid var(--border-color);
-        font-size: 14px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        background: var(--bg-color);
-      }
-      .ac-item:last-child {
-        border-bottom: none;
-      }
-      .ac-item:hover {
-        background: var(--border-color);
-      }
-      .ac-active {
-        background: var(--primary) !important;
-        color: white !important;
-      }
-      .ac-active .sub-text {
-        color: rgba(255, 255, 255, 0.8) !important;
-      }
-      .ac-active .stok-text {
-        color: white !important;
-      }
-
-      /* Kolom input opname perlu ruang minimum agar label pilihan tidak
-         tertutup ikon dropdown pada viewport laptop yang lebih sempit. */
-      .opname-adjust-table {
-        min-width: 64rem;
-      }
-      .opname-adjust-table .opname-type-column {
-        width: 13.5rem;
-        min-width: 13.5rem;
-      }
-      .opname-adjust-table .opname-qty-column {
-        width: 7rem;
-        min-width: 7rem;
-      }
-      .opname-adjust-table .opname-action-column {
-        width: 4.5rem;
-        min-width: 4.5rem;
-        text-align: center;
-      }
-      .opname-adjust-table .opname-type-select {
-        width: 100%;
-        min-width: 0;
-        white-space: nowrap;
-      }
-
-      @media (max-width: 640px) {
-        .opname-adjust-table {
-          min-width: 0;
-        }
-      }
+      .inventory-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+      .inventory-tab{padding:9px 16px;border-radius:999px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer}
+      .inventory-tab.active{border-color:var(--primary);background:var(--primary);color:#fff}
+      .doc-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(340px,.65fr);gap:16px;align-items:start}
+      .doc-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+      .doc-meta .wide{grid-column:1/-1}
+      .search-wrap{position:relative}
+      .search-results{position:absolute;left:0;right:0;top:100%;z-index:30;background:var(--card-bg,#fff);border:1px solid var(--border-color);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.18);max-height:320px;overflow:auto;display:none}
+      .search-result{display:flex;justify-content:space-between;gap:12px;padding:11px 13px;border-bottom:1px solid var(--border-color);cursor:pointer}
+      .search-result:hover,.search-result.active{background:color-mix(in srgb,var(--primary) 13%,transparent)}
+      .search-result:last-child{border-bottom:0}
+      .document-table{min-width:780px}
+      .qty-input{width:110px;text-align:right}
+      .diff-plus{color:#059669;font-weight:800}.diff-minus{color:#dc2626;font-weight:800}
+      .hint-box{padding:12px 14px;border-radius:10px;background:color-mix(in srgb,var(--primary) 9%,transparent);font-size:13px;color:var(--text-muted);margin-bottom:14px}
+      .history-toolbar{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+      .status-posted{color:#059669;font-weight:800}.status-cancelled{color:#dc2626;font-weight:800}
+      .empty-state{text-align:center;padding:28px;color:var(--text-muted)}
+      .modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.58);display:none;align-items:center;justify-content:center;z-index:1000;padding:20px}
+      .modal-box{width:min(900px,100%);max-height:90vh;overflow:auto;background:var(--card-bg,#fff);border-radius:16px;padding:20px}
+      .modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+      @media(max-width:980px){.doc-layout{grid-template-columns:1fr}}
+      @media(max-width:640px){.doc-meta,.history-toolbar{grid-template-columns:1fr}.doc-meta .wide{grid-column:auto}}
     </style>
   </head>
   <body>
     <div class="app-container">
       <main class="main-content">
-        <button
-          class="btn"
-          style="
-            background: transparent;
-            color: var(--text-muted);
-            padding: 0;
-            margin-bottom: 16px;
-          "
-          onclick="location.href = '/dashboard'"
-        >
-          ← Kembali
-        </button>
+        <button class="btn" style="background:transparent;color:var(--text-muted);padding:0;margin-bottom:16px" onclick="location.href='/dashboard'">← Kembali</button>
         <div class="pg-header">
-          <div>
-            <h1>📋 Persediaan Stok</h1>
-            <p>Mutasi stok, stok menipis, dan penyesuaian / opname.</p>
-          </div>
+          <div><h1>📦 Persediaan</h1><p>Item masuk, item keluar, saldo awal, opname fisik, dan kartu mutasi.</p></div>
         </div>
 
-        <div style="display: flex; gap: 8px; margin-bottom: 20px">
-          <button
-            id="tbMutasi"
-            onclick="switchTab('mutasi')"
-            style="
-              padding: 8px 20px;
-              border-radius: 100px;
-              border: 2px solid var(--primary);
-              background: var(--primary);
-              color: #fff;
-              font-weight: 700;
-              cursor: pointer;
-              font-family: inherit;
-            "
-          >
-            📜 Mutasi Stok
-          </button>
-          <button
-            id="tbLow"
-            onclick="switchTab('low')"
-            style="
-              padding: 8px 20px;
-              border-radius: 100px;
-              border: 2px solid var(--border-color);
-              background: transparent;
-              color: var(--text-muted);
-              font-weight: 700;
-              cursor: pointer;
-              font-family: inherit;
-            "
-          >
-            ⚠️ Stok Menipis
-          </button>
-          <button
-            id="tbOpname"
-            onclick="switchTab('opname')"
-            style="
-              padding: 8px 20px;
-              border-radius: 100px;
-              border: 2px solid var(--border-color);
-              background: transparent;
-              color: var(--text-muted);
-              font-weight: 700;
-              cursor: pointer;
-              font-family: inherit;
-            "
-          >
-            📊 Penyesuaian & Opname
-          </button>
+        <div class="inventory-tabs" id="inventoryTabs">
+          <button class="inventory-tab" data-tab="mutasi" data-permission="master.stock_card">📜 Mutasi</button>
+          <button class="inventory-tab" data-tab="low" data-permission="inventory.item_in">⚠️ Stok Menipis</button>
+          <button class="inventory-tab" data-tab="item_in" data-permission="inventory.item_in">⬇ Item Masuk</button>
+          <button class="inventory-tab" data-tab="item_out" data-permission="inventory.item_out">⬆ Item Keluar</button>
+          <button class="inventory-tab" data-tab="opening_stock" data-permission="inventory.opening_stock">🏁 Saldo Awal</button>
+          <button class="inventory-tab" data-tab="stock_opname" data-permission="inventory.stock_opname">📊 Stok Opname</button>
         </div>
 
-        <div id="pnlMutasi">
-          <div class="filter-bar">
-            <input
-              id="mStart"
-              type="date"
-              class="input-control"
-              onchange="loadMutasi()"
-            />
-            <input
-              id="mEnd"
-              type="date"
-              class="input-control"
-              onchange="loadMutasi()"
-            />
-            <select id="mType" class="input-control" onchange="loadMutasi()">
-              <option value="">Semua Tipe</option>
-              <option value="in">Masuk</option>
-              <option value="out">Keluar</option>
-              <option value="transfer_in">Transfer Masuk</option>
-              <option value="transfer_out">Transfer Keluar</option>
-              <option value="internal_transfer">Pindah Rak (Internal)</option>
-              <option value="sale">Penjualan Kasir</option>
-            </select>
-          </div>
-          <div class="tbl-wrap">
-            <table class="tbl">
-              <thead>
-                <tr>
-                  <th>Tanggal</th>
-                  <th>Referensi</th>
-                  <th>Nama Barang</th>
-                  <th>Tipe Mutasi</th>
-                  <th style="text-align: right; width: 160px">
-                    Perubahan Stok Cabang
-                  </th>
-                  <th>Keterangan</th>
-                </tr>
-              </thead>
-              <tbody id="tblMutasi"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div id="pnlLow" style="display: none">
-          <div class="tbl-wrap">
-            <table class="tbl">
-              <thead>
-                <tr>
-                  <th>Kode</th>
-                  <th>Nama Barang</th>
-                  <th>Stok Saat Ini</th>
-                  <th>Stok Minimum</th>
-                  <th>Status</th>
-                  <th>Aksi</th>
-                </tr>
-              </thead>
-              <tbody id="tblLow"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div id="pnlOpname" style="display: none">
-          <div class="card" style="padding: 24px; margin-bottom: 16px">
-            <h3 style="margin: 0 0 8px">📊 Form Penyesuaian Stok Massal</h3>
-            <p
-              style="
-                color: var(--text-muted);
-                margin-bottom: 20px;
-                font-size: 14px;
-              "
-            >
-              Cari dan kumpulkan barang yang ingin disesuaikan stoknya ke dalam
-              daftar di bawah ini. Atur perubahannya, lalu klik simpan
-              sekaligus.
-            </p>
-
-            <div class="input-group" style="margin-bottom: 16px">
-              <label>Jenis Opname (Jurnal) *</label>
-              <select id="adjOpnameMode" class="input-control">
-                <option value="running">
-                  Opname Berjalan (Selisih → Pendapatan/Beban)
-                </option>
-                <option value="opening">
-                  Setup Awal Stok (Masuk ke Modal Transisi, bukan laba rugi)
-                </option>
+        <section id="pnlMutasi" class="inventory-panel">
+          <div class="card" style="padding:18px">
+            <div class="filter-bar">
+              <input id="mStart" type="date" class="input-control" />
+              <input id="mEnd" type="date" class="input-control" />
+              <select id="mType" class="input-control">
+                <option value="">Semua tipe</option><option value="item_in">Item Masuk</option><option value="item_out">Item Keluar</option>
+                <option value="opening_stock">Saldo Awal</option><option value="opname_in">Surplus Opname</option><option value="opname_out">Susut Opname</option>
+                <option value="transfer_in">Transfer Masuk</option><option value="transfer_out">Transfer Keluar</option><option value="sale">Penjualan</option>
               </select>
-              <div style="margin-top: 6px; font-size: 12px; color: var(--text-muted)">
-                Gunakan <b>Setup Awal</b> hanya saat pertama kali input stok awal,
-                agar tidak terlihat seperti “untung besar” di laporan laba rugi.
-              </div>
+              <button class="btn btn-primary" onclick="loadMutasi()">Tampilkan</button>
             </div>
-
-            <div
-              style="
-                display: flex;
-                gap: 12px;
-                align-items: flex-end;
-                margin-bottom: 24px;
-              "
-            >
-              <div class="autocomplete-container">
-                <label>🔍 Cari Barang (Ketik Nama / Kode / Barcode)</label>
-                <input
-                  type="text"
-                  id="adjSearch"
-                  class="input-control"
-                  placeholder="Mulai ketik nama atau kode barang disini..."
-                  autocomplete="off"
-                />
-                <div id="autocomplete-list" class="autocomplete-list"></div>
-              </div>
-              <button
-                class="btn btn-primary"
-                onclick="tambahKeDaftarManual()"
-                style="padding: 12px 24px; font-weight: bold"
-              >
-                ➕ Tambah
-              </button>
-            </div>
-
-            <div
-              class="tbl-wrap"
-              style="
-                margin-bottom: 20px;
-                border: 1px solid var(--border-color);
-                border-radius: 12px;
-              "
-            >
-              <table class="tbl opname-adjust-table">
-                <thead>
-                  <tr>
-                    <th>Nama Barang</th>
-                    <th>Stok Sistem</th>
-                    <th class="opname-type-column">Tipe Penyesuaian</th>
-                    <th class="opname-qty-column">Jumlah</th>
-                    <th>Keterangan</th>
-                    <th class="opname-action-column">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody id="tblAdjustList">
-                  <tr>
-                    <td
-                      colspan="6"
-                      style="
-                        text-align: center;
-                        padding: 30px;
-                        color: var(--text-muted);
-                        font-style: italic;
-                      "
-                    >
-                      Belum ada barang di dalam daftar. Silakan cari dan tambah
-                      barang di atas.
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <button
-              class="btn btn-primary"
-              onclick="simpanSemuaPenyesuaian()"
-              style="
-                width: 100%;
-                padding: 14px;
-                font-size: 16px;
-                box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2);
-              "
-            >
-              ✓ Simpan Semua Penyesuaian ke Database
-            </button>
+            <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Tanggal</th><th>Referensi</th><th>Barang</th><th>Tipe</th><th style="text-align:right">Perubahan</th><th>Keterangan</th></tr></thead><tbody id="tblMutasi"></tbody></table></div>
           </div>
-        </div>
+        </section>
+
+        <section id="pnlLow" class="inventory-panel" style="display:none">
+          <div class="card" style="padding:18px"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Kode</th><th>Barang</th><th style="text-align:right">Stok</th><th style="text-align:right">Minimum</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="tblLow"></tbody></table></div></div>
+        </section>
+
+        <section id="pnlDocument" class="inventory-panel" style="display:none">
+          <div class="doc-layout">
+            <div class="card" style="padding:20px">
+              <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px"><div><h2 id="docTitle" style="margin:0 0 5px"></h2><p id="docDescription" style="margin:0;color:var(--text-muted)"></p></div><span id="docBadge" class="bb"></span></div>
+              <div id="docHint" class="hint-box"></div>
+              <div class="doc-meta">
+                <div class="input-group"><label>Tanggal *</label><input id="docDate" type="date" class="input-control" /></div>
+                <div class="input-group"><label>Gudang *</label><select id="docWarehouse" class="input-control"></select></div>
+                <div id="surplusAccountGroup" class="input-group" style="display:none"><label id="surplusAccountLabel">Akun Penambah Stok</label><select id="surplusAccount" class="input-control"></select></div>
+                <div id="shortageAccountGroup" class="input-group" style="display:none"><label id="shortageAccountLabel">Akun Pengurang Stok</label><select id="shortageAccount" class="input-control"></select></div>
+                <div class="input-group wide"><label>Keterangan dokumen</label><input id="docNotes" class="input-control" placeholder="Contoh: bonus supplier, barang rusak, atau opname bulanan" /></div>
+                <div class="input-group wide search-wrap"><label>Scan barcode atau cari barang</label><input id="docSearch" class="input-control" autocomplete="off" placeholder="Ketik kode, barcode, atau nama barang..." /><div id="docSearchResults" class="search-results"></div></div>
+              </div>
+              <div class="tbl-wrap" style="margin-top:16px"><table class="tbl document-table"><thead><tr><th>Barang</th><th id="systemStockHead">Stok Buku</th><th id="qtyHead">Jumlah</th><th id="diffHead">Selisih</th><th>Keterangan</th><th></th></tr></thead><tbody id="docLines"></tbody></table></div>
+              <button id="saveDocumentBtn" class="btn btn-primary" style="width:100%;padding:13px;margin-top:16px;font-weight:800" onclick="saveDocument()">Simpan Dokumen</button>
+            </div>
+
+            <div class="card" style="padding:18px">
+              <h3 style="margin:0 0 12px">Riwayat Dokumen</h3>
+              <div class="history-toolbar"><input id="historySearch" class="input-control" placeholder="Nomor / barang" /><select id="historyStatus" class="input-control"><option value="">Semua status</option><option value="posted">Aktif</option><option value="cancelled">Dibatalkan</option></select></div>
+              <button class="btn" style="width:100%;margin-bottom:12px" onclick="loadHistory()">Cari Riwayat</button>
+              <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Tanggal / Nomor</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="tblHistory"></tbody></table></div>
+            </div>
+          </div>
+        </section>
       </main>
     </div>
 
-    <script src="/js/api.js"></script>
+    <div class="modal-overlay" id="detailModal" onclick="if(event.target===this)closeDetail()"><div class="modal-box"><div class="modal-head"><h2 id="detailTitle" style="margin:0">Detail Dokumen</h2><button class="btn" onclick="closeDetail()">✕</button></div><div id="detailBody"></div></div></div>
+
+    <script src="/js/api.js?v=20260820-inventory-documents"></script>
     <script src="/js/theme.js"></script>
     <script>
       requireAuth();
-      let allItems = [];
-      let adjustList = [];
+      const DOCS={
+        item_in:{title:"Item Masuk",badge:"BARANG MASUK",description:"Barang yang diterima tanpa transaksi pembelian, misalnya bonus atau hadiah supplier.",hint:"Jumlah yang dimasukkan akan menambah stok gudang dan dinilai memakai harga beli pada master barang.",qty:"Jumlah Masuk"},
+        item_out:{title:"Item Keluar",badge:"BARANG KELUAR",description:"Barang keluar tanpa pendapatan, misalnya rusak, hilang, atau dipakai operasional.",hint:"Stok dan nilai FIFO akan berkurang. Gunakan Penjualan untuk barang yang menghasilkan pendapatan.",qty:"Jumlah Keluar"},
+        opening_stock:{title:"Saldo Awal Item",badge:"SATU KALI",description:"Stok saat pertama kali mulai menggunakan aplikasi.",hint:"Hanya dapat diisi untuk barang dan gudang yang belum memiliki stok atau riwayat batch. Nilainya masuk Modal Transisi, bukan laba-rugi.",qty:"Stok Awal"},
+        stock_opname:{title:"Stok Opname",badge:"STOK FISIK",description:"Cocokkan stok buku dengan jumlah barang yang benar-benar ada di gudang.",hint:"Masukkan jumlah fisik saat ini. Arah masuk/keluar dan selisih dihitung otomatis oleh sistem.",qty:"Stok Fisik"}
+      };
+      const state={tab:"mutasi",docType:null,warehouses:[],accounts:null,lines:[],searchItems:[],searchIndex:-1,searchTimer:null};
+      const esc=(v)=>String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
+      const num=(v)=>new Intl.NumberFormat("id-ID",{maximumFractionDigits:4}).format(Number(v)||0);
+      const money=(v)=>new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0}).format(Number(v)||0);
+      const allowed=(key,action="view")=>typeof hasPermission!=="function"||hasPermission(key,action,typeof getPermissionState==="function"?getPermissionState():undefined);
 
-      // HELPER: Format Angka
-      function formatNum(n) {
-        return new Intl.NumberFormat("id-ID").format(n || 0);
+      async function init(){
+        if(typeof loadMyPermissions==="function")await loadMyPermissions();
+        document.getElementById("mStart").value=today().slice(0,7)+"-01";document.getElementById("mEnd").value=today();document.getElementById("docDate").value=today();
+        document.querySelectorAll("[data-permission]").forEach(b=>{if(!allowed(b.dataset.permission))b.style.display="none"});
+        bindEvents();
+        const requested=new URLSearchParams(location.search).get("tab");
+        const valid=["mutasi","low",...Object.keys(DOCS)];const requestedButton=document.querySelector(`[data-tab="${requested}"]`);const fallback=[...document.querySelectorAll(".inventory-tab")].find(b=>b.style.display!=="none")?.dataset.tab;
+        if(fallback)switchTab(valid.includes(requested)&&requestedButton?.style.display!=="none"?requested:fallback);else renderAccessDenied();
       }
-      // HELPER: Format Tanggal Aman
-      function amanFmtDate(d) {
-        try {
-          return typeof fmtDate === "function" ? fmtDate(d) : d;
-        } catch (e) {
-          return d;
-        }
+      function bindEvents(){
+        document.querySelectorAll(".inventory-tab").forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
+        document.getElementById("docWarehouse").onchange=()=>{state.lines=[];renderLines();loadHistory()};
+        const search=document.getElementById("docSearch");
+        search.oninput=()=>{clearTimeout(state.searchTimer);state.searchTimer=setTimeout(searchItems,180)};
+        search.onkeydown=e=>{const n=state.searchItems.length;if((e.key==="ArrowDown"||e.key==="ArrowUp")&&n){e.preventDefault();state.searchIndex=(state.searchIndex+(e.key==="ArrowDown"?1:-1)+n)%n;renderSearch()}else if(e.key==="Enter"){e.preventDefault();const item=state.searchItems[state.searchIndex>=0?state.searchIndex:0];if(item)addLine(item)}else if(e.key==="Escape")closeSearch()};
+        document.addEventListener("click",e=>{if(!e.target.closest(".search-wrap"))closeSearch()});
       }
-
-      // --- NAVIGASI TAB ---
-      function switchTab(t) {
-        ["mutasi", "low", "opname"].forEach((x) => {
-          document.getElementById(
-            "pnl" + x.charAt(0).toUpperCase() + x.slice(1),
-          ).style.display = x === t ? "block" : "none";
-          const btn = document.getElementById(
-            "tb" + x.charAt(0).toUpperCase() + x.slice(1),
-          );
-          const on =
-            "padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit";
-          const off =
-            "padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit";
-          btn.style.cssText = x === t ? on : off;
-        });
-
-        if (t === "mutasi") loadMutasi();
-        if (t === "low") loadLow();
-        if (t === "opname") {
-          setTimeout(() => {
-            document.getElementById("adjSearch").focus();
-          }, 100);
-        }
+      async function switchTab(tab){
+        state.tab=tab;document.querySelectorAll(".inventory-tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
+        document.querySelectorAll(".inventory-panel").forEach(p=>p.style.display="none");
+        if(tab==="mutasi"){document.getElementById("pnlMutasi").style.display="block";loadMutasi();return}
+        if(tab==="low"){document.getElementById("pnlLow").style.display="block";loadLow();return}
+        state.docType=tab;state.lines=[];document.getElementById("pnlDocument").style.display="block";
+        await ensureDocumentMeta();configureDocument();renderLines();loadHistory();setTimeout(()=>document.getElementById("docSearch").focus(),80);
+        history.replaceState(null,"",`/inventory?tab=${tab}`);
       }
-
-      // --- INISIALISASI ---
-      async function init() {
-        allItems = await api("GET", "/items/?limit=2000");
-        setupAutocomplete(document.getElementById("adjSearch"));
-        subscribeItemMasterChanges(refreshInventoryItems);
-
-        // Tambahkan fungsi today() yang aman
-        function today() {
-          const d = new Date();
-          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-        }
-
-        // Atur filter dari tanggal 1 sampai hari ini
-        document.getElementById("mStart").value = today().slice(0, 7) + "-01"; // ✅ AMAN
-        document.getElementById("mEnd").value = today(); // ✅ AMAN
-
-        const requestedTab = new URLSearchParams(location.search).get("tab");
-        switchTab(
-          ["mutasi", "low", "opname"].includes(requestedTab)
-            ? requestedTab
-            : "mutasi",
-        );
+      async function ensureDocumentMeta(){
+        if(!state.warehouses.length)state.warehouses=await api("GET","/inventory/document-warehouses");
+        if(!state.accounts)state.accounts=await api("GET","/inventory/document-accounts");
+        const select=document.getElementById("docWarehouse");const selected=select.value;
+        select.innerHTML=state.warehouses.map(w=>`<option value="${w.id}">${esc(w.name)}${w.is_default?" (Default)":""}</option>`).join("");if(selected)select.value=selected;
       }
-
-      async function refreshInventoryItems() {
-        try {
-          allItems = await api("GET", "/items/?limit=2000");
-          // Autocomplete membaca allItems saat pengguna mengetik, sehingga
-          // daftar baru langsung tersedia tanpa mengganggu penyesuaian yang
-          // sudah ada di layar.
-        } catch (error) {
-          console.error("Gagal menyegarkan barang inventaris", error);
-        }
+      function configureDocument(){
+        const cfg=DOCS[state.docType];document.getElementById("docTitle").textContent=cfg.title;document.getElementById("docDescription").textContent=cfg.description;document.getElementById("docHint").textContent=cfg.hint;document.getElementById("docBadge").textContent=cfg.badge;document.getElementById("qtyHead").textContent=cfg.qty;
+        const opname=state.docType==="stock_opname";document.getElementById("systemStockHead").style.display=opname?"":"none";document.getElementById("diffHead").style.display=opname?"":"none";
+        setupAccounts();const save=document.getElementById("saveDocumentBtn"),permission={item_in:"inventory.item_in",item_out:"inventory.item_out",opening_stock:"inventory.opening_stock",stock_opname:"inventory.stock_opname"}[state.docType];save.disabled=!allowed(permission,"create");save.textContent=save.disabled?`Tidak memiliki izin membuat ${cfg.title}`:`Simpan ${cfg.title}`;
       }
-
-      window.addEventListener("message", (event) => {
-        if (event.origin !== location.origin || event.source !== window.parent)
-          return;
-        if (event.data?.type !== "fpos-route-state") return;
-
-        const target = new URL(event.data.url, location.origin);
-        if (target.pathname.replace(/\.html$/, "") !== "/inventory") return;
-        const requestedTab = target.searchParams.get("tab");
-        if (!["mutasi", "low", "opname"].includes(requestedTab)) return;
-
-        history.replaceState(
-          null,
-          "",
-          `${target.pathname}${target.search}${target.hash}`,
-        );
-        switchTab(requestedTab);
-      });
-
-      // --- AUTOCOMPLETE ---
-      function setupAutocomplete(inp) {
-        let currentFocus;
-        const listContainer = document.getElementById("autocomplete-list");
-
-        inp.addEventListener("input", function (e) {
-          let val = this.value;
-          closeAllLists();
-          if (!val) return false;
-          currentFocus = -1;
-
-          listContainer.style.display = "block";
-          listContainer.innerHTML = "";
-
-          let matches = allItems
-            .filter(
-              (item) =>
-                item.name.toLowerCase().includes(val.toLowerCase()) ||
-                (item.code &&
-                  item.code.toLowerCase().includes(val.toLowerCase())) ||
-                (item.barcode &&
-                  item.barcode.toLowerCase().includes(val.toLowerCase())),
-            )
-            .slice(0, 50);
-
-          if (matches.length === 0) {
-            listContainer.innerHTML =
-              '<div style="padding:12px 16px; color:var(--text-muted); font-style:italic;">Barang tidak ditemukan...</div>';
-            return;
-          }
-
-          matches.forEach((item) => {
-            let b = document.createElement("div");
-            b.setAttribute("class", "ac-item");
-            b.innerHTML = `<div><strong>${item.name}</strong> <span class="sub-text" style="color:var(--text-muted);font-size:12px;margin-left:8px;">[${item.code}]</span></div><div class="stok-text" style="font-weight:bold; color:var(--primary);">Stok: ${formatNum(item.stock)}</div>`;
-            b.addEventListener("click", function (e) {
-              tambahKeDaftarLangsung(item);
-              closeAllLists();
-            });
-            listContainer.appendChild(b);
-          });
-        });
-
-        inp.addEventListener("keydown", function (e) {
-          let x = listContainer.getElementsByClassName("ac-item");
-          const isNextKey = e.key === "ArrowDown" || e.key === "ArrowRight";
-          const isPreviousKey =
-            e.key === "ArrowUp" || e.key === "ArrowLeft";
-          if (isNextKey || isPreviousKey) {
-            e.preventDefault();
-            currentFocus += isNextKey ? 1 : -1;
-            addActive(x);
-          } else if (e.key === "Tab") {
-            if (currentFocus > -1 && x[currentFocus]) x[currentFocus].click();
-            closeAllLists();
-          } else if (e.key === "Escape") {
-            closeAllLists();
-            currentFocus = -1;
-          } else if (e.key === "Enter") {
-            e.preventDefault();
-            if (x.length) {
-              const selected = x[currentFocus > -1 ? currentFocus : 0];
-              if (selected) selected.click();
-            } else {
-              tambahKeDaftarManual();
-            }
-          }
-        });
-
-        function addActive(x) {
-          if (!x) return false;
-          removeActive(x);
-          if (currentFocus >= x.length) currentFocus = 0;
-          if (currentFocus < 0) currentFocus = x.length - 1;
-          x[currentFocus].classList.add("ac-active");
-          x[currentFocus].scrollIntoView({
-            behavior: "smooth",
-            block: "nearest",
-          });
-        }
-        function removeActive(x) {
-          for (let i = 0; i < x.length; i++) x[i].classList.remove("ac-active");
-        }
-        function closeAllLists(elmnt) {
-          if (elmnt != inp && elmnt != listContainer)
-            listContainer.style.display = "none";
-        }
-        document.addEventListener("click", function (e) {
-          closeAllLists(e.target);
-        });
+      function setupAccounts(){
+        const meta=state.accounts||{};const defs=meta.defaults?.[state.docType]||{};const showPlus=!!defs.surplus,showMinus=!!defs.shortage;
+        const plus=document.getElementById("surplusAccountGroup"),minus=document.getElementById("shortageAccountGroup");plus.style.display=showPlus?"block":"none";minus.style.display=showMinus?"block":"none";
+        const options=(type,code)=>{const eligible=(meta.accounts||[]).filter(a=>type.includes(a.type));if(!meta.can_override)return `<option value="">${esc(code)} (akun default)</option>`;return eligible.map(a=>`<option value="${a.id}" ${a.code===code?"selected":""}>${esc(a.code)} - ${esc(a.name)}</option>`).join("")};
+        document.getElementById("surplusAccount").innerHTML=options(state.docType==="opening_stock"?["equity"]:["revenue","equity"],defs.surplus);document.getElementById("shortageAccount").innerHTML=options(["expense"],defs.shortage);
+        document.getElementById("surplusAccount").disabled=!meta.can_override;document.getElementById("shortageAccount").disabled=!meta.can_override;
+        document.getElementById("surplusAccountLabel").textContent=state.docType==="stock_opname"?"Akun Surplus":"Akun Lawan Persediaan";document.getElementById("shortageAccountLabel").textContent=state.docType==="stock_opname"?"Akun Kekurangan":"Akun Beban";
       }
-
-      // --- FUNGSI OPNAME ---
-      function tambahKeDaftarLangsung(item) {
-        if (adjustList.find((x) => x.id === item.id)) {
-          document.getElementById("adjSearch").value = "";
-          document.getElementById("adjSearch").focus();
-          return showToast("Barang ini sudah ada di dalam daftar", "warning");
-        }
-        adjustList.unshift({
-          id: item.id,
-          name: item.name,
-          code: item.code,
-          stock: item.stock,
-          type: "in",
-          qty: 1,
-          note: "Penyesuaian manual",
-        });
-        document.getElementById("adjSearch").value = "";
-        document.getElementById("adjSearch").focus();
-        renderAdjustList();
+      async function searchItems(){
+        const q=document.getElementById("docSearch").value.trim(),wid=document.getElementById("docWarehouse").value;if(!q||!wid)return closeSearch();
+        try{state.searchItems=await api("GET",`/inventory/item-snapshot?warehouse_id=${wid}&search=${encodeURIComponent(q)}&limit=30`);state.searchIndex=state.searchItems.length?0:-1;renderSearch()}catch(e){showToast(e.message,"error")}
       }
-
-      function tambahKeDaftarManual() {
-        const searchInput = document.getElementById("adjSearch");
-        const searchVal = searchInput.value.trim().toLowerCase();
-        if (!searchVal) {
-          searchInput.focus();
-          return;
-        }
-        const item = allItems.find(
-          (x) =>
-            x.code.toLowerCase() === searchVal ||
-            (x.barcode && x.barcode.toLowerCase() === searchVal),
-        );
-        if (!item) {
-          searchInput.select();
-          return showToast("Pilih dari daftar dropdown!", "error");
-        }
-        tambahKeDaftarLangsung(item);
+      function renderSearch(){
+        const box=document.getElementById("docSearchResults");if(!state.searchItems.length){box.innerHTML='<div class="empty-state">Barang tidak ditemukan</div>';box.style.display="block";return}
+        box.innerHTML=state.searchItems.map((i,k)=>`<div class="search-result ${k===state.searchIndex?"active":""}" onclick="addLineByIndex(${k})"><div><b>${esc(i.name)}</b><br><small>${esc(i.code)}${i.unit?` · ${esc(i.unit)}`:""}</small></div><div>${i.stock===null?"Stok disembunyikan":`Stok ${num(i.stock)}`}</div></div>`).join("");box.style.display="block";
       }
-
-      function renderAdjustList() {
-        const tbody = document.getElementById("tblAdjustList");
-        if (adjustList.length === 0) {
-          tbody.innerHTML =
-            '<tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted); font-style:italic;">Belum ada barang di dalam daftar. Silakan cari dan tambah barang di atas.</td></tr>';
-          return;
-        }
-        tbody.innerHTML = adjustList
-          .map(
-            (item, index) => `
-          <tr style="animation: fadeIn 0.3s ease;">
-            <td><b>${item.name}</b><br><small style="color:var(--text-muted)">${item.code}</small></td>
-            <td style="font-size:16px; font-weight:bold;">${formatNum(item.stock)}</td>
-            <td><select class="input-control opname-type-select" style="margin:0; padding:8px;" onchange="updateAdjItem(${index}, 'type', this.value)"><option value="in" ${item.type === "in" ? "selected" : ""}>⬇ Masuk (+)</option><option value="out" ${item.type === "out" ? "selected" : ""}>⬆ Keluar (-)</option><option value="adjust" ${item.type === "adjust" ? "selected" : ""}>↕ Set Ulang (=)</option></select></td>
-            <td><input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0" class="input-control" style="margin:0; padding:8px; text-align:center;" value="${item.qty}" oninput="updateAdjItem(${index}, 'qty', this.value)"></td>
-            <td><input type="text" class="input-control" style="margin:0; padding:8px;" value="${item.note}" placeholder="Alasan penyesuaian..." oninput="updateAdjItem(${index}, 'note', this.value)"></td>
-            <td style="text-align:center;"><button class="btn" style="background:#ef4444; color:white; padding:6px 10px; border-radius:6px; border:none;" onclick="removeAdjItem(${index})">✕</button></td>
-          </tr>
-        `,
-          )
-          .join("");
+      function addLineByIndex(k){addLine(state.searchItems[k])}
+      function addLine(item){
+        if(state.lines.some(x=>x.id===item.id)){showToast("Barang sudah ada dalam dokumen","warning");return}
+        state.lines.push({...item,qty:state.docType==="stock_opname"?0:1,notes:""});document.getElementById("docSearch").value="";closeSearch();renderLines();document.getElementById("docSearch").focus();
       }
-
-      function updateAdjItem(index, field, value) {
-        if (field === "qty")
-          value = parseDesimal(value, { maximumFractionDigits: 4 });
-        adjustList[index][field] = value;
+      function closeSearch(){document.getElementById("docSearchResults").style.display="none";state.searchItems=[];state.searchIndex=-1}
+      function updateLine(index,field,value){state.lines[index][field]=field==="qty"?Math.max(0,Number(String(value).replace(",","."))||0):value;if(field==="qty")renderDiff(index)}
+      function renderDiff(index){const cell=document.getElementById(`diff-${index}`);if(!cell)return;const line=state.lines[index];if(line.stock===null){cell.textContent="Dihitung saat simpan";cell.className="";return}const diff=line.qty-Number(line.stock||0);cell.textContent=(diff>0?"+":"")+num(diff);cell.className=diff>0?"diff-plus":diff<0?"diff-minus":""}
+      function removeLine(index){state.lines.splice(index,1);renderLines()}
+      function renderLines(){
+        const body=document.getElementById("docLines"),opname=state.docType==="stock_opname";if(!state.lines.length){body.innerHTML='<tr><td colspan="6" class="empty-state">Belum ada barang. Scan barcode atau cari barang di atas.</td></tr>';return}
+        body.innerHTML=state.lines.map((i,k)=>`<tr><td><b>${esc(i.name)}</b><br><small>${esc(i.code)}</small></td><td style="display:${opname?"table-cell":"none"}">${i.stock===null?"••••":num(i.stock)}</td><td><input class="input-control qty-input" inputmode="decimal" value="${i.qty}" oninput="updateLine(${k},'qty',this.value)" /></td><td id="diff-${k}" style="display:${opname?"table-cell":"none"}"></td><td><input class="input-control" value="${esc(i.notes)}" oninput="updateLine(${k},'notes',this.value)" placeholder="Opsional" /></td><td><button class="btn" style="color:#dc2626" onclick="removeLine(${k})">✕</button></td></tr>`).join("");if(opname)state.lines.forEach((_,k)=>renderDiff(k));
       }
-      function removeAdjItem(index) {
-        adjustList.splice(index, 1);
-        renderAdjustList();
+      async function saveDocument(){
+        if(!state.lines.length)return showToast("Tambahkan minimal satu barang","warning");const wid=Number(document.getElementById("docWarehouse").value);if(!wid)return showToast("Pilih gudang","warning");
+        const lines=state.lines.map(i=>state.docType==="stock_opname"?{item_id:i.id,physical_qty:i.qty,snapshot_token:i.snapshot_token,notes:i.notes}:{item_id:i.id,qty:i.qty,notes:i.notes});
+        if(lines.some(x=>(state.docType==="stock_opname"?x.physical_qty:x.qty)<0)||lines.some(x=>state.docType!=="stock_opname"&&x.qty<=0))return showToast("Jumlah barang tidak valid","error");
+        const payload={type:state.docType,date:document.getElementById("docDate").value,warehouse_id:wid,notes:document.getElementById("docNotes").value.trim(),lines};
+        const plus=document.getElementById("surplusAccount").value,minus=document.getElementById("shortageAccount").value;if(plus)payload.surplus_account_id=Number(plus);if(minus)payload.shortage_account_id=Number(minus);
+        if(!(await showConfirm(`Simpan ${DOCS[state.docType].title} berisi ${lines.length} barang?`)))return;
+        try{if(typeof showLoading==="function")showLoading("Menyimpan dokumen persediaan...");const saved=await api("POST","/inventory/documents",payload);if(typeof hideLoading==="function")hideLoading();showToast(`${saved.number} berhasil disimpan`,"success");state.lines=[];document.getElementById("docNotes").value="";renderLines();loadHistory();loadMutasi()}catch(e){if(typeof hideLoading==="function")hideLoading();showToast(e.message,e.message.includes("berubah saat opname")?"warning":"error")}
       }
-
-      async function simpanSemuaPenyesuaian() {
-        if (adjustList.length === 0)
-          return showToast("Daftar masih kosong", "warning");
-        const opnameMode =
-          document.getElementById("adjOpnameMode")?.value || "running";
-        for (let item of adjustList) {
-          if (item.qty < 0)
-            return showToast(`Jumlah untuk ${item.name} tidak valid`, "error");
-          if (!item.note.trim())
-            return showToast(
-              `Keterangan untuk ${item.name} wajib diisi`,
-              "error",
-            );
-        }
-        const confirmMsg =
-          opnameMode === "opening"
-            ? `Mode SETUP AWAL: jurnal surplus stok akan masuk ke akun 3-1999 (Modal Transisi), bukan Pendapatan, jadi tidak mempengaruhi laba rugi.\n\nLanjutkan simpan ${adjustList.length} penyesuaian?`
-            : `Yakin ingin menyimpan ${adjustList.length} penyesuaian?`;
-        if (!(await showConfirm(confirmMsg))) return;
-        try {
-          if (typeof showLoading === "function")
-            showLoading("Memproses penyesuaian...");
-          for (let item of adjustList) {
-            await api("POST", "/inventory/adjust", {
-              item_id: item.id,
-              type: item.type,
-              qty: item.qty,
-              description: item.note,
-              opname_mode: opnameMode,
-            });
-          }
-          if (typeof hideLoading === "function") hideLoading();
-          showToast("Semua penyesuaian berhasil disimpan ✓", "success");
-          adjustList = [];
-          renderAdjustList();
-          allItems = await api("GET", "/items/?limit=2000");
-          loadMutasi();
-        } catch (ex) {
-          if (typeof hideLoading === "function") hideLoading();
-          showToast(ex.message, "error");
-        }
+      async function loadHistory(){
+        if(!state.docType)return;const p=new URLSearchParams({type:state.docType,limit:"100"}),status=document.getElementById("historyStatus").value,search=document.getElementById("historySearch").value.trim(),wid=document.getElementById("docWarehouse").value;if(status)p.set("status",status);if(search)p.set("search",search);if(wid)p.set("warehouse_id",wid);
+        try{const rows=await api("GET",`/inventory/documents?${p}`);document.getElementById("tblHistory").innerHTML=rows.length?rows.map(d=>`<tr><td><b>${esc(d.number)}</b><br><small>${esc(d.date)} · ${d.line_count} barang${d.total_value===null?"":` · ${money(d.total_value)}`}</small></td><td class="status-${d.status}">${d.status==="posted"?"AKTIF":"DIBATALKAN"}</td><td><button class="btn" onclick="showDetail(${d.id})">Detail</button>${d.can_cancel?` <button class="btn" style="color:#dc2626" onclick="cancelDocument(${d.id},'${esc(d.number)}')">Batalkan</button>`:""}</td></tr>`).join(""):'<tr><td colspan="3" class="empty-state">Belum ada dokumen</td></tr>'}catch(e){showToast(e.message,"error")}
       }
-
-      function quickAdjust(id, name, stok) {
-        switchTab("opname");
-        if (!adjustList.find((x) => x.id === id)) {
-          const item = allItems.find((x) => x.id === id) || { code: "" };
-          adjustList.unshift({
-            id: id,
-            name: name,
-            code: item.code,
-            stock: stok,
-            type: "in",
-            qty: 1,
-            note: "Tambah stok menipis",
-          });
-          renderAdjustList();
-        }
-        showToast(name + " ditambahkan ke form penyesuaian", "success");
+      async function showDetail(id){
+        try{const d=await api("GET",`/inventory/documents/${id}`);document.getElementById("detailTitle").textContent=d.number;document.getElementById("detailBody").innerHTML=`<div class="hint-box"><b>${esc(DOCS[d.type]?.title||d.type)}</b> · ${esc(d.date)} · ${esc(d.warehouse_name)} · <span class="status-${d.status}">${d.status.toUpperCase()}</span><br>${esc(d.notes||"Tanpa keterangan")}${d.cancellation_reason?`<br><b>Alasan batal:</b> ${esc(d.cancellation_reason)}`:""}</div><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Barang</th><th style="text-align:right">Stok Buku</th><th style="text-align:right">Fisik</th><th style="text-align:right">Selisih</th><th style="text-align:right">Nilai</th></tr></thead><tbody>${d.lines.map(i=>`<tr><td><b>${esc(i.item_name)}</b><br><small>${esc(i.item_code)}</small></td><td style="text-align:right">${i.system_qty===null?"••••":num(i.system_qty)}</td><td style="text-align:right">${i.physical_qty===null?"-":num(i.physical_qty)}</td><td style="text-align:right" class="${i.qty_delta>0?"diff-plus":i.qty_delta<0?"diff-minus":""}">${i.qty_delta>0?"+":""}${num(i.qty_delta)}</td><td style="text-align:right">${i.total_cost===null?"••••":money(i.total_cost)}</td></tr>`).join("")}</tbody></table></div>`;document.getElementById("detailModal").style.display="flex"}catch(e){showToast(e.message,"error")}
       }
-
-      // --- LOGIKA UTAMA RENDER TABEL MUTASI ---
-      async function loadMutasi() {
-        const s = document.getElementById("mStart").value,
-          e = document.getElementById("mEnd").value,
-          t = document.getElementById("mType").value;
-        let url = "/inventory/movements?limit=200";
-        if (s) url += `&start_date=${s}`;
-        if (e) url += `&end_date=${e}`;
-        if (t) url += `&type=${t}`;
-
-        try {
-          const d = await api("GET", url);
-
-          document.getElementById("tblMutasi").innerHTML = d.length
-            ? d
-                .map((m) => {
-                  let color = "var(--text-main)";
-                  let sign = "";
-                  let badge = "";
-
-                  // 🔥 LOGIKA WARNA & TANDA YANG BENAR 🔥
-                  if (["in", "transfer_in", "return"].includes(m.type)) {
-                    color = "#10b981"; // Hijau (Naik)
-                    sign = "+";
-                    badge =
-                      '<span style="background:rgba(16,185,129,0.15);color:#10b981;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:bold">MASUK</span>';
-                  } else if (["out", "transfer_out", "sale"].includes(m.type)) {
-                    color = "#ef4444"; // Merah (Turun)
-                    sign = "-";
-                    badge =
-                      '<span style="background:rgba(239,68,68,0.15);color:#ef4444;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:bold">KELUAR</span>';
-                  } else if (m.type === "internal_transfer") {
-                    color = "#94a3b8"; // Abu-abu (Tetap)
-                    sign = "⇄";
-                    badge =
-                      '<span style="background:rgba(148,163,184,0.15);color:#94a3b8;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:bold">PINDAH RAK</span>';
-                  } else {
-                    color = "#94a3b8";
-                    badge = `<span class="bo">${m.type}</span>`;
-                  }
-
-                  return `
-              <tr>
-                <td style="font-size:13px;color:var(--text-muted)">${amanFmtDate(m.date)}</td>
-                <td style="font-family:monospace; color:var(--primary); font-size:12px;">${m.reference || "-"}</td>
-                <td><b>${m.item?.name || "-"}</b></td>
-                <td>${badge}</td>
-                <td style="text-align:right">
-                   <div style="font-size:11px; color:var(--text-muted)">Sebelum: ${formatNum(m.qty_before)}</div>
-                   <div style="font-size:18px; font-weight:900; color:${color}; margin: 2px 0;">${sign} ${formatNum(m.qty)}</div>
-                   <div style="font-size:11px; color:var(--text-muted)">Sesudah: ${formatNum(m.qty_after)}</div>
-                </td>
-                <td style="font-size:12px; color:var(--text-muted)">${m.notes || "-"}</td>
-              </tr>
-            `;
-                })
-                .join("")
-            : '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada mutasi stok</td></tr>';
-        } catch (ex) {
-          showToast(ex.message, "error");
-        }
+      function closeDetail(){document.getElementById("detailModal").style.display="none"}
+      async function cancelDocument(id,number){const reason=prompt(`Alasan pembatalan ${number}:`);if(reason===null)return;if(!reason.trim())return showToast("Alasan pembatalan wajib diisi","warning");if(!(await showConfirm(`Batalkan ${number}? Sistem akan membuat reversal stok dan jurnal.`)))return;try{await api("POST",`/inventory/documents/${id}/cancel`,{reason:reason.trim()});showToast(`${number} berhasil dibatalkan`,"success");loadHistory();loadMutasi()}catch(e){showToast(e.message,"error")}}
+      async function loadMutasi(){
+        const p=new URLSearchParams({start_date:document.getElementById("mStart").value,end_date:document.getElementById("mEnd").value,limit:"200"}),type=document.getElementById("mType").value;if(type)p.set("type",type);try{const rows=await api("GET",`/inventory/movements?${p}`);const incoming=["in","item_in","opening_stock","opname_in","transfer_in","return","reversal_in"];document.getElementById("tblMutasi").innerHTML=rows.length?rows.map(m=>{const plus=incoming.includes(m.type),label={item_in:"ITEM MASUK",item_out:"ITEM KELUAR",opening_stock:"SALDO AWAL",opname_in:"OPNAME +",opname_out:"OPNAME -",reversal_in:"REVERSAL +",reversal_out:"REVERSAL -",sale:"PENJUALAN",transfer_in:"TRANSFER +",transfer_out:"TRANSFER -"}[m.type]||m.type;return `<tr><td>${esc(m.date)}</td><td><b>${esc(m.reference||"-")}</b></td><td>${esc(m.item?.name||"-")}</td><td><span class="${plus?"bg":"br"}">${esc(label)}</span></td><td style="text-align:right" class="${plus?"diff-plus":"diff-minus"}">${plus?"+":"-"}${num(m.qty)}<br><small>${num(m.qty_before)} → ${num(m.qty_after)}</small></td><td>${esc(m.notes||"-")}</td></tr>`}).join(""):'<tr><td colspan="6" class="empty-state">Belum ada mutasi</td></tr>'}catch(e){showToast(e.message,"error")}
       }
-
-      async function loadLow() {
-        try {
-          const d = await api("GET", "/inventory/low-stock");
-          document.getElementById("tblLow").innerHTML = d.length
-            ? d
-                .map(
-                  (i) => `
-              <tr>
-                <td style="font-family:monospace;font-size:13px;color:var(--text-muted)">${i.code || "-"}</td>
-                <td><b>${i.name}</b></td>
-                <td style="font-size:22px;font-weight:900;color:${i.stock <= 0 ? "#ef4444" : "#f59e0b"}">${formatNum(i.stock)}</td>
-                <td style="color:var(--text-muted)">${formatNum(i.min_stock)}</td>
-                <td>${i.stock <= 0 ? '<span class="br">⛔ Habis</span>' : '<span class="bo">⚠️ Menipis</span>'}</td>
-                <td><button class="bsm be" onclick="quickAdjust(${i.id},'${i.name.replace(/'/g, "\\'")}',${i.stock})">Tambah Stok</button></td>
-              </tr>
-            `,
-                )
-                .join("")
-            : '<tr><td colspan="6" style="text-align:center;padding:24px;color:#10b981;font-weight:700">✓ Semua stok aman</td></tr>';
-        } catch (ex) {
-          showToast(ex.message, "error");
-        }
-      }
-
+      async function loadLow(){try{const rows=await api("GET","/inventory/low-stock");document.getElementById("tblLow").innerHTML=rows.length?rows.map(i=>`<tr><td>${esc(i.code)}</td><td><b>${esc(i.name)}</b></td><td style="text-align:right">${num(i.stock)}</td><td style="text-align:right">${num(i.min_stock)}</td><td>${i.stock<=0?'<span class="br">HABIS</span>':'<span class="bo">MENIPIS</span>'}</td><td>${allowed("inventory.stock_opname")?`<button class="btn" onclick="openLowInOpname(${i.id})">Opname</button>`:""}</td></tr>`).join(""):'<tr><td colspan="6" class="empty-state">Semua stok aman</td></tr>'}catch(e){showToast(e.message,"error")}}
+      async function openLowInOpname(id){await switchTab("stock_opname");const wid=document.getElementById("docWarehouse").value;if(!wid)return;const items=await api("GET",`/inventory/item-snapshot?warehouse_id=${wid}&item_id=${id}`);if(items[0])addLine(items[0])}
+      window.addEventListener("message",e=>{if(e.origin!==location.origin||e.data?.type!=="fpos-route-state")return;const tab=new URL(e.data.url,location.origin).searchParams.get("tab");if(["mutasi","low",...Object.keys(DOCS)].includes(tab))switchTab(tab)});
       init();
     </script>
   </body>

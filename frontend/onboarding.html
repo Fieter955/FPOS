@@ -348,6 +348,26 @@
       <!-- STEP 1 — Data Barang                                       -->
       <!-- ══════════════════════════════════════════════════════════ -->
       <div id="step-1" class="step-panel active">
+        <div
+          id="iposSeedCard"
+          class="onboard-card"
+          style="border: 2px solid var(--border-color)"
+        >
+          <h2 id="iposSeedTitle" style="margin: 0 0 10px">
+            Data Awal iPos
+          </h2>
+          <p
+            id="iposSeedMessage"
+            style="color: var(--text-muted); font-size: 14px; margin: 0"
+          >
+            Memeriksa hasil impor otomatis...
+          </p>
+          <div
+            id="iposSeedCounts"
+            style="display: none; margin-top: 12px; font-size: 13px; font-weight: 700"
+          ></div>
+        </div>
+
         <div class="onboard-card" style="border: 2px solid #10b981">
           <h2 style="margin: 0 0 10px; color: #10b981">
             📥 Cara Cepat: Import Excel
@@ -730,6 +750,47 @@
       }
       checkGatekeeper();
 
+      async function loadIposSeedStatus() {
+        const card = document.getElementById("iposSeedCard");
+        const title = document.getElementById("iposSeedTitle");
+        const message = document.getElementById("iposSeedMessage");
+        const countsBox = document.getElementById("iposSeedCounts");
+        try {
+          const response = await api("GET", "/onboarding/status");
+          const seed = response?.ipos_seed || { status: "pending", counts: {} };
+          const counts = seed.counts || {};
+          countsBox.style.display = "none";
+          if (seed.status === "completed") {
+            card.style.borderColor = "#10b981";
+            title.style.color = "#10b981";
+            title.textContent = "Data Awal iPos Sudah Siap";
+            message.textContent =
+              "Barang, harga, supplier, multi-satuan, stok awal, dan formula rakitan sudah dimasukkan otomatis.";
+            countsBox.style.display = "block";
+            countsBox.textContent = `${counts.items || 0} barang | ${counts.virtual_variants || 0} varian virtual | ${counts.opening_stock_lines || 0} barang memiliki stok | ${counts.boms || 0} formula rakitan`;
+          } else if (seed.status === "failed") {
+            card.style.borderColor = "#ef4444";
+            title.style.color = "#ef4444";
+            title.textContent = "Impor Otomatis iPos Gagal";
+            message.textContent = seed.error || "Kesalahan impor belum diketahui. Restart aplikasi untuk mencoba lagi.";
+          } else if (seed.status === "skipped_existing_data") {
+            card.style.borderColor = "#f59e0b";
+            title.style.color = "#f59e0b";
+            title.textContent = "Data Lama Dipertahankan";
+            message.textContent =
+              "Seed iPos tidak dijalankan karena database ini sudah memiliki barang.";
+          } else {
+            title.textContent = "Data Awal iPos Sedang Diproses";
+            message.textContent = "Tunggu sebentar atau restart aplikasi bila status tidak berubah.";
+          }
+        } catch (error) {
+          card.style.borderColor = "#ef4444";
+          title.style.color = "#ef4444";
+          title.textContent = "Status Data Awal Tidak Tersedia";
+          message.textContent = error.message || "Gagal membaca status impor otomatis.";
+        }
+      }
+
       let supplierOptions = [];
 
       function normalizeSupplierText(value) {
@@ -968,7 +1029,9 @@
 
           if (hint) {
             hint.textContent =
-              suggested > 0
+              res?.already_posted && suggested > 0
+                ? `Nilai ${new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(suggested)} sudah dijurnal otomatis melalui dokumen Saldo Awal dan tidak akan dijurnal ulang.`
+                : suggested > 0
                 ? `Otomatis dari stok import: ${res?.item_count || 0} barang, nilai ${new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(suggested)}.`
                 : "Belum ada nilai persediaan terdeteksi dari stok import.";
           }
@@ -1300,6 +1363,7 @@
       // INIT — satu baris hutang default saat halaman dimuat
       // ══════════════════════════════════════════════════════════════
       tambahBaris("hutang");
+      loadIposSeedStatus();
       loadSupplierDatalist();
       refreshOpeningInventoryValue();
       document.addEventListener("click", (e) => {

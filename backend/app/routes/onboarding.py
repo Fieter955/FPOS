@@ -20,6 +20,10 @@ router = APIRouter()
 def get_onboarding_status(db: Session = Depends(get_db),
                           _=Depends(get_current_user)):
     """Cek progres onboarding"""
+    from ..services.ipos_seed import seed_status
+
+    ipos_seed = seed_status(db)
+    ipos_completed = ipos_seed["status"] in {"completed", "skipped_existing_data"}
     has_category = db.query(models.Category).count() > 0
     has_item = db.query(models.Item).count() > 0
     has_customer = db.query(models.Customer).count() > 0
@@ -32,6 +36,21 @@ def get_onboarding_status(db: Session = Depends(get_db),
 
     # 👇 FIX: Sesuaikan kata kunci dengan yang diminta oleh HTML (title, description, completed, url)
     steps = [
+        {
+            "id": "ipos_seed",
+            "title": "Data Awal iPos",
+            "description": (
+                "Master barang iPos otomatis sudah dimasukkan."
+                if ipos_seed["status"] == "completed"
+                else "Database lama dipertahankan tanpa seed otomatis."
+                if ipos_seed["status"] == "skipped_existing_data"
+                else "Impor otomatis gagal; lihat pesan kesalahan di halaman onboarding."
+                if ipos_seed["status"] == "failed"
+                else "Menunggu impor otomatis data master iPos."
+            ),
+            "completed": ipos_completed,
+            "url": "/onboarding"
+        },
         {
             "id": "store",    
             "title": "Info Toko & Pengaturan",           
@@ -78,7 +97,8 @@ def get_onboarding_status(db: Session = Depends(get_db),
         "done_count": done_count,
         "total_steps": len(steps),
         "completed": completed,
-        "percent": int(done_count / len(steps) * 100) if len(steps) > 0 else 0
+        "percent": int(done_count / len(steps) * 100) if len(steps) > 0 else 0,
+        "ipos_seed": ipos_seed,
     }
 
 

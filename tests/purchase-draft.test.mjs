@@ -11,6 +11,10 @@ const sumberKomponen = readFileSync(
   new URL("../frontend/js/components.js", import.meta.url),
   "utf8",
 );
+const sumberHalamanPembelian = readFileSync(
+  new URL("../frontend/purchase/purchases.html", import.meta.url),
+  "utf8",
+);
 
 class PenyimpananMemori {
   constructor() {
@@ -46,6 +50,31 @@ function muatKonversiHarga() {
   kotakPasir.globalThis = kotakPasir;
   vm.runInNewContext(functionSource, kotakPasir);
   return kotakPasir;
+}
+
+function muatHelperBarcodePembelian() {
+  const awal = sumberHalamanPembelian.indexOf(
+    "function susunPayloadBarcode(daftar)",
+  );
+  const akhir = sumberHalamanPembelian.indexOf(
+    "async function mintaLembarBarcode",
+    awal,
+  );
+  assert.ok(awal >= 0 && akhir > awal, "helper barcode pembelian tidak ditemukan");
+
+  const kotakPasir = { console };
+  kotakPasir.globalThis = kotakPasir;
+  vm.runInNewContext(
+    `${sumberHalamanPembelian.slice(awal, akhir)}
+    globalThis.__purchaseBarcodeTest = {
+      susunPayloadBarcode,
+      terapkanHargaGlobalBarcode,
+      terapkanHargaBarangBarcode,
+      resetHargaBarangBarcode,
+    };`,
+    kotakPasir,
+  );
+  return kotakPasir.__purchaseBarcodeTest;
 }
 
 function salinKeRealmUtama(value) {
@@ -161,10 +190,7 @@ test("draft rusak atau tidak sesuai scope dibuang dengan aman", () => {
 });
 
 test("halaman pembelian memuat helper dan mengaitkan semua jalur keluar", () => {
-  const html = readFileSync(
-    new URL("../frontend/purchase/purchases.html", import.meta.url),
-    "utf8",
-  );
+  const html = sumberHalamanPembelian;
 
   assert.match(html, /\/js\/purchase-draft\.js/);
   assert.match(html, /onclick="kembaliKeDashboard\(\)"/);
@@ -173,6 +199,59 @@ test("halaman pembelian memuat helper dan mengaitkan semua jalur keluar", () => 
   assert.match(html, /getPurchaseDraftStore\(currentFormMode\)\?\.remove\(\)/);
   assert.match(html, /ppn_percent: it\.ppn_percent/);
   assert.match(html, /await formGrid\.addItem\(item\)/);
+});
+
+test("pengaturan harga barcode pembelian mendukung default dan override", () => {
+  const helper = muatHelperBarcodePembelian();
+  const daftar = [
+    { nama: "Barang A", tampilkan_harga: true, harga_override: false },
+    { nama: "Barang B", tampilkan_harga: true, harga_override: false },
+  ];
+
+  helper.terapkanHargaGlobalBarcode(daftar, false);
+  assert.deepEqual(
+    daftar.map((item) => item.tampilkan_harga),
+    [false, false],
+  );
+
+  helper.terapkanHargaBarangBarcode(daftar, 0, true);
+  helper.terapkanHargaGlobalBarcode(daftar, false);
+  assert.equal(daftar[0].tampilkan_harga, true);
+  assert.equal(daftar[0].harga_override, true);
+  assert.equal(daftar[1].tampilkan_harga, false);
+
+  helper.resetHargaBarangBarcode(daftar, 0, false);
+  assert.equal(daftar[0].tampilkan_harga, false);
+  assert.equal(daftar[0].harga_override, false);
+});
+
+test("payload barcode pembelian membawa pilihan harga ke setiap label", () => {
+  const helper = muatHelperBarcodePembelian();
+  const payload = helper.susunPayloadBarcode([
+    {
+      nama: "Barang Tanpa Harga",
+      kategori: "CAT",
+      barcode: "BC-1",
+      harga: 12000,
+      qty: 2,
+      tampilkan_harga: false,
+    },
+    {
+      nama: "Barang Dengan Harga",
+      kategori: "CAT",
+      barcode: "BC-2",
+      harga: 15000,
+      qty: 1,
+      tampilkan_harga: true,
+    },
+  ]);
+
+  const produk = salinKeRealmUtama(payload.data_produk);
+  assert.equal(produk.length, 3);
+  assert.deepEqual(
+    produk.map((item) => item.tampilkan_harga),
+    [false, false, true],
+  );
 });
 
 test("non-PKP tidak memaksa validasi tarif barang menjadi 0%", () => {
