@@ -856,8 +856,8 @@
       // Token render: tiap loadItems menaikkannya; render bertahap berhenti bila tokennya basi
       // (mis. user mengetik pencarian baru saat baris lama belum selesai disusun).
       let _itemsRenderToken = 0;
-      async function loadItems() {
-        const q = document.getElementById("srchBarang").value;
+      async function loadItems(searchOverride = null) {
+        const q = searchOverride ?? document.getElementById("srchBarang").value;
         const kat = document.getElementById("filterKat").value;
         const inaktif = document.getElementById("showInaktif").checked;
         // lite=1: payload ringan untuk tabel (tanpa suppliers/group_discounts) → backend ~4x cepat.
@@ -3544,6 +3544,14 @@
       // Halaman lain yang memakai form ini (mis. assembly.html) cukup memuat skrip ini
       // untuk fungsinya, lalu memanggil loader yang diperlukannya sendiri.
       if (document.getElementById("tblBarang")) {
+        setupBarcodeScanner((scanned) => {
+          const input = document.getElementById("srchBarang");
+          if (!input) return;
+          input.value = scanned;
+          loadItems(scanned);
+          input.focus();
+          input.select();
+        });
         // Kritis untuk tampilan awal: filter kategori + daftar barang.
         refreshSelects();
         loadItems();

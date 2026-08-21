@@ -1,10 +1,10 @@
 ﻿{
-    "version":  "5.0.5",
+    "version":  "5.0.6",
     "minimum_version":  "0.0.0",
     "release_date":  "2026-08-21",
-    "notes":  "Perbaikan barcode dan dokumen pembelian.",
-    "download_url":  "https://github.com/Fieter955/FPOS/releases/download/v5.0.5/FPOS-5.0.5-Windows.zip",
-    "sha256":  "5d4227a5eadf5dd7ac7881005a5aee217e776d5cf983241e3e5491498bf00560",
-    "size_bytes":  93609278,
+    "notes":  "Perbaikan alur pembelian dan komponen antarmuka.",
+    "download_url":  "https://github.com/Fieter955/FPOS/releases/download/v5.0.6/FPOS-5.0.6-Windows.zip",
+    "sha256":  "4c4366b8c3d1d67beb5692277d717de2db3b2dbef2fc6fa06c87c64836c37a6a",
+    "size_bytes":  93612059,
     "mandatory":  false
 }

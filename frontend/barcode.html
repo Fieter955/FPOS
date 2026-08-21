@@ -658,6 +658,7 @@
 
     <script src="/js/theme.js"></script>
     <script src="/js/api.js"></script>
+    <script src="/js/barcode-search.js?v=20260821-barcode-scan-1"></script>
     <script>
       requireAuth();
       let allItems = [],
@@ -687,7 +688,10 @@
 
       async function loadItems() {
         try {
-          allItems = await api("GET", "/items/?lite=1&limit=5000");
+          allItems = await api(
+            "GET",
+            "/items/?lite=1&include_supplier_barcodes=1&limit=5000",
+          );
           sembunyikanHasilPencarian();
         } catch (e) {
           showToast("Gagal muat data", "error");
@@ -701,13 +705,7 @@
       }
 
       function findExactScannableItem(keyword) {
-        const normalized = normalizeSearchValue(keyword);
-        if (!normalized) return null;
-        return allItems.find((item) =>
-          [item.code, item.barcode].some(
-            (value) => normalizeSearchValue(value) === normalized,
-          ),
-        );
+        return findExactScannedItem(allItems, keyword);
       }
 
       const BARCODE_QTY_MIN = 1;
@@ -913,15 +911,15 @@
 
         const allMatches = allItems
           .filter((item) =>
-            [item.name, item.code, item.barcode].some((value) =>
+            [item.name, item.code, item.barcode, ...(item.supplier_barcodes || [])].some((value) =>
               normalizeSearchValue(value).includes(normalized),
             ),
           )
           .sort((a, b) => {
-            const aExact = [a.name, a.code, a.barcode].some(
+            const aExact = [a.name, a.code, a.barcode, ...(a.supplier_barcodes || [])].some(
               (value) => normalizeSearchValue(value) === normalized,
             );
-            const bExact = [b.name, b.code, b.barcode].some(
+            const bExact = [b.name, b.code, b.barcode, ...(b.supplier_barcodes || [])].some(
               (value) => normalizeSearchValue(value) === normalized,
             );
             return Number(bExact) - Number(aExact) ||
@@ -1009,6 +1007,12 @@
         .addEventListener("input", function () {
           renderItemSearchResults(this.value);
         });
+      setupBarcodeScanner((scanned) => {
+        const input = document.getElementById("itemSearch");
+        if (!input) return;
+        input.value = scanned;
+        tambahKeDaftar();
+      });
       document.getElementById("itemSearch").addEventListener("blur", () => {
         setTimeout(() => {
           const picker = document.getElementById("barcodeItemPicker");

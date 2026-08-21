@@ -67,7 +67,7 @@ def _serialize_item_for_user(item: models.Item, current_user: models.User, db: S
     return data
 
 
-def _serialize_item_lite(item: models.Item, current_user: models.User, db: Session):
+def _serialize_item_lite(item: models.Item, current_user: models.User, db: Session, include_supplier_barcodes: bool = False):
     """Serialisasi RINGAN untuk daftar/tabel barang. TANPA suppliers, supplier_details,
     group_discounts, dan brand — field-field itu hanya dipakai POS & menu pembelian (yang
     memanggil tanpa lite). Dengan begitu eager-load + hidrasi ORM jauh lebih ringan
@@ -77,7 +77,7 @@ def _serialize_item_lite(item: models.Item, current_user: models.User, db: Sessi
     buy = float(item.buy_price or 0)
     _fifo_min = getattr(item, "_fifo_min_price", None)
     min_price = float(_fifo_min if _fifo_min is not None else buy)
-    return {
+    data = {
         "id": item.id,
         "code": item.code,
         "name": item.name,
@@ -104,6 +104,13 @@ def _serialize_item_lite(item: models.Item, current_user: models.User, db: Sessi
             for p in item.prices
         ],
     }
+    if include_supplier_barcodes:
+        data["supplier_barcodes"] = [
+            setting.barcode
+            for setting in getattr(item, "supplier_details", [])
+            if setting.barcode
+        ]
+    return data
 
 
 def _apply_virtual_item_metrics(items, db: Session, current_user: models.User):
@@ -268,6 +275,7 @@ def get_items(
     category_id: Optional[int] = None,
     active_only: bool = True,
     lite: bool = False,
+    include_supplier_barcodes: bool = False,
     skip: int = 0, limit: int = 100,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user) # 👈 Wajib passing current_user
@@ -290,6 +298,8 @@ def get_items(
             joinedload(models.Item.unit),
             selectinload(models.Item.prices),
         )
+        if include_supplier_barcodes:
+            q = q.options(selectinload(models.Item.supplier_details))
     else:
         q = db.query(models.Item).options(
             joinedload(models.Item.category),
@@ -335,7 +345,7 @@ def get_items(
     items = q.offset(skip).limit(limit).all()
     items = _apply_virtual_item_metrics(items, db, current_user)
     if lite:
-        return [_serialize_item_lite(item, current_user, db) for item in items]
+        return [_serialize_item_lite(item, current_user, db, include_supplier_barcodes) for item in items]
     return [_serialize_item_for_user(item, current_user, db) for item in items]
 
 @router.get("/{item_id}", response_model=schemas.ItemOut)

@@ -4,6 +4,10 @@ import test from "node:test";
 import vm from "node:vm";
 
 function bacaSkripBarcode() {
+  const helper = readFileSync(
+    new URL("../frontend/js/barcode-search.js", import.meta.url),
+    "utf8",
+  );
   const html = readFileSync(
     new URL("../frontend/barcode.html", import.meta.url),
     "utf8",
@@ -12,7 +16,8 @@ function bacaSkripBarcode() {
     .map((match) => match[1])
     .filter((script) => script.trim());
   assert.ok(scripts.length, "Skrip inline halaman barcode tidak ditemukan");
-  return `${scripts.at(-1)}
+  return `${helper}
+    ${scripts.at(-1)}
     globalThis.__barcodeTest = {
       setItems(items) { allItems = JSON.parse(JSON.stringify(items)); },
       getDaftar() { return JSON.parse(JSON.stringify(daftarCetak)); },
@@ -174,10 +179,14 @@ function buatSimulasi({ generateError = false, printAccepted = true } = {}) {
       const event = {
         type,
         key: props.key,
+        target: props.target || document.activeElement,
         ctrlKey: !!props.ctrlKey,
         defaultPrevented: false,
         preventDefault() {
           this.defaultPrevented = true;
+        },
+        stopImmediatePropagation() {
+          this.immediatePropagationStopped = true;
         },
       };
       for (const callback of this.listeners.get(type) || []) callback(event);
@@ -221,6 +230,8 @@ function buatSimulasi({ generateError = false, printAccepted = true } = {}) {
   const sandbox = {
     console: { ...console, error() {} },
     document,
+    HTMLInputElement: ElemenPalsu,
+    HTMLTextAreaElement: ElemenPalsu,
     Blob,
     AbortController,
     FileReader: FileReaderPalsu,
@@ -322,6 +333,7 @@ const barang = [
     name: "Semen Abu",
     code: "SMN-001",
     barcode: "BC-001",
+    supplier_barcodes: ["SUP-BC-001"],
     sell_price: 68_000,
     category: { name: "SEMEN" },
   },
@@ -372,6 +384,23 @@ test("Enter scanner memprioritaskan barcode exact dan pilihan ulang menambah qty
   assert.equal(daftar.length, 1);
   assert.equal(daftar[0].id, 1);
   assert.equal(daftar[0].qty, 2);
+});
+
+test("scanner keyboard memproses barcode supplier secara langsung", async () => {
+  const simulasi = buatSimulasi();
+  simulasi.sandbox.__barcodeTest.setItems(barang);
+  const input = simulasi.document.getElementById("itemSearch");
+  input.focus();
+
+  for (const key of "SUP-BC-001") {
+    simulasi.document.dispatch("keydown", { key, target: input });
+  }
+  simulasi.document.dispatch("keydown", { key: "Enter", target: input });
+  await tuntaskanPromise();
+
+  const daftar = simulasi.sandbox.__barcodeTest.getDaftar();
+  assert.equal(daftar.length, 1);
+  assert.equal(daftar[0].id, 1);
 });
 
 test("Enter pada pencarian nama langsung menambahkan hasil yang disorot", async () => {
