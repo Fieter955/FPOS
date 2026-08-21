@@ -21,8 +21,8 @@ class Settings(BaseSettings):
     TAILSCALE_PUBLIC: bool = False
 
     # App
-    APP_NAME: str = "iPos 5.0"
-    APP_VERSION: str = "5.0.3"
+    APP_NAME: str = "FPos 5.0"
+    APP_VERSION: str = "5.0.7"
 
     # CORS
     ALLOWED_ORIGINS: str = "*"
@@ -60,8 +60,8 @@ class Settings(BaseSettings):
     TELEGRAM_CHAT_ID: str = "your_telegram_chat_id_here"
 
     # ── Update System ─────────────────────────────────────────────────────────
-    # Manifest rilis berada di branch sumber yang memang menyimpan version.json.
-    UPDATE_CHECK_URL: str = "https://raw.githubusercontent.com/Fieter955/FPOS/run/10-juli-source/version.json"
+    # Manifest rilis berada di branch yang memang menyimpan version.json.
+    UPDATE_CHECK_URL: str = "https://raw.githubusercontent.com/Fieter955/FPOS/local-main-2026-08-20/version.json"
     # HTTP is only useful for a controlled local test server. Production
     # installations must fetch both the manifest and package over HTTPS.
     UPDATE_ALLOW_HTTP: bool = False
