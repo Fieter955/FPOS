@@ -18,6 +18,7 @@ from ..services.purchase_flow import (
     get_local_datetime,
     update_draft_purchase,
     receive_branch_stock,
+    refresh_source_request_status,
 )
 
 router = APIRouter()
@@ -257,6 +258,20 @@ def get_purchase(
     # If it's a branch request, also fetch its fulfillment drafts
     if obj.is_branch_request:
         obj.fulfillment_drafts = db.query(models.Purchase).filter(models.Purchase.from_po_id == obj.id).all()
+        reserved = {}
+        for child in obj.fulfillment_drafts:
+            if child.status == "cancelled":
+                continue
+            for line in child.items:
+                if not line.source_request_item_id:
+                    continue
+                amount = line.qty_ordered if child.status == "draft" else (line.qty_received or line.qty)
+                reserved[line.source_request_item_id] = float(reserved.get(line.source_request_item_id, 0)) + float(amount or 0)
+        for line in obj.items:
+            line.qty_outstanding = max(
+                0.0,
+                float(line.qty_ordered or line.qty or 0) - float(reserved.get(line.id, 0) or 0),
+            )
         
     return obj
 
@@ -396,8 +411,31 @@ def split_fulfill_request(
         raise HTTPException(404, "Request cabang tidak ditemukan")
     if not source.is_branch_request:
         raise HTTPException(400, "Dokumen bukan request cabang")
-    if source.status != "pending":
+    if source.status not in ("pending", "processing", "partially_received", "shipping"):
         raise HTTPException(400, f"Request sudah berstatus {source.status}")
+
+    source_lines = {line.id: line for line in source.items}
+    source_by_item = {line.item_id: line for line in source.items}
+    reserved = {}
+    children = db.query(models.Purchase).filter(
+        models.Purchase.from_po_id == source.id,
+        models.Purchase.status != "cancelled",
+    ).all()
+    for child in children:
+        for line in child.items:
+            if not line.source_request_item_id:
+                continue
+            amount = line.qty_ordered if child.status == "draft" else (line.qty_received or line.qty)
+            reserved[line.source_request_item_id] = float(reserved.get(line.source_request_item_id, 0)) + float(amount or 0)
+    for it in data.items:
+        src = source_lines.get(it.source_request_item_id) if it.source_request_item_id else source_by_item.get(it.item_id)
+        if not src or src.item_id != it.item_id:
+            raise HTTPException(400, f"Barang {it.item_id} tidak berasal dari request ini")
+        outstanding = float(src.qty_ordered or src.qty or 0) - float(reserved.get(src.id, 0) or 0)
+        if it.qty <= 0 or it.qty > outstanding + 1e-9:
+            raise HTTPException(400, f"Qty fulfillment melebihi sisa request ({max(0, outstanding)})")
+        it.source_request_item_id = src.id
+        reserved[src.id] = float(reserved.get(src.id, 0) or 0) + float(it.qty)
 
     # Group items by supplier_id
     from collections import defaultdict
@@ -432,7 +470,8 @@ def split_fulfill_request(
             created_by=current_user.id,
             is_branch_request=False,
             target_branch_id=source.branch_id,
-            from_po_id=source.id
+            from_po_id=source.id,
+            fulfillment_status="draft",
         )
         db.add(purchase)
         db.flush()
@@ -445,11 +484,12 @@ def split_fulfill_request(
                 qty_ordered=it.qty,
                 qty_received=0,
                 buy_price=it.buy_price,
-                total=it.qty * it.buy_price
+                total=it.qty * it.buy_price,
+                source_request_item_id=it.source_request_item_id,
             ))
         created_purchases.append(purchase)
 
-    source.status = "processing"
+    refresh_source_request_status(db, source)
     db.commit()
     return {"message": f"Berhasil membuat {len(created_purchases)} draft pembelian", "ids": [p.id for p in created_purchases]}
 
@@ -461,42 +501,54 @@ def receive_branch_request(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    source = db.query(models.Purchase).filter(models.Purchase.id == pid).with_for_update().first()
-    if not source:
-        raise HTTPException(404, "Request cabang tidak ditemukan")
-    if not source.is_branch_request:
-        raise HTTPException(400, "Dokumen bukan merupakan request cabang")
-    if source.branch_id != current_user.active_branch_id:
+    purchase = db.query(models.Purchase).filter(models.Purchase.id == pid).with_for_update().first()
+    if not purchase or not purchase.from_po_id:
+        raise HTTPException(404, "Kiriman fulfillment tidak ditemukan")
+    source = db.query(models.Purchase).filter(models.Purchase.id == purchase.from_po_id).with_for_update().first()
+    if not source or not source.is_branch_request:
+        raise HTTPException(400, "Dokumen sumber bukan request cabang")
+    if purchase.target_branch_id != current_user.active_branch_id or source.branch_id != current_user.active_branch_id:
         raise HTTPException(403, "Hanya cabang peminta yang dapat melakukan ACC penerimaan barang")
-    if source.status != "shipping":
-        raise HTTPException(400, f"Status saat ini '{source.status}'. Barang harus berstatus 'DIJALAN' untuk diterima.")
-
-
-    # 1. Update Status
-    source.status = "completed"
+    if purchase.fulfillment_status == "received" or purchase.is_received_by_branch:
+        raise HTTPException(409, "Kiriman ini sudah pernah di-ACC")
+    if purchase.fulfillment_status != "shipping":
+        raise HTTPException(400, f"Status kiriman saat ini '{purchase.fulfillment_status}'")
+    transfer = db.query(models.WarehouseTransfer).filter(
+        models.WarehouseTransfer.source_purchase_id == purchase.id,
+        models.WarehouseTransfer.transfer_kind == "po_fulfillment",
+    ).with_for_update().first()
+    if not transfer or transfer.status != "shipping":
+        raise HTTPException(409, "Dokumen mutasi kiriman tidak tersedia atau sudah diterima")
     
     # 2. Add Stock for Branch
     # Menggunakan source items karena cabang mungkin telah melakukan clone barang atau mengubah qty
     local_datetime = get_local_datetime()
     local_date = get_local_date()
     
-    receive_branch_stock(db, purchase=source, target_branch_id=source.branch_id, local_datetime=local_datetime, local_date=local_date)
+    receive_branch_stock(db, purchase=purchase, target_branch_id=source.branch_id, local_datetime=local_datetime, local_date=local_date)
     
     # Kalkulasi nilai penerimaan berdasarkan item yang sudah terupdate
-    total_received_value = sum(pi.total for pi in source.items)
+    total_received_value = float(purchase.total or 0)
 
     # 3. Create Branch Journal (Debit: Persediaan, Credit: Transfer dari Pusat)
     create_branch_receiving_journal(
         db,
         date_val=local_date,
-        number_ref=source.number,
+        number_ref=transfer.number,
         total=total_received_value,
         user_id=current_user.id,
         target_branch_id=source.branch_id
     )
 
+    for line in transfer.items:
+        line.qty_received = line.qty
+    transfer.status = "confirmed"
+    transfer.received_at = local_datetime
+    purchase.fulfillment_status = "received"
+    purchase.is_received_by_branch = True
+    refresh_source_request_status(db, source)
     db.commit()
-    return {"message": "Barang berhasil diterima! Stok telah diperbarui dan jurnal telah dicatat.", "status": source.status}
+    return {"message": "Kiriman berhasil di-ACC; stok, mutasi, dan jurnal memakai jumlah aktual.", "status": source.status}
 
 
 # Mencatat pembayaran cicilan atau pelunasan hutang supplier (Account Payable)
@@ -521,18 +573,19 @@ def pay_purchase(
 
     cash_amount = float(payment.cash_amount or 0)
     bank_amount = float(payment.bank_amount or 0)
+    deposit_amount = float(payment.deposit_amount or 0)
     legacy_amount = float(payment.amount or 0)
 
-    if cash_amount < 0 or bank_amount < 0 or legacy_amount < 0:
+    if cash_amount < 0 or bank_amount < 0 or deposit_amount < 0 or legacy_amount < 0:
         raise HTTPException(400, "DITOLAK: Nominal pembayaran tidak boleh negatif!")
-    if cash_amount <= 0 and bank_amount <= 0 and legacy_amount > 0:
+    if cash_amount <= 0 and bank_amount <= 0 and deposit_amount <= 0 and legacy_amount > 0:
         cash_amount = legacy_amount
 
-    total_payment = cash_amount + bank_amount
+    total_payment = cash_amount + bank_amount + deposit_amount
     if total_payment <= 0:
-        raise HTTPException(400, "DITOLAK: Isi nominal pembayaran kas, bank, atau keduanya.")
+        raise HTTPException(400, "DITOLAK: Isi nominal pembayaran kas, bank, deposit supplier, atau gabungannya.")
     if legacy_amount > 0 and abs(legacy_amount - total_payment) > 0.01:
-        raise HTTPException(400, "DITOLAK: Total pembayaran tidak cocok dengan rincian kas/bank.")
+        raise HTTPException(400, "DITOLAK: Total pembayaran tidak cocok dengan rincian kas/bank/deposit.")
 
     remaining = obj.total - obj.paid
     if total_payment > remaining:
@@ -547,6 +600,25 @@ def pay_purchase(
     bank_acc = db.query(models.Account).filter(models.Account.code == "1-1200").first()
     branch_id = obj.branch_id
 
+    supplier = None
+    if deposit_amount > 0:
+        if not obj.supplier_id:
+            raise HTTPException(400, "DITOLAK: Faktur ini tidak memiliki supplier untuk penggunaan deposit.")
+        supplier = (
+            db.query(models.Supplier)
+            .filter(models.Supplier.id == obj.supplier_id)
+            .with_for_update()
+            .first()
+        )
+        if not supplier:
+            raise HTTPException(400, "DITOLAK: Supplier faktur tidak ditemukan.")
+        deposit_balance = float(supplier.deposit_balance or 0)
+        if deposit_amount - deposit_balance > 0.01:
+            raise HTTPException(
+                400,
+                f"DITOLAK: Deposit supplier tidak cukup. Tersedia Rp {deposit_balance:,.0f}, diminta Rp {deposit_amount:,.0f}.",
+            )
+
     if cash_amount > 0:
         cash_balance = get_account_balance(db, cash_acc.id, branch_id=branch_id) if cash_acc else 0.0
         if cash_amount - cash_balance > 0.01:
@@ -557,7 +629,11 @@ def pay_purchase(
         if bank_amount - bank_balance > 0.01:
             raise HTTPException(400, f"DITOLAK: Saldo bank tidak cukup. Tersedia Rp {bank_balance:,.0f}, diminta Rp {bank_amount:,.0f}.")
 
+    if supplier is not None:
+        supplier.deposit_balance = float(supplier.deposit_balance or 0) - deposit_amount
+
     obj.paid += total_payment
+    obj.deposit_paid = float(obj.deposit_paid or 0) + deposit_amount
     obj.status = "paid" if obj.paid >= obj.total else "partial"
 
     notes = payment.notes or f"Cicilan Hutang untuk {obj.number}"
@@ -568,6 +644,7 @@ def pay_purchase(
         description=f"PAY: {obj.number} - {notes}",
         cash_amount=cash_amount,
         bank_amount=bank_amount,
+        deposit_amount=deposit_amount,
         user_id=current_user.id,
         branch_id=branch_id,
     )
@@ -581,6 +658,8 @@ def pay_purchase(
         "amount": total_payment,
         "cash_amount": cash_amount,
         "bank_amount": bank_amount,
+        "deposit_amount": deposit_amount,
+        "supplier_deposit_balance": float(supplier.deposit_balance or 0) if supplier else None,
     }
 
 

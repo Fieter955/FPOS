@@ -76,6 +76,22 @@ class AssemblyFlowTests(unittest.TestCase):
             item_id=item_id,
         ).one().stock
 
+    def test_formula_list_and_light_catalog_are_compact_and_correct(self):
+        boms = assembly.get_boms(self.db, self.user)
+        self.assertEqual(len(boms), 1)
+        self.assertEqual(boms[0]["product_name"], "Produk Jadi")
+        self.assertEqual(boms[0]["materials"][0]["material_name"], "Bahan")
+        self.assertEqual(boms[0]["estimated_cost"], 10)
+
+        catalog = assembly.get_assembly_catalog(self.db, self.user)
+        self.assertEqual(
+            {(item["id"], item["code"], item["name"], item["buy_price"]) for item in catalog},
+            {
+                (self.material.id, "MAT", "Bahan", 2),
+                (self.product.id, "PROD", "Produk Jadi", 0),
+            },
+        )
+
     def make_order_and_process(self):
         order_response = assembly.create_order(
             assembly.AssemblyOrderCreate(

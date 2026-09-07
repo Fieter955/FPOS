@@ -2,6 +2,7 @@ import json
 import os
 import base64
 import io
+import zlib
 import requests
 import subprocess
 import sys
@@ -14,8 +15,15 @@ import win32gui
 import win32print
 import win32ui
 import winreg
+import socket
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from PIL import Image, ImageWin
+from printer_zpl import image_to_zpl_bitmap
 from tkinter import messagebox, ttk
+
+# Buat ID unik untuk PC ini
+DEVICE_ID = socket.gethostname()
 
 
 def get_app_dir():
@@ -49,6 +57,27 @@ class FileLogger:
 if getattr(sys, "frozen", False) or not sys.stdout:
     sys.stdout = FileLogger()
     sys.stderr = sys.stdout
+
+class DeviceInfoHandler(BaseHTTPRequestHandler):
+    def log_message(self, format, *args):
+        pass # disable logging to stdout
+        
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "*")
+        self.end_headers()
+        
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(json.dumps({"device_id": DEVICE_ID}).encode("utf-8"))
+
+def start_local_server():
+    server = HTTPServer(("127.0.0.1", 19731), DeviceInfoHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
 
 
 def enumerate_printers():
@@ -96,6 +125,71 @@ def detect_dpi(printer_info):
     if "300dpi" in haystack or "300 dpi" in haystack:
         return 300
     return 203
+
+
+def make_fingerprint(printer_info, role):
+    """Buat fingerprint dari info printer untuk auto-match di kemudian hari."""
+    port_raw = printer_info.get("port", "")
+    # Ambil tipe port saja: USB, COM, LPT, TCP, dsb.
+    port_pattern = port_raw.split(":")[0].split(",")[0].strip().upper()
+    if not port_pattern:
+        port_pattern = "UNKNOWN"
+    return {
+        "driver": printer_info.get("driver", ""),
+        "port_pattern": port_pattern,
+        "role": role,
+    }
+
+
+def find_best_match(fingerprint, role):
+    """Cari printer yang paling cocok berdasarkan fingerprint.
+
+    Scoring:
+    - Exact driver match: +10
+    - Partial driver match (brand sama): +5
+    - Port type cocok (USB/COM/LPT): +3
+    - Mode kompatibel dengan role: +2
+
+    Minimum score 5 agar tidak asal match.
+    """
+    candidates = enumerate_printers()
+    best = None
+    best_score = 0
+    fp_driver = fingerprint.get("driver", "")
+    fp_port = fingerprint.get("port_pattern", "")
+
+    for printer in candidates:
+        score = 0
+
+        # Exact driver match = sangat yakin ini printer pengganti
+        if printer["driver"] == fp_driver and fp_driver:
+            score += 10
+        elif fp_driver:
+            # Partial: brand pertama dari driver name cocok
+            fp_brand = fp_driver.split()[0].lower() if fp_driver else ""
+            pr_driver_lower = printer["driver"].lower()
+            if fp_brand and fp_brand in pr_driver_lower:
+                score += 5
+
+        # Port type cocok (USB, COM, LPT, TCP)
+        if fp_port:
+            pr_port_upper = printer["port"].upper()
+            if fp_port in pr_port_upper:
+                score += 3
+
+        # Mode yang terdeteksi kompatibel dengan role
+        detected_mode = detect_print_mode(printer, role)
+        if role == "label" and detected_mode in ("ZPL", "GDI"):
+            score += 2
+        elif role == "receipt" and detected_mode in ("ESC/POS", "GDI"):
+            score += 2
+
+        if score > best_score:
+            best_score = score
+            best = printer
+
+    # Minimum threshold: harus setidaknya partial driver match + port
+    return best if best_score >= 5 else None
 
 
 def send_raw(printer_name, data, document_name):
@@ -161,10 +255,39 @@ def load_or_setup():
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 config = json.load(f)
-            printer_names = {item["name"] for item in enumerate_printers()}
+            all_printers = enumerate_printers()
+            printer_names = {item["name"] for item in all_printers}
             legacy_name = config.get("printer_name")
             receipt_name = config.get("receipt_printer") or legacy_name
             label_name = config.get("label_printer") or legacy_name
+            config_changed = False
+
+            # --- Soft-fallback: auto-match via fingerprint sebelum buka GUI ---
+            if receipt_name not in printer_names:
+                fp = config.get("receipt_fingerprint", {})
+                if fp:
+                    match = find_best_match(fp, "receipt")
+                    if match:
+                        old_name = receipt_name
+                        receipt_name = match["name"]
+                        config["receipt_printer"] = receipt_name
+                        config["receipt_fingerprint"] = make_fingerprint(match, "receipt")
+                        config_changed = True
+                        print(f"Auto-match receipt: '{old_name}' -> '{receipt_name}' (driver={match['driver']})")
+
+            if label_name not in printer_names:
+                fp = config.get("label_fingerprint", {})
+                if fp:
+                    match = find_best_match(fp, "label")
+                    if match:
+                        old_name = label_name
+                        label_name = match["name"]
+                        config["label_printer"] = label_name
+                        config["label_fingerprint"] = make_fingerprint(match, "label")
+                        config["label_dpi"] = detect_dpi(match)
+                        config_changed = True
+                        print(f"Auto-match label: '{old_name}' -> '{label_name}' (driver={match['driver']})")
+
             if (
                 config.get("server_url")
                 and config.get("agent_token")
@@ -177,8 +300,23 @@ def load_or_setup():
                     "receipt_mode": config.get("receipt_mode") or "Auto",
                     "label_mode": config.get("label_mode") or "Auto",
                 })
+
+                # Migrasi: jika belum ada fingerprint, buat dari printer yang ada
+                if "receipt_fingerprint" not in config:
+                    r_info = next((p for p in all_printers if p["name"] == receipt_name), None)
+                    if r_info:
+                        config["receipt_fingerprint"] = make_fingerprint(r_info, "receipt")
+                        config_changed = True
+                if "label_fingerprint" not in config:
+                    l_info = next((p for p in all_printers if p["name"] == label_name), None)
+                    if l_info:
+                        config["label_fingerprint"] = make_fingerprint(l_info, "label")
+                        config_changed = True
+
                 with open(CONFIG_FILE, "w", encoding="utf-8") as f:
                     json.dump(config, f, indent=2)
+                if config_changed:
+                    print("Config printer diperbarui otomatis")
                 return config
             previous = config
         except (OSError, ValueError):
@@ -271,6 +409,7 @@ def load_or_setup():
             messagebox.showerror("Setup belum lengkap", "Pilih printer struk dan barcode.", parent=root)
             return
         autostart_saved = set_autostart(autostart_var.get())
+        receipt_info = printer_map[receipt_var.get()]
         label_info = printer_map[label_var.get()]
         result.update({
             "server_url": server_var.get().strip().rstrip("/"),
@@ -281,6 +420,8 @@ def load_or_setup():
             "label_mode": label_mode_var.get(),
             "label_dpi": detect_dpi(label_info),
             "autostart": bool(autostart_var.get() and autostart_saved),
+            "receipt_fingerprint": make_fingerprint(receipt_info, "receipt"),
+            "label_fingerprint": make_fingerprint(label_info, "label"),
         })
         with open(CONFIG_FILE, "w", encoding="utf-8") as config_file:
             json.dump(result, config_file, indent=2)
@@ -312,6 +453,77 @@ LABEL_MODE = CONFIG.get("label_mode", "Auto")
 LABEL_DPI = int(CONFIG.get("label_dpi") or 203)
 AGENT_HEADERS = {"X-Printer-Token": AGENT_TOKEN}
 PENDING_RESULTS_FILE = os.path.join(APP_DIR, "printer_pending_results.json")
+HEALTH_CHECK_INTERVAL = 30  # detik
+_last_health_check = 0.0
+
+
+def save_config_to_disk():
+    """Simpan CONFIG saat ini ke disk (thread-safe via tmp+replace)."""
+    tmp_file = f"{CONFIG_FILE}.tmp"
+    with open(tmp_file, "w", encoding="utf-8") as f:
+        json.dump(CONFIG, f, indent=2)
+    os.replace(tmp_file, CONFIG_FILE)
+
+
+def check_and_swap_printers():
+    """Cek kesehatan printer dan otomatis swap jika diperlukan.
+
+    Dipanggil periodik dari main loop setiap HEALTH_CHECK_INTERVAL detik.
+    """
+    global RECEIPT_PRINTER, LABEL_PRINTER, LABEL_DPI, RECEIPT_MODE, LABEL_MODE
+
+    try:
+        current_printers = enumerate_printers()
+    except Exception as e:
+        print(f"Health check: gagal enumerate printer: {e}")
+        return
+
+    current_names = {p["name"] for p in current_printers}
+    changed = False
+
+    for role, current_name, fp_key, name_key in [
+        ("receipt", RECEIPT_PRINTER, "receipt_fingerprint", "receipt_printer"),
+        ("label", LABEL_PRINTER, "label_fingerprint", "label_printer"),
+    ]:
+        if current_name in current_names:
+            continue  # Printer masih ada, OK
+
+        print(f"[HOT-SWAP] Printer {role} '{current_name}' tidak ditemukan!")
+        fingerprint = CONFIG.get(fp_key, {})
+
+        if not fingerprint:
+            print(f"[HOT-SWAP] Tidak ada fingerprint untuk {role}, menunggu printer kembali...")
+            continue
+
+        match = find_best_match(fingerprint, role)
+        if match:
+            new_name = match["name"]
+            print(
+                f"[HOT-SWAP] Auto-switch {role}: '{current_name}' -> '{new_name}' "
+                f"(driver={match['driver']}, port={match['port']})"
+            )
+
+            # Update globals
+            if role == "receipt":
+                RECEIPT_PRINTER = new_name
+            else:
+                LABEL_PRINTER = new_name
+                LABEL_DPI = detect_dpi(match)
+                CONFIG["label_dpi"] = LABEL_DPI
+
+            # Update CONFIG dict
+            CONFIG[name_key] = new_name
+            CONFIG[fp_key] = make_fingerprint(match, role)
+            changed = True
+        else:
+            print(f"[HOT-SWAP] Tidak ada printer pengganti cocok untuk {role}, menunggu...")
+
+    if changed:
+        try:
+            save_config_to_disk()
+            print("[HOT-SWAP] Config printer diperbarui otomatis")
+        except Exception as e:
+            print(f"[HOT-SWAP] Gagal simpan config: {e}")
 
 
 def load_pending_results():
@@ -586,6 +798,55 @@ def _split_label_rows(
     return pages or [(image, total_height_mm)]
 
 
+def _split_zpl_rows(
+    image: Image.Image,
+    total_height_mm: float,
+    row_count: int,
+    row_height_mm: float,
+    gap_vertical_mm: float,
+):
+    """Pisahkan sheet menjadi satu bitmap per baris untuk printer ZPL.
+
+    Printer Zebra dengan media GAP/NOTCH dapat menganggap baris pertama sebagai
+    satu label fisik. Karena itu bitmap multi-baris tidak boleh dikirim sebagai
+    satu format ZPL. Gap tidak ikut dimasukkan ke bitmap baris; sensor printer
+    yang akan melewati gap fisik antarlabel.
+    """
+    if row_count <= 1 or row_height_mm <= 0 or total_height_mm <= row_height_mm:
+        return [(image, total_height_mm)]
+
+    expected_total_mm = (row_height_mm * row_count) + (
+        gap_vertical_mm * max(0, row_count - 1)
+    )
+    if abs(expected_total_mm - total_height_mm) > 0.5:
+        print(
+            "Split ZPL row dibatalkan karena metadata tinggi sheet tidak cocok | "
+            f"expected={expected_total_mm:.3f}mm actual={total_height_mm:.3f}mm"
+        )
+        return [(image, total_height_mm)]
+
+    px_per_mm = image.height / total_height_mm
+    pages = []
+    row_top_mm = 0.0
+
+    for row_index in range(row_count):
+        row_bottom_mm = min(total_height_mm, row_top_mm + row_height_mm)
+        top_px = max(0, int(round(row_top_mm * px_per_mm)))
+        bottom_px = min(image.height, int(round(row_bottom_mm * px_per_mm)))
+
+        if bottom_px > top_px:
+            pages.append(
+                (
+                    image.crop((0, top_px, image.width, bottom_px)),
+                    row_bottom_mm - row_top_mm,
+                )
+            )
+
+        row_top_mm = row_bottom_mm + gap_vertical_mm
+
+    return pages or [(image, total_height_mm)]
+
+
 def _print_label_page(
     image: Image.Image,
     printer_name: str,
@@ -723,6 +984,9 @@ def print_label_image_zpl(content: str, printer_name: str, dpi: int = 203) -> bo
         image_base64 = str(payload.get("image_base64") or "").strip()
         width_mm = float(payload.get("width_mm") or 0)
         height_mm = float(payload.get("height_mm") or 0)
+        row_count = max(1, int(payload.get("row_count") or 1))
+        row_height_mm = float(payload.get("row_height_mm") or 0)
+        gap_vertical_mm = max(0.0, float(payload.get("gap_vertical_mm") or 0))
         if image_base64.startswith("data:"):
             image_base64 = image_base64.split(",", 1)[-1]
         if not image_base64 or width_mm <= 0 or height_mm <= 0:
@@ -730,34 +994,66 @@ def print_label_image_zpl(content: str, printer_name: str, dpi: int = 203) -> bo
             return False
 
         image = Image.open(io.BytesIO(base64.b64decode(image_base64))).convert("L")
-        target_w = max(1, int(round(width_mm * dpi / 25.4)))
-        target_h = max(1, int(round(height_mm * dpi / 25.4)))
-        image = image.resize((target_w, target_h), _get_resample_filter())
-        image = image.point(lambda pixel: 0 if pixel < 180 else 255, mode="1")
-        row_bytes = (target_w + 7) // 8
-        bitmap = bytearray()
-        for y in range(target_h):
-            for byte_x in range(row_bytes):
-                value = 0
-                for bit in range(8):
-                    x = byte_x * 8 + bit
-                    if x < target_w and image.getpixel((x, y)) == 0:
-                        value |= 1 << (7 - bit)
-                bitmap.append(value)
-
-        total_bytes = len(bitmap)
-        zpl = (
-            f"^XA^PW{target_w}^LL{target_h}^FO0,0^GFA,{total_bytes},{total_bytes},{row_bytes},"
-            f"{bitmap.hex().upper()}^FS^XZ"
-        ).encode("ascii")
+        pages = _split_zpl_rows(
+            image=image,
+            total_height_mm=height_mm,
+            row_count=row_count,
+            row_height_mm=row_height_mm,
+            gap_vertical_mm=gap_vertical_mm,
+        )
 
         h_printer = win32print.OpenPrinter(printer_name)
-        win32print.StartDocPrinter(h_printer, 1, ("Barcode Label ZPL", None, "RAW"))
-        win32print.StartPagePrinter(h_printer)
-        win32print.WritePrinter(h_printer, zpl)
-        win32print.EndPagePrinter(h_printer)
-        win32print.EndDocPrinter(h_printer)
-        print(f"ZPL PRINT SUCCESS | size={width_mm}x{height_mm}mm | dots={target_w}x{target_h}")
+
+        zpl_started = time.perf_counter()
+        total_uncompressed = 0
+        total_encoded = 0
+
+        for page_index, (page_image, page_height_mm) in enumerate(pages, start=1):
+            target_w = max(1, int(round(width_mm * dpi / 25.4)))
+            target_h = max(1, int(round(page_height_mm * dpi / 25.4)))
+            page_image = page_image.resize(
+                (target_w, target_h), _get_resample_filter()
+            )
+            row_bytes = (target_w + 7) // 8
+            # Pillow and ZPL agree on MSB-first packing, but use opposite bit
+            # polarity: Pillow stores black as 0 while ZPL prints black for 1.
+            bitmap = image_to_zpl_bitmap(page_image, threshold=180)
+            expected_bytes = row_bytes * target_h
+            if len(bitmap) != expected_bytes:
+                raise RuntimeError(
+                    f"Ukuran bitmap ZPL tidak valid: {len(bitmap)} != {expected_bytes}"
+                )
+
+            z64_data = _encode_zpl_z64(bitmap)
+            total_uncompressed += len(bitmap)
+            total_encoded += len(z64_data)
+            zpl = (
+                f"^XA^PW{target_w}^LL{target_h}^FO0,0^GFA,{len(bitmap)},{len(bitmap)},{row_bytes},"
+                f"{z64_data}^FS^XZ"
+            ).encode("ascii")
+
+            win32print.StartDocPrinter(
+                h_printer,
+                1,
+                (
+                    "Barcode Label ZPL"
+                    if len(pages) <= 1
+                    else f"Barcode Label ZPL {page_index}/{len(pages)}",
+                    None,
+                    "RAW",
+                ),
+            )
+            win32print.StartPagePrinter(h_printer)
+            win32print.WritePrinter(h_printer, zpl)
+            win32print.EndPagePrinter(h_printer)
+            win32print.EndDocPrinter(h_printer)
+
+        print(
+            f"ZPL PRINT SUCCESS | size={width_mm}x{height_mm}mm | "
+            f"rows={len(pages)} | source={image.width}x{image.height}px | "
+            f"bitmap={total_uncompressed}B | z64={total_encoded}B | "
+            f"encode_ms={(time.perf_counter() - zpl_started) * 1000:.1f}"
+        )
         return True
     except Exception as e:
         print(f"ZPL PRINT ERROR: {e}")
@@ -770,12 +1066,42 @@ def print_label_image_zpl(content: str, printer_name: str, dpi: int = 203) -> bo
                 pass
 
 
+def _crc16_xmodem(value: bytes) -> int:
+    """CRC-16/XMODEM used by Zebra's B64/Z64 envelope."""
+    crc = 0
+    for byte in value:
+        crc ^= byte << 8
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x1021) & 0xFFFF if crc & 0x8000 else (crc << 1) & 0xFFFF
+    return crc
+
+
+def _encode_zpl_z64(bitmap: bytes) -> str:
+    """Return a Zebra-compatible compressed graphic data field.
+
+    Z64 is the documented LZ77/DEFLATE + Base64 representation.  The CRC is
+    calculated over the encoded Base64 bytes, as required by the ZPL envelope.
+    """
+    encoded = base64.b64encode(zlib.compress(bitmap, level=6))
+    crc = _crc16_xmodem(encoded)
+    return f":Z64:{encoded.decode('ascii')}:{crc:04X}"
+
+
+def _plain_receipt_text(text):
+    """Hapus byte kontrol ESC/POS untuk inspeksi/log dan fallback GDI."""
+    return "".join(ch for ch in str(text) if ch == "\n" or ord(ch) >= 32)
+
+
 def print_windows(text, printer_name):
     try:
         print("===================================")
         print("PRINT JOB")
         print("Printer:", printer_name)
         print("Length :", len(text))
+
+        visible_lines = [line for line in _plain_receipt_text(text).splitlines() if line]
+        max_line = max((len(line) for line in visible_lines), default=0)
+        print(f"Receipt layout: lines={len(visible_lines)} max_chars={max_line}")
 
         assert_printer_ready(printer_name)
 
@@ -786,6 +1112,10 @@ def print_windows(text, printer_name):
             win32print.StartPagePrinter(h_printer)
             win32print.WritePrinter(h_printer, b"\x1B\x40")
             win32print.WritePrinter(h_printer, text.encode("latin-1", errors="replace"))
+            # Beri margin vertikal eksplisit sebelum memotong. GS V 0 adalah
+            # perintah cut yang paling kompatibel; ESC d 3 memastikan footer
+            # tidak berada tepat di bibir pisau pada printer thermal umum.
+            win32print.WritePrinter(h_printer, b"\x1B\x64\x03")
             win32print.WritePrinter(h_printer, b"\x1D\x56\x00")
             win32print.EndPagePrinter(h_printer)
             win32print.EndDocPrinter(h_printer)
@@ -810,9 +1140,17 @@ def print_text_gdi(text, printer_name):
         width = dc.GetDeviceCaps(win32con.HORZRES)
         y = 40
         line_height = 28
-        for line in str(text).splitlines():
-            dc.DrawText(line, (20, y, max(40, width - 20), y + line_height), win32con.DT_LEFT)
-            y += line_height
+        draw_width = max(40, width - 40)
+        # Konten struk dirender sebagai ESC/POS. Driver GDI tidak memahami
+        # byte kontrol tersebut, jadi buang kontrolnya sebelum DrawText dan
+        # aktifkan word-wrap agar fallback Windows tidak memotong sisi kanan.
+        plain_text = _plain_receipt_text(text)
+        estimated_chars = max(1, draw_width // 10)
+        draw_flags = win32con.DT_LEFT | win32con.DT_WORDBREAK | win32con.DT_NOPREFIX
+        for line in plain_text.splitlines():
+            dc.DrawText(line, (20, y, width - 20, y + line_height * 8), draw_flags)
+            wrapped_lines = max(1, (len(line) + estimated_chars - 1) // estimated_chars)
+            y += line_height * wrapped_lines
         dc.EndPage()
         dc.EndDoc()
         print(f"GDI TEXT PRINT SUCCESS | printer={printer_name}")
@@ -837,13 +1175,21 @@ print("Jalankan dengan --setup untuk mengganti server, token, atau printer.")
 
 while True:
     try:
+        # --- Periodik health check printer ---
+        _now = time.time()
+        if _now - _last_health_check > HEALTH_CHECK_INTERVAL:
+            _last_health_check = _now
+            check_and_swap_printers()
+
         if not flush_pending_results():
             time.sleep(2)
             continue
+        claim_headers = AGENT_HEADERS.copy()
+        claim_headers["X-Device-Id"] = DEVICE_ID
         res = requests.post(
             f"{API_URL}/agent/claim",
             json={"limit": 1},
-            headers=AGENT_HEADERS,
+            headers=claim_headers,
             timeout=10,
         )
 
@@ -868,6 +1214,19 @@ while True:
                         success = print_label_image(job["content"], LABEL_PRINTER)
                 else:
                     print(f"Memproses Job #{job['id']} (Mode: RAW ESC/POS / Struk)")
+                    paper_width = job.get("paper_width_mm")
+                    if paper_width in (58, 80):
+                        max_chars = 32 if paper_width == 58 else 48
+                        visible_lines = [
+                            line for line in _plain_receipt_text(job.get("content") or "").splitlines()
+                            if line
+                        ]
+                        measured_max = max((len(line) for line in visible_lines), default=0)
+                        if measured_max > max_chars:
+                            print(
+                                f"WARNING LAYOUT: Job #{job['id']} memiliki baris {measured_max} karakter "
+                                f"untuk target {paper_width}mm ({max_chars} kolom)"
+                            )
                     receipt_mode = resolve_mode(RECEIPT_PRINTER, RECEIPT_MODE, "receipt")
                     if receipt_mode == "GDI":
                         success = print_text_gdi(job["content"], RECEIPT_PRINTER)

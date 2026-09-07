@@ -3,7 +3,7 @@
 # Versi: Fixed — Journal Diskon, Piutang, & Duplikasi Kode
 # ══════════════════════════════════════════════════════════════════════════════
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional
@@ -246,6 +246,7 @@ def get_sale(
 @router.post("/")
 def create_sale(
     data: schemas.SaleCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
@@ -460,7 +461,13 @@ def create_sale(
                     raise HTTPException(400, "Bayar pakai Saldo Pelanggan butuh pelanggan dipilih")
                 if jml > (cust.deposit_balance or 0) + 0.01:
                     raise HTTPException(400, "Saldo pelanggan tidak cukup")
-                cust.deposit_balance -= jml
+                from ..services.customer_deposits import apply_customer_deposit_change
+                apply_customer_deposit_change(
+                    db, cust, -jml, event_type="purchase", transaction_date=sale.date,
+                    branch_id=sale.branch_id, source_type="sale", source_id=sale.id,
+                    reference=sale.number, description="Pemakaian deposit untuk pembelian",
+                    created_by=current_user.id,
+                )
                 jurnal_entries.append({"code": "2-1300", "debit": round(jml, 2), "credit": 0})
             else:
                 kode = METODE_KE_AKUN.get(p.metode)
@@ -479,8 +486,14 @@ def create_sale(
         ))
         if data.payment_method == "deposit" and cust:
             deduct = min(sale.paid, cust.deposit_balance or 0)
-            cust.deposit_balance -= deduct
             if deduct > 0:
+                from ..services.customer_deposits import apply_customer_deposit_change
+                apply_customer_deposit_change(
+                    db, cust, -deduct, event_type="purchase", transaction_date=sale.date,
+                    branch_id=sale.branch_id, source_type="sale", source_id=sale.id,
+                    reference=sale.number, description="Pemakaian deposit untuk pembelian",
+                    created_by=current_user.id,
+                )
                 jurnal_entries.append({"code": "2-1300", "debit": float(deduct), "credit": 0})
             
             sisa_cash = sale.paid - deduct
@@ -543,6 +556,7 @@ def create_sale(
             document_type="sale",
             document_id=sale.id,
             created_by=current_user.id,
+            device_id=request.headers.get("X-Device-Id"),
         )
 
     db.commit()
@@ -634,13 +648,42 @@ def cancel_sale(
             if cust.points < 0: cust.points = 0
             if cust.loyalty_points < 0: cust.loyalty_points = 0
 
+            deposit_paid = sum(
+                float(payment.amount or 0) for payment in obj.payments
+                if payment.method == "deposit"
+            )
+            if not obj.payments and obj.payment_method == "deposit":
+                deposit_paid = float(obj.paid or 0)
+            if deposit_paid > 0.005:
+                from ..services.customer_deposits import apply_customer_deposit_change
+                apply_customer_deposit_change(
+                    db, cust, deposit_paid, event_type="purchase_cancel",
+                    transaction_date=local_date, branch_id=obj.branch_id,
+                    source_type="sale", source_id=obj.id, reference=obj.number,
+                    description="Pengembalian deposit karena pembatalan pembelian",
+                    created_by=current_user.id,
+                )
+
     # ── Jurnal Pembalik (cermin sempurna dari jurnal asli) ────────────────────
     total_hpp      = sum(it.buy_price * it.qty for it in obj.items)
     jurnal_pembalik = []
 
-    # 1. Balik KAS
-    if obj.paid > 0:
-        jurnal_pembalik.append({"code": "1-1100", "debit": 0, "credit": float(obj.paid)})
+    # 1. Balik tender sesuai snapshot metode pembayaran asli.
+    reverse_accounts = {
+        "cash": "1-1100", "debit": "1-1200", "credit_card": "1-1200",
+        "emoney": "1-1250", "deposit": "2-1300",
+    }
+    payment_rows = list(obj.payments)
+    if not payment_rows and obj.paid > 0:
+        payment_rows = [type("LegacyPayment", (), {
+            "method": obj.payment_method or "cash", "amount": obj.paid,
+        })()]
+    for payment in payment_rows:
+        account_code = reverse_accounts.get(payment.method, "1-1100")
+        jurnal_pembalik.append({
+            "code": account_code, "debit": 0,
+            "credit": round(float(payment.amount or 0), 2),
+        })
 
     # 2. Balik PIUTANG
     piutang_sisa = obj.total - obj.paid
@@ -721,6 +764,7 @@ def print_receipt_api(
         document_type="sale_reprint",
         document_id=sale.id,
         created_by=current_user.id,
+        device_id=request.headers.get("X-Device-Id"),
     )
     db.commit()
     return {"status": "queued", "job_id": job.id, "branch_id": job.branch_id}

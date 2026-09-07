@@ -10,6 +10,7 @@ from .. import models, schemas
 from .journal_service import (
     create_branch_fulfillment_journal,
     create_branch_fulfillment_reversal_journal,
+    create_pusat_fulfillment_reversal_journal,
     create_purchase_journal,
     create_purchase_reversal_journal,
 )
@@ -78,7 +79,7 @@ def calculate_purchase_totals(data: schemas.PurchaseCreate, *, received: bool = 
         tax_type = "none"
         subtotal = 0.0
         for line in data.items:
-            qty = line.qty_received if received and line.qty_received > 0 else line.qty
+            qty = line.qty_received if received else line.qty
             subtotal += harga_neto_bertingkat(line) * qty
         discount = subtotal * ((data.discount or 0) / 100)
         return {"subtotal": subtotal, "discount": discount, "tax": 0.0,
@@ -90,7 +91,7 @@ def calculate_purchase_totals(data: schemas.PurchaseCreate, *, received: bool = 
         dr = (data.discount or 0) / 100
         subtotal = discount = tax = total = 0.0
         for line in data.items:
-            qty = line.qty_received if received and line.qty_received > 0 else line.qty
+            qty = line.qty_received if received else line.qty
             net_price = harga_neto_bertingkat(line)
             g = net_price * qty            # gross baris (incl PPN), sudah net disc1..disc4
             dg = g * dr
@@ -111,7 +112,7 @@ def calculate_purchase_totals(data: schemas.PurchaseCreate, *, received: bool = 
     if tax_type == "include":
         subtotal = 0.0
         for line in data.items:
-            qty = line.qty_received if received and line.qty_received > 0 else line.qty
+            qty = line.qty_received if received else line.qty
             subtotal += harga_neto_bertingkat(line) * qty
         discount = subtotal * ((data.discount or 0) / 100)
         return {"subtotal": subtotal, "discount": discount, "tax": 0.0,
@@ -120,7 +121,7 @@ def calculate_purchase_totals(data: schemas.PurchaseCreate, *, received: bool = 
     # Exclude: the header rate is added above the entered net prices.
     subtotal = 0.0
     for line in data.items:
-        qty = line.qty_received if received and line.qty_received > 0 else line.qty
+        qty = line.qty_received if received else line.qty
         net_price = harga_neto_bertingkat(line)
         subtotal += net_price * qty
 
@@ -214,7 +215,7 @@ def validate_purchase_items(db: Session, data: schemas.PurchaseCreate):
 def add_purchase_items(db: Session, purchase: models.Purchase, data: schemas.PurchaseCreate,
                        *, received: bool):
     for line in data.items:
-        qty = line.qty_received if received and line.qty_received > 0 else line.qty
+        qty = line.qty_received if received else line.qty
         net_price = harga_neto_bertingkat(line)
         db.add(models.PurchaseItem(
             purchase_id=purchase.id,
@@ -229,8 +230,111 @@ def add_purchase_items(db: Session, purchase: models.Purchase, data: schemas.Pur
             disc4=line.disc4,
             discount=line.buy_price - net_price,
             total=net_price * qty,
+            source_request_item_id=line.source_request_item_id,
             ppn_percent=line.ppn_percent,  # tarif PPN baris (Included/PKP) → kupas biaya batch & retur
         ))
+
+
+def refresh_source_request_status(db: Session, source: models.Purchase) -> str:
+    """Hitung status request dari kiriman yang benar-benar sudah di-ACC cabang."""
+    if not source or not source.is_branch_request or source.status == "cancelled":
+        return source.status if source else ""
+
+    received_by_line = dict(
+        db.query(
+            models.WarehouseTransferItem.source_request_item_id,
+            func.sum(models.WarehouseTransferItem.qty_received),
+        )
+        .join(models.WarehouseTransfer)
+        .filter(
+            models.WarehouseTransfer.transfer_kind == "po_fulfillment",
+            models.WarehouseTransfer.status == "confirmed",
+            models.WarehouseTransfer.source_purchase.has(from_po_id=source.id),
+            models.WarehouseTransferItem.source_request_item_id.isnot(None),
+        )
+        .group_by(models.WarehouseTransferItem.source_request_item_id)
+        .all()
+    )
+    any_received = False
+    complete = True
+    for line in source.items:
+        ordered = float(line.qty_ordered or line.qty or 0)
+        received = min(ordered, float(received_by_line.get(line.id, 0) or 0))
+        line.qty_received = received
+        any_received = any_received or received > 1e-9
+        complete = complete and received + 1e-9 >= ordered
+
+    has_shipping = db.query(models.WarehouseTransfer.id).filter(
+        models.WarehouseTransfer.transfer_kind == "po_fulfillment",
+        models.WarehouseTransfer.status == "shipping",
+        models.WarehouseTransfer.source_purchase.has(from_po_id=source.id),
+    ).first() is not None
+    has_children = db.query(models.Purchase.id).filter(
+        models.Purchase.from_po_id == source.id,
+        models.Purchase.status != "cancelled",
+    ).first() is not None
+
+    if complete and source.items:
+        source.status = "completed"
+        source.is_received_by_branch = True
+    elif any_received:
+        source.status = "partially_received"
+    elif has_shipping:
+        source.status = "shipping"
+    elif has_children:
+        source.status = "processing"
+    else:
+        source.status = "pending"
+    return source.status
+
+
+def create_fulfillment_shipment(db: Session, purchase: models.Purchase) -> models.WarehouseTransfer:
+    """Buat mutasi logis pusat ke cabang tanpa transit stok fisik pusat."""
+    existing = db.query(models.WarehouseTransfer).filter(
+        models.WarehouseTransfer.transfer_kind == "po_fulfillment",
+        models.WarehouseTransfer.source_purchase_id == purchase.id,
+        models.WarehouseTransfer.status != "cancelled",
+    ).first()
+    if existing:
+        return existing
+
+    from_warehouse = get_or_create_default_warehouse(db, PUSAT_BRANCH_ID)
+    to_warehouse = get_or_create_default_warehouse(db, purchase.target_branch_id)
+    transfer = models.WarehouseTransfer(
+        number=f"SHIP-{purchase.number}",
+        date=purchase.date,
+        from_warehouse_id=from_warehouse.id,
+        to_warehouse_id=to_warehouse.id,
+        status="shipping",
+        transfer_kind="po_fulfillment",
+        source_purchase_id=purchase.id,
+        notes=f"Kiriman Toko Utama untuk {purchase.from_po.number if purchase.from_po else purchase.number}",
+        created_by=purchase.created_by,
+    )
+    db.add(transfer)
+    db.flush()
+    subtotal = float(purchase.subtotal or 0)
+    factor = float(purchase.total or 0) / subtotal if subtotal > 0 else 1.0
+    for line in purchase.items:
+        qty = float(line.qty_received or line.qty or 0)
+        if qty <= 1e-9:
+            continue
+        net_unit = float(line.total or 0) / qty if qty else float(line.buy_price or 0)
+        unit_cost = net_unit * factor
+        db.add(models.WarehouseTransferItem(
+            transfer_id=transfer.id,
+            item_id=line.item_id,
+            qty=qty,
+            qty_received=0,
+            purchase_item_id=line.id,
+            source_request_item_id=line.source_request_item_id,
+            unit_cost=unit_cost,
+            total_cost=unit_cost * qty,
+        ))
+    purchase.fulfillment_status = "shipping"
+    if purchase.from_po:
+        refresh_source_request_status(db, purchase.from_po)
+    return transfer
 
 
 def update_supplier_item_master(db: Session, data: schemas.PurchaseCreate):
@@ -451,6 +555,7 @@ def create_supplier_purchase(db: Session, *, data: schemas.PurchaseCreate,
         is_branch_request=False,
         target_branch_id=target_branch_id,
         from_po_id=source_request.id if source_request else data.from_po_id,
+        fulfillment_status=("draft" if is_fulfillment else "none"),
     )
     db.add(purchase)
     db.flush()
@@ -494,6 +599,7 @@ def create_supplier_purchase(db: Session, *, data: schemas.PurchaseCreate,
                 user_id=current_user.id,
                 pusat_branch_id=branch_id,
             )
+            create_fulfillment_shipment(db, purchase)
         else:
             create_purchase_journal(
                 db,
@@ -509,8 +615,7 @@ def create_supplier_purchase(db: Session, *, data: schemas.PurchaseCreate,
             )
 
     if source_request is not None:
-        source_request.status = "completed"
-        db.add(source_request)
+        refresh_source_request_status(db, source_request)
 
     return purchase
 
@@ -522,8 +627,14 @@ def finalize_request_to_purchase(db: Session, *, source_request: models.Purchase
         raise HTTPException(403, "Hanya Toko Pusat yang bisa fulfill request cabang.")
     if not source_request.is_branch_request:
         raise HTTPException(400, "Dokumen sumber bukan request cabang.")
-    if source_request.status != "pending":
+    if source_request.status not in ("pending", "processing", "partially_received", "shipping"):
         raise HTTPException(400, f"Request {source_request.number} sudah berstatus {source_request.status}.")
+
+    # Jalur fulfillment langsung (tanpa split) tetap harus membawa provenance baris.
+    by_item = {line.item_id: line.id for line in source_request.items}
+    for line in data.items:
+        if line.source_request_item_id is None:
+            line.source_request_item_id = by_item.get(line.item_id)
 
     return create_supplier_purchase(
         db,
@@ -580,6 +691,7 @@ def update_draft_purchase(db: Session, *, purchase: models.Purchase,
     purchase.is_branch_request = False
     purchase.document_type = data.document_type
     purchase.target_branch_id = final_target_branch_id
+    purchase.fulfillment_status = "draft" if is_fulfillment else "none"
 
     db.query(models.PurchaseItem).filter(models.PurchaseItem.purchase_id == purchase.id).delete()
     add_purchase_items(db, purchase, data, received=True)
@@ -624,6 +736,7 @@ def update_draft_purchase(db: Session, *, purchase: models.Purchase,
                 user_id=current_user.id,
                 pusat_branch_id=purchase.branch_id,
             )
+            create_fulfillment_shipment(db, purchase)
         else:
             create_purchase_journal(
                 db,
@@ -651,15 +764,7 @@ def check_and_update_source_status(db: Session, from_po_id: int):
     if not source or not source.is_branch_request:
         return
 
-    # Count drafts that are still 'draft'
-    drafts_count = db.query(models.Purchase).filter(
-        models.Purchase.from_po_id == from_po_id,
-        models.Purchase.status == 'draft'
-    ).count()
-
-    if drafts_count == 0:
-        source.status = 'shipping'
-        db.commit()
+    refresh_source_request_status(db, source)
 
 
 def cancel_purchase_flow(db: Session, *, purchase: models.Purchase,
@@ -676,6 +781,43 @@ def cancel_purchase_flow(db: Session, *, purchase: models.Purchase,
 
     if current_user.active_branch_id != purchase.branch_id:
         raise HTTPException(403, "Pembayaran/pembatalan supplier hanya boleh dilakukan oleh cabang pemilik faktur.")
+
+    # Kembalikan bagian pembayaran deposit ke supplier di transaksi pembatalan yang sama.
+    deposit_paid = min(float(getattr(purchase, "deposit_paid", 0) or 0), float(purchase.paid or 0))
+    if deposit_paid > 0:
+        supplier = (
+            db.query(models.Supplier)
+            .filter(models.Supplier.id == purchase.supplier_id)
+            .with_for_update()
+            .first()
+        )
+        if not supplier:
+            raise HTTPException(400, "Supplier faktur tidak ditemukan; deposit tidak dapat dikembalikan.")
+        supplier.deposit_balance = float(supplier.deposit_balance or 0) + deposit_paid
+
+    if purchase.from_po_id and purchase.fulfillment_status in ("shipping", "received"):
+        if purchase.fulfillment_status == "received":
+            raise HTTPException(400, "Kiriman yang sudah di-ACC tidak dapat dibatalkan; gunakan Retur Kiriman Pusat.")
+        transfer = db.query(models.WarehouseTransfer).filter(
+            models.WarehouseTransfer.source_purchase_id == purchase.id,
+            models.WarehouseTransfer.transfer_kind == "po_fulfillment",
+            models.WarehouseTransfer.status == "shipping",
+        ).first()
+        if transfer:
+            transfer.status = "cancelled"
+        create_pusat_fulfillment_reversal_journal(
+            db, date_val=local_date, number_ref=purchase.number,
+            target_branch_id=purchase.target_branch_id, total=purchase.total,
+            paid=purchase.paid, user_id=current_user.id,
+            pusat_branch_id=purchase.branch_id,
+            deposit_amount=deposit_paid,
+        )
+        purchase.status = "cancelled"
+        purchase.fulfillment_status = "cancelled"
+        if purchase.from_po:
+            refresh_source_request_status(db, purchase.from_po)
+        return {"message": "Kiriman dibatalkan dan jurnal pusat telah dibalik.",
+                "number": purchase.number, "status": purchase.status}
 
     stock_branch_id = purchase.target_branch_id or purchase.branch_id
 
@@ -704,6 +846,7 @@ def cancel_purchase_flow(db: Session, *, purchase: models.Purchase,
             paid=purchase.paid,
             user_id=current_user.id,
             pusat_branch_id=purchase.branch_id,
+            deposit_amount=deposit_paid,
         )
     else:
         create_purchase_reversal_journal(
@@ -714,6 +857,7 @@ def cancel_purchase_flow(db: Session, *, purchase: models.Purchase,
             tax=float(purchase.tax or 0),
             pisah_ppn=pisah_ppn,
             paid=purchase.paid,
+            deposit_amount=deposit_paid,
             user_id=current_user.id,
             branch_id=purchase.branch_id,
         )

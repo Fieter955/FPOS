@@ -1,0 +1,9 @@
+.env
+.pytest_cache/
+.ruff_cache/
+.test-tmp/
+pytest-cache-files-*/
+tests/runtime-tmp/
+test-license.db*
+__pycache__/
+*.py[cod]

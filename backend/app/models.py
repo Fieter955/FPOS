@@ -314,10 +314,42 @@ class Customer(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     group = relationship("CustomerGroup", back_populates="customers")
     sales = relationship("Sale", back_populates="customer")
+    deposit_movements = relationship(
+        "CustomerDepositMovement", back_populates="customer",
+        cascade="all, delete-orphan",
+    )
 
     @property
     def total_purchase(self):
         return sum(s.total for s in self.sales if s.status != "cancelled")
+
+
+class CustomerDepositMovement(Base):
+    """Ledger audit untuk setiap perubahan saldo deposit pelanggan."""
+    __tablename__ = "customer_deposit_movements"
+    __table_args__ = (
+        Index("ix_customer_deposit_movements_customer_time", "customer_id", "occurred_at"),
+        Index("ix_customer_deposit_movements_branch_id", "branch_id"),
+        Index("ix_customer_deposit_movements_source", "source_type", "source_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
+    event_type = Column(String(40), nullable=False)
+    source_type = Column(String(40), nullable=True)
+    source_id = Column(Integer, nullable=True)
+    reference = Column(String(100), nullable=True)
+    transaction_date = Column(Date, nullable=False)
+    occurred_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    amount = Column(Float, nullable=False)
+    balance_after = Column(Float, nullable=False)
+    description = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    customer = relationship("Customer", back_populates="deposit_movements")
+    branch = relationship("Branch")
+    creator = relationship("User")
 
 
 class Supplier(Base):
@@ -380,6 +412,8 @@ class Purchase(Base):
     ppn_dipisah = Column(Boolean, default=False)  # PPN dicatat terpisah ke 1-1550 saat dibeli (mode PKP)? → batal/retur mengikuti mode ini, bukan saklar saat ini
     total = Column(Float, default=0)
     paid = Column(Float, default=0)
+    # Pembayaran dari saldo retur/deposit supplier, untuk pemulihan saat dibatalkan.
+    deposit_paid = Column(Float, default=0, nullable=False)
     status = Column(String(20), default="unpaid")
     # purchase = transaksi pembelian, purchase_order = PO supplier,
     # branch_request = request antar cabang (legacy flag tetap dipertahankan).
@@ -401,6 +435,9 @@ class Purchase(Base):
     from_po = relationship("Purchase", remote_side=[id], back_populates="fulfillment_drafts")
     fulfillment_drafts = relationship("Purchase", back_populates="from_po")
     is_received_by_branch = Column(Boolean, default=False)
+    # Status logistik fulfillment dipisahkan dari status pembayaran supplier.
+    # none | draft | shipping | received | cancelled
+    fulfillment_status = Column(String(20), default="none", nullable=False)
 
 
 class PurchaseItem(Base):
@@ -425,6 +462,7 @@ class PurchaseItem(Base):
     # Tarif PPN per-baris pembelian (%); NULL → ikut tarif barang/toko. Dipakai mode Included
     # (PKP) untuk mengupas PPN mundur per-barang saat menghitung biaya batch FIFO & retur.
     ppn_percent = Column(Float, nullable=True)
+    source_request_item_id = Column(Integer, ForeignKey("purchase_items.id"), nullable=True)
     purchase = relationship("Purchase", back_populates="items")
     item = relationship("Item", back_populates="purchase_items")
 
@@ -459,6 +497,9 @@ class PurchaseReturnItem(Base):
     qty = Column(Float, nullable=False)
     price = Column(Float, nullable=False)
     total = Column(Float, nullable=False)
+    trade_in_return_item_id = Column(Integer, ForeignKey("trade_in_return_items.id"), nullable=True)
+    sale_return_item_id = Column(Integer, ForeignKey("sale_return_items.id"), nullable=True)
+    quarantine_cost = Column(Float, default=0)
     return_ = relationship("PurchaseReturn", back_populates="items")
     item = relationship("Item")
 
@@ -565,6 +606,9 @@ class SaleReturnItem(Base):
     qty = Column(Float, nullable=False)
     price = Column(Float, nullable=False)
     total = Column(Float, nullable=False)
+    condition = Column(String(20), nullable=False, default="good")  # good | damaged
+    returned_qty = Column(Float, nullable=False, default=0)
+    quarantine_unit_cost = Column(Float, nullable=False, default=0)
     return_ = relationship("SaleReturn", back_populates="items")
     item = relationship("Item")
 
@@ -1038,6 +1082,9 @@ class WarehouseTransfer(Base):
     from_warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
     to_warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
     status = Column(String(20), default="pending")  # pending | confirmed
+    transfer_kind = Column(String(30), default="standard", nullable=False)
+    source_purchase_id = Column(Integer, ForeignKey("purchases.id"), nullable=True)
+    received_at = Column(DateTime(timezone=True), nullable=True)
     notes = Column(Text)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -1049,6 +1096,7 @@ class WarehouseTransfer(Base):
     items = relationship("WarehouseTransferItem", back_populates="transfer",
                          cascade="all, delete-orphan")
     creator = relationship("User")
+    source_purchase = relationship("Purchase", foreign_keys=[source_purchase_id])
 
 
 class WarehouseTransferItem(Base):
@@ -1057,9 +1105,16 @@ class WarehouseTransferItem(Base):
     transfer_id = Column(Integer, ForeignKey("warehouse_transfers.id"), nullable=False)
     item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
     qty = Column(Float, nullable=False)
+    qty_received = Column(Float, nullable=False, default=0)
+    purchase_item_id = Column(Integer, ForeignKey("purchase_items.id"), nullable=True)
+    source_request_item_id = Column(Integer, ForeignKey("purchase_items.id"), nullable=True)
+    unit_cost = Column(Float, nullable=False, default=0)
+    total_cost = Column(Float, nullable=False, default=0)
 
     transfer = relationship("WarehouseTransfer", back_populates="items")
     item = relationship("Item")
+    purchase_item = relationship("PurchaseItem", foreign_keys=[purchase_item_id])
+    source_request_item = relationship("PurchaseItem", foreign_keys=[source_request_item_id])
 
 
 # ─── Perakitan (Assembly) ──────────────────────────────────────────────────────
@@ -1455,6 +1510,9 @@ class TradeIn(Base):
     payment_method = Column(String(20), default="cash")
     cash_amount = Column(Float, default=0)
     bank_amount = Column(Float, default=0)
+    deposit_amount = Column(Float, default=0)
+    status = Column(String(20), nullable=False, default="completed")
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -1476,7 +1534,7 @@ class TradeInReturnItem(Base):
     qty = Column(Float, nullable=False)
     returned_qty = Column(Float, default=0) # Jumlah yang sudah diretur ke supplier
     return_price = Column(Float, nullable=False)  # harga yang diterima toko dari pelanggan
-    condition = Column(String(50), default="good")  # good | damaged | partial
+    condition = Column(String(50), default="good")  # good | damaged
     total = Column(Float, nullable=False)
 
     trade_in = relationship("TradeIn", back_populates="return_items")
@@ -1598,6 +1656,7 @@ class PrintJob(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True)
+    device_id = Column(String(100), nullable=True, index=True)
     content = Column(Text, nullable=False)
     status = Column(String, default="pending", nullable=False, index=True)
     content_type = Column(String, default="raw")

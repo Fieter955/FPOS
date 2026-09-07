@@ -18,6 +18,7 @@ def get_incoming_requests(
     status: Optional[str] = "pending",
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
+    branch_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -36,6 +37,8 @@ def get_incoming_requests(
         q = q.filter(models.Purchase.date >= start_date)
     if end_date:
         q = q.filter(models.Purchase.date <= end_date)
+    if branch_id is not None:
+        q = q.filter(models.Purchase.branch_id == branch_id)
 
     return q.order_by(models.Purchase.id.desc()).all()
 

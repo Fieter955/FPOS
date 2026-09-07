@@ -8,6 +8,7 @@ from datetime import date
 from ..database import get_db
 from .. import models, schemas, auth as auth_utils
 from .accounting import create_auto_journal, get_local_date
+from ..services.item_catalog_sync import ensure_all_items_in_warehouse
 
 router = APIRouter()
 
@@ -260,8 +261,7 @@ def create_branch(branch: schemas.BranchCreate, db: Session = Depends(get_db), c
     # A. Simpan Cabang Baru
     new_branch = models.Branch(**branch_data)
     db.add(new_branch)
-    db.commit()
-    db.refresh(new_branch)
+    db.flush()
 
     # B. Otomatis Bangun Gudang Fisik untuk Cabang Baru Ini
     new_warehouse = models.Warehouse(
@@ -272,7 +272,10 @@ def create_branch(branch: schemas.BranchCreate, db: Session = Depends(get_db), c
         is_default=True # 🚀 REVISI: DIUBAH MENJADI TRUE
     )
     db.add(new_warehouse)
+    db.flush()
+    ensure_all_items_in_warehouse(db, new_warehouse.id)
     db.commit()
+    db.refresh(new_branch)
 
     return new_branch
 

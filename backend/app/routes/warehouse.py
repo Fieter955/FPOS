@@ -17,6 +17,7 @@ import pytz
 from ..database import get_db
 from ..auth import get_current_user, write_audit
 from .. import models
+from ..services.item_catalog_sync import ensure_all_items_in_warehouse
 from ..services.virtual_units import is_virtual_variant
 
 router = APIRouter()
@@ -168,6 +169,8 @@ def create_warehouse(data: dict, db: Session = Depends(get_db),
         branch_id=b_id  # SEKARANG SUDAH AKURAT SESUAI PILIHAN
     )
     db.add(w)
+    db.flush()
+    ensure_all_items_in_warehouse(db, w.id)
     db.commit()
     db.refresh(w)
     return {"id": w.id, "message": f"Gudang {name} berhasil dibuat"}
@@ -496,9 +499,13 @@ def get_detailed_transfers(
         FromWarehouse, models.WarehouseTransfer.from_warehouse_id == FromWarehouse.id
     ).outerjoin(
         ToWarehouse, models.WarehouseTransfer.to_warehouse_id == ToWarehouse.id
-    ).filter(
-        models.WarehouseTransfer.status == "confirmed"
-    )
+    ).filter(models.WarehouseTransfer.status.in_(["shipping", "confirmed"]))
+
+    if current_user.active_branch_id and current_user.active_branch_id != 1:
+        q = q.filter(
+            (FromWarehouse.branch_id == current_user.active_branch_id)
+            | (ToWarehouse.branch_id == current_user.active_branch_id)
+        )
 
     # Filter Bagian Asal (Sumber)
     if from_warehouse_id:
@@ -530,5 +537,7 @@ def get_detailed_transfers(
         "to_warehouse": it.transfer.to_warehouse.name if it.transfer.to_warehouse else "-",
         "item_code": it.item.code if it.item else "-",
         "item_name": it.item.name if it.item else "-",
-        "qty": it.qty
+        "qty": it.qty_received if it.transfer.status == "confirmed" and it.qty_received else it.qty,
+        "status": it.transfer.status,
+        "transfer_kind": it.transfer.transfer_kind,
     } for it in items]

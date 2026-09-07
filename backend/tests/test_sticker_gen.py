@@ -45,6 +45,21 @@ class StickerPriceVisibilityTests(unittest.TestCase):
 
 
 class StickerBarcodeRenderingTests(unittest.TestCase):
+    def test_repeated_barcode_values_are_cached_within_batch(self):
+        sticker_gen.render_code128_fit.cache_clear()
+
+        for _ in range(4):
+            sticker_gen.render_code128_fit(
+                code_text="8991234567890",
+                max_w_px=sticker_gen.mm_to_px(31, 203),
+                max_h_px=sticker_gen.mm_to_px(8, 203),
+                dpi=203,
+            )
+
+        cache_info = sticker_gen.render_code128_fit.cache_info()
+        self.assertEqual(cache_info.misses, 1)
+        self.assertEqual(cache_info.hits, 3)
+
     def test_code128_render_uses_requested_dpi_and_stays_within_bounds(self):
         dpi = 203
         max_width = sticker_gen.mm_to_px(31, dpi)
@@ -83,6 +98,46 @@ class StickerBarcodeRenderingTests(unittest.TestCase):
         self.assertEqual(image.format, "PNG")
         self.assertEqual(image.width, sticker_gen.mm_to_px(33, 203))
         self.assertEqual(image.height, sticker_gen.mm_to_px(15, 203))
+
+    def test_code128_keeps_a_scanner_quiet_zone(self):
+        image = sticker_gen.render_code128_fit(
+            code_text="8991234567890",
+            max_w_px=sticker_gen.mm_to_px(31, 203),
+            max_h_px=sticker_gen.mm_to_px(8, 203),
+            dpi=203,
+        )
+
+        self.assertIsNotNone(image)
+        black_columns = [
+            x
+            for x in range(image.width)
+            if any(image.getpixel((x, y)) == 0 for y in range(image.height))
+        ]
+        self.assertGreaterEqual(min(black_columns), sticker_gen.mm_to_px(1.5, 203))
+        self.assertGreaterEqual(
+            image.width - 1 - max(black_columns),
+            sticker_gen.mm_to_px(1.5, 203),
+        )
+
+    def test_two_column_layout_allows_taller_barcode(self):
+        request = sticker_gen.StikerBatchRequest(
+            data_produk=[
+                sticker_gen.ProdukItem(
+                    nama="Barang 2 Lin",
+                    barcode="8991234567890",
+                    tampilkan_harga=False,
+                )
+            ],
+            jumlah_kolom=2,
+            lebar_mm=33,
+            tinggi_mm=15,
+            barcode_scale_pct=100,
+        )
+        fake_barcode = Image.new("1", (20, 20), 0)
+        with patch.object(sticker_gen, "render_code128_fit", return_value=fake_barcode) as render:
+            sticker_gen.render_stiker_sheet(request)
+
+        self.assertEqual(render.call_args.kwargs["preferred_height_factor"], 0.85)
 
 
 class StickerColumnLayoutTests(unittest.TestCase):

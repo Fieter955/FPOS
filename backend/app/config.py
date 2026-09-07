@@ -1,10 +1,11 @@
 import secrets
 from pathlib import Path
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     # Database
     DATABASE_URL: str = "sqlite:///./ipos.db"
 
@@ -16,13 +17,11 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
 
     # ── Network / Tailscale ───────────────────────────────────────────────────
-    # False = tailscale "serve"  → HANYA device di tailnet yang sama (AMAN, default)
-    # True  = tailscale "funnel" → TERBUKA ke internet publik (pakai hanya jika perlu)
-    TAILSCALE_PUBLIC: bool = False
+    # FPOS selalu memakai Tailscale Funnel; tidak ada mode Serve privat.
 
     # App
     APP_NAME: str = "FPos 5.0"
-    APP_VERSION: str = "5.0.7"
+    APP_VERSION: str = "5.0.8"
 
     # CORS
     ALLOWED_ORIGINS: str = "*"
@@ -66,10 +65,12 @@ class Settings(BaseSettings):
     # installations must fetch both the manifest and package over HTTPS.
     UPDATE_ALLOW_HTTP: bool = False
 
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
-
+    # Central lifetime license service. URL/key can also be configured by the
+    # local Fieter maintenance screen and are then stored in instance/.
+    LICENSE_SERVER_URL: str = ""
+    LICENSE_PUBLIC_KEY_B64: str = ""
+    LICENSE_OFFLINE_GRACE_HOURS: int = 72
+    LICENSE_ALLOW_HTTP: bool = False
 
 # Nilai SECRET_KEY lama yang pernah hardcoded / bocor di git — wajib diganti otomatis.
 _INSECURE_SECRETS = {

@@ -30,13 +30,13 @@ Siapkan paket bersih
         ↓
 Salin ke C:\FPOS di laptop baru
         ↓
-Jalankan secara lokal dengan Funnel masih mati
+Jalankan secara lokal sebelum Tailscale dipasang
         ↓
 Ganti password bawaan dan isi data toko
         ↓
 Instal/login Tailscale di laptop server
         ↓
-Aktifkan Funnel untuk port 8010
+FPOS mengaktifkan Funnel port 8010 otomatis
         ↓
 Uji URL publik dari perangkat lain
 ```
@@ -117,14 +117,12 @@ Untuk setup pertama, pastikan nilai jaringan seperti berikut:
 ```dotenv
 DATABASE_URL=sqlite:///./ipos.db
 SECRET_KEY=
-TAILSCALE_PUBLIC=false
 ALLOWED_ORIGINS=*
 ```
 
 Aturan pengisian:
 
 - Biarkan `SECRET_KEY=` kosong. Aplikasi akan membuat `secret.key` acak saat pertama dijalankan.
-- Biarkan `TAILSCALE_PUBLIC=false` sampai semua password bawaan sudah diganti.
 - Isi `VENDOR_BOOTSTRAP_PASSWORD` dengan password kuat dan unik **sebelum aplikasi pertama kali dijalankan**.
 - Isi konfigurasi Drive, email, Telegram, atau AI hanya jika fitur tersebut memang digunakan.
 
@@ -148,7 +146,7 @@ Jangan memakai contoh tersebut sebagai password asli.
 8. Selesaikan data toko/cabang dan pengaturan dasar.
 9. Tutup lalu buka kembali FPOS, kemudian pastikan password baru dapat dipakai.
 
-Jangan melanjutkan ke Funnel jika masih ada akun dengan password bawaan.
+Selesaikan penggantian password sebelum memasang/login Tailscale pada laptop server.
 
 ## 5. Memasang dan mengaktifkan Tailscale Funnel
 
@@ -162,24 +160,18 @@ Jangan melanjutkan ke Funnel jika masih ada akun dengan password bawaan.
 
 Perangkat pelanggan yang hanya membuka URL Funnel tidak perlu memasang atau login Tailscale.
 
-### 5.2 Aktifkan mode publik di FPOS
+### 5.2 Aktivasi Funnel otomatis
 
-Tutup FPOS, lalu ubah konfigurasi berikut di `C:\FPOS\.env`:
+FPOS otomatis menjalankan `tailscale funnel --bg --yes 8010` ketika server dimulai.
+Jika service Tailscale belum siap ketika Windows baru menyala, FPOS akan mencoba
+kembali di background tanpa menghambat akses lokal.
 
-```dotenv
-TAILSCALE_PUBLIC=true
-ALLOWED_ORIGINS=*
-```
-
-Simpan file, kemudian buka kembali `FPOS.exe` dan biarkan aplikasi tetap berjalan.
-
-### 5.3 Aktifkan Funnel
-
-Buka **PowerShell sebagai Administrator**, kemudian jalankan:
+Pada aktivasi pertama, Tailscale mungkin memerlukan persetujuan melalui browser.
+Jika URL belum muncul, buka **PowerShell sebagai Administrator**, kemudian jalankan:
 
 ```powershell
 tailscale status
-tailscale funnel --bg 8010
+tailscale funnel --bg --yes 8010
 tailscale funnel status
 ```
 
@@ -189,7 +181,7 @@ Jika perintah `tailscale` tidak ditemukan, gunakan lokasi executable lengkap:
 
 ```powershell
 & "C:\Program Files\Tailscale\tailscale.exe" status
-& "C:\Program Files\Tailscale\tailscale.exe" funnel --bg 8010
+& "C:\Program Files\Tailscale\tailscale.exe" funnel --bg --yes 8010
 & "C:\Program Files\Tailscale\tailscale.exe" funnel status
 ```
 
@@ -204,7 +196,7 @@ Simpan URL tersebut sebagai alamat FPOS untuk instalasi ini. URL terikat pada pe
 Rujukan resmi:
 
 - [Tailscale Funnel](https://tailscale.com/kb/1223/funnel)
-- [Perintah Tailscale Serve](https://tailscale.com/docs/reference/tailscale-cli/serve)
+- [Perintah Tailscale Funnel](https://tailscale.com/docs/reference/tailscale-cli/funnel)
 - [Instalasi Tailscale](https://tailscale.com/docs/install)
 
 ## 6. Pengujian
@@ -299,11 +291,11 @@ Buka aplikasi Tailscale, login kembali, dan pastikan perangkat muncul pada dafta
 
 ### Funnel belum menghasilkan URL
 
-Pastikan FPOS sedang berjalan, lalu jalankan sebagai Administrator:
+FPOS akan mencoba kembali secara otomatis. Untuk memeriksa atau memicu aktivasi
+secara manual, jalankan sebagai Administrator:
 
 ```powershell
-tailscale funnel reset
-tailscale funnel --bg 8010
+tailscale funnel --bg --yes 8010
 tailscale funnel status
 ```
 
@@ -332,7 +324,7 @@ C:\FPOS\error_log.txt
 Jalankan kembali:
 
 ```powershell
-tailscale funnel --bg 8010
+tailscale funnel --bg --yes 8010
 tailscale funnel status
 ```
 

@@ -7,6 +7,7 @@ from .. import models
 
 
 ACCOUNT_INVENTORY = "1-1400"
+ACCOUNT_DAMAGED_INVENTORY = "1-1450"
 ACCOUNT_CASH = "1-1100"
 ACCOUNT_BANK = "1-1200"
 ACCOUNT_PAYABLE = "2-1100"
@@ -111,7 +112,8 @@ def create_purchase_journal(db: Session, *, date_val: date, number_ref: str,
 def create_purchase_reversal_journal(db: Session, *, date_val: date, number_ref: str,
                                      total: float, paid: float, user_id: int,
                                      branch_id: int,
-                                     tax: float = 0, pisah_ppn: bool = False):
+                                     tax: float = 0, pisah_ppn: bool = False,
+                                     deposit_amount: float = 0):
     tax = float(tax or 0)
     if pisah_ppn and tax > 0:
         # Kebalikan pembelian PKP: PPN Masukan (1-1550) ikut dibalik, persediaan dibalik NET.
@@ -122,8 +124,12 @@ def create_purchase_reversal_journal(db: Session, *, date_val: date, number_ref:
         ]
     else:
         entries = [{"code": ACCOUNT_INVENTORY, "debit": 0, "credit": total}]
-    if paid > 0:
-        entries.append({"code": ACCOUNT_CASH, "debit": paid, "credit": 0})
+    deposit_amount = min(float(deposit_amount or 0), float(paid or 0))
+    cash_refund = float(paid or 0) - deposit_amount
+    if cash_refund > 0:
+        entries.append({"code": ACCOUNT_CASH, "debit": cash_refund, "credit": 0})
+    if deposit_amount > 0:
+        entries.append({"code": ACCOUNT_SALDO_SUPPLIER, "debit": deposit_amount, "credit": 0})
     payable = total - paid
     if payable > 0:
         entries.append({"code": ACCOUNT_PAYABLE, "debit": payable, "credit": 0})
@@ -141,13 +147,16 @@ def create_purchase_reversal_journal(db: Session, *, date_val: date, number_ref:
 
 def create_purchase_payment_journal(db: Session, *, date_val: date, number_ref: str,
                                     description: str, cash_amount: float,
-                                    bank_amount: float, user_id: int,
+                                    bank_amount: float, deposit_amount: float,
+                                    user_id: int,
                                     branch_id: int):
-    entries = [{"code": ACCOUNT_PAYABLE, "debit": cash_amount + bank_amount, "credit": 0}]
+    entries = [{"code": ACCOUNT_PAYABLE, "debit": cash_amount + bank_amount + deposit_amount, "credit": 0}]
     if cash_amount > 0:
         entries.append({"code": ACCOUNT_CASH, "debit": 0, "credit": cash_amount})
     if bank_amount > 0:
         entries.append({"code": "1-1200", "debit": 0, "credit": bank_amount})
+    if deposit_amount > 0:
+        entries.append({"code": ACCOUNT_SALDO_SUPPLIER, "debit": 0, "credit": deposit_amount})
 
     return _auto_journal(
         db,
@@ -220,6 +229,32 @@ def create_branch_receiving_journal(db: Session, *, date_val: date, number_ref: 
     )
 
 
+def create_branch_return_dispatch_journal(db: Session, *, date_val: date,
+                                          number_ref: str, total: float,
+                                          user_id: int, branch_id: int):
+    return _auto_journal(
+        db, date_val, number_ref, f"Retur kiriman ke Toko Utama ({number_ref})",
+        [
+            {"code": ACCOUNT_TRANSFER_IN, "debit": total, "credit": 0},
+            {"code": ACCOUNT_INVENTORY, "debit": 0, "credit": total},
+        ],
+        user_id, branch_id,
+    )
+
+
+def create_pusat_return_receiving_journal(db: Session, *, date_val: date,
+                                          number_ref: str, total: float,
+                                          user_id: int, pusat_branch_id: int = 1):
+    return _auto_journal(
+        db, date_val, number_ref, f"Terima retur kiriman dari cabang ({number_ref})",
+        [
+            {"code": ACCOUNT_INVENTORY, "debit": total, "credit": 0},
+            {"code": ACCOUNT_TRANSFER_OUT, "debit": 0, "credit": total},
+        ],
+        user_id, pusat_branch_id,
+    )
+
+
 def create_branch_fulfillment_journal(db: Session, *, date_val: date, number_ref: str,
                                       supplier_name: str, target_branch_id: int,
                                       total: float, paid: float, user_id: int,
@@ -239,11 +274,16 @@ def create_branch_fulfillment_journal(db: Session, *, date_val: date, number_ref
 def create_branch_fulfillment_reversal_journal(db: Session, *, date_val: date,
                                                number_ref: str, target_branch_id: int,
                                                total: float, paid: float,
-                                               user_id: int, pusat_branch_id: int = 1):
+                                               user_id: int, pusat_branch_id: int = 1,
+                                               deposit_amount: float = 0):
     # 1. Balik Jurnal Toko Pusat
     entries_pusat = [{"code": ACCOUNT_TRANSFER_OUT, "debit": 0, "credit": total}]
-    if paid > 0:
-        entries_pusat.append({"code": ACCOUNT_CASH, "debit": paid, "credit": 0})
+    deposit_amount = min(float(deposit_amount or 0), float(paid or 0))
+    cash_refund = float(paid or 0) - deposit_amount
+    if cash_refund > 0:
+        entries_pusat.append({"code": ACCOUNT_CASH, "debit": cash_refund, "credit": 0})
+    if deposit_amount > 0:
+        entries_pusat.append({"code": ACCOUNT_SALDO_SUPPLIER, "debit": deposit_amount, "credit": 0})
     payable = total - paid
     if payable > 0:
         entries_pusat.append({"code": ACCOUNT_PAYABLE, "debit": payable, "credit": 0})
@@ -275,12 +315,35 @@ def create_branch_fulfillment_reversal_journal(db: Session, *, date_val: date,
     )
 
 
+def create_pusat_fulfillment_reversal_journal(db: Session, *, date_val: date,
+                                              number_ref: str, target_branch_id: int,
+                                              total: float, paid: float,
+                                              user_id: int, pusat_branch_id: int = 1,
+                                              deposit_amount: float = 0):
+    entries = [{"code": ACCOUNT_TRANSFER_OUT, "debit": 0, "credit": total}]
+    deposit_amount = min(float(deposit_amount or 0), float(paid or 0))
+    cash_refund = float(paid or 0) - deposit_amount
+    if cash_refund > 0:
+        entries.append({"code": ACCOUNT_CASH, "debit": cash_refund, "credit": 0})
+    if deposit_amount > 0:
+        entries.append({"code": ACCOUNT_SALDO_SUPPLIER, "debit": deposit_amount, "credit": 0})
+    payable = total - paid
+    if payable > 0:
+        entries.append({"code": ACCOUNT_PAYABLE, "debit": payable, "credit": 0})
+    return _auto_journal(
+        db, date_val, number_ref,
+        f"PEMBATALAN KIRIMAN CABANG ({target_branch_id}): {number_ref}",
+        entries, user_id, pusat_branch_id,
+    )
+
+
 def create_purchase_return_journal(db: Session, *, date_val: date, number_ref: str,
                                    supplier_name: str, total_inventory: float,
                                    total_tax: float, is_tax_included: bool,
                                    user_id: int, branch_id: int,
                                    total_carrying: Optional[float] = None,
-                                   ppn_dipisah: bool = False):
+                                   ppn_dipisah: bool = False,
+                                   damaged_carrying: float = 0.0):
     """Jurnal retur pembelian dengan SELISIH HARGA.
 
     Supplier (1-1600) ditagih sebesar refund disepakati (`total_inventory + PPN`); Persediaan
@@ -318,6 +381,16 @@ def create_purchase_return_journal(db: Session, *, date_val: date, number_ref: s
     # ── Mode FIFO: biaya batch sudah landed (incl pajak) → tanpa kaki pajak terpisah ──
     carrying = float(total_carrying)
 
+    def carrying_entries() -> list[dict]:
+        damaged = min(max(float(damaged_carrying or 0), 0.0), carrying)
+        normal = carrying - damaged
+        result = []
+        if normal > 0.005:
+            result.append({"code": ACCOUNT_INVENTORY, "debit": 0, "credit": normal})
+        if damaged > 0.005:
+            result.append({"code": ACCOUNT_DAMAGED_INVENTORY, "debit": 0, "credit": damaged})
+        return result
+
     # ── Mode PKP (faktur ini dulu memisah PPN): balikkan PPN Masukan (1-1550) terpisah; selisih
     #    harga dihitung pada NILAI NET barang (total_inventory) vs biaya batch nyata (carrying). ──
     if ppn_dipisah and total_tax > 0.005:
@@ -328,11 +401,9 @@ def create_purchase_return_journal(db: Session, *, date_val: date, number_ref: s
         elif variance < -0.005:
             if not db.query(models.Account).filter(models.Account.code == ACCOUNT_INVENTORY_VARIANCE).first():
                 carrying, variance = total_inventory, 0.0
-        entries = [
-            {"code": ACCOUNT_SALDO_SUPPLIER, "debit": total_to_supplier, "credit": 0},
-            {"code": ACCOUNT_INVENTORY, "debit": 0, "credit": carrying},
-            {"code": ACCOUNT_PPN_MASUKAN, "debit": 0, "credit": total_tax},
-        ]
+        entries = [{"code": ACCOUNT_SALDO_SUPPLIER, "debit": total_to_supplier, "credit": 0}]
+        entries.extend(carrying_entries())
+        entries.append({"code": ACCOUNT_PPN_MASUKAN, "debit": 0, "credit": total_tax})
         if variance > 0.005:
             entries.append({"code": ACCOUNT_PURCHASE_DISCOUNT, "debit": 0, "credit": variance})
         elif variance < -0.005:
@@ -353,10 +424,8 @@ def create_purchase_return_journal(db: Session, *, date_val: date, number_ref: s
         if not db.query(models.Account).filter(models.Account.code == ACCOUNT_INVENTORY_VARIANCE).first():
             carrying, variance = total_to_supplier, 0.0
 
-    entries = [
-        {"code": ACCOUNT_SALDO_SUPPLIER, "debit": total_to_supplier, "credit": 0},
-        {"code": ACCOUNT_INVENTORY, "debit": 0, "credit": carrying},
-    ]
+    entries = [{"code": ACCOUNT_SALDO_SUPPLIER, "debit": total_to_supplier, "credit": 0}]
+    entries.extend(carrying_entries())
     if variance > 0.005:
         # Refund > biaya landed → untung retur
         entries.append({"code": ACCOUNT_PURCHASE_DISCOUNT, "debit": 0, "credit": variance})
@@ -374,7 +443,8 @@ def create_purchase_return_journal(db: Session, *, date_val: date, number_ref: s
 def create_sale_return_journal(db: Session, *, date_val: date, number_ref: str,
                                customer_name: str, total_sales: float,
                                total_tax: float, total_cogs: float,
-                               is_tax_included: bool, user_id: int, branch_id: int):
+                               is_tax_included: bool, user_id: int, branch_id: int,
+                               damaged_cogs: float = 0.0):
     # Total yang menjadi hutang ke customer (Saldo di Customer)
     total_to_customer = total_sales + total_tax
     
@@ -383,8 +453,10 @@ def create_sale_return_journal(db: Session, *, date_val: date, number_ref: str,
         {"code": ACCOUNT_SALES_RETURN, "debit": total_sales, "credit": 0},
         # Kembalikan stok
         {"code": ACCOUNT_INVENTORY, "debit": total_cogs, "credit": 0},
-        {"code": ACCOUNT_COGS, "debit": 0, "credit": total_cogs}
+        {"code": ACCOUNT_COGS, "debit": 0, "credit": total_cogs + damaged_cogs}
     ]
+    if damaged_cogs > 0:
+        entries.append({"code": ACCOUNT_DAMAGED_INVENTORY, "debit": damaged_cogs, "credit": 0})
     
     if total_tax > 0:
         # PPN Keluaran yang dipungut saat jual ikut dibalik → kurangi Hutang PPN (2-1200),

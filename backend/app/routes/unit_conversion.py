@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..auth import get_current_user, write_audit
 from ..database import get_db
+from ..services.item_catalog_sync import ensure_item_in_all_warehouses
 from ..services.virtual_units import (
     get_effective_buy_price,
     get_effective_stock_from_source,
@@ -328,6 +329,7 @@ def create_virtual_variant(
     db.add(child_item)
     db.flush()
     _sync_child_barcode(db, child_item)
+    ensure_item_in_all_warehouses(db, child_item.id)
 
     conv = models.UnitConversion(
         item_id=source_item.id,

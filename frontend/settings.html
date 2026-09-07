@@ -437,7 +437,25 @@
         </div>
 
         <div id="pnlDeveloper" class="tab-panel" style="display: none">
-          <div class="card" style="padding: 28px; border: 2px solid #ef4444">
+          <div class="card" style="padding:28px;border:2px solid #f97316">
+            <h3 style="margin:0 0 8px;color:#f97316">Maintenance Lisensi Server</h3>
+            <p style="color:var(--text-muted);line-height:1.6">Konfigurasi ini khusus Fieter. Public key mencegah aplikasi menerima keputusan dari server lisensi palsu.</p>
+            <div class="input-group"><label>URL server lisensi pusat</label><input id="licenseServerUrl" class="input-control" placeholder="https://license.example.com"></div>
+            <div class="input-group"><label>Public key Ed25519</label><input id="licensePublicKey" class="input-control" autocomplete="off" placeholder="Public key dari fposLicense"></div>
+            <div class="input-group"><label>URL publik/Tailscale FPOS pelanggan</label><input id="licenseFposUrl" class="input-control" placeholder="https://server-pelanggan.example.ts.net"></div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
+              <button onclick="saveCentralLicenseConfig()" class="btn btn-primary">Simpan konfigurasi</button>
+              <button onclick="checkCentralLicense()" class="btn">Periksa sekarang</button>
+            </div>
+            <div class="input-group"><label>Kode lisensi lifetime</label><input id="centralLicenseCode" class="input-control" placeholder="FPOS-XXXX-XXXX-XXXX-XXXX"></div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button onclick="activateCentralLicense()" class="btn btn-primary">Aktifkan lisensi</button>
+              <button onclick="setFposAutostart(true)" class="btn">Aktifkan auto-start</button>
+              <button onclick="setFposAutostart(false)" class="btn">Matikan auto-start</button>
+            </div>
+            <pre id="centralLicenseStatus" style="white-space:pre-wrap;background:var(--bg-color);padding:14px;border-radius:10px;margin-top:18px">Memuat status...</pre>
+          </div>
+          <div class="card" style="display:none;padding: 28px; border: 2px solid #ef4444">
             <h3 style="margin: 0 0 16px; color: #ef4444">
               👑 Kontrol Super Admin (Developer)
             </h3>
@@ -548,7 +566,7 @@
         });
         if (t.toLowerCase() === "backup") loadSysInfo();
         if (t.toLowerCase() === "update") loadUpdateInfo();
-        if (t.toLowerCase() === "developer") loadPembayaran();
+        if (t.toLowerCase() === "developer") loadCentralLicense();
         if (t.toLowerCase() === "printer") {
           loadPrintSettings();
           loadPrintJobs();
@@ -897,6 +915,79 @@
       }
 
       /* ── Super Admin (Fieter Only) ── */
+      async function loadCentralLicense() {
+        try {
+          const status = await api("GET", "/license/status");
+          document.getElementById("licenseServerUrl").value = status.license_server_url || "";
+          document.getElementById("licenseFposUrl").value = status.fpos_url || "";
+          document.getElementById("centralLicenseCode").value = status.license_key || "";
+          document.getElementById("centralLicenseStatus").textContent = [
+            `Status: ${status.status}`,
+            `Pesan: ${status.message}`,
+            `Komputer: ${status.hostname}`,
+            `Installation ID: ${status.installation_id}`,
+            `Pemeriksaan terakhir: ${status.last_successful_check_at || "belum pernah"}`,
+          ].join("\n");
+        } catch (error) {
+          document.getElementById("centralLicenseStatus").textContent = error.message;
+        }
+      }
+
+      async function saveCentralLicenseConfig() {
+        try {
+          showLoading("Menyimpan konfigurasi lisensi...");
+          await api("POST", "/license/developer/configure", {
+            license_server_url: document.getElementById("licenseServerUrl").value.trim(),
+            public_key_b64: document.getElementById("licensePublicKey").value.trim(),
+            fpos_url: document.getElementById("licenseFposUrl").value.trim(),
+          });
+          hideLoading();
+          showToast("Konfigurasi lisensi tersimpan", "success");
+          await loadCentralLicense();
+        } catch (error) {
+          hideLoading();
+          showToast(error.message, "error");
+        }
+      }
+
+      async function activateCentralLicense() {
+        try {
+          showLoading("Mengaktifkan lisensi...");
+          await api("POST", "/license/activate", {
+            license_key: document.getElementById("centralLicenseCode").value.trim(),
+          });
+          hideLoading();
+          showToast("Lisensi berhasil diaktifkan", "success");
+          await loadCentralLicense();
+          await checkBillingStatus();
+        } catch (error) {
+          hideLoading();
+          showToast(error.message, "error");
+        }
+      }
+
+      async function checkCentralLicense() {
+        try {
+          showLoading("Menghubungi server lisensi...");
+          await api("POST", "/license/check");
+          hideLoading();
+          await loadCentralLicense();
+          await checkBillingStatus();
+        } catch (error) {
+          hideLoading();
+          showToast(error.message, "error");
+        }
+      }
+
+      async function setFposAutostart(enabled) {
+        try {
+          await api("POST", "/license/autostart", { enabled });
+          showToast(enabled ? "Auto-start diaktifkan" : "Auto-start dimatikan", "success");
+        } catch (error) {
+          showToast(error.message, "error");
+        }
+      }
+
       async function kirimSihir(aksi, pesan) {
         if (
           !(await showConfirm(`Kirim perintah ${aksi.toUpperCase()} ke klien?`))

@@ -58,6 +58,16 @@
   --tap-min: 44px; /* SENGAJA px: batas fisik target sentuh, tak boleh menyusut di HP kecil */
 }
 
+.report-page { max-width: 1440px; margin: 0 auto; }
+.report-summary { display: grid; grid-template-columns: repeat(auto-fit,minmax(170px,1fr)); gap: 1rem; margin: 1rem 0; }
+.report-kpi { padding: 1rem; display: flex; flex-direction: column; gap: .35rem; }
+.report-kpi small { color: var(--text-muted); text-transform: capitalize; }
+.report-kpi strong { font-size: 1.35rem; overflow-wrap: anywhere; }
+.report-paging { color: var(--text-muted); font-size: .85rem; }
+.date-filter { display: flex; gap: .5rem; }
+@media (max-width: 700px) { .date-filter { flex-direction: column; } .report-page .filter-bar { align-items: stretch; } .report-page .filter-bar button { width: 100%; } }
+@media print { .report-page > button, .report-page .filter-bar { display:none !important; } .report-page { max-width:none; } body { background:#fff !important; } .card { box-shadow:none !important; } }
+
 /* Modern Dark Mode (Deep Slate) */
 body.dark-mode {
   --bg-color: #0f172a;
@@ -145,6 +155,81 @@ table {
   flex: 1;
   padding: var(--content-pad);
   overflow-y: auto;
+}
+
+/* Dialog pembayaran hutang versi lebar. Layout ini bersifat opt-in agar modal
+   pembayaran lain tetap memakai susunan ringkas satu kolom. */
+.payment-modal-box-wide .modal-hdr {
+  margin-bottom: 12px;
+}
+
+.payment-modal-box-wide .payment-modal-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.payment-modal-box-wide .payment-modal-column {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.payment-modal-box-wide .p-info,
+.payment-modal-box-wide .p-method-group,
+.payment-modal-box-wide .p-balances,
+.payment-modal-box-wide .p-amounts,
+.payment-modal-box-wide .p-total,
+.payment-modal-box-wide .p-note-group,
+.payment-modal-box-wide .p-actions {
+  margin: 0 !important;
+}
+
+.payment-modal-box-wide :is(input, select, button):focus-visible {
+  outline: 3px solid var(--primary-light);
+  outline-offset: 2px;
+}
+
+@media (min-width: 769px) {
+  .payment-modal-box.payment-modal-box-wide {
+    width: min(94vw, 920px) !important;
+    max-width: 920px !important;
+    padding: 24px !important;
+  }
+
+  .payment-modal-box-wide .payment-modal-layout {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    align-items: start;
+    gap: 20px;
+  }
+
+  .payment-modal-box-wide .p-balances {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .payment-modal-box-wide .p-balances > div {
+    min-width: 0;
+  }
+
+  .payment-modal-box-wide .p-balances > div > div:last-child {
+    overflow-wrap: anywhere;
+  }
+
+  .payment-modal-box-wide .p-amounts {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .payment-modal-box.payment-modal-box-wide {
+    width: min(92vw, 480px) !important;
+    max-width: 480px !important;
+  }
+
+  .payment-modal-box-wide .p-balances {
+    grid-template-columns: 1fr !important;
+  }
 }
 
 /* Modern Cards */

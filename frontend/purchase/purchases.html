@@ -1185,6 +1185,7 @@
     // Initialize Shared Payment Modal
     const apModal = createPaymentModal({
       type: "ap",
+      layout: "wide",
       onSuccess: () => {
         if (currentTab === "payment") loadPayments();
         else load();
@@ -2246,6 +2247,7 @@
             total: p.total,
             paid: p.paid,
             name: p.supplier?.name || "-",
+            depositBalance: p.supplier?.deposit_balance || 0,
           });
         }
       } catch (ex) {
@@ -2368,6 +2370,7 @@
         total: finalP.total,
         paid: finalP.paid,
         name: finalP.supplier?.name || "-",
+        depositBalance: finalP.supplier?.deposit_balance || 0,
       });
     }
 
@@ -2428,6 +2431,7 @@
             total: currentP.total,
             paid: currentP.paid,
             name: currentP.supplier?.name || "-",
+            depositBalance: currentP.supplier?.deposit_balance || 0,
             onSuccess: () => {
               setTimeout(() => {
                 location.href = `catat-pembelian.html?id=${newPurchase.id}`;

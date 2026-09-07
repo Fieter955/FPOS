@@ -8,6 +8,7 @@ from app.services.receipt_renderer import (
     build_purchase_return_receipt,
     build_sale_receipt,
     build_sale_return_receipt,
+    build_trade_in_receipt,
     safe_text,
 )
 
@@ -73,6 +74,32 @@ class ReceiptRendererTests(unittest.TestCase):
         self.assertTrue(all(len(line) <= 48 for line in visible_lines(receipt)))
         self.assertIn("-" * 48, receipt)
 
+    def test_enlarged_store_name_wraps_to_half_width(self):
+        settings = ReceiptSettings("Nama Toko Sangat Panjang Untuk Pengujian Struk", paper_width_mm=58)
+        receipt = build_sale_receipt(self.make_sale(), settings, ns(username="kasir"))
+        enlarged_block = receipt.split("\x1d\x21\x11", 1)[1].split("\x1d\x21\x00", 1)[0]
+        enlarged_lines = [line for line in enlarged_block.splitlines() if line]
+
+        self.assertTrue(enlarged_lines)
+        self.assertTrue(all(len(line) <= settings.enlarged_columns for line in enlarged_lines))
+
+    def test_long_receipt_fields_never_exceed_paper_width(self):
+        sale = self.make_sale()
+        sale.customer = ns(name="Pelanggan Dengan Nama Sangat Panjang " * 4)
+        sale.items[0].item.name = "Barang Dengan Nama Sangat Panjang " * 5
+        for width, columns in ((58, 32), (80, 48)):
+            receipt = build_sale_receipt(
+                sale,
+                ReceiptSettings(
+                    "Toko " + ("Sangat Panjang " * 8),
+                    address="Alamat " + ("Panjang " * 12),
+                    footer="Terima kasih " + ("banyak " * 12),
+                    paper_width_mm=width,
+                ),
+                ns(full_name="Kasir " + ("Panjang " * 5)),
+            )
+            self.assertTrue(all(len(line) <= columns for line in visible_lines(receipt)))
+
     def test_control_characters_and_unicode_are_printer_safe(self):
         self.assertEqual(safe_text("Es Kopi\x1b\x07 – café 😀"), "Es Kopi  cafe")
 
@@ -106,6 +133,28 @@ class ReceiptRendererTests(unittest.TestCase):
 
         self.assertIn("saldo pelanggan", build_sale_return_receipt(sale_return, settings))
         self.assertIn("saldo supplier", build_purchase_return_receipt(purchase_return, settings))
+
+    def test_trade_in_receipt_shows_customer_balance_tender(self):
+        trade = ns(
+            number="TT1",
+            date=date(2026, 9, 1),
+            created_at=datetime.now(),
+            creator=ns(username="admin"),
+            customer=ns(name="Budi"),
+            return_items=[],
+            new_items=[],
+            return_subtotal=50_000,
+            new_subtotal=100_000,
+            difference=50_000,
+            cash_amount=10_000,
+            bank_amount=15_000,
+            deposit_amount=25_000,
+        )
+
+        receipt = build_trade_in_receipt(trade, ReceiptSettings("Toko"))
+
+        self.assertIn("Saldo Pelanggan", receipt)
+        self.assertIn("25.000,00", receipt)
 
 
 if __name__ == "__main__":

@@ -120,9 +120,9 @@
 
           let btnHtml = "";
           if (!initialData.is_branch_request && initialData.from_po_id) {
-            btnHtml = `<button class="btn btn-PO-success" onclick="terimaBarangCabang(${initialData.from_po_id})">ACC (Terima dari Pusat)</button>`;
-          } else if (initialData.is_branch_request) {
             btnHtml = `<button class="btn btn-PO-success" onclick="terimaBarangCabang(${initialData.id})">ACC (Terima dari Pusat)</button>`;
+          } else if (initialData.is_branch_request) {
+            btnHtml = `<button class="btn" disabled>Tunggu kiriman dari Pusat</button>`;
           } else {
             btnHtml = `<button class="btn btn-PO-success" onclick="finalisasi('paid')">ACC (Simpan Invoice)</button>`;
           }
@@ -459,16 +459,6 @@
 
         try {
           showLoading("Memproses Penerimaan Barang...");
-
-          // --- SIMPAN PERUBAHAN KE TRANSAKSI DAHULU ---
-          // Ini memastikan qty_received dan item_id baru tersimpan sebelum proses stok
-          const updatePayload = {
-            ...data,
-            notes: document.getElementById("bNotes").value || null,
-            from_po_id: loadedPOId,
-            target_branch_id: poBranchId || data.target_branch_id,
-          };
-          await api("PUT", `/purchases/${targetPoId}`, updatePayload);
 
           // --- FINALIZE RECEIVE ---
           const res = await api(

@@ -1,57 +1,132 @@
 <!doctype html>
 <html lang="id">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Pelanggan - FPOS</title>
-    <link rel="stylesheet" href="/css/style.css" />
-    <link rel="stylesheet" href="/css/components.css" />
-  </head>
-  <body>
-    <div class="app-container">
-      <main class="main-content">
-        <button
-          class="btn"
-          style="
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pelanggan - FPOS</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <style>
+    #mHistory {
+      padding: 12px;
+    }
+
+    #mHistory .customer-history-box {
+      width: calc(100vw - 24px);
+      max-width: none;
+      height: calc(100vh - 24px);
+      max-height: none;
+      padding: 24px;
+      overflow: auto;
+    }
+
+    #mHistory .modal-hdr {
+      position: sticky;
+      top: -24px;
+      z-index: 4;
+      padding: 24px 0 12px;
+      background: var(--card-bg);
+    }
+
+    .customer-history-summary {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .customer-history-card {
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 14px;
+      background: var(--bg-color);
+    }
+
+    .customer-history-filters {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .deposit-positive {
+      color: #16a34a;
+      font-weight: 800;
+    }
+
+    .deposit-negative {
+      color: #dc2626;
+      font-weight: 800;
+    }
+
+    .history-detail {
+      margin: 12px 0 20px;
+      padding: 14px;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      background: var(--bg-color);
+    }
+
+    @media (max-width: 760px) {
+      #mHistory {
+        padding: 4px;
+      }
+
+      #mHistory .customer-history-box {
+        width: calc(100vw - 8px);
+        height: calc(100vh - 8px);
+        padding: 14px;
+        border-radius: 14px;
+      }
+
+      #mHistory .modal-hdr {
+        top: -14px;
+        padding-top: 14px;
+      }
+
+      .customer-history-summary,
+      .customer-history-filters {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app-container">
+    <main class="main-content">
+      <button class="btn" style="
             background: transparent;
             color: var(--text-muted);
             padding: 0;
             margin-bottom: 16px;
-          "
-          onclick="location.href = '/dashboard'"
-        >
-          ← Kembali
-        </button>
+          " onclick="location.href = '/dashboard'">
+        ← Kembali
+      </button>
 
-        <div class="pg-header">
-          <div>
-            <h1>👥 Data Pelanggan</h1>
-            <p>Kelola member, poin loyalitas, dan grup diskon.</p>
-          </div>
-          <div style="display: flex; gap: 10px">
-            <button
-              class="btn"
-              style="
+      <div class="pg-header">
+        <div>
+          <h1>👥 Data Pelanggan</h1>
+          <p>Kelola member, poin loyalitas, dan grup diskon.</p>
+        </div>
+        <div style="display: flex; gap: 10px">
+          <button class="btn" style="
                 background: var(--bg-color);
                 border: 1px solid var(--border-color);
                 color: var(--text-main);
-              "
-              onclick="switchTab('grup')"
-            >
-              🎯 Grup Diskon
-            </button>
-            <button class="btn btn-primary" onclick="openModal('mPelanggan')">
-              ➕ Tambah Pelanggan
-            </button>
-          </div>
+              " onclick="switchTab('grup')">
+            🎯 Grup Diskon
+          </button>
+          <button class="btn btn-primary" onclick="openModal('mPelanggan')">
+            ➕ Tambah Pelanggan
+          </button>
         </div>
+      </div>
 
-        <!-- Tab buttons -->
-        <div style="display: flex; gap: 8px; margin-bottom: 20px">
-          <button
-            id="tbCust"
-            onclick="switchTab('cust')"
-            style="
+      <!-- Tab buttons -->
+      <div style="display: flex; gap: 8px; margin-bottom: 20px">
+        <button id="tbCust" onclick="switchTab('cust')" style="
               padding: 8px 20px;
               border-radius: 100px;
               border: 2px solid var(--primary);
@@ -60,14 +135,10 @@
               font-weight: 700;
               cursor: pointer;
               font-family: inherit;
-            "
-          >
-            Pelanggan
-          </button>
-          <button
-            id="tbGrup"
-            onclick="switchTab('grup')"
-            style="
+            ">
+          Pelanggan
+        </button>
+        <button id="tbGrup" onclick="switchTab('grup')" style="
               padding: 8px 20px;
               border-radius: 100px;
               border: 2px solid var(--border-color);
@@ -76,646 +147,811 @@
               font-weight: 700;
               cursor: pointer;
               font-family: inherit;
-            "
-          >
-            Grup Diskon
-          </button>
-        </div>
+            ">
+          Grup Diskon
+        </button>
+      </div>
 
-        <!-- Panel Pelanggan -->
-        <div id="pnlCust">
-          <div class="filter-bar">
-            <input
-              id="srchCust"
-              type="text"
-              class="input-control"
-              placeholder="🔍 Cari nama / telepon..."
-              oninput="loadCust()"
-            />
-          </div>
-          <div class="tbl-wrap">
-            <table class="tbl">
-              <thead>
-                <tr>
-                  <th>Nama</th>
-                  <th>Telepon</th>
-                  <th>Grup Diskon</th>
-                  <th>Deposit</th>
-                  <th>Poin</th>
-                  <th>Total Beli</th>
-                  <th>Aksi</th>
-                </tr>
-              </thead>
-              <tbody id="tblCust"></tbody>
-            </table>
-          </div>
+      <!-- Panel Pelanggan -->
+      <div id="pnlCust">
+        <div class="filter-bar">
+          <input id="srchCust" type="text" class="input-control" placeholder="🔍 Cari nama / telepon..."
+            oninput="loadCust()" />
+          <select id="filterGroup" class="input-control" onchange="loadCust()" style="max-width:240px">
+            <option value="">Semua Grup Diskon</option>
+            <option value="none">Level 1 — Harga Umum (0%)</option>
+          </select>
+          <select id="sortCust" class="input-control" onchange="changeCustomerSort()" style="max-width:230px">
+            <option value="name_asc">Urutkan: Nama</option>
+            <option value="deposit_desc">Deposit Tertinggi</option>
+            <option value="deposit_asc">Deposit Terendah</option>
+          </select>
         </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Nama</th>
+                <th>Telepon</th>
+                <th>Grup Diskon</th>
+                <th>Deposit</th>
+                <th>Poin</th>
+                <th>Total Beli</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="tblCust"></tbody>
+          </table>
+        </div>
+      </div>
 
-        <!-- Panel Grup -->
-        <div id="pnlGrup" style="display: none">
-          <div
-            style="
+      <!-- Panel Grup -->
+      <div id="pnlGrup" style="display: none">
+        <div style="
               display: flex;
               justify-content: flex-end;
               margin-bottom: 14px;
               display: none;
-            "
-          >
-            <button class="btn btn-primary" onclick="openModal('mGrup')">
-              ➕ Tambah Grup
-            </button>
-          </div>
-          <div class="tbl-wrap">
-            <table class="tbl">
-              <thead>
-                <tr>
-                  <th>Nama Grup</th>
-                  <th>Diskon (%)</th>
-                  <th>Jumlah Member</th>
-                  <th>Aksi</th>
-                </tr>
-              </thead>
-              <tbody id="tblGrup"></tbody>
-            </table>
-          </div>
+            ">
+          <button class="btn btn-primary" onclick="openModal('mGrup')">
+            ➕ Tambah Grup
+          </button>
         </div>
-      </main>
-    </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Nama Grup</th>
+                <th>Diskon (%)</th>
+                <th>Jumlah Member</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="tblGrup"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
 
-    <!-- Modal: Pelanggan -->
-    <div class="modal-overlay" id="mPelanggan">
-      <div class="modal-box">
-        <div class="modal-hdr">
-          <h2 id="mCustTitle">Tambah Pelanggan</h2>
-          <button class="btn-x" onclick="closeCustomerModal('mPelanggan')">×</button>
-        </div>
-        <input type="hidden" id="cId" />
+  <!-- Modal: Pelanggan -->
+  <div class="modal-overlay" id="mPelanggan">
+    <div class="modal-box">
+      <div class="modal-hdr">
+        <h2 id="mCustTitle">Tambah Pelanggan</h2>
+        <button class="btn-x" onclick="closeCustomerModal('mPelanggan')">×</button>
+      </div>
+      <input type="hidden" id="cId" />
+      <div class="input-group">
+        <label>Nama *</label><input id="cNama" class="input-control" placeholder="Nama lengkap pelanggan" />
+      </div>
+      <div class="row2" style="margin-bottom: 16px">
         <div class="input-group">
-          <label>Nama *</label
-          ><input
-            id="cNama"
-            class="input-control"
-            placeholder="Nama lengkap pelanggan"
-          />
-        </div>
-        <div class="row2" style="margin-bottom: 16px">
-          <div class="input-group">
-            <label>Telepon / WA</label
-            ><input
-              id="cPhone"
-              class="input-control"
-              inputmode="tel"
-              placeholder="08xxxxxxxxxx"
-            />
-          </div>
-          <div class="input-group">
-            <label>Email</label
-            ><input
-              id="cEmail"
-              class="input-control"
-              type="email"
-              placeholder="email@contoh.com"
-            />
-          </div>
+          <label>Telepon / WA</label><input id="cPhone" class="input-control" inputmode="tel"
+            placeholder="08xxxxxxxxxx" />
         </div>
         <div class="input-group">
-          <label>Alamat</label
-          ><textarea
-            id="cAlamat"
-            class="input-control"
-            rows="2"
-            placeholder="Alamat lengkap pelanggan"
-          ></textarea>
+          <label>Email</label><input id="cEmail" class="input-control" type="email" placeholder="email@contoh.com" />
         </div>
-        <div class="input-group">
-          <label>Grup Diskon</label
-          ><select id="cGrup" class="input-control">
-            <option value="">-- Tidak ada --</option>
-          </select>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
-          <button
-            onclick="closeCustomerModal('mPelanggan')"
-            class="btn"
-            style="
+      </div>
+      <div class="input-group">
+        <label>Alamat</label><textarea id="cAlamat" class="input-control" rows="2"
+          placeholder="Alamat lengkap pelanggan"></textarea>
+      </div>
+      <div class="input-group">
+        <label>Grup Diskon</label><select id="cGrup" class="input-control">
+          <option value="">Level 1 — Harga Umum (0%)</option>
+        </select>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+        <button onclick="closeCustomerModal('mPelanggan')" class="btn" style="
               background: var(--bg-color);
               border: 1px solid var(--border-color);
               color: var(--text-main);
-            "
-          >
-            Batal
-          </button>
-          <button onclick="saveCust()" class="btn btn-primary">✓ Simpan</button>
-        </div>
+            ">
+          Batal
+        </button>
+        <button onclick="saveCust()" class="btn btn-primary">✓ Simpan</button>
       </div>
     </div>
+  </div>
 
-    <!-- Modal: Grup -->
-    <div class="modal-overlay" id="mGrup">
-      <div class="modal-box">
-        <div class="modal-hdr">
-          <h2 id="mGrupTitle">Tambah Grup Diskon</h2>
-          <button class="btn-x" onclick="closeCustomerModal('mGrup')">×</button>
-        </div>
-        <input type="hidden" id="gId" />
-        <div class="input-group">
-          <label>Nama Grup *</label>
-          <input
-            id="gNama"
-            class="input-control"
-            placeholder="Misal: Member Gold, Grosir, dll"
-          />
-        </div>
-        <div class="input-group">
-          <label>Diskon (%) — Referensi saja</label>
-          <input
-            id="gDisc"
-            type="text"
-            inputmode="decimal"
-            data-input-desimal
-            data-min="0"
-            data-max="100"
-            class="input-control"
-            placeholder="0"
-          />
-          <div
-            style="
+  <!-- Modal: Grup -->
+  <div class="modal-overlay" id="mGrup">
+    <div class="modal-box">
+      <div class="modal-hdr">
+        <h2 id="mGrupTitle">Tambah Grup Diskon</h2>
+        <button class="btn-x" onclick="closeCustomerModal('mGrup')">×</button>
+      </div>
+      <input type="hidden" id="gId" />
+      <div class="input-group">
+        <label>Nama Grup *</label>
+        <input id="gNama" class="input-control" placeholder="Misal: Member Gold, Grosir, dll" />
+      </div>
+      <div class="input-group">
+        <label>Diskon (%) — Referensi saja</label>
+        <input id="gDisc" type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100"
+          class="input-control" placeholder="0" />
+        <div style="
               font-size: 11px;
               color: var(--text-muted);
               margin-top: 4px;
               line-height: 1.5;
-            "
-          >
-            ℹ️ Angka ini hanya <b>referensi/acuan</b> — POS tidak otomatis
-            memberi diskon ini. Diskon nyata per barang diatur di
-            <b>Barang → Potongan Harga Jual</b> per grup.
-          </div>
+            ">
+          ℹ️ Angka ini hanya <b>referensi/acuan</b> — POS tidak otomatis
+          memberi diskon ini. Diskon nyata per barang diatur di
+          <b>Barang → Potongan Harga Jual</b> per grup.
         </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
-          <button
-            onclick="closeCustomerModal('mGrup')"
-            class="btn"
-            style="
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+        <button onclick="closeCustomerModal('mGrup')" class="btn" style="
               background: var(--bg-color);
               border: 1px solid var(--border-color);
               color: var(--text-main);
-            "
-          >
-            Batal
-          </button>
-          <button onclick="saveGrup()" class="btn btn-primary">✓ Simpan</button>
-        </div>
+            ">
+          Batal
+        </button>
+        <button onclick="saveGrup()" class="btn btn-primary">✓ Simpan</button>
       </div>
     </div>
+  </div>
 
-    <!-- Modal: Transfer Saldo -->
-    <div class="modal-overlay" id="mTransferSaldo">
-      <div class="modal-box">
-        <div class="modal-hdr">
-          <h2 id="mTrfTitle">Transfer Saldo Pelanggan</h2>
-          <button class="btn-x" onclick="closeCustomerModal('mTransferSaldo')">
-            ×
-          </button>
-        </div>
-        <p
-          id="trfSourceInfo"
-          style="margin-bottom: 20px; color: var(--text-muted); font-size: 14px"
-        ></p>
+  <!-- Modal: Transfer Saldo -->
+  <div class="modal-overlay" id="mTransferSaldo">
+    <div class="modal-box">
+      <div class="modal-hdr">
+        <h2 id="mTrfTitle">Transfer Saldo Pelanggan</h2>
+        <button class="btn-x" onclick="closeCustomerModal('mTransferSaldo')">
+          ×
+        </button>
+      </div>
+      <p id="trfSourceInfo" style="margin-bottom: 20px; color: var(--text-muted); font-size: 14px"></p>
 
-        <div class="input-group">
-          <label>Kirim Ke Pelanggan *</label>
-          <div id="trfTargetCombo"></div>
-        </div>
+      <div class="input-group">
+        <label>Kirim Ke Pelanggan *</label>
+        <div id="trfTargetCombo"></div>
+      </div>
 
-        <div class="input-group">
-          <label>Nominal Transfer *</label>
-          <input
-            id="trfAmount"
-            type="text"
-            inputmode="decimal"
-            data-input-desimal
-            data-min="1"
-            class="input-control"
-            placeholder="0"
-            min="1"
-          />
-        </div>
+      <div class="input-group">
+        <label>Nominal Transfer *</label>
+        <input id="trfAmount" type="text" inputmode="decimal" data-input-desimal data-min="1" class="input-control"
+          placeholder="0" min="1" />
+      </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
-          <button
-            onclick="closeCustomerModal('mTransferSaldo')"
-            class="btn"
-            style="
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+        <button onclick="closeCustomerModal('mTransferSaldo')" class="btn" style="
               background: var(--bg-color);
               border: 1px solid var(--border-color);
               color: var(--text-main);
-            "
-          >
-            Batal
-          </button>
-          <button onclick="saveTransfer()" class="btn btn-primary">
-            ✓ Proses Transfer
-          </button>
-        </div>
+            ">
+          Batal
+        </button>
+        <button onclick="saveTransfer()" class="btn btn-primary">
+          ✓ Proses Transfer
+        </button>
       </div>
     </div>
+  </div>
 
-    <script src="/js/api.js"></script>
-    <script src="/js/theme.js"></script>
-    <script src="/js/components.js"></script>
-    <script>
-      requireAuth();
-      const customerSort =
-        new URLSearchParams(location.search).get("sort") === "deposit_desc"
-          ? "deposit_desc"
-          : "";
-      let editCustId = null,
-        editGrupId = null,
-        trfSourceId = null,
-        trfCombo = null,
-        curTab = "cust";
-      let customerDraft = null;
+  <!-- Modal: Riwayat Pelanggan -->
+  <div class="modal-overlay" id="mHistory">
+    <div class="modal-box customer-history-box">
+      <div class="modal-hdr">
+        <h2 id="historyTitle">Riwayat Pelanggan</h2>
+        <button class="btn-x" onclick="closeModal('mHistory')">×</button>
+      </div>
+      <div class="customer-history-summary">
+        <div class="customer-history-card" id="historyIdentity">-</div>
+        <div class="customer-history-card">
+          <div style="font-size:12px;color:var(--text-muted)">Saldo Deposit Global</div>
+          <div id="historyBalance" style="font-size:24px;font-weight:900;color:var(--primary)">Rp 0</div>
+        </div>
+      </div>
+      <div class="customer-history-filters">
+        <select id="historyType" class="input-control" onchange="loadCustomerHistory()">
+          <option value="">Semua Transaksi</option>
+          <option value="purchase">Pembelian</option>
+          <option value="trade_in">Tukar Tambah</option>
+          <option value="sale_return">Retur</option>
+          <option value="balance">Mutasi Saldo Lain</option>
+        </select>
+        <select id="historyBranch" class="input-control" onchange="loadCustomerHistory()">
+          <option value="">Semua Cabang</option>
+        </select>
+        <input id="historyStart" type="date" class="input-control" onchange="loadCustomerHistory()" />
+        <input id="historyEnd" type="date" class="input-control" onchange="loadCustomerHistory()" />
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>Tanggal</th>
+              <th>Jenis / Nomor</th>
+              <th>Cabang</th>
+              <th>Total</th>
+              <th>Perubahan Deposit</th>
+              <th>Saldo</th>
+              <th>Status</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+      </div>
+      <div id="historyPager" style="display:flex;justify-content:center;gap:10px;margin-top:14px"></div>
+      <div id="historyDetail"></div>
+    </div>
+  </div>
 
-      function serializeCustomerDraft(modalId) {
-        const value = (id) => document.getElementById(id)?.value ?? "";
-        if (modalId === "mPelanggan") {
-          return JSON.stringify({
-            id: value("cId"),
-            name: value("cNama"),
-            phone: value("cPhone"),
-            email: value("cEmail"),
-            address: value("cAlamat"),
-            groupId: value("cGrup"),
-          });
-        }
-        if (modalId === "mGrup") {
-          return JSON.stringify({
-            id: value("gId"),
-            name: value("gNama"),
-            discount: parseDesimal(document.getElementById("gDisc")),
-          });
-        }
-        if (modalId === "mTransferSaldo") {
-          return JSON.stringify({
-            sourceId: trfSourceId,
-            targetId: trfCombo?.val?.() ?? "",
-            targetSearch:
-              document.querySelector("#trfTargetCombo .combobox-input")?.value ??
-              "",
-            amount: parseDesimal(document.getElementById("trfAmount")),
-          });
-        }
-        return "";
+  <script src="/js/api.js"></script>
+  <script src="/js/theme.js"></script>
+  <script src="/js/components.js"></script>
+  <script>
+    requireAuth();
+    let customerSort = ["deposit_desc", "deposit_asc"].includes(
+      new URLSearchParams(location.search).get("sort"),
+    )
+      ? new URLSearchParams(location.search).get("sort")
+      : "name_asc";
+    let editCustId = null,
+      editGrupId = null,
+      trfSourceId = null,
+      trfCombo = null,
+      curTab = "cust";
+    let customerDraft = null;
+    let historyCustomerId = null,
+      historySkip = 0,
+      historyRows = new Map();
+    document.getElementById("sortCust").value = customerSort;
+
+    function safeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function changeCustomerSort() {
+      customerSort = document.getElementById("sortCust").value;
+      loadCust();
+    }
+
+    function serializeCustomerDraft(modalId) {
+      const value = (id) => document.getElementById(id)?.value ?? "";
+      if (modalId === "mPelanggan") {
+        return JSON.stringify({
+          id: value("cId"),
+          name: value("cNama"),
+          phone: value("cPhone"),
+          email: value("cEmail"),
+          address: value("cAlamat"),
+          groupId: value("cGrup"),
+        });
       }
-
-      function beginCustomerDraft(modalId) {
-        customerDraft = {
-          modalId,
-          baseline: serializeCustomerDraft(modalId),
-        };
-        notifyUnsavedChangesChanged();
+      if (modalId === "mGrup") {
+        return JSON.stringify({
+          id: value("gId"),
+          name: value("gNama"),
+          discount: parseDesimal(document.getElementById("gDisc")),
+        });
       }
-
-      function clearCustomerDraft(modalId = null) {
-        if (modalId && customerDraft?.modalId !== modalId) return;
-        customerDraft = null;
-        notifyUnsavedChangesChanged();
+      if (modalId === "mTransferSaldo") {
+        return JSON.stringify({
+          sourceId: trfSourceId,
+          targetId: trfCombo?.val?.() ?? "",
+          targetSearch:
+            document.querySelector("#trfTargetCombo .combobox-input")?.value ??
+            "",
+          amount: parseDesimal(document.getElementById("trfAmount")),
+        });
       }
+      return "";
+    }
 
-      function closeCustomerModal(modalId) {
-        closeModal(modalId);
-        clearCustomerDraft(modalId);
-      }
+    function beginCustomerDraft(modalId) {
+      customerDraft = {
+        modalId,
+        baseline: serializeCustomerDraft(modalId),
+      };
+      notifyUnsavedChangesChanged();
+    }
 
-      function hasDirtyCustomerDraft() {
-        return Boolean(
-          customerDraft &&
-            serializeCustomerDraft(customerDraft.modalId) !==
-              customerDraft.baseline,
-        );
-      }
+    function clearCustomerDraft(modalId = null) {
+      if (modalId && customerDraft?.modalId !== modalId) return;
+      customerDraft = null;
+      notifyUnsavedChangesChanged();
+    }
 
-      async function saveCustomerDraft() {
-        if (!customerDraft) return true;
-        if (customerDraft.modalId === "mPelanggan") return saveCust();
-        if (customerDraft.modalId === "mGrup") return saveGrup();
-        if (customerDraft.modalId === "mTransferSaldo") return saveTransfer();
-        return false;
-      }
+    function closeCustomerModal(modalId) {
+      closeModal(modalId);
+      clearCustomerDraft(modalId);
+    }
 
-      function switchTab(t) {
-        curTab = t;
-        document.getElementById("pnlCust").style.display =
-          t === "cust" ? "block" : "none";
-        document.getElementById("pnlGrup").style.display =
-          t === "grup" ? "block" : "none";
-        const on =
-          "padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit";
-        const off =
-          "padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit";
-        document.getElementById("tbCust").style.cssText =
-          t === "cust" ? on : off;
-        document.getElementById("tbGrup").style.cssText =
-          t === "grup" ? on : off;
-        if (t === "grup") loadGrup();
-      }
+    function hasDirtyCustomerDraft() {
+      return Boolean(
+        customerDraft &&
+        serializeCustomerDraft(customerDraft.modalId) !==
+        customerDraft.baseline,
+      );
+    }
 
-      async function loadGrupSelect() {
-        const groups = await api("GET", "/customers/groups");
-        const sel = document.getElementById("cGrup");
-        const prev = sel.value;
-        sel.innerHTML =
-          '<option value="">-- Tidak ada --</option>' +
-          groups
+    async function saveCustomerDraft() {
+      if (!customerDraft) return true;
+      if (customerDraft.modalId === "mPelanggan") return saveCust();
+      if (customerDraft.modalId === "mGrup") return saveGrup();
+      if (customerDraft.modalId === "mTransferSaldo") return saveTransfer();
+      return false;
+    }
+
+    function switchTab(t) {
+      curTab = t;
+      document.getElementById("pnlCust").style.display =
+        t === "cust" ? "block" : "none";
+      document.getElementById("pnlGrup").style.display =
+        t === "grup" ? "block" : "none";
+      const on =
+        "padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit";
+      const off =
+        "padding:8px 20px;border-radius:100px;border:2px solid var(--border-color);background:transparent;color:var(--text-muted);font-weight:700;cursor:pointer;font-family:inherit";
+      document.getElementById("tbCust").style.cssText =
+        t === "cust" ? on : off;
+      document.getElementById("tbGrup").style.cssText =
+        t === "grup" ? on : off;
+      if (t === "grup") loadGrup();
+    }
+
+    async function loadGrupSelect() {
+      const groups = await api("GET", "/customers/groups");
+      const sel = document.getElementById("cGrup");
+      const prev = sel.value;
+      sel.innerHTML =
+        '<option value="">Level 1 — Harga Umum (0%)</option>' +
+        groups
+          .map(
+            (g) =>
+              `<option value="${g.id}">${g.name} (${g.discount_percent}%)</option>`,
+          )
+          .join("");
+      sel.value = prev;
+      const filter = document.getElementById("filterGroup");
+      const filterPrev = filter.value;
+      filter.innerHTML =
+        '<option value="">Semua Grup Diskon</option><option value="none">Level 1 — Harga Umum (0%)</option>' +
+        groups.map((g) => `<option value="${g.id}">${safeHtml(g.name)}</option>`).join("");
+      filter.value = filterPrev;
+    }
+
+    async function loadCust() {
+      const q = document.getElementById("srchCust").value;
+      let url = "/customers/?limit=300";
+      if (q) url += `&search=${encodeURIComponent(q)}`;
+      const group = document.getElementById("filterGroup").value;
+      if (group === "none") url += "&without_group=true";
+      else if (group) url += `&group_id=${encodeURIComponent(group)}`;
+      if (customerSort && customerSort !== "name_asc")
+        url += `&sort=${encodeURIComponent(customerSort)}`;
+      try {
+        const d = await api("GET", url);
+        document.getElementById("tblCust").innerHTML = d.length
+          ? d
             .map(
-              (g) =>
-                `<option value="${g.id}">${g.name} (${g.discount_percent}%)</option>`,
-            )
-            .join("");
-        sel.value = prev;
-      }
-
-      async function loadCust() {
-        const q = document.getElementById("srchCust").value;
-        let url = "/customers/?limit=300";
-        if (q) url += `&search=${encodeURIComponent(q)}`;
-        if (customerSort) url += `&sort=${customerSort}`;
-        try {
-          const d = await api("GET", url);
-          document.getElementById("tblCust").innerHTML = d.length
-            ? d
-                .map(
-                  (c) => `<tr>
+              (c) => `<tr>
       <td><b>${c.name}</b></td>
       <td>${c.phone || "-"}</td>
-      <td>${c.group?.name || "—"}</td>
+      <td>${c.group?.name || "Level 1 — Harga Umum"}</td>
       <td style="font-weight:700;color:var(--primary)">${fmtRp(c.deposit_balance || 0)}</td>
       <td><span style="background:var(--primary-light);color:var(--primary);padding:4px 10px;border-radius:8px;font-weight:700;font-size:13px">⭐ ${c.loyalty_points || 0}</span></td>
       <td style="font-weight:600">${fmtRp(c.total_purchase || 0)}</td>
       <td style="white-space:nowrap">
+        <button class="bsm" onclick="openCustomerHistory(${c.id})" title="Riwayat Transaksi">Riwayat</button>
         ${c.deposit_balance > 0 ? `<button class="bsm bp" onclick='openTransferModal(${JSON.stringify(c).replace(/"/g, "&quot;")})' title="Transfer Saldo">Transfer Saldo💸</button>` : ""}
         <button class="bsm be" onclick='editCust(${JSON.stringify(c).replace(/"/g, "&quot;")})'>Edit</button>
         <button class="bsm bd" onclick="delCust(${c.id},'${c.name}')">Hapus</button>
       </td></tr>`,
-                )
-                .join("")
-            : '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada pelanggan</td></tr>';
-        } catch (ex) {
-          showToast(ex.message, "error");
-        }
+            )
+            .join("")
+          : '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada pelanggan</td></tr>';
+      } catch (ex) {
+        showToast(ex.message, "error");
       }
+    }
 
-      function openPelangganModal() {
-        editCustId = null;
-        document.getElementById("mCustTitle").textContent = "Tambah Pelanggan";
-        document.getElementById("cId").value = "";
-        ["cNama", "cPhone", "cEmail", "cAlamat"].forEach(
-          (id) => (document.getElementById(id).value = ""),
-        );
-        document.getElementById("cGrup").value = "";
-        loadGrupSelect();
-        beginCustomerDraft("mPelanggan");
+    function openPelangganModal() {
+      editCustId = null;
+      document.getElementById("mCustTitle").textContent = "Tambah Pelanggan";
+      document.getElementById("cId").value = "";
+      ["cNama", "cPhone", "cEmail", "cAlamat"].forEach(
+        (id) => (document.getElementById(id).value = ""),
+      );
+      document.getElementById("cGrup").value = "";
+      loadGrupSelect();
+      beginCustomerDraft("mPelanggan");
+    }
+    const _origOM = openModal;
+    window.openModal = function (id) {
+      if (id === "mPelanggan") {
+        openPelangganModal();
       }
-      const _origOM = openModal;
-      window.openModal = function (id) {
-        if (id === "mPelanggan") {
-          openPelangganModal();
-        }
-        _origOM(id);
+      _origOM(id);
+    };
+
+    async function editCust(c) {
+      editCustId = c.id;
+      document.getElementById("mCustTitle").textContent = "Edit Pelanggan";
+      document.getElementById("cId").value = c.id;
+      document.getElementById("cNama").value = c.name;
+      document.getElementById("cPhone").value = c.phone || "";
+      document.getElementById("cEmail").value = c.email || "";
+      document.getElementById("cAlamat").value = c.address || "";
+      await loadGrupSelect();
+      document.getElementById("cGrup").value = c.group_id || "";
+      _origOM("mPelanggan");
+      beginCustomerDraft("mPelanggan");
+    }
+
+    async function saveCust() {
+      const name = document.getElementById("cNama").value.trim();
+      if (!name) {
+        showToast("Nama wajib diisi", "error");
+        return false;
+      }
+      const data = {
+        name,
+        phone: document.getElementById("cPhone").value || null,
+        email: document.getElementById("cEmail").value || null,
+        address: document.getElementById("cAlamat").value || null,
+        group_id: parseInt(document.getElementById("cGrup").value) || null,
       };
-
-      async function editCust(c) {
-        editCustId = c.id;
-        document.getElementById("mCustTitle").textContent = "Edit Pelanggan";
-        document.getElementById("cId").value = c.id;
-        document.getElementById("cNama").value = c.name;
-        document.getElementById("cPhone").value = c.phone || "";
-        document.getElementById("cEmail").value = c.email || "";
-        document.getElementById("cAlamat").value = c.address || "";
-        await loadGrupSelect();
-        document.getElementById("cGrup").value = c.group_id || "";
-        _origOM("mPelanggan");
-        beginCustomerDraft("mPelanggan");
+      try {
+        if (editCustId) await api("PUT", `/customers/${editCustId}`, data);
+        else await api("POST", "/customers/", data);
+        showToast("Pelanggan disimpan ✓");
+        closeCustomerModal("mPelanggan");
+        loadCust();
+        return true;
+      } catch (ex) {
+        showToast(ex.message, "error");
+        return false;
       }
+    }
 
-      async function saveCust() {
-        const name = document.getElementById("cNama").value.trim();
-        if (!name) {
-          showToast("Nama wajib diisi", "error");
-          return false;
-        }
-        const data = {
-          name,
-          phone: document.getElementById("cPhone").value || null,
-          email: document.getElementById("cEmail").value || null,
-          address: document.getElementById("cAlamat").value || null,
-          group_id: parseInt(document.getElementById("cGrup").value) || null,
-        };
-        try {
-          if (editCustId) await api("PUT", `/customers/${editCustId}`, data);
-          else await api("POST", "/customers/", data);
-          showToast("Pelanggan disimpan ✓");
-          closeCustomerModal("mPelanggan");
-          loadCust();
-          return true;
-        } catch (ex) {
-          showToast(ex.message, "error");
-          return false;
-        }
-      }
-
-      async function delCust(id, name) {
-        if (!(await showConfirm(`Hapus pelanggan "${name}"?`))) return;
-        try {
-          await api("DELETE", `/customers/${id}`);
-          showToast("Dihapus");
-          loadCust();
-        } catch (ex) {
-          if (ex.message.includes("HAS_BALANCE")) {
-            const err = JSON.parse(ex.message);
-            if (
-              await showConfirm(
-                `Pelanggan ini memiliki saldo ${fmtRp(err.balance)}.\n\nJika dihapus, saldo akan dihanguskan ke Pendapatan.\nTetap hapus?`,
-              )
-            ) {
-              try {
-                await api("DELETE", `/customers/${id}?force=true`);
-                showToast("Dihapus & Saldo dihanguskan");
-                loadCust();
-              } catch (ex2) {
-                showToast(ex2.message, "error");
-              }
+    async function delCust(id, name) {
+      if (!(await showConfirm(`Hapus pelanggan "${name}"?`))) return;
+      try {
+        await api("DELETE", `/customers/${id}`);
+        showToast("Dihapus");
+        loadCust();
+      } catch (ex) {
+        if (ex.message.includes("HAS_BALANCE")) {
+          const err = JSON.parse(ex.message);
+          if (
+            await showConfirm(
+              `Pelanggan ini memiliki saldo ${fmtRp(err.balance)}.\n\nJika dihapus, saldo akan dihanguskan ke Pendapatan.\nTetap hapus?`,
+            )
+          ) {
+            try {
+              await api("DELETE", `/customers/${id}?force=true`);
+              showToast("Dihapus & Saldo dihanguskan");
+              loadCust();
+            } catch (ex2) {
+              showToast(ex2.message, "error");
             }
-          } else {
-            showToast(ex.message, "error");
           }
-        }
-      }
-
-      async function openTransferModal(c) {
-        trfSourceId = c.id;
-        document.getElementById("trfSourceInfo").textContent =
-          `Sumber: ${c.name} (Saldo: ${fmtRp(c.deposit_balance)})`;
-        document.getElementById("trfAmount").value = toDesimal(
-          c.deposit_balance,
-        );
-
-        // Load all customers for target
-        const all = await api("GET", "/customers/?limit=1000");
-        // Ensure data format matches createPremiumCombo expectations (default labField is 'name')
-        const options = all
-          .filter((x) => x.id !== c.id)
-          .map((x) => ({ id: x.id, name: `${x.name} (${x.phone || "-"})` }));
-
-        const container = document.getElementById("trfTargetCombo");
-        container.innerHTML = "";
-        trfCombo = createPremiumCombo(container, options, {
-          placeholder: "Pilih pelanggan tujuan...",
-          labField: "name", // Explicitly use 'name'
-          onSelect: notifyUnsavedChangesChanged,
-        });
-
-        openModal("mTransferSaldo");
-        beginCustomerDraft("mTransferSaldo");
-      }
-
-      async function saveTransfer() {
-        const targetId = trfCombo.val();
-        const amount = parseDesimal(document.getElementById("trfAmount"));
-
-        if (!targetId) {
-          showToast("Pilih pelanggan tujuan", "error");
-          return false;
-        }
-        if (!amount || amount <= 0) {
-          showToast("Masukkan nominal valid", "error");
-          return false;
-        }
-
-        try {
-          showLoading("Memproses transfer...");
-          await api("POST", `/customers/${trfSourceId}/transfer-balance`, {
-            target_customer_id: parseInt(targetId),
-            amount: amount,
-          });
-          showToast("Transfer berhasil ✓");
-          closeCustomerModal("mTransferSaldo");
-          loadCust();
-          return true;
-        } catch (ex) {
+        } else {
           showToast(ex.message, "error");
-          return false;
-        } finally {
-          hideLoading();
         }
       }
+    }
 
-      async function loadGrup() {
-        const d = await api("GET", "/customers/groups");
-        document.getElementById("tblGrup").innerHTML = d.length
-          ? d
-              .map(
-                (g) => `<tr>
-    <td><b>${g.name}</b></td>
+    async function openTransferModal(c) {
+      trfSourceId = c.id;
+      document.getElementById("trfSourceInfo").textContent =
+        `Sumber: ${c.name} (Saldo: ${fmtRp(c.deposit_balance)})`;
+      document.getElementById("trfAmount").value = toDesimal(
+        c.deposit_balance,
+      );
+
+      // Load all customers for target
+      const all = await api("GET", "/customers/?limit=1000");
+      // Ensure data format matches createPremiumCombo expectations (default labField is 'name')
+      const options = all
+        .filter((x) => x.id !== c.id)
+        .map((x) => ({ id: x.id, name: `${x.name} (${x.phone || "-"})` }));
+
+      const container = document.getElementById("trfTargetCombo");
+      container.innerHTML = "";
+      trfCombo = createPremiumCombo(container, options, {
+        placeholder: "Pilih pelanggan tujuan...",
+        labField: "name", // Explicitly use 'name'
+        onSelect: notifyUnsavedChangesChanged,
+      });
+
+      openModal("mTransferSaldo");
+      beginCustomerDraft("mTransferSaldo");
+    }
+
+    async function saveTransfer() {
+      const targetId = trfCombo.val();
+      const amount = parseDesimal(document.getElementById("trfAmount"));
+
+      if (!targetId) {
+        showToast("Pilih pelanggan tujuan", "error");
+        return false;
+      }
+      if (!amount || amount <= 0) {
+        showToast("Masukkan nominal valid", "error");
+        return false;
+      }
+
+      try {
+        showLoading("Memproses transfer...");
+        await api("POST", `/customers/${trfSourceId}/transfer-balance`, {
+          target_customer_id: parseInt(targetId),
+          amount: amount,
+        });
+        showToast("Transfer berhasil ✓");
+        closeCustomerModal("mTransferSaldo");
+        loadCust();
+        return true;
+      } catch (ex) {
+        showToast(ex.message, "error");
+        return false;
+      } finally {
+        hideLoading();
+      }
+    }
+
+    async function openCustomerHistory(customerId) {
+      historyCustomerId = customerId;
+      historySkip = 0;
+      historyRows.clear();
+      ["historyType", "historyStart", "historyEnd"].forEach(
+        (id) => (document.getElementById(id).value = ""),
+      );
+      document.getElementById("historyDetail").innerHTML = "";
+      document.getElementById("historyBranch").innerHTML =
+        '<option value="">Semua Cabang</option>';
+      openModal("mHistory");
+      await loadCustomerHistory();
+    }
+
+    async function loadCustomerHistory(reset = true) {
+      if (!historyCustomerId) return;
+      if (reset !== false) historySkip = 0;
+      const params = new URLSearchParams({ skip: historySkip, limit: 50 });
+      const filters = {
+        event_type: document.getElementById("historyType").value,
+        branch_id: document.getElementById("historyBranch").value,
+        start_date: document.getElementById("historyStart").value,
+        end_date: document.getElementById("historyEnd").value,
+      };
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value) params.set(key, value);
+      });
+      const body = document.getElementById("historyBody");
+      body.innerHTML =
+        '<tr><td colspan="8" style="text-align:center;padding:24px">Memuat riwayat...</td></tr>';
+      try {
+        const data = await api(
+          "GET",
+          `/customers/${historyCustomerId}/history?${params}`,
+        );
+        const customer = data.customer;
+        const branchSelect = document.getElementById("historyBranch");
+        const selectedBranch = branchSelect.value;
+        branchSelect.innerHTML =
+          '<option value="">Semua Cabang</option>' +
+          data.branches
+            .map((branch) => `<option value="${branch.id}">${safeHtml(branch.name)}</option>`)
+            .join("");
+        branchSelect.value = selectedBranch;
+        document.getElementById("historyTitle").textContent =
+          `Riwayat ${customer.name}`;
+        document.getElementById("historyIdentity").innerHTML =
+          `<b style="font-size:18px">${safeHtml(customer.name)}</b>` +
+          `<div style="color:var(--text-muted);margin-top:4px">${safeHtml(customer.code)} · ${safeHtml(customer.phone || "Tanpa telepon")} · ${safeHtml(customer.group || "Level 1 — Harga Umum")}</div>`;
+        document.getElementById("historyBalance").textContent = fmtRp(
+          customer.deposit_balance || 0,
+        );
+        historyRows = new Map(data.items.map((row) => [row.event_key, row]));
+        body.innerHTML = data.items.length
+          ? data.items
+            .map((row) => {
+              const change = Number(row.deposit_change || 0);
+              const changeClass =
+                change > 0
+                  ? "deposit-positive"
+                  : change < 0
+                    ? "deposit-negative"
+                    : "";
+              const changeText =
+                change > 0
+                  ? `+${fmtRp(change)}`
+                  : change < 0
+                    ? `-${fmtRp(Math.abs(change))}`
+                    : "—";
+              const status =
+                row.status === "cancelled"
+                  ? "Dibatalkan"
+                  : ["completed", "paid"].includes(row.status)
+                    ? "Selesai"
+                    : row.status;
+              return `<tr>
+                    <td>${row.event_type === "opening_adjustment" ? "Saldo awal" : fmtDate(row.transaction_date)}</td>
+                    <td><b>${safeHtml(row.label)}</b><br><span style="color:var(--text-muted);font-size:12px">${safeHtml(row.number)}</span></td>
+                    <td>${safeHtml(row.branch?.name || "Global / tidak tercatat")}</td>
+                    <td>${fmtRp(row.transaction_total || 0)}</td>
+                    <td class="${changeClass}">${changeText}</td>
+                    <td style="font-weight:700">${fmtRp(row.balance_after || 0)}</td>
+                    <td>${safeHtml(status || "-")}</td>
+                    <td><button class="bsm be" onclick="openHistoryDetail('${row.event_key}')">Detail</button></td>
+                  </tr>`;
+            })
+            .join("")
+          : '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-muted)">Tidak ada riwayat untuk filter ini</td></tr>';
+        const prevDisabled = historySkip <= 0 ? "disabled" : "";
+        const nextDisabled =
+          historySkip + data.limit >= data.total ? "disabled" : "";
+        document.getElementById("historyPager").innerHTML = `
+            <button class="btn" ${prevDisabled} onclick="changeHistoryPage(-1)">← Sebelumnya</button>
+            <span style="align-self:center;color:var(--text-muted)">${data.total ? historySkip + 1 : 0}–${Math.min(historySkip + data.limit, data.total)} dari ${data.total}</span>
+            <button class="btn" ${nextDisabled} onclick="changeHistoryPage(1)">Berikutnya →</button>`;
+      } catch (error) {
+        body.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:24px;color:#dc2626">${safeHtml(error.message)}</td></tr>`;
+      }
+    }
+
+    function changeHistoryPage(direction) {
+      historySkip = Math.max(0, historySkip + direction * 50);
+      loadCustomerHistory(false);
+    }
+
+    async function openHistoryDetail(eventKey) {
+      const row = historyRows.get(eventKey);
+      if (!row) return;
+      const target = document.getElementById("historyDetail");
+      target.innerHTML = '<div class="history-detail">Memuat detail...</div>';
+      try {
+        const detail = await api(
+          "GET",
+          `/customers/${historyCustomerId}/history/${row.source_type}/${row.source_id}`,
+        );
+        const itemRows = detail.items?.length
+          ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Barang</th><th>Jenis/Kondisi</th><th>Qty</th><th>Harga</th><th>Total</th></tr></thead><tbody>${detail.items
+            .map(
+              (item) => `<tr><td><b>${safeHtml(item.name)}</b><br><small>${safeHtml(item.code)}</small></td><td>${safeHtml(item.kind || item.condition || "-")}</td><td>${item.qty}</td><td>${fmtRp(item.price || 0)}</td><td>${fmtRp(item.total || 0)}</td></tr>`,
+            )
+            .join("")}</tbody></table></div>`
+          : '<p style="color:var(--text-muted)">Mutasi ini tidak memiliki rincian barang.</p>';
+        const payments = detail.payments?.length
+          ? `<p><b>Pembayaran:</b> ${detail.payments
+            .map(
+              (payment) =>
+                `${safeHtml(payment.method)} ${fmtRp(payment.amount || 0)}`,
+            )
+            .join(" · ")}</p>`
+          : "";
+        target.innerHTML = `<div class="history-detail"><div style="display:flex;justify-content:space-between;gap:12px"><h3>Detail ${safeHtml(detail.number || row.number)}</h3><button class="btn-x" onclick="document.getElementById('historyDetail').innerHTML=''">×</button></div>${payments}${itemRows}${detail.notes ? `<p style="margin-top:10px"><b>Catatan:</b> ${safeHtml(detail.notes)}</p>` : ""}</div>`;
+        target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      } catch (error) {
+        target.innerHTML = `<div class="history-detail" style="color:#dc2626">${safeHtml(error.message)}</div>`;
+      }
+    }
+
+    async function loadGrup() {
+      const d = await api("GET", "/customers/groups");
+      const levelOneRow = `<tr data-system-group="level-1">
+    <td><b>Level 1</b><div style="font-size:11px;color:var(--text-muted);margin-top:3px">Harga umum tanpa level harga khusus</div></td>
+    <td><span style="font-size:22px;font-weight:900;color:var(--text-muted)">0%</span></td>
+    <td>Pelanggan tanpa grup</td>
+    <td><span class="bi" title="Level bawaan sistem; tidak dapat diubah atau dihapus">Bawaan</span></td>
+  </tr>`;
+      const customRows = d
+        .map(
+          (g) => `<tr>
+    <td><b>${safeHtml(g.name)}</b></td>
     <td><span style="font-size:22px;font-weight:900;color:var(--primary)">${g.discount_percent}%</span></td>
     <td>${g.member_count || 0} orang</td>
     <td style="white-space:nowrap">
       <button class="bsm be" onclick='editGrup(${JSON.stringify(g).replace(/"/g, "&quot;")})'>Edit</button>
-      <button class="bsm bd" onclick="delGrup(${g.id},'${g.name}')">Hapus</button>
+      <button class="bsm bd" onclick="delGrup(${g.id},${JSON.stringify(g.name).replace(/"/g, "&quot;")})">Hapus</button>
     </td></tr>`,
-              )
-              .join("")
-          : '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada grup</td></tr>';
-      }
+        )
+        .join("");
+      document.getElementById("tblGrup").innerHTML = levelOneRow + customRows;
+    }
 
-      function openGrupModal() {
-        editGrupId = null;
-        document.getElementById("mGrupTitle").textContent =
-          "Tambah Grup Diskon";
-        document.getElementById("gId").value = "";
-        document.getElementById("gNama").value = "";
-        document.getElementById("gDisc").value = "0,00";
-        beginCustomerDraft("mGrup");
+    function openGrupModal() {
+      editGrupId = null;
+      document.getElementById("mGrupTitle").textContent =
+        "Tambah Grup Diskon";
+      document.getElementById("gId").value = "";
+      document.getElementById("gNama").value = "";
+      document.getElementById("gDisc").value = "0,00";
+      beginCustomerDraft("mGrup");
+    }
+    const _origOM2 = window.openModal;
+    window.openModal = function (id) {
+      if (id === "mGrup") {
+        openGrupModal();
       }
-      const _origOM2 = window.openModal;
-      window.openModal = function (id) {
-        if (id === "mGrup") {
-          openGrupModal();
-        }
-        _origOM2(id);
+      _origOM2(id);
+    };
+
+    async function editGrup(g) {
+      editGrupId = g.id;
+      document.getElementById("mGrupTitle").textContent = "Edit Grup";
+      document.getElementById("gId").value = g.id;
+      document.getElementById("gNama").value = g.name;
+      document.getElementById("gDisc").value = toDesimal(
+        g.discount_percent,
+      );
+      _origOM2("mGrup");
+      beginCustomerDraft("mGrup");
+    }
+
+    async function saveGrup() {
+      const name = document.getElementById("gNama").value.trim();
+      if (!name) {
+        showToast("Nama wajib diisi", "error");
+        return false;
+      }
+      const data = {
+        name,
+        discount_percent: parseDesimal(document.getElementById("gDisc")),
       };
-
-      async function editGrup(g) {
-        editGrupId = g.id;
-        document.getElementById("mGrupTitle").textContent = "Edit Grup";
-        document.getElementById("gId").value = g.id;
-        document.getElementById("gNama").value = g.name;
-        document.getElementById("gDisc").value = toDesimal(
-          g.discount_percent,
-        );
-        _origOM2("mGrup");
-        beginCustomerDraft("mGrup");
+      try {
+        if (editGrupId)
+          await api("PUT", `/customers/groups/${editGrupId}`, data);
+        else await api("POST", "/customers/groups", data);
+        showToast("Grup disimpan ✓");
+        closeCustomerModal("mGrup");
+        loadGrup();
+        loadGrupSelect();
+        return true;
+      } catch (ex) {
+        showToast(ex.message, "error");
+        return false;
       }
+    }
 
-      async function saveGrup() {
-        const name = document.getElementById("gNama").value.trim();
-        if (!name) {
-          showToast("Nama wajib diisi", "error");
-          return false;
-        }
-        const data = {
-          name,
-          discount_percent: parseDesimal(document.getElementById("gDisc")),
-        };
-        try {
-          if (editGrupId)
-            await api("PUT", `/customers/groups/${editGrupId}`, data);
-          else await api("POST", "/customers/groups", data);
-          showToast("Grup disimpan ✓");
-          closeCustomerModal("mGrup");
-          loadGrup();
-          loadGrupSelect();
-          return true;
-        } catch (ex) {
-          showToast(ex.message, "error");
-          return false;
-        }
+    async function delGrup(id, name) {
+      if (!(await showConfirm(`Hapus grup "${name}"?`))) return;
+      try {
+        await api("DELETE", `/customers/groups/${id}`);
+        showToast("Dihapus");
+        loadGrup();
+      } catch (ex) {
+        showToast(ex.message, "error");
       }
+    }
 
-      async function delGrup(id, name) {
-        if (!(await showConfirm(`Hapus grup "${name}"?`))) return;
-        try {
-          await api("DELETE", `/customers/groups/${id}`);
-          showToast("Dihapus");
-          loadGrup();
-        } catch (ex) {
-          showToast(ex.message, "error");
-        }
-      }
+    // Data master adalah fungsi utama halaman dan harus mulai dimuat sebelum
+    // fitur tambahan. Ini juga menjaga tabel tetap bekerja bila browser masih
+    // sempat membawa api.js lama dari cache development.
+    loadCust();
+    loadGrupSelect().catch((ex) => showToast(ex.message, "error"));
 
-      // Data master adalah fungsi utama halaman dan harus mulai dimuat sebelum
-      // fitur tambahan. Ini juga menjaga tabel tetap bekerja bila browser masih
-      // sempat membawa api.js lama dari cache development.
-      loadCust();
-      loadGrupSelect().catch((ex) => showToast(ex.message, "error"));
+    if (
+      typeof registerUnsavedChangesGuard === "function" &&
+      typeof notifyUnsavedChangesChanged === "function"
+    ) {
+      ["mPelanggan", "mGrup", "mTransferSaldo"].forEach((modalId) => {
+        const modal = document.getElementById(modalId);
+        modal.addEventListener("input", notifyUnsavedChangesChanged);
+        modal.addEventListener("change", notifyUnsavedChangesChanged);
+      });
 
-      if (
-        typeof registerUnsavedChangesGuard === "function" &&
-        typeof notifyUnsavedChangesChanged === "function"
-      ) {
-        ["mPelanggan", "mGrup", "mTransferSaldo"].forEach((modalId) => {
-          const modal = document.getElementById(modalId);
-          modal.addEventListener("input", notifyUnsavedChangesChanged);
-          modal.addEventListener("change", notifyUnsavedChangesChanged);
-        });
+      registerUnsavedChangesGuard({
+        label: "Pelanggan",
+        isDirty: hasDirtyCustomerDraft,
+        save: saveCustomerDraft,
+        discard: clearCustomerDraft,
+      });
+    }
+  </script>
+</body>
 
-        registerUnsavedChangesGuard({
-          label: "Pelanggan",
-          isDirty: hasDirtyCustomerDraft,
-          save: saveCustomerDraft,
-          discard: clearCustomerDraft,
-        });
-      }
-    </script>
-  </body>
 </html>

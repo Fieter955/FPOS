@@ -24,7 +24,7 @@ Script release memakai isi `frontend-dist` yang sudah ada; pastikan folder itu
 sudah berisi frontend terbaru sebelum build.
 
 3. Upload ZIP ke URL yang sama dengan `DownloadUrl`.
-4. Commit dan push `version.json` di root repository ke branch `main`; script
+4. Commit dan push `version.json` di root repository ke branch `local-main-2026-08-20`; script
    release otomatis memperbarui file tersebut.
 5. Upload `FPOS-Updater.exe` di dalam ZIP; script release sudah memasukkannya.
 
@@ -36,7 +36,7 @@ Paket ZIP hanya berisi kode aplikasi. Database, `.env`, `secret.key`,
 Di file `.env` instalasi client, isi:
 
 ```dotenv
-UPDATE_CHECK_URL=https://raw.githubusercontent.com/Fieter955/FPOS/main/version.json
+UPDATE_CHECK_URL=https://raw.githubusercontent.com/Fieter955/FPOS/local-main-2026-08-20/version.json
 UPDATE_ALLOW_HTTP=false
 ```
 

@@ -9,11 +9,12 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from .. import models
 from ..auth import get_current_user, write_audit
 from ..database import get_db
+from ..permissions import has_permission
 from ..services.inventory_fifo import EPS, add_batch, consume_fifo
 from ..services.virtual_units import get_required_stock_qty, is_virtual_variant
 from .warehouse import adjust_warehouse_stock, get_warehouse_stock
@@ -349,14 +350,61 @@ def _add_stock_movement(
 # Formula / BOM
 # ---------------------------------------------------------------------------
 
+@router.get("/catalog")
+def get_assembly_catalog(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Katalog minimal untuk dropdown Perakitan.
+
+    Endpoint ini sengaja tidak melewati serializer katalog barang umum yang
+    memuat banyak relasi dan metrik tambahan.
+    """
+    query = db.query(
+        models.Item.id,
+        models.Item.code,
+        models.Item.name,
+        models.Item.buy_price,
+    ).filter(models.Item.is_active == True)
+
+    active_branch = None
+    if current_user.active_branch_id:
+        active_branch = db.query(models.Branch).get(current_user.active_branch_id)
+    is_pusat = not active_branch or active_branch.id == 1 or active_branch.status == "Toko Utama"
+    if not is_pusat:
+        query = (
+            query.join(models.WarehouseStock)
+            .join(models.Warehouse)
+            .filter(models.Warehouse.branch_id == active_branch.id)
+            .distinct()
+        )
+
+    can_view_cost = has_permission(db, current_user, "master.show_cost_item", "view")
+    return [
+        {
+            "id": item_id,
+            "code": code,
+            "name": name,
+            "buy_price": float(buy_price or 0) if can_view_cost else 0,
+        }
+        for item_id, code, name, buy_price in query.order_by(models.Item.name.asc()).all()
+    ]
+
+
 @router.get("/bom")
-def get_boms(db: Session = Depends(get_db), _=Depends(get_current_user)):
+def get_boms(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     boms = (
-        db.query(models.BillOfMaterial)
+        db.query(models.BillOfMaterial).options(
+            joinedload(models.BillOfMaterial.product),
+            selectinload(models.BillOfMaterial.materials)
+            .joinedload(models.BOMLine.material)
+            .joinedload(models.Item.unit),
+        )
         .filter(models.BillOfMaterial.is_active == True)
         .order_by(models.BillOfMaterial.id.desc())
         .all()
     )
+    can_view_cost = has_permission(db, current_user, "master.show_cost_item", "view")
     return [
         {
             "id": bom.id,
@@ -365,6 +413,12 @@ def get_boms(db: Session = Depends(get_db), _=Depends(get_current_user)):
             "product_code": bom.product.code if bom.product else "-",
             "qty_produced": bom.qty_produced,
             "operational_cost": bom.operational_cost or 0,
+            "estimated_cost": (
+                sum(
+                    float(line.qty_needed or 0) * float(line.material.buy_price or 0)
+                    for line in bom.materials
+                ) + float(bom.operational_cost or 0)
+            ) if can_view_cost else 0,
             "notes": bom.notes,
             "materials": [
                 {

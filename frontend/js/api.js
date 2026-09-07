@@ -1,3 +1,11 @@
+let fposLocalDeviceId = null;
+try {
+  fetch("http://127.0.0.1:19731/device-info")
+    .then(res => res.json())
+    .then(data => { if (data.device_id) fposLocalDeviceId = data.device_id; })
+    .catch(() => {});
+} catch (e) {}
+
 const API_BASE = "/api";
 const SESSION_EXPIRED_NOTICE_KEY = "fpos_session_expired_notice";
 let fposUnsavedChangesGuard = null;
@@ -352,6 +360,8 @@ async function api(method, path, body = null) {
     // 👇 INJEKSI ID CABANG SECARA GLOBAL KE BACKEND 👇
     const activeBranch = localStorage.getItem("active_branch_id");
     if (activeBranch) h["X-Branch-ID"] = activeBranch;
+    if (typeof fposLocalDeviceId !== "undefined" && fposLocalDeviceId)
+      h["X-Device-Id"] = fposLocalDeviceId;
   }
 
   const o = { method, headers: h };
@@ -422,6 +432,8 @@ async function apiForm(path, fd) {
     // 👇 INJEKSI ID CABANG SECARA GLOBAL KE BACKEND 👇
     const activeBranch = localStorage.getItem("active_branch_id");
     if (activeBranch) h["X-Branch-ID"] = activeBranch;
+    if (typeof fposLocalDeviceId !== "undefined" && fposLocalDeviceId)
+      h["X-Device-Id"] = fposLocalDeviceId;
   }
 
   let r;
@@ -462,6 +474,8 @@ async function apiBlob(method, path, body = null, options = {}) {
     headers.Authorization = `Bearer ${token}`;
     const activeBranch = localStorage.getItem("active_branch_id");
     if (activeBranch) headers["X-Branch-ID"] = activeBranch;
+    if (typeof fposLocalDeviceId !== "undefined" && fposLocalDeviceId)
+      headers["X-Device-Id"] = fposLocalDeviceId;
   }
   if (body !== null) headers["Content-Type"] = "application/json";
 
@@ -1583,29 +1597,25 @@ document.addEventListener(
 // ==============================================================================
 
 async function checkBillingStatus() {
-  // --- FITUR IMUNITAS FIETER ---
-  const user = getUser();
-  if (user && user.username && user.username.toLowerCase() === "fieter") {
-    document.getElementById("billingWarning")?.remove();
-    document.getElementById("lockScreenOverlay")?.remove();
-    document.body.style.overflow = "";
-    return;
-  }
-
   if (!getToken() && window.location.pathname === "/") return;
 
   try {
     const resp = await api("GET", "/license/status?_t=" + new Date().getTime());
-
-    if (resp.billing_status === "warning") {
-      tampilkanBannerWarning(resp.billing_message);
-    } else if (resp.billing_status === "blocked") {
-      kunciTotalAplikasi(resp.billing_message);
+    const user = getUser();
+    const isFieterMaintenance =
+      user?.username?.toLowerCase() === "fieter" &&
+      window.location.pathname.replace(/\.html$/, "") === "/settings";
+    if (isFieterMaintenance) {
+      document.getElementById("lockScreenOverlay")?.remove();
+      document.body.style.overflow = "";
+      return;
+    }
+    if (["conflict", "blocked", "offline_blocked", "setup_required"].includes(resp.status)) {
+      kunciTotalAplikasi(resp.message, resp);
     } else {
       document.getElementById("billingWarning")?.remove();
-      if (document.getElementById("lockScreenOverlay")) {
-        window.location.reload();
-      }
+      document.getElementById("lockScreenOverlay")?.remove();
+      document.body.style.overflow = "";
     }
   } catch (e) {
     console.log("Mengecek lisensi server...");
@@ -1632,7 +1642,7 @@ function tampilkanBannerWarning(pesan) {
   document.body.prepend(banner);
 }
 
-function kunciTotalAplikasi(pesan) {
+function kunciTotalAplikasiLegacy(pesan) {
   if (document.getElementById("lockScreenOverlay")) return;
 
   const lock = document.createElement("div");
@@ -1652,6 +1662,94 @@ function kunciTotalAplikasi(pesan) {
   `;
   document.body.appendChild(lock);
   document.body.style.overflow = "hidden";
+}
+
+function licenseEscapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[char]);
+}
+
+// Deklarasi ini menggantikan renderer kill-switch lama di atas. Renderer lama
+// dipertahankan sementara agar update instalasi lama tidak memutus referensi JS.
+function kunciTotalAplikasi(pesan, status = {}) {
+  let lock = document.getElementById("lockScreenOverlay");
+  if (!lock) {
+    lock = document.createElement("div");
+    lock.id = "lockScreenOverlay";
+    document.body.appendChild(lock);
+  }
+  lock.style.cssText =
+    "position:fixed;inset:0;background:#0f172a;z-index:9999999;display:flex;flex-direction:column;justify-content:center;align-items:center;color:white;font-family:inherit;text-align:center;padding:20px;overflow:auto";
+  const devices = Array.isArray(status.installations) ? status.installations : [];
+  const conflictForm = status.status === "conflict" ? `
+    <div style="width:min(680px,100%);display:grid;gap:10px;text-align:left;margin:20px 0">
+      ${devices.map((device) => `<label style="padding:13px;border:1px solid #475569;border-radius:10px;cursor:pointer"><input type="radio" name="licenseDevice" value="${licenseEscapeHtml(device.installation_id)}"> <b>${licenseEscapeHtml(device.hostname)}</b><br><small style="color:#94a3b8">${licenseEscapeHtml(device.fpos_url || device.installation_id)}</small></label>`).join("")}
+      <input id="licenseHostnameConfirmation" placeholder="Ketik nama komputer yang dipilih" style="padding:13px;border-radius:10px;border:1px solid #475569;background:#020617;color:white">
+      <button onclick="pilihServerLisensi()" style="padding:13px;border:0;border-radius:10px;background:#f97316;color:white;font-weight:800;cursor:pointer">Tetapkan server utama</button>
+    </div>` : "";
+  const activationForm = status.status === "setup_required" ? `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:20px 0">
+      <input id="centralLicenseKey" placeholder="FPOS-XXXX-XXXX-XXXX-XXXX" style="min-width:290px;padding:13px;border-radius:10px;border:1px solid #475569;background:#020617;color:white">
+      <button onclick="aktifkanLisensiPusat()" style="padding:13px;border:0;border-radius:10px;background:#f97316;color:white;font-weight:800;cursor:pointer">Aktifkan</button>
+    </div>` : "";
+  const reclaimButton = status.status === "blocked" && status.can_reclaim
+    ? `<button onclick="rebutLisensiServer()" style="padding:13px;border:0;border-radius:10px;background:#f97316;color:white;font-weight:800;cursor:pointer">Pilih ulang server</button>` : "";
+  const user = getUser();
+  const maintenance = user?.username?.toLowerCase() === "fieter"
+    ? `<a href="/settings?tab=developer" style="color:#fdba74;margin-top:18px">Buka maintenance Fieter</a>` : "";
+  lock.innerHTML = `
+    <div style="font-size:58px;margin-bottom:10px">&#128274;</div>
+    <h1 style="color:#fb7185;margin:0 0 12px;font-size:30px">LISENSI SERVER MEMERLUKAN TINDAKAN</h1>
+    <p style="font-size:17px;color:#cbd5e1;max-width:680px;line-height:1.6;margin:0">${licenseEscapeHtml(pesan)}</p>
+    ${conflictForm}${activationForm}${reclaimButton}
+    ${status.blocked_until ? `<small style="color:#94a3b8;margin-top:14px">Diblokir sampai ${new Date(status.blocked_until).toLocaleString("id-ID")}</small>` : ""}
+    ${maintenance}`;
+  document.body.style.overflow = "hidden";
+}
+
+async function aktifkanLisensiPusat() {
+  const key = document.getElementById("centralLicenseKey")?.value?.trim();
+  if (!key) return showToast("Masukkan kode lisensi", "error");
+  try {
+    showLoading("Mengaktifkan lisensi...");
+    await api("POST", "/license/activate", { license_key: key });
+    hideLoading();
+    await checkBillingStatus();
+  } catch (error) {
+    hideLoading();
+    showToast(error.message, "error");
+  }
+}
+
+async function pilihServerLisensi() {
+  const selected = document.querySelector('input[name="licenseDevice"]:checked');
+  const confirmation = document.getElementById("licenseHostnameConfirmation")?.value || "";
+  if (!selected) return showToast("Pilih komputer server", "error");
+  try {
+    showLoading("Menyimpan server utama...");
+    await api("POST", "/license/select-server", {
+      selected_installation_id: selected.value,
+      confirmation_hostname: confirmation,
+    });
+    hideLoading();
+    await checkBillingStatus();
+  } catch (error) {
+    hideLoading();
+    showToast(error.message, "error");
+  }
+}
+
+async function rebutLisensiServer() {
+  try {
+    showLoading("Membuka pemilihan server...");
+    await api("POST", "/license/reclaim");
+    hideLoading();
+    await checkBillingStatus();
+  } catch (error) {
+    hideLoading();
+    showToast(error.message, "error");
+  }
 }
 
 function bukaModalUploadBukti() {

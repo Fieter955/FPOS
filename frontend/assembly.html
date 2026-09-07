@@ -166,6 +166,7 @@
   <script>
     requireAuth();
     let allItems = [], allBOMs = [], allCustomers = [], allWarehouses = [];
+    let assemblyCatalogPromise = null;
     let allOrders = [], allProcesses = [], allResults = [];
 
     const esc = (value) => String(value ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]);
@@ -183,8 +184,8 @@
 
     async function init() {
       try {
-        [allItems, allBOMs, allCustomers, allWarehouses] = await Promise.all([
-          api("GET", "/items/?limit=500"), api("GET", "/assembly/bom"),
+        [allBOMs, allCustomers, allWarehouses] = await Promise.all([
+          api("GET", "/assembly/bom"),
           api("GET", "/customers/?limit=500"), api("GET", "/warehouses/")
         ]);
         subscribeItemMasterChanges(refreshAssemblyItems);
@@ -194,7 +195,8 @@
 
     async function refreshAssemblyItems() {
       try {
-        allItems = await api("GET", "/items/?limit=500");
+        assemblyCatalogPromise = null;
+        allItems = await loadAssemblyCatalog();
         document
           .querySelectorAll("#bomProduct, #bomLines .material-select")
           .forEach((select) => {
@@ -203,6 +205,29 @@
           });
       } catch (error) {
         console.error("Gagal menyegarkan barang perakitan", error);
+      }
+    }
+
+    async function loadAssemblyCatalog() {
+      if (!assemblyCatalogPromise) {
+        assemblyCatalogPromise = api("GET", "/assembly/catalog");
+      }
+      try {
+        allItems = await assemblyCatalogPromise;
+        return allItems;
+      } catch (error) {
+        assemblyCatalogPromise = null;
+        throw error;
+      }
+    }
+
+    async function ensureAssemblyCatalog() {
+      if (allItems.length) return allItems;
+      try {
+        return await loadAssemblyCatalog();
+      } catch (error) {
+        showToast("Gagal memuat daftar barang: " + error.message, "error");
+        throw error;
       }
     }
 
@@ -216,7 +241,8 @@
       if (name === "results") loadResults();
     }
 
-    function openBOM(id=null) {
+    async function openBOM(id=null) {
+      await ensureAssemblyCatalog();
       const bom = id ? allBOMs.find(b => b.id===id) : null;
       document.getElementById("bomId").value = bom?.id || "";
       document.getElementById("bomTitle").textContent = bom ? "Edit Formula" : "Buat Formula";
@@ -262,8 +288,7 @@
 
     function renderBOMs() {
       document.getElementById("tblBOM").innerHTML = allBOMs.length ? allBOMs.map(b => {
-        const componentCost = (b.materials||[]).reduce((sum,line) => sum + num(allItems.find(i=>i.id===line.material_id)?.buy_price)*num(line.qty_needed),0);
-        return `<tr><td><b>${esc(b.product_name)}</b><br><span class="muted">${esc(b.product_code)}</span></td><td>${qty(b.qty_produced)}</td><td>${b.materials?.length||0}</td><td>${money(componentCost+num(b.operational_cost))}</td><td style="white-space:nowrap"><button class="bsm" onclick="detailBOM(${b.id})">Detail</button> <button class="bsm bl" onclick="openBOM(${b.id})">Edit</button> <button class="bsm bd" onclick="deleteBOM(${b.id})">Hapus</button></td></tr>`;
+        return `<tr><td><b>${esc(b.product_name)}</b><br><span class="muted">${esc(b.product_code)}</span></td><td>${qty(b.qty_produced)}</td><td>${b.materials?.length||0}</td><td>${money(b.estimated_cost)}</td><td style="white-space:nowrap"><button class="bsm" onclick="detailBOM(${b.id})">Detail</button> <button class="bsm bl" onclick="openBOM(${b.id})">Edit</button> <button class="bsm bd" onclick="deleteBOM(${b.id})">Hapus</button></td></tr>`;
       }).join("") : emptyRow(5,"Belum ada formula");
     }
 
@@ -277,7 +302,8 @@
       try { await api("DELETE",`/assembly/bom/${id}`); allBOMs=await api("GET","/assembly/bom"); renderBOMs(); showToast("Formula dinonaktifkan"); } catch(error){showToast(error.message,"error");}
     }
 
-    function openOrder() {
+    async function openOrder() {
+      await ensureAssemblyCatalog();
       document.getElementById("orderCustomer").innerHTML=customerOptions(false);
       document.getElementById("orderDate").value=today();
       document.getElementById("orderNotes").value="";
@@ -300,6 +326,7 @@
     async function cancelOrder(id){if(!(await showConfirm("Batalkan pesanan ini? Stok tidak akan berubah.")))return;try{await api("POST",`/assembly/orders/${id}/cancel`,{});await loadOrders();showToast("Pesanan dibatalkan");}catch(error){showToast(error.message,"error");}}
 
     async function openProcess(orderId=null) {
+      await ensureAssemblyCatalog();
       await loadOrders();
       document.getElementById("processOrder").innerHTML='<option value="">-- Proses langsung tanpa pesanan --</option>'+allOrders.filter(o=>["open","partially_processed"].includes(o.status)).map(o=>`<option value="${o.id}" ${o.id===orderId?"selected":""}>${esc(o.number)} — ${esc(o.customer_name)}</option>`).join("");
       document.getElementById("processWarehouse").innerHTML=warehouseOptions();

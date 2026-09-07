@@ -1,0 +1,2 @@
+"""FPOS central license service."""
+

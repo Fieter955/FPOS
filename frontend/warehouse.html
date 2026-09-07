@@ -357,12 +357,13 @@
                   <th>Ke (Cabang - Gudang)</th>
                   <th>Barang</th>
                   <th style="text-align: right">Qty</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody id="tblMutasi">
                 <tr>
                   <td
-                    colspan="6"
+                    colspan="7"
                     style="
                       text-align: center;
                       padding: 24px;
@@ -686,11 +687,12 @@
           <small style="font-family:monospace; color:var(--text-muted)">${t.item_code}</small>
         </td>
         <td style="text-align:right;font-size:16px;font-weight:900;color:var(--primary)">${formatNum(t.qty)}</td>
+        <td>${t.status === "confirmed" ? '<span class="badge bg">DITERIMA</span>' : '<span class="badge bo">DIJALAN</span>'}</td>
       </tr>
     `,
                 )
                 .join("")
-            : '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Tidak ada riwayat mutasi yang cocok dengan filter.</td></tr>';
+            : '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">Tidak ada riwayat mutasi yang cocok dengan filter.</td></tr>';
         } catch (ex) {
           hideLoading();
           showToast(ex.message, "error");

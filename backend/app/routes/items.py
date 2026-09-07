@@ -21,6 +21,10 @@ from ..services.virtual_units import (
     get_stock_source_item,
     is_virtual_variant,
 )
+from ..services.item_catalog_sync import (
+    ensure_item_in_all_warehouses,
+    register_new_item_in_all_warehouses,
+)
 
 router = APIRouter()
 
@@ -441,27 +445,9 @@ def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db), current
         for gd in item.group_discounts:
             db.add(models.ItemGroupDiscount(item_id=obj.id, **gd.model_dump()))
 
-    # 6. 🛡️ INISIALISASI STOK GUDANG (SUPER PENTING!) 🛡️
-    # Ini yang membuat barang terbaca di POS dan Menu Pembelian Supplier!
-    b_id = current_user.active_branch_id
-    if b_id:
-        gudang_aktif = db.query(models.Warehouse).filter(models.Warehouse.branch_id == b_id).first()
-        if gudang_aktif:
-            db.add(models.WarehouseStock(
-                warehouse_id=gudang_aktif.id,
-                item_id=obj.id,
-                stock=0.0 # Berikan stok awal 0
-            ))
-    else:
-        # Jika user tidak memiliki cabang aktif, buat WarehouseStock untuk gudang pertama yang ditemukan
-        # agar barang tetap terbaca di menu supplier
-        gudang_pertama = db.query(models.Warehouse).filter(models.Warehouse.is_active == True).first()
-        if gudang_pertama:
-            db.add(models.WarehouseStock(
-                warehouse_id=gudang_pertama.id,
-                item_id=obj.id,
-                stock=0.0
-            ))
+    # Master barang global harus langsung tersedia di setiap cabang. Baris stok
+    # lokal dibuat dengan nilai 0 tanpa mengubah stok gudang yang sudah ada.
+    ensure_item_in_all_warehouses(db, obj.id)
 
     db.commit()
     db.refresh(obj)
@@ -751,6 +737,11 @@ def _import_items_sync(contents: bytes, filename: str, db: Session, current_user
             db.add(gudang_aktif)
             db.flush()
 
+        catalog_warehouse_ids = [
+            warehouse_id
+            for (warehouse_id,) in db.query(models.Warehouse.id).all()
+        ]
+
         # ── 2. BUILD CACHE DATA MASTER ─────────────────────────────────────
         existing_cats      = {c.name.upper(): c.id for c in db.query(models.Category).all()}
         existing_units     = {u.name.upper(): u.id for u in db.query(models.Unit).all()}
@@ -870,11 +861,12 @@ def _import_items_sync(contents: bytes, filename: str, db: Session, current_user
                 ))
 
             # ── 6. STOK GUDANG ─────────────────────────────────────────────
-            db.add(models.WarehouseStock(
-                warehouse_id=gudang_aktif.id,
-                item_id=new_item.id,
-                stock=imported_stock
-            ))
+            register_new_item_in_all_warehouses(
+                db,
+                new_item.id,
+                warehouse_ids=catalog_warehouse_ids,
+                stock_overrides={gudang_aktif.id: imported_stock},
+            )
 
             # ── 7. KARTU STOK (hanya jika ada saldo awal) ──────────────────
             if imported_stock > 0:

@@ -383,6 +383,7 @@ class PurchaseItemCreate(BaseModel):
     sell_price: float = 0
     profit_margin: float = 0
     discount: float = 0
+    source_request_item_id: Optional[int] = None
     ppn_percent: Optional[float] = None   # tarif PPN baris (%); None → ikut tarif barang/toko (Included/PKP)
 
 class PurchaseCreate(BaseModel):
@@ -418,6 +419,8 @@ class PurchaseItemOut(BaseModel):
     disc4: float = 0
     total: float
     ppn_percent: Optional[float] = None
+    source_request_item_id: Optional[int] = None
+    qty_outstanding: Optional[float] = None
     item: Optional[ItemOut] = None
     model_config = {"from_attributes": True}
 
@@ -437,12 +440,14 @@ class PurchaseOut(BaseModel):
     tax_type: Optional[str] = None
     total: float
     paid: float
+    deposit_paid: float = 0
     status: str
     document_type: str = "purchase"
     notes: Optional[str]
     is_branch_request: Optional[bool] = False
     target_branch_id: Optional[int] = None
     is_received_by_branch: bool = False
+    fulfillment_status: str = "none"
     supplier: Optional[SupplierOut] = None
     branch: Optional[BranchOut] = None
     target_branch: Optional[BranchOut] = None
@@ -526,6 +531,7 @@ class PurchasePayment(BaseModel):
     amount: float = 0
     cash_amount: float = 0
     bank_amount: float = 0
+    deposit_amount: float = 0
     notes: Optional[str] = None
 
 class SplitFulfillItem(BaseModel):
@@ -533,6 +539,7 @@ class SplitFulfillItem(BaseModel):
     qty: float
     supplier_id: int
     buy_price: float = 0
+    source_request_item_id: Optional[int] = None
 
 class SplitFulfillRequest(BaseModel):
     items: List[SplitFulfillItem]
@@ -583,6 +590,15 @@ class SaleCreate(BaseModel):
     receipt_requested: bool = False  # tombol "Simpan + Cetak"; auto-print cabang diputuskan server
     notes: Optional[str] = None
     items: List[SaleItemCreate]
+
+class BranchReturnItemCreate(BaseModel):
+    purchase_item_id: int
+    qty: float
+
+class BranchReturnCreate(BaseModel):
+    date: date
+    items: List[BranchReturnItemCreate]
+    notes: Optional[str] = None
 
 class SaleItemOut(BaseModel):
     id: int

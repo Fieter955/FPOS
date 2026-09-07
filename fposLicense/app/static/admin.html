@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>FPOS License</title>
+    <style>
+      :root{font-family:Inter,system-ui,sans-serif;color:#e2e8f0;background:#0f172a}body{max-width:1100px;margin:auto;padding:32px}h1{margin-bottom:4px}.muted{color:#94a3b8}.card{background:#1e293b;border:1px solid #334155;border-radius:16px;padding:20px;margin:18px 0}input,button{font:inherit;padding:10px 12px;border-radius:9px;border:1px solid #475569}input{background:#0f172a;color:#fff}button{background:#f97316;color:#fff;border:0;font-weight:700;cursor:pointer}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid #334155}code{color:#fdba74}.row{display:flex;gap:10px;flex-wrap:wrap}.error{color:#fca5a5}
+    </style>
+  </head>
+  <body>
+    <h1>FPOS License</h1><div class="muted">Satu lisensi seumur hidup untuk satu server FPOS.</div>
+    <section class="card">
+      <h2>Tambah lisensi</h2>
+      <div class="row"><input id="key" placeholder="FPOS-XXXX-XXXX-XXXX-XXXX" size="30"/><input id="owner" placeholder="Nama pelanggan"/><button id="save">Simpan</button></div>
+      <p id="message"></p>
+    </section>
+    <section class="card"><h2>Lisensi</h2><div id="licenses">Memuat…</div></section>
+    <script>
+      const escapeHtml=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+      async function api(path,options={}){const r=await fetch(path,{...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||`HTTP ${r.status}`);return r.json()}
+      async function load(){try{const rows=await api('/api/admin/licenses');document.querySelector('#licenses').innerHTML=rows.length?`<table><thead><tr><th>Kode</th><th>Pemilik</th><th>Status</th><th>Server</th><th>Aksi</th></tr></thead><tbody>${rows.map(r=>`<tr><td><code>${escapeHtml(r.license_key)}</code></td><td>${escapeHtml(r.owner_name)}</td><td>${escapeHtml(r.conflict_open?'konflik':r.status)}</td><td>${r.installations.map(i=>`${escapeHtml(i.hostname)} <button onclick="forceSelect('${escapeHtml(r.license_key)}','${escapeHtml(i.installation_id)}')">Pilih</button>`).join('<br>')||'-'}</td><td><button onclick="setStatus('${escapeHtml(r.license_key)}','${r.status==='active'?'revoked':'active'}')">${r.status==='active'?'Cabut':'Aktifkan'}</button></td></tr>`).join('')}</tbody></table>`:'Belum ada lisensi.'}catch(e){document.querySelector('#licenses').innerHTML=`<span class="error">${escapeHtml(e.message)}</span>`}}
+      async function setStatus(key,status){if(!confirm(`${status==='revoked'?'Cabut':'Aktifkan'} lisensi ${key}?`))return;try{await api(`/api/admin/licenses/${encodeURIComponent(key)}/status`,{method:'POST',body:JSON.stringify({status})});await load()}catch(e){alert(e.message)}}
+      async function forceSelect(key,id){if(!confirm('Tetapkan perangkat ini sebagai server utama?'))return;try{await api(`/api/admin/licenses/${encodeURIComponent(key)}/select/${encodeURIComponent(id)}`,{method:'POST'});await load()}catch(e){alert(e.message)}}
+      document.querySelector('#save').onclick=async()=>{const message=document.querySelector('#message');try{await api('/api/admin/licenses',{method:'POST',body:JSON.stringify({license_key:document.querySelector('#key').value,owner_name:document.querySelector('#owner').value})});message.textContent='Lisensi tersimpan.';await load()}catch(e){message.className='error';message.textContent=e.message}};load();
+    </script>
+  </body>
+</html>

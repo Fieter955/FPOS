@@ -95,9 +95,10 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from sqlalchemy import func
 import uvicorn
 from contextlib import asynccontextmanager
+from tailscale_manager import start_funnel_manager
 
 from app.database import Base, engine, SessionLocal
-from app.auth import get_password_hash, verify_password
+from app.auth import get_password_hash
 from app.config import settings
 from app import models
 from app.permissions import (
@@ -207,6 +208,9 @@ def run_migrations():
     add_col("customers", "email",          "TEXT")
     add_col("purchases", "created_by", "INTEGER")
     add_col("purchases", "paid", "REAL DEFAULT 0")
+    # Pembayaran dari saldo retur/deposit supplier. Instalasi desktop lama
+    # diperbarui lewat safe migration ini (bukan Alembic otomatis).
+    add_col("purchases", "deposit_paid", "REAL NOT NULL DEFAULT 0")
     add_col("purchases", "status", "TEXT DEFAULT 'unpaid'")
     add_col("warehouses", "is_default", "INTEGER DEFAULT 0")
     add_col("unit_conversions", "buy_price",  "REAL DEFAULT 0")
@@ -215,11 +219,6 @@ def run_migrations():
     add_col("unit_conversions", "child_item_id", "INTEGER")
     add_col("delivery_notes", "signed_at",      "TEXT")
     add_col("delivery_notes", "recipient_name", "TEXT")
-    add_col("licenses", "max_users",    "INTEGER DEFAULT 3")
-    add_col("licenses", "owner_name",   "TEXT")
-    add_col("licenses", "owner_email",  "TEXT")
-    add_col("licenses", "billing_status", "TEXT DEFAULT 'ok'")
-    add_col("licenses", "billing_message", "TEXT DEFAULT 'Aplikasi berjalan normal.'")
     add_col("users", "branch_id", "INTEGER")
     add_col("sales", "branch_id", "INTEGER DEFAULT 1") 
     add_col("purchases", "branch_id", "INTEGER DEFAULT 1")
@@ -248,6 +247,19 @@ def run_migrations():
     add_col("purchases", "ppn_dipisah", "INTEGER DEFAULT 0")
     add_col("purchases", "tax_type", "TEXT")  # include | exclude | none; NULL = legacy fallback
     add_col("purchases", "due_date", "DATE")  # tanggal jatuh tempo pembayaran (data lama tetap NULL)
+    # Status proses pemenuhan PO cabang terpisah dari status pembayarannya.
+    # Kolom-kolom berikut juga ada di migrasi Alembic e5f6a7b8c9d0, tetapi
+    # instalasi desktop lama diperbarui lewat safe migration ini saat startup.
+    add_col("purchases", "fulfillment_status", "TEXT NOT NULL DEFAULT 'none'")
+    add_col("purchase_items", "source_request_item_id", "INTEGER")
+    add_col("warehouse_transfers", "transfer_kind", "TEXT NOT NULL DEFAULT 'standard'")
+    add_col("warehouse_transfers", "source_purchase_id", "INTEGER")
+    add_col("warehouse_transfers", "received_at", "DATETIME")
+    add_col("warehouse_transfer_items", "qty_received", "REAL NOT NULL DEFAULT 0")
+    add_col("warehouse_transfer_items", "purchase_item_id", "INTEGER")
+    add_col("warehouse_transfer_items", "source_request_item_id", "INTEGER")
+    add_col("warehouse_transfer_items", "unit_cost", "REAL NOT NULL DEFAULT 0")
+    add_col("warehouse_transfer_items", "total_cost", "REAL NOT NULL DEFAULT 0")
     add_col("purchase_returns", "total_carrying", "REAL DEFAULT 0")
     add_col("purchase_returns", "selisih", "REAL DEFAULT 0")
     add_col("purchase_returns", "branch_id", "INTEGER")
@@ -256,6 +268,19 @@ def run_migrations():
     add_col("sale_returns", "created_by", "INTEGER")
     add_col("trade_ins", "cash_amount", "REAL DEFAULT 0")
     add_col("trade_ins", "bank_amount", "REAL DEFAULT 0")
+    add_col("trade_ins", "deposit_amount", "REAL DEFAULT 0")
+    add_col("trade_ins", "status", "TEXT NOT NULL DEFAULT 'completed'")
+    add_col("trade_ins", "cancelled_at", "DATETIME")
+    add_col("sale_return_items", "condition", "TEXT NOT NULL DEFAULT 'good'")
+    add_col("sale_return_items", "returned_qty", "REAL NOT NULL DEFAULT 0")
+    add_col("sale_return_items", "quarantine_unit_cost", "REAL NOT NULL DEFAULT 0")
+    add_col("purchase_return_items", "trade_in_return_item_id", "INTEGER")
+    add_col("purchase_return_items", "sale_return_item_id", "INTEGER")
+    add_col("purchase_return_items", "quarantine_cost", "REAL NOT NULL DEFAULT 0")
+    if col_exists("trade_in_return_items", "condition"):
+        c.execute(
+            "UPDATE trade_in_return_items SET condition = 'damaged' WHERE condition = 'partial'"
+        )
     add_col("branches", "receipt_name", "TEXT")
     add_col("branches", "receipt_footer", "TEXT DEFAULT 'Terima kasih telah berbelanja!'")
     add_col("branches", "receipt_paper_width_mm", "INTEGER DEFAULT 80")
@@ -281,6 +306,23 @@ def run_migrations():
         c.execute(
             "UPDATE purchases SET document_type = 'purchase' "
             "WHERE document_type IS NULL OR TRIM(document_type) = ''"
+        )
+        c.execute(
+            "UPDATE purchases SET fulfillment_status = 'none' "
+            "WHERE fulfillment_status IS NULL OR TRIM(fulfillment_status) = ''"
+        )
+        # Hubungkan baris draft fulfillment lama ke baris request asal bila
+        # pasangan item-nya tidak ambigu. Ini menyamai backfill migrasi Alembic.
+        c.execute(
+            "UPDATE purchase_items AS child SET source_request_item_id = ("
+            "SELECT src.id FROM purchases AS p "
+            "JOIN purchase_items AS src ON src.purchase_id = p.from_po_id "
+            "WHERE p.id = child.purchase_id AND src.item_id = child.item_id LIMIT 1"
+            ") WHERE child.source_request_item_id IS NULL "
+            "AND child.purchase_id IN (SELECT id FROM purchases WHERE from_po_id IS NOT NULL) "
+            "AND 1 = (SELECT COUNT(*) FROM purchases AS p2 "
+            "JOIN purchase_items AS src2 ON src2.purchase_id = p2.from_po_id "
+            "WHERE p2.id = child.purchase_id AND src2.item_id = child.item_id)"
         )
         c.execute(
             "UPDATE sale_returns SET branch_id = "
@@ -336,6 +378,7 @@ def run_migrations():
     add_index("ix_purchases_branch_date", "purchases", "branch_id, date")
     add_index("ix_purchase_items_purchase_id", "purchase_items", "purchase_id")
     add_index("ix_purchase_items_item_id", "purchase_items", "item_id")
+    add_index("ix_purchase_items_source_request", "purchase_items", "source_request_item_id")
     add_index("ix_purchase_returns_purchase_id", "purchase_returns", "purchase_id")
     add_index("ix_purchase_return_items_return_id", "purchase_return_items", "return_id")
     add_index("ix_purchase_return_items_item_id", "purchase_return_items", "item_id")
@@ -360,6 +403,7 @@ def run_migrations():
     add_index("ix_warehouses_branch_id", "warehouses", "branch_id")
     add_index("ix_warehouse_transfers_from_wh", "warehouse_transfers", "from_warehouse_id")
     add_index("ix_warehouse_transfers_to_wh", "warehouse_transfers", "to_warehouse_id")
+    add_index("ix_transfer_source_purchase", "warehouse_transfers", "source_purchase_id")
     add_index("ix_wh_transfer_items_transfer_id", "warehouse_transfer_items", "transfer_id")
     add_index("ix_wh_transfer_items_item_id", "warehouse_transfer_items", "item_id")
     add_index("ix_stock_batches_source_inventory_line_id", "stock_batches", "source_inventory_line_id")
@@ -404,6 +448,9 @@ def run_migrations():
     add_index("ix_delivery_note_items_delivery_id", "delivery_note_items", "delivery_id")
     add_index("ix_trade_ins_customer_id", "trade_ins", "customer_id")
     add_index("ix_trade_ins_branch_id", "trade_ins", "branch_id")
+    add_index("ix_customer_deposit_movements_customer_time", "customer_deposit_movements", "customer_id, occurred_at")
+    add_index("ix_customer_deposit_movements_branch_id", "customer_deposit_movements", "branch_id")
+    add_index("ix_customer_deposit_movements_source", "customer_deposit_movements", "source_type, source_id")
     add_index("ix_ti_return_items_trade_in_id", "trade_in_return_items", "trade_in_id")
     add_index("ix_ti_new_items_trade_in_id", "trade_in_new_items", "trade_in_id")
     add_index("ix_unit_conversions_item_id", "unit_conversions", "item_id")
@@ -412,6 +459,18 @@ def run_migrations():
     conn.close()
 
 run_migrations()
+
+# Rekonstruksi ledger deposit sekali untuk instalasi lama. Transaksi dan baris
+# penyesuaian dibuat dalam satu commit sehingga restart aman bila proses gagal.
+with SessionLocal() as _deposit_migration_db:
+    try:
+        from app.services.customer_deposits import backfill_customer_deposit_movements
+        _deposit_rows = backfill_customer_deposit_movements(_deposit_migration_db)
+        if _deposit_rows:
+            print(f"  Migration: {_deposit_rows} mutasi deposit pelanggan dibuat")
+    except Exception as _deposit_migration_error:
+        _deposit_migration_db.rollback()
+        print(f"  Migration ledger deposit dilewati: {_deposit_migration_error}")
 
 # Migrasi histori perakitan lama bersifat idempotent dan tidak mem-posting stok.
 with SessionLocal() as _assembly_migration_db:
@@ -519,6 +578,8 @@ def start_background_tasks_once():
     _background_tasks_started = True
     threading.Thread(target=local_backup_loop, daemon=True).start()
     threading.Thread(target=email_backup_scheduler, daemon=True).start()
+    from app.services.central_license import scheduler_loop
+    threading.Thread(target=scheduler_loop, daemon=True, name="license-check").start()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -604,28 +665,13 @@ async def lifespan(app: FastAPI):
         elif ipos_seed_result["status"] == "failed":
             print(f"Data awal iPos gagal: {ipos_seed_result.get('error')}")
 
-        # ── Guard keamanan: password default + akses publik (Funnel) ──────────
-        # Di mode publik, kredensial bawaan bisa ditebak SEKALI coba dari internet;
-        # throttle login (429) tidak menolong bila tebakan pertama sudah benar.
-        # CATATAN: sengaja TIDAK pakai messagebox di sini — lifespan jalan di thread
-        # server (bukan main thread); Tk tidak thread-safe & modal akan memblok startup.
-        # Peringatan diarahkan ke stdout → error_log.txt (mode frozen windowed).
-        if settings.TAILSCALE_PUBLIC:
-            lemah = []
-            admin_u = db.query(models.User).filter(models.User.username == "admin").first()
-            if admin_u and verify_password("admin123", admin_u.hashed_password):
-                lemah.append("admin/admin123")
-            fieter_u = db.query(models.User).filter(models.User.username == "Fieter").first()
-            if fieter_u and verify_password("Fieter098", fieter_u.hashed_password):
-                lemah.append("Fieter/Fieter098 (vendor)")
-            if lemah:
-                garis = "!" * 70
-                print(garis)
-                print("⚠️  BAHAYA: AKSES PUBLIK (Tailscale Funnel) AKTIF DENGAN PASSWORD DEFAULT")
-                print(f"    Akun masih memakai password bawaan: {', '.join(lemah)}")
-                print("    Siapa pun yang menemukan URL bisa login. GANTI PASSWORD SEKARANG,")
-                print("    atau matikan Funnel (TAILSCALE_PUBLIC=false) sampai password diganti.")
-                print(garis)
+        # Master barang bersifat global. Perbaiki instalasi lama yang belum
+        # memiliki baris stok lokal lengkap untuk setiap gudang/cabang.
+        from app.services.item_catalog_sync import backfill_catalog_stock_rows
+        catalog_rows_added = backfill_catalog_stock_rows(db)
+        db.commit()
+        if catalog_rows_added:
+            print(f"Sinkronisasi katalog: {catalog_rows_added} baris stok gudang ditambahkan")
 
     except Exception as e:
         print(f"⚠️ Gagal inisialisasi data awal: {e}")
@@ -636,17 +682,16 @@ async def lifespan(app: FastAPI):
     yield 
     print("Server mematikan proses...")
 
-# Saat mode Funnel (TAILSCALE_PUBLIC=True) server terbuka ke internet publik.
+# Semua instalasi FPOS memakai Funnel dan terbuka ke internet publik.
 # Tutup dokumentasi interaktif agar peta API (endpoint, schema, contoh) tidak
-# bocor ke publik. Di mode privat (serve/tailnet) docs tetap aktif untuk debug.
-_public = settings.TAILSCALE_PUBLIC
+# bocor ke publik; endpoint dokumentasi selalu dinonaktifkan.
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     lifespan=lifespan,
-    docs_url=None if _public else "/docs",
-    redoc_url=None if _public else "/redoc",
-    openapi_url=None if _public else "/openapi.json",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 
 # CORS: auth memakai Bearer token di header Authorization (BUKAN cookie), maka
@@ -665,6 +710,24 @@ app.add_middleware(
 # 🗜️ Kompresi GZip — pangkas ukuran transfer JSON/JS/CSS/HTML (sangat membantu via Tailscale).
 # minimum_size=1024 agar respons kecil tidak ikut dikompres (overhead tak sepadan).
 app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+
+@app.middleware("http")
+async def enforce_central_license(request: Request, call_next):
+    """Reject business API calls even when a browser overlay is bypassed."""
+    if request.url.path.startswith("/api/"):
+        from app.services.central_license import is_business_blocked, public_status
+
+        if is_business_blocked(request.url.path):
+            current = public_status()
+            return JSONResponse(
+                status_code=423,
+                content={
+                    "detail": current["message"],
+                    "license_status": current["status"],
+                },
+            )
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -850,6 +913,19 @@ if FRONTEND_DIR.exists():
             app.add_api_route(f"/{page}.html", make_handler(page), methods=["GET"])
 
     # Serve pages in item subdirectory
+    REPORT_PAGES = ["sales", "profit-loss", "inventory", "purchases", "customers", "cash", "receivables"]
+    for page in REPORT_PAGES:
+        html_file = FRONTEND_DIR / "reports" / f"{page}.html"
+        if html_file.exists():
+            def make_report_handler(p):
+                async def handler():
+                    return FileResponse(str(FRONTEND_DIR / "reports" / f"{p}.html"), headers=_HTML_NO_CACHE)
+                handler.__name__ = f"page_report_{p}"
+                return handler
+            app.add_api_route(f"/reports/{page}", make_report_handler(page), methods=["GET"])
+            app.add_api_route(f"/reports/{page}.html", make_report_handler(page), methods=["GET"])
+
+    # Serve pages in item subdirectory
     ITEM_PAGES = ["dashboard", "satuan", "levelHarga", "levelJumlah", "items", "popUp", "kategori", "units", "merek", "potonganHargaJual"]
     for page in ITEM_PAGES:
         html_file = FRONTEND_DIR / "item" / f"{page}.html"
@@ -890,61 +966,6 @@ if FRONTEND_DIR.exists():
                 return handler
             app.add_api_route(f"/supplier/{page}", make_supplier_handler(page), methods=["GET"])
             app.add_api_route(f"/supplier/{page}.html", make_supplier_handler(page), methods=["GET"])
-
-def cari_tailscale_exe() -> str | None:
-    kandidat = [
-        r"C:\Program Files\Tailscale\tailscale.exe",
-        r"C:\Program Files (x86)\Tailscale\tailscale.exe",
-        os.path.expandvars(r"%LOCALAPPDATA%\Tailscale\tailscale.exe"),
-    ]
-    for path in kandidat:
-        if os.path.exists(path):
-            return path
-    return None
-
-def run_cmd(args: list[str]) -> tuple[int, str, str]:
-    ts_exe = cari_tailscale_exe()
-    if args and args[0] == "tailscale" and ts_exe:
-        args = [ts_exe] + args[1:]
-    try:
-        result = subprocess.run(
-            args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, timeout=10
-        )
-        return result.returncode, result.stdout.strip(), result.stderr.strip()
-    except Exception as e:
-        return -1, "", str(e)
-
-def cek_tailscale_status() -> bool:
-    code, out, _ = run_cmd(["tailscale", "status"])
-    return code == 0
-
-def reset_serve(publik: bool):
-    run_cmd(["tailscale", "funnel" if publik else "serve", "reset"])
-
-def jalankan_tailscale(port: int, publik: bool) -> bool:
-    if os.environ.get("FPOS_SKIP_TAILSCALE") == "1":
-        return True  # Digunakan oleh smoke test build otomatis.
-
-    ts_exe = cari_tailscale_exe()
-    if not ts_exe:
-        return False
-    
-    if not cek_tailscale_status():
-        return False
-    
-    reset_serve(publik)
-    time.sleep(1)
-    
-    args = ["tailscale", "funnel" if publik else "serve", "--bg"]
-    if not publik:
-        args.append(f"http://localhost:{port}")
-    else:
-        args.append(str(port))
-        
-    code, out, err = run_cmd(args)
-    return code == 0 or "already exists" in err
-
 
 def buka_prompt_autostart_terpisah():
     """Tampilkan prompt sesudah server siap, di proses terpisah agar tidak memblok."""
@@ -990,10 +1011,6 @@ if __name__ == "__main__":
         PORT = int(os.environ.get("FPOS_PORT", "8010"))
     except ValueError:
         PORT = 8010
-    # AMAN secara default: tailscale "serve" (hanya tailnet). Set TAILSCALE_PUBLIC=true
-    # di .env HANYA jika cabang berada di luar tailnet dan benar-benar butuh akses publik.
-    PUBLIK = settings.TAILSCALE_PUBLIC
-
     def is_server_healthy(port: int) -> bool:
         """Pastikan port benar-benar melayani FPOS, bukan sekadar sedang terbuka."""
         try:
@@ -1013,7 +1030,9 @@ if __name__ == "__main__":
             return False
 
     def jalankan_server():
-        jalankan_tailscale(PORT, PUBLIK)
+        # Tailscale dapat belum siap ketika Windows baru login. Pengelola daemon
+        # melakukan retry tanpa menahan server lokal atau browser FPOS.
+        start_funnel_manager(PORT)
         # Bind ke localhost saja. Tailscale serve/funnel & browser lokal mengakses
         # lewat 127.0.0.1, jadi app tidak perlu terekspos di seluruh interface (0.0.0.0).
         #

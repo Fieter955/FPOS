@@ -36,6 +36,11 @@ class ReceiptSettings:
     def columns(self) -> int:
         return 32 if self.paper_width_mm == 58 else 48
 
+    @property
+    def enlarged_columns(self) -> int:
+        """Jumlah karakter aman saat font dicetak dua kali lebih lebar."""
+        return max(1, self.columns // 2)
+
 
 def settings_from_branch(branch) -> ReceiptSettings:
     width = int(getattr(branch, "receipt_paper_width_mm", 80) or 80)
@@ -87,15 +92,16 @@ class Receipt:
     def command(self, value: str) -> None:
         self.parts.append(value)
 
-    def line(self, value="") -> None:
+    def line(self, value="", width: int | None = None) -> None:
         text = safe_text(value)
         if not text:
             self.parts.append("\n")
             return
+        line_width = width or self.width
         for source_line in text.split("\n"):
             wrapped = textwrap.wrap(
                 source_line,
-                width=self.width,
+                width=line_width,
                 break_long_words=True,
                 break_on_hyphens=False,
             ) or [""]
@@ -118,7 +124,7 @@ class Receipt:
             self.line(left_text)
             self.line(right_text)
             return
-        max_left = self.width - len(right_text) - 1
+        max_left = max(1, self.width - len(right_text) - 1)
         if len(left_text) > max_left:
             wrapped_left = textwrap.wrap(left_text, width=max_left) or [""]
             for wrapped in wrapped_left[:-1]:
@@ -136,7 +142,10 @@ class Receipt:
 
     def header(self, title: str) -> None:
         self.command("\x1b\x61\x01\x1d\x21\x11")
-        self.line(self.settings.store_name.upper())
+        # GS ! 0x11 maakt het teken zowel dubbel breed als dubbel hoog.
+        # Daarom moet de naam op halve breedte worden gewrapt; wrappen op
+        # self.width laat lange namen anders buiten de fysieke papierzijde lopen.
+        self.line(self.settings.store_name.upper(), width=self.settings.enlarged_columns)
         self.command("\x1d\x21\x00")
         if self.settings.address:
             self.line(self.settings.address)
@@ -148,7 +157,10 @@ class Receipt:
     def footer(self) -> None:
         self.line()
         self.center(self.settings.footer)
-        self.parts.append("\n\n\n")
+        # Jarak aman sebelum pisau potong dikirim oleh agen printer. Menaruh
+        # feed di satu tempat membuat semua tipe nota memiliki perilaku cut
+        # yang sama dan tidak menggandakan jarak pada retry/cetak ulang.
+        self.parts.append("\n")
 
     def render(self) -> str:
         return "".join(self.parts)
@@ -290,10 +302,13 @@ def build_trade_in_receipt(trade, settings: ReceiptSettings) -> str:
         receipt.line("Impas")
     cash = float(getattr(trade, "cash_amount", 0) or 0)
     bank = float(getattr(trade, "bank_amount", 0) or 0)
+    deposit = float(getattr(trade, "deposit_amount", 0) or 0)
     if cash > 0.005:
         receipt.pair("Tunai", money(cash))
     if bank > 0.005:
         receipt.pair("Bank/Transfer", money(bank))
+    if deposit > 0.005:
+        receipt.pair("Saldo Pelanggan", money(deposit))
     receipt.footer()
     return receipt.render()
 

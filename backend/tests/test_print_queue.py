@@ -72,6 +72,8 @@ class PrintQueueTests(unittest.TestCase):
         jobs = claim_jobs(AgentClaim(limit=5), request_with_token(self.token), self.db)
 
         self.assertEqual([job["content"] for job in jobs], ["JOB A"])
+        self.assertEqual(jobs[0]["paper_width_mm"], 80)
+        self.assertEqual(jobs[0]["document_type"], "sale")
         self.assertEqual(self.db.query(models.PrintJob).filter_by(branch_id=1).one().status, "processing")
         self.assertEqual(self.db.query(models.PrintJob).filter_by(branch_id=2).one().status, "pending")
 

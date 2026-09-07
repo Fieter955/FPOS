@@ -75,6 +75,22 @@ from app import models
 from app.routes import reports
 
 
+# Test ini memakai stub untuk tetap ringan, tetapi stub tidak boleh bocor ke
+# modul test lain ketika unittest discovery memuat semua file dalam satu proses.
+_STUB_MODULES = (
+    "app.config",
+    "fastapi",
+    "jose",
+    "pytz",
+    "openpyxl",
+    "openpyxl.styles",
+    "app.auth",
+    "app.routes.accounting",
+)
+for _module_name in _STUB_MODULES:
+    sys.modules.pop(_module_name, None)
+
+
 class DashboardReportTests(unittest.TestCase):
     def setUp(self):
         engine = create_engine(

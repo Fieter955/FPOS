@@ -52,6 +52,51 @@
         background: rgba(239, 68, 68, 0.15);
         color: #ef4444;
       }
+
+      #mManualReturn {
+        padding: 12px;
+      }
+      #mManualReturn .manual-return-modal-box {
+        display: flex;
+        flex-direction: column;
+        width: calc(100vw - 24px);
+        max-width: none;
+        height: calc(100vh - 24px);
+        max-height: none;
+        padding: 24px;
+        overflow: hidden;
+      }
+      #mManualReturn .modal-hdr {
+        flex: 0 0 auto;
+        margin-bottom: 12px;
+      }
+      #mManualReturn .manual-return-modal-body {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-height: 0;
+        overflow: auto;
+      }
+      #mManualReturn .manual-return-table-wrap {
+        flex: 1 1 auto;
+        min-height: 240px;
+        overflow: auto;
+      }
+      #mManualReturn .manual-return-actions {
+        flex: 0 0 auto;
+      }
+
+      @media (max-width: 640px) {
+        #mManualReturn {
+          padding: 4px;
+        }
+        #mManualReturn .manual-return-modal-box {
+          width: calc(100vw - 8px);
+          height: calc(100vh - 8px);
+          padding: 14px;
+          border-radius: 14px;
+        }
+      }
     </style>
   </head>
   <body>
@@ -132,6 +177,9 @@
                 <button class="btn" onclick="openReturnHistory()">
                   Riwayat Retur &amp; Cetak
                 </button>
+                <button class="btn" id="btnBranchShipmentReturn" onclick="openBranchShipmentReturn()">
+                  Retur Kiriman Pusat
+                </button>
                 <button
                   class="btn"
                   style="
@@ -209,6 +257,13 @@
               min="1"
             />
           </div>
+          <div class="input-group" id="mReturnConditionWrap" style="margin-bottom: 12px">
+            <label>Kondisi Barang *</label>
+            <select id="mReturnCondition" class="input-control">
+              <option value="good">Bagus — kembali ke stok jual</option>
+              <option value="damaged">Rusak — masuk karantina</option>
+            </select>
+          </div>
           <div class="input-group" style="margin-bottom: 12px">
             <label>Alasan Retur</label>
             <input
@@ -250,12 +305,15 @@
 
     <!-- Modal Form Retur Manual -->
     <div class="modal-overlay" id="mManualReturn">
-      <div class="modal-box" style="max-width: 80vw; width: 80vw">
+      <div class="modal-box manual-return-modal-box">
         <div class="modal-hdr">
           <h2 id="mManualReturnTitle">Buat Retur Pembelian</h2>
           <button class="btn-x" onclick="closeModal('mManualReturn')">×</button>
         </div>
-        <div class="modal-body" style="padding: 16px 0">
+        <div
+          class="modal-body manual-return-modal-body"
+          style="padding: 16px 0"
+        >
           <div
             style="
               display: grid;
@@ -272,13 +330,7 @@
               <label id="lblManualItemSearch"
                 >Cari Barang (Scan / Ketik) *</label
               >
-              <input
-                type="text"
-                id="mManualItemSearch"
-                class="input-control"
-                placeholder="Pilih supplier dulu..."
-                disabled
-              />
+              <div id="mManualItemCombo"></div>
             </div>
           </div>
 
@@ -322,7 +374,7 @@
           </div>
 
           <div
-            class="tbl-wrap"
+            class="tbl-wrap manual-return-table-wrap"
             style="border: 1px solid var(--border-color); border-radius: 8px"
           >
             <table
@@ -332,12 +384,14 @@
               <thead>
                 <tr>
                   <th style="width: auto">Nama Barang</th>
-                  <th style="width: 8%; text-align: center">Sisa</th>
-                  <th style="width: 10%; text-align: center">Qty Retur</th>
-                  <th style="width: 18%; text-align: right">Harga Dasar</th>
-                  <th style="width: 10%; text-align: center">PPN (%)</th>
-                  <th style="width: 20%; text-align: right">Harga + PPN</th>
-                  <th style="width: 20%; text-align: right">Total</th>
+                  <th style="width: 22%">Faktur / Invoice</th>
+                  <th style="width: 7%; text-align: center">Sisa</th>
+                  <th style="width: 8%; text-align: center">Qty Retur</th>
+                  <th style="width: 10%; text-align: center">Kondisi</th>
+                  <th style="width: 13%; text-align: right">Harga Dasar</th>
+                  <th style="width: 7%; text-align: center">PPN (%)</th>
+                  <th style="width: 13%; text-align: right">Harga + PPN</th>
+                  <th style="width: 13%; text-align: right">Total</th>
                   <th style="width: 40px"></th>
                 </tr>
               </thead>
@@ -377,6 +431,7 @@
           </div>
         </div>
         <div
+          class="manual-return-actions"
           style="
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -439,12 +494,31 @@
       </div>
     </div>
 
+    <div class="modal-overlay" id="mBranchShipmentReturn">
+      <div class="modal-box" style="max-width:900px;width:94vw">
+        <div class="modal-hdr">
+          <h2 id="branchShipmentReturnTitle">Retur Kiriman Pusat</h2>
+          <button class="btn-x" onclick="closeModal('mBranchShipmentReturn')">×</button>
+        </div>
+        <div style="overflow:auto;max-height:65vh">
+          <table class="tbl" style="width:100%">
+            <thead id="branchShipmentReturnHead"></thead>
+            <tbody id="branchShipmentReturnBody"></tbody>
+          </table>
+        </div>
+        <div id="branchShipmentReturnActions" style="padding-top:14px"></div>
+      </div>
+    </div>
+
     <script src="/js/api.js"></script>
     <script src="/js/theme.js"></script>
     <script src="/js/components.js"></script>
     <script>
       requireAuth();
-      let currentTab = "sales"; // sales or purchase
+      const requestedTab = new URLSearchParams(window.location.search).get("tab");
+      let currentTab = ["sales", "purchase", "broken"].includes(requestedTab)
+        ? requestedTab
+        : "sales"; // sales or purchase
       let mainFilter = null;
       let activeItem = null;
       let allSuppliers = [];
@@ -452,6 +526,7 @@
 
       let mManualMode = "purchase"; // 'purchase' or 'sales'
       let mManualEntityCombo = null;
+      let mManualItemCombo = null;
       let mManualSelectedEntity = null;
       let mManualValidItems = [];
 
@@ -462,6 +537,71 @@
       let swapContext = null;
       let pendingSwapNote = null; // hasil swap terakhir, untuk ditampilkan di rincian retur
       let currentPrintedReturn = null;
+
+      async function openBranchShipmentReturn() {
+        const pusat = isMainStore();
+        document.getElementById("branchShipmentReturnTitle").textContent = pusat
+          ? "ACC Retur dari Cabang"
+          : "Kirim Retur ke Toko Utama";
+        const head = document.getElementById("branchShipmentReturnHead");
+        const body = document.getElementById("branchShipmentReturnBody");
+        const actions = document.getElementById("branchShipmentReturnActions");
+        openModal("mBranchShipmentReturn");
+        body.innerHTML = '<tr><td style="padding:24px">Memuat...</td></tr>';
+        actions.innerHTML = "";
+        try {
+          if (pusat) {
+            const rows = await api("GET", "/returns/branch-to-center?status=shipping");
+            head.innerHTML = "<tr><th>No. Retur</th><th>Cabang</th><th>Tanggal</th><th>Barang</th><th>Aksi</th></tr>";
+            body.innerHTML = rows.length ? rows.map((row) => `
+              <tr><td><b>${row.number}</b></td><td>${row.from_branch}</td><td>${row.date}</td>
+              <td>${row.items.map((item) => `${item.item_name} × ${toDesimal(item.qty)}`).join("<br>")}</td>
+              <td><button class="btn btn-primary" onclick="receiveBranchReturn(${row.id})">ACC di Pusat</button></td></tr>
+            `).join("") : '<tr><td colspan="5" style="text-align:center;padding:24px">Tidak ada retur cabang yang menunggu ACC.</td></tr>';
+          } else {
+            const rows = await api("GET", "/returns/branch-shipments");
+            head.innerHTML = "<tr><th>Faktur Pusat</th><th>Supplier Asal</th><th>Barang</th><th>Sisa</th><th>Qty Retur</th></tr>";
+            body.innerHTML = rows.length ? rows.map((row) => `
+              <tr data-purchase-item-id="${row.purchase_item_id}" data-max="${row.qty_available}">
+                <td>${row.purchase_number}</td><td>${row.supplier_name}</td>
+                <td><b>${row.item_name}</b><br><small>${row.item_code}</small></td>
+                <td>${toDesimal(row.qty_available)}</td>
+                <td><input class="input-control branch-return-qty" inputmode="decimal" data-input-desimal value="0" style="width:100px"></td>
+              </tr>`).join("") : '<tr><td colspan="5" style="text-align:center;padding:24px">Tidak ada barang kiriman pusat yang dapat diretur.</td></tr>';
+            if (rows.length) actions.innerHTML = '<button class="btn btn-primary" style="width:100%" onclick="submitBranchReturn()">Kirim Retur ke Pusat</button>';
+          }
+        } catch (error) {
+          body.innerHTML = `<tr><td style="color:var(--danger);padding:24px">${error.message}</td></tr>`;
+        }
+      }
+
+      async function submitBranchReturn() {
+        const items = Array.from(document.querySelectorAll("#branchShipmentReturnBody tr[data-purchase-item-id]"))
+          .map((row) => ({
+            purchase_item_id: Number(row.dataset.purchaseItemId),
+            qty: parseDesimal(row.querySelector(".branch-return-qty")),
+            max: Number(row.dataset.max),
+          })).filter((item) => item.qty > 0);
+        if (!items.length) return showToast("Isi minimal satu qty retur", "warning");
+        if (items.some((item) => item.qty > item.max)) return showToast("Qty retur melebihi sisa kiriman", "error");
+        try {
+          showLoading("Mengirim retur ke pusat...");
+          const result = await api("POST", "/returns/branch-to-center", {
+            date: new Date().toISOString().split("T")[0],
+            items: items.map(({purchase_item_id, qty}) => ({purchase_item_id, qty})),
+          });
+          hideLoading(); closeModal("mBranchShipmentReturn"); showToast(result.message); load();
+        } catch (error) { hideLoading(); showToast(error.message, "error"); }
+      }
+
+      async function receiveBranchReturn(id) {
+        if (!(await showConfirm("Terima retur ini ke stok pusat?"))) return;
+        try {
+          showLoading("Menerima retur...");
+          const result = await api("POST", `/returns/branch-to-center/${id}/receive`, {});
+          hideLoading(); showToast(result.message); openBranchShipmentReturn();
+        } catch (error) { hideLoading(); showToast(error.message, "error"); }
+      }
 
       function switchTab(tab) {
         currentTab = tab;
@@ -517,22 +657,44 @@
       }
 
       function buatReturPembelian() {
+        pendingBrokenItem = null;
+        pendingBrokenSuppliers = null;
         mManualMode = "purchase";
         openManualReturnModal();
       }
 
       function buatReturPenjualan() {
+        pendingBrokenItem = null;
+        pendingBrokenSuppliers = null;
         mManualMode = "sales";
         openManualReturnModal();
       }
 
       let pendingBrokenItem = null;
+      let pendingBrokenSuppliers = null;
 
-      function openBrokenReturnModal(item) {
+      async function openBrokenReturnModal(item) {
         pendingBrokenItem = item;
         mManualMode = "purchase";
-        openManualReturnModal();
-        showToast("Pilih Supplier untuk meretur barang rusak ini", "info");
+        showLoading("Mencari supplier yang pernah memasok barang...");
+        try {
+          pendingBrokenSuppliers = await api(
+            "GET",
+            `/returns/history/broken/${item.source_type || "trade_in"}/${item.source_item_id || item.trade_in_return_item_id}/suppliers`,
+          );
+          hideLoading();
+          openManualReturnModal();
+          if (!pendingBrokenSuppliers.length) {
+            showToast("Belum ada faktur pembelian untuk barang ini di cabang aktif.", "warning");
+          } else {
+            showToast("Barang sudah dipilih. Silakan pilih supplier dan faktur.", "info");
+          }
+        } catch (ex) {
+          hideLoading();
+          pendingBrokenItem = null;
+          pendingBrokenSuppliers = null;
+          showToast(ex.message || "Gagal mencari supplier barang rusak.", "error");
+        }
       }
 
       function openManualReturnModal() {
@@ -547,17 +709,11 @@
           .toISOString()
           .split("T")[0];
         document.getElementById("mManualReason").value = pendingBrokenItem
-          ? `Retur Barang Rusak: ${pendingBrokenItem.trade_in_number}`
+          ? `Retur Barang Rusak: ${pendingBrokenItem.source_number || pendingBrokenItem.trade_in_number}`
           : "";
         document.getElementById("mManualGridBody").innerHTML = "";
         document.getElementById("mManualGrandTotal").textContent = "Rp 0";
         document.getElementById("mManualPpnInfo").style.display = "none";
-
-        const searchInp = document.getElementById("mManualItemSearch");
-        searchInp.value = "";
-        searchInp.disabled = true;
-        searchInp.placeholder =
-          "Pilih " + (isPurchase ? "supplier" : "pelanggan") + " dulu...";
 
         mManualSelectedEntity = null;
         mManualValidItems = [];
@@ -569,15 +725,41 @@
         if (!mManualEntityCombo) {
           mManualEntityCombo = createPremiumCombo(
             "mManualEntityCombo",
-            isPurchase ? allSuppliers : allCustomers,
+            pendingBrokenItem ? pendingBrokenSuppliers || [] : (isPurchase ? allSuppliers : allCustomers),
             {
               onSelect: (sel) => onManualEntitySelected(sel),
             },
           );
         } else {
           mManualEntityCombo.updateData(
-            isPurchase ? allSuppliers : allCustomers,
+            pendingBrokenItem ? pendingBrokenSuppliers || [] : (isPurchase ? allSuppliers : allCustomers),
           );
+        }
+
+        if (!mManualItemCombo) {
+          mManualItemCombo = createPremiumCombo("mManualItemCombo", [], {
+            isItem: true,
+            placeholder: "Pilih supplier/pelanggan dulu...",
+            onSelect: async (item) => {
+              if (!item) return;
+              await addManualReturnRow(item);
+              mManualItemCombo.clear();
+              document
+                .querySelector("#mManualItemCombo .combobox-input")
+                ?.focus();
+            },
+          });
+        }
+        mManualItemCombo.updateData([]);
+        mManualItemCombo.clear();
+        mManualItemCombo.disable();
+        const itemSearchInput = document.querySelector(
+          "#mManualItemCombo .combobox-input",
+        );
+        if (itemSearchInput) {
+          itemSearchInput.placeholder = pendingBrokenItem
+            ? `Barang otomatis: ${pendingBrokenItem.item?.name || "barang rusak"}`
+            : "Pilih " + (isPurchase ? "supplier" : "pelanggan") + " dulu...";
         }
 
         if (!pendingBrokenItem) {
@@ -590,32 +772,66 @@
 
       async function onManualEntitySelected(entity) {
         mManualSelectedEntity = entity;
-        const searchInp = document.getElementById("mManualItemSearch");
 
         if (!entity) {
-          searchInp.disabled = true;
           mManualValidItems = [];
+          mManualItemCombo.updateData([]);
+          mManualItemCombo.clear();
+          mManualItemCombo.disable();
           return;
         }
 
-        searchInp.disabled = false;
-        searchInp.placeholder = "Scan Barcode atau Ketik Nama...";
-        searchInp.focus();
-
         showLoading("Mencari daftar barang...");
         try {
-          if (mManualMode === "purchase") {
-            mManualValidItems = await api(
-              "GET",
-              `/suppliers/${entity.id}/purchased-items`,
-            );
-          } else {
-            mManualValidItems = await api(
-              "GET",
-              `/customers/${entity.id}/sold-items`,
-            );
+          const isPurchase = mManualMode === "purchase";
+          const entityParam = isPurchase ? "supplier_id" : "customer_id";
+          const historyType = isPurchase ? "purchases" : "sales";
+          const transactions = await api(
+            "GET",
+            `/returns/history/${historyType}?${entityParam}=${entity.id}`,
+          );
+          const itemsById = new Map();
+          for (const transaction of transactions || []) {
+            const item = transaction.item;
+            if (!item) continue;
+            if (!itemsById.has(item.id)) {
+              itemsById.set(item.id, { ...item, returnTransactions: [] });
+            }
+            itemsById.get(item.id).returnTransactions.push({
+              purchase_id: isPurchase
+                ? transaction.purchase_id
+                : transaction.sale_id,
+              number: isPurchase
+                ? transaction.purchase_number
+                : transaction.sale_number,
+              date: isPurchase
+                ? transaction.purchase_date
+                : transaction.sale_date,
+              qty: isPurchase ? transaction.qty_bought : transaction.qty_sold,
+              qty_available: transaction.qty_available,
+              price: isPurchase
+                ? transaction.buy_price
+                : transaction.sell_price,
+              tax_percent: transaction.tax_percent || 0,
+            });
           }
+          mManualValidItems = Array.from(itemsById.values()).sort((a, b) =>
+            String(a.name || "").localeCompare(String(b.name || ""), "id"),
+          );
           hideLoading();
+          mManualItemCombo.updateData(mManualValidItems);
+          mManualItemCombo.clear();
+          if (pendingBrokenItem) mManualItemCombo.disable();
+          else mManualItemCombo.enable();
+          const itemSearchInput = document.querySelector(
+            "#mManualItemCombo .combobox-input",
+          );
+          if (itemSearchInput) {
+            itemSearchInput.placeholder = pendingBrokenItem
+              ? `Barang otomatis: ${pendingBrokenItem.item?.name || "barang rusak"}`
+              : "Scan barcode atau ketik nama...";
+            if (!pendingBrokenItem) itemSearchInput.focus();
+          }
 
           // Jika ada barang rusak yang menunggu, tambahkan otomatis
           if (pendingBrokenItem) {
@@ -629,14 +845,17 @@
                 `#mManualGridBody tr[data-item-id="${itemMatch.id}"]`,
               );
               if (row) {
-                row.dataset.tradeInReturnItemId =
-                  pendingBrokenItem.trade_in_return_item_id;
+                row.dataset.damagedSourceType = pendingBrokenItem.source_type || "trade_in";
+                row.dataset.damagedSourceItemId =
+                  pendingBrokenItem.source_item_id || pendingBrokenItem.trade_in_return_item_id;
                 // Set qty retur sesuai qty rusak
                 const qtyInp = row.querySelector(".row-qty");
                 qtyInp.value = pendingBrokenItem.qty_available;
+                row.querySelector(".row-condition").value = "damaged";
                 calculateManualReturnTotal();
               }
               pendingBrokenItem = null;
+              pendingBrokenSuppliers = null;
             } else {
               showToast(
                 "Barang ini tidak memiliki riwayat pembelian dari supplier terpilih.",
@@ -656,13 +875,6 @@
         if (modal.style.display !== "flex") return;
         handleManualItemInput(scode);
       });
-
-      document.getElementById("mManualItemSearch").onkeydown = (e) => {
-        if (e.key === "Enter") {
-          handleManualItemInput(e.target.value);
-          e.target.value = "";
-        }
-      };
 
       async function handleManualItemInput(query) {
         if (!query) return;
@@ -686,16 +898,20 @@
 
       async function addManualReturnRow(item) {
         if (!item) {
-          document.getElementById("mManualItemSearch").focus();
+          document
+            .querySelector("#mManualItemCombo .combobox-input")
+            ?.focus();
           return;
         }
 
         const body = document.getElementById("mManualGridBody");
 
         // Cek jika sudah ada
-        const existing = Array.from(body.querySelectorAll("tr")).find(
-          (r) => r.dataset.itemId == item.id,
-        );
+        const existing = mManualMode === "purchase"
+          ? Array.from(body.querySelectorAll("tr")).find(
+              (r) => r.dataset.itemId == item.id,
+            )
+          : null;
         if (existing) {
           const qtyInp = existing.querySelector(".row-qty");
           qtyInp.value = toDesimal(parseDesimal(qtyInp) + 1, {
@@ -707,18 +923,36 @@
 
         const row = document.createElement("tr");
         row.dataset.itemId = item.id;
+        row._returnTransactions = Array.isArray(item.returnTransactions)
+          ? item.returnTransactions
+          : [];
+        const invoiceOptions = row._returnTransactions
+          .map(
+            (transaction, index) =>
+              `<option value="${index}">${transaction.number} · ${fmtDate(transaction.date)} · sisa ${toDesimal(transaction.qty_available, { maximumFractionDigits: 4 })}</option>`,
+          )
+          .join("");
         row.innerHTML = `
           <td>
             <div style="font-weight:600">${item.name}</div>
             <div style="font-size:11px; color:var(--text-muted)">${item.code}</div>
-            <div class="row-factur-info" style="font-size:10px; color:var(--primary); margin-top:4px"></div>
+          </td>
+          <td>
+            <select class="input-control row-invoice" style="width:100%; box-sizing:border-box; padding:5px; font-size:11px" onchange="selectManualReturnTransaction(this)">
+              ${invoiceOptions || '<option value="">Tidak ada faktur</option>'}
+            </select>
+            <div class="row-factur-info" style="display:none"></div>
           </td>
           <td style="text-align: center; font-weight: 700" class="row-avail">-</td>
           <td><input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0" class="input-control row-qty" value="1" style="text-align: center; width: 100%; box-sizing: border-box;" oninput="calculateManualReturnTotal()" /></td>
+          <td style="text-align:center">
+            ${mManualMode === "sales"
+              ? `<select class="input-control row-condition" style="width:100%;padding:5px;font-size:11px"><option value="good">Bagus</option><option value="damaged">Rusak</option></select>`
+              : `<span style="color:var(--text-muted)">—</span><select class="row-condition" hidden><option value="good">Bagus</option><option value="damaged">Rusak</option></select>`}
+          </td>
           <td style="text-align: right">
             <div style="display:flex; align-items:center; gap:4px; justify-content:flex-end; width: 100%;">
                 <input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control row-price-awal" value="0" style="text-align:right; width: 100%; box-sizing: border-box; padding:4px" oninput="onPriceInput(this)" />
-                <button class="btn" onclick="showPriceHistory(${item.id}, this)" style="padding:4px; background:var(--bg-color); border:1px solid var(--border-color); flex-shrink: 0;" title="Cari Faktur">📜</button>
             </div>
           </td>
           <td style="text-align: center"><input type="text" inputmode="decimal" data-input-desimal data-min="0" data-max="100" class="input-control row-ppn" value="0" style="text-align: center; width: 100%; box-sizing: border-box; padding:4px" oninput="calculateManualReturnTotal()" /></td>
@@ -728,32 +962,62 @@
         `;
         body.appendChild(row);
 
-        // Auto-fetch history and pick latest
-        try {
-          const endpoint =
-            mManualMode === "purchase"
-              ? `/suppliers/${mManualSelectedEntity.id}/items/${item.id}/history`
-              : `/customers/${mManualSelectedEntity.id}/items/${item.id}/history`;
+        if (row._returnTransactions.length > 0) {
+          applyManualReturnTransaction(row, row._returnTransactions[0]);
+        } else {
+          // Fallback untuk pemanggilan lama yang belum membawa histori transaksi.
+          try {
+            const endpoint =
+              mManualMode === "purchase"
+                ? `/suppliers/${mManualSelectedEntity.id}/items/${item.id}/history`
+                : `/customers/${mManualSelectedEntity.id}/items/${item.id}/history`;
 
-          console.log("Fetching history from:", endpoint);
-          const history = await api("GET", endpoint);
-          console.log("History received:", history);
+            const history = await api("GET", endpoint);
 
-          if (history && history.length > 0) {
-            const latest = history[0];
-            row.querySelector(".row-price-awal").value = formatRibuan(
-              latest.price,
-            );
-            row.querySelector(".row-ppn").value = latest.tax_percent || 0;
-            row.querySelector(".row-avail").textContent = latest.qty_available;
-            row.querySelector(".row-factur-info").textContent = latest.number;
-            row.dataset.purchaseId = latest.purchase_id;
+            if (history && history.length > 0) {
+              const latest = history[0];
+              row.querySelector(".row-price-awal").value = formatRibuan(
+                latest.price,
+              );
+              row.querySelector(".row-ppn").value = latest.tax_percent || 0;
+              row.querySelector(".row-avail").textContent =
+                latest.qty_available;
+              row.querySelector(".row-factur-info").textContent =
+                latest.number;
+              row.dataset.purchaseId = latest.purchase_id;
+            }
+          } catch (e) {
+            console.error("Gagal autofill riwayat:", e);
           }
-        } catch (e) {
-          console.error("Gagal autofill riwayat:", e);
         }
 
         calculateManualReturnTotal();
+      }
+
+      function applyManualReturnTransaction(row, transaction) {
+        if (!row || !transaction) return;
+        row.querySelector(".row-price-awal").value = formatRibuan(
+          transaction.price,
+        );
+        row.querySelector(".row-ppn").value = transaction.tax_percent || 0;
+        row.querySelector(".row-avail").textContent =
+          transaction.qty_available;
+        row.querySelector(".row-factur-info").textContent =
+          transaction.number;
+        row.dataset.purchaseId = transaction.purchase_id;
+
+        const qtyInput = row.querySelector(".row-qty");
+        const available = Number(transaction.qty_available) || 0;
+        if (parseDesimal(qtyInput) > available) {
+          qtyInput.value = toDesimal(available, { maximumFractionDigits: 4 });
+        }
+        calculateManualReturnTotal();
+      }
+
+      function selectManualReturnTransaction(select) {
+        const row = select.closest("tr");
+        const transaction = row?._returnTransactions?.[Number(select.value)];
+        applyManualReturnTransaction(row, transaction);
       }
 
       async function showPriceHistory(itemId, btn) {
@@ -989,6 +1253,10 @@
         document.getElementById("mReturnQty").dataset.max = item.qty_available;
         document.getElementById("mReturnReason").value = "";
         document.getElementById("mReturnNotes").value = "";
+        document.getElementById("mReturnConditionWrap").style.display = isSales
+          ? "block"
+          : "none";
+        document.getElementById("mReturnCondition").value = "good";
 
         const entityLabel = isSales ? "Pelanggan" : "Supplier";
         const entityName = isSales
@@ -1040,6 +1308,9 @@
               item_id: activeItem.item_id,
               qty: qty,
               price: basePrice,
+              ...(isSales
+                ? { condition: document.getElementById("mReturnCondition").value }
+                : {}),
             },
           ],
         };
@@ -1393,9 +1664,14 @@
             price: priceAwal,
             tax_percent: ppn,
           };
-          const tradeInReturnItemId = row.dataset.tradeInReturnItemId;
-          if (tradeInReturnItemId) {
-            itemData.trade_in_return_item_id = parseInt(tradeInReturnItemId);
+          if (mManualMode === "sales") {
+            itemData.condition = row.querySelector(".row-condition").value;
+          }
+          if (row.dataset.damagedSourceItemId) {
+            itemData.damaged_source_type = row.dataset.damagedSourceType;
+            itemData.damaged_source_item_id = parseInt(
+              row.dataset.damagedSourceItemId,
+            );
           }
           groups[pid].push(itemData);
         });
@@ -1437,7 +1713,7 @@
 
       (async () => {
         await initFilters();
-        load();
+        switchTab(currentTab);
       })();
     </script>
   </body>

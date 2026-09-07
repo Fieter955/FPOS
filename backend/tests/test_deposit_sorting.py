@@ -1,7 +1,7 @@
 import sys
 import types
 import unittest
-from datetime import timezone
+from datetime import datetime, timezone
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -64,8 +64,22 @@ sys.modules.setdefault("app.schemas", schemas_stub)
 
 from app import models
 from app.database import Base
-from app.routes.customers import get_customers
+from app.routes.customers import get_customer_history, get_customers
 from app.routes.suppliers import get_suppliers
+
+
+# Route functions above already hold the lightweight dependencies they need;
+# remove the temporary import stubs before the next test module is imported.
+for _module_name in (
+    "app.config",
+    "pytz",
+    "fastapi",
+    "app.auth",
+    "app.schemas",
+):
+    sys.modules.pop(_module_name, None)
+for _module_name in ("app.routes.customers", "app.routes.suppliers"):
+    sys.modules.pop(_module_name, None)
 
 
 class DepositSortingTests(unittest.TestCase):
@@ -161,6 +175,57 @@ class DepositSortingTests(unittest.TestCase):
                 "Supplier Saldo Nol",
             ],
         )
+
+    def test_customers_can_be_filtered_by_group_and_sorted_by_lowest_deposit(self):
+        group = models.CustomerGroup(name="Grosir", discount_percent=5)
+        self.db.add(group)
+        self.db.flush()
+        alpha = self.db.query(models.Customer).filter_by(code="C-ALPHA").one()
+        low = self.db.query(models.Customer).filter_by(code="C-LOW").one()
+        alpha.group_id = group.id
+        low.group_id = group.id
+        self.db.commit()
+
+        result = get_customers(
+            search=None, active_only=True, sort="deposit_asc", group_id=group.id,
+            without_group=False, skip=0, limit=100, db=self.db, _=object(),
+        )
+
+        self.assertEqual([customer.code for customer in result], ["C-LOW", "C-ALPHA"])
+
+    def test_customer_history_includes_all_branches_and_running_balance(self):
+        customer = self.db.query(models.Customer).filter_by(code="C-LOW").one()
+        branch_a = models.Branch(code="B-A", name="Cabang A")
+        branch_b = models.Branch(code="B-B", name="Cabang B")
+        self.db.add_all([branch_a, branch_b])
+        self.db.flush()
+        sale_a = models.Sale(
+            number="SALE-A", date=datetime(2026, 8, 1).date(), customer_id=customer.id,
+            total=150, paid=150, status="paid", branch_id=branch_a.id,
+        )
+        sale_b = models.Sale(
+            number="SALE-B", date=datetime(2026, 8, 2).date(), customer_id=customer.id,
+            total=200, paid=200, status="paid", branch_id=branch_b.id,
+        )
+        self.db.add_all([sale_a, sale_b])
+        self.db.flush()
+        self.db.add(models.CustomerDepositMovement(
+            customer_id=customer.id, branch_id=branch_b.id, event_type="purchase",
+            source_type="sale", source_id=sale_b.id, reference=sale_b.number,
+            transaction_date=sale_b.date, occurred_at=datetime(2026, 8, 2, 10),
+            amount=-50, balance_after=50, description="Deposit dipakai",
+        ))
+        self.db.commit()
+
+        result = get_customer_history(
+            cid=customer.id, start_date=None, end_date=None, event_type=None,
+            branch_id=None, skip=0, limit=100, db=self.db, _=object(),
+        )
+
+        self.assertEqual({row["name"] for row in result["branches"]}, {"Cabang A", "Cabang B"})
+        sale_b_row = next(row for row in result["items"] if row["number"] == "SALE-B")
+        self.assertEqual(sale_b_row["deposit_change"], -50)
+        self.assertEqual(sale_b_row["balance_after"], 50)
 
 
 if __name__ == "__main__":

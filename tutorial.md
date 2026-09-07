@@ -49,7 +49,7 @@ http://127.0.0.1:8010
 
 Menutup jendela Edge/Chrome tidak mematikan server FPOS. Untuk menghentikan server sepenuhnya, tutup proses `FPOS.exe` melalui Task Manager atau matikan laptop.
 
-## 4. Aktifkan Tailscale pada port 8010
+## 4. Periksa Tailscale Funnel pada port 8010
 
 1. Klik **Start** Windows.
 2. Cari `PowerShell`.
@@ -58,11 +58,11 @@ Menutup jendela Edge/Chrome tidak mematikan server FPOS. Untuk menghentikan serv
 
    ```powershell
    tailscale status
-   tailscale funnel --bg 8010
+   tailscale funnel --bg --yes 8010
    tailscale funnel status
    ```
 
-5. Jika browser membuka halaman persetujuan Funnel, setujui.
+5. FPOS menjalankan perintah tersebut otomatis saat hidup. Jika browser membuka halaman persetujuan Funnel untuk aktivasi pertama, setujui.
 6. Salin URL yang muncul, misalnya:
 
    ```text
@@ -100,8 +100,7 @@ Nilai `TcpTestSucceeded` harus `True`.
 Jalankan kembali:
 
 ```powershell
-tailscale funnel reset
-tailscale funnel --bg 8010
+tailscale funnel --bg --yes 8010
 tailscale funnel status
 ```
 

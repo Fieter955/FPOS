@@ -1,0 +1,29 @@
+services:
+  license:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      FPOS_LICENSE_ENVIRONMENT: production
+      FPOS_LICENSE_DATA_DIR: /data
+      FPOS_LICENSE_ADMIN_USERNAME: fieter
+      FPOS_LICENSE_ADMIN_PASSWORD_HASH: ${FPOS_LICENSE_ADMIN_PASSWORD_HASH:?set admin password hash}
+      FPOS_LICENSE_SIGNING_PRIVATE_KEY_B64: ${FPOS_LICENSE_SIGNING_PRIVATE_KEY_B64:?set signing key}
+      FPOS_LICENSE_SIGNING_KEY_SEED: ${FPOS_LICENSE_SIGNING_KEY_SEED:-development-only-change-me}
+    volumes:
+      - license-data:/data
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+
+volumes:
+  license-data:

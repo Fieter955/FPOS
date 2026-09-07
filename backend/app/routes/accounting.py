@@ -412,6 +412,7 @@ def get_default_accounts() -> list[tuple[str, str, str, str, str]]:
             ("1-1250", "E-Money / Dompet Digital", "asset", "current_asset", "debit"), # BARU: uang masuk via e-money/dompet digital
             ("1-1300", "Piutang Usaha", "asset", "current_asset", "debit"),
             ("1-1400", "Persediaan Barang", "asset", "current_asset", "debit"),
+            ("1-1450", "Persediaan Barang Rusak / Karantina", "asset", "current_asset", "debit"),
             ("1-1500", "Uang Muka Pembelian", "asset", "current_asset", "debit"),
             ("1-1550", "PPN Masukan (Pajak Dibayar Dimuka)", "asset", "current_asset", "debit"), # BARU
             ("1-1600", "Perlengkapan Toko", "asset", "current_asset", "debit"),

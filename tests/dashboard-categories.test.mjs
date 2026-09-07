@@ -72,3 +72,33 @@ test("KPI dan badge pesanan tetap dipertahankan", () => {
   assert.match(dashboard, /loadKPI\(\)/);
   assert.match(dashboard, /loadPOCount\(\)/);
 });
+
+test("pesanan pembelian dan cabang toko berada di kategori persediaan", () => {
+  const inventoryStart = dashboard.indexOf('key: "inventory"');
+  const accountingStart = dashboard.indexOf('key: "accounting"');
+  const purchaseStart = dashboard.indexOf('key: "purchase"');
+  const settingsStart = dashboard.indexOf('key: "settings"');
+
+  const inventory = dashboard.slice(inventoryStart, accountingStart);
+  const purchase = dashboard.slice(purchaseStart, inventoryStart);
+  const settings = dashboard.slice(settingsStart);
+
+  assert.match(inventory, /menuItem\("Pesanan Pembelian", "\/po"/);
+  assert.match(inventory, /menuItem\("Cabang Toko", "\/branches"/);
+  assert.doesNotMatch(purchase, /menuItem\("Pesanan Pembelian", "\/po"/);
+  assert.doesNotMatch(settings, /menuItem\("Cabang Toko", "\/branches"/);
+  assert.equal((dashboard.match(/menuItem\("Pesanan Pembelian", "\/po"/g) || []).length, 1);
+  assert.equal((dashboard.match(/menuItem\("Cabang Toko", "\/branches"/g) || []).length, 1);
+});
+
+test("menu retur pembelian dan penjualan membuka tab retur yang sesuai", () => {
+  assert.match(dashboard, /menuItem\("Retur Pembelian", "\/returns\?tab=purchase"/);
+  assert.match(dashboard, /menuItem\("Retur Penjualan", "\/returns\?tab=sales"/);
+  assert.match(dashboard, /"purchase\.return"/);
+  assert.match(dashboard, /"sales\.return"/);
+});
+
+test("menu tidak menampilkan pilihan AI Advisor dan AI Bangunan", () => {
+  assert.doesNotMatch(dashboard, /menuItem\("AI Advisor", "\/ai_advisor"/);
+  assert.doesNotMatch(dashboard, /menuItem\("AI Bangunan", "\/ai_bangunan"/);
+});

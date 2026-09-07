@@ -490,7 +490,7 @@
       <td>${fmtRp(p.total)}</td>
       <td style="color:#10b981;font-weight:600">${fmtRp(p.paid)}</td>
       <td style="color:#ef4444;font-weight:800;font-size:16px">${fmtRp(p.total - p.paid)}</td>
-      <td><button class="bsm bp" onclick="apModal.open({id:${p.id}, total:${p.total}, paid:${p.paid}, name:'${p.supplier?.name || "-"}'})">Bayar</button></td>
+      <td><button class="bsm bp" onclick="apModal.open({id:${p.id}, total:${p.total}, paid:${p.paid}, name:'${p.supplier?.name || "-"}', depositBalance:${p.supplier?.deposit_balance || 0}})">Bayar</button></td>
     </tr>`,
                 )
                 .join("")

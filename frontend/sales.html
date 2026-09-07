@@ -41,12 +41,6 @@
             class="input-control"
             onchange="load()"
           />
-          <select id="fStatus" class="input-control" onchange="load()">
-            <option value="">Semua Status</option>
-            <option value="paid">Lunas</option>
-            <option value="unpaid">Belum Bayar</option>
-            <option value="partial">Sebagian</option>
-          </select>
         </div>
         <div
           id="summaryRow"
@@ -66,7 +60,6 @@
                 <th>Pelanggan</th>
                 <th>Metode</th>
                 <th>Total</th>
-                <th>Status</th>
                 <th>Aksi</th>
               </tr>
             </thead>
@@ -87,83 +80,20 @@
       </div>
     </div>
 
-    <!-- Bayar Modal -->
-    <div class="modal-overlay" id="mBayar">
-      <div class="modal-box">
-        <div class="modal-hdr">
-          <h2>💸 Bayar Piutang</h2>
-          <button class="btn-x" onclick="closeModal('mBayar')">×</button>
-        </div>
-        <input type="hidden" id="bayarId" />
-        <div
-          id="bayarInfo"
-          style="
-            background: var(--bg-color);
-            border-radius: 12px;
-            padding: 14px;
-            margin-bottom: 16px;
-            font-size: 15px;
-          "
-        ></div>
-        <div class="input-group">
-          <label>Jumlah Bayar (Rp)</label
-          ><input
-            type="text"
-            data-input-desimal
-            id="bayarAmt"
-            class="input-control"
-            min="0"
-            inputmode="decimal"
-          />
-        </div>
-        <div class="input-group">
-          <label>Catatan</label
-          ><input
-            type="text"
-            id="bayarNote"
-            class="input-control"
-            placeholder="Opsional"
-          />
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
-          <button
-            onclick="closeModal('mBayar')"
-            class="btn"
-            style="
-              background: var(--bg-color);
-              border: 1px solid var(--border-color);
-              color: var(--text-main);
-            "
-          >
-            Batal
-          </button>
-          <button onclick="doBayar()" class="btn btn-primary">✓ Bayar</button>
-        </div>
-      </div>
-    </div>
-
     <script src="/js/api.js"></script>
     <script src="/js/theme.js"></script>
     <script>
       requireAuth();
-      const sb = (s) =>
-        ({
-          paid: '<span class="bl">✓ Lunas</span>',
-          unpaid: '<span class="br">✗ Belum</span>',
-          partial: '<span class="bo">~ Sebagian</span>',
-        })[s] || `<span class="bg">${s || "-"}</span>`;
       const pm = (m) =>
         ({ cash: "💵 Cash", transfer: "🏦 Transfer", card: "💳 Kartu" })[m] ||
         m ||
         "-";
       async function load() {
         const s = document.getElementById("fStart").value,
-          e = document.getElementById("fEnd").value,
-          st = document.getElementById("fStatus").value;
+          e = document.getElementById("fEnd").value;
         let url = "/sales/?limit=300";
         if (s) url += `&start_date=${s}`;
         if (e) url += `&end_date=${e}`;
-        if (st) url += `&status=${st}`;
         try {
           const d = await api("GET", url);
           const tot = d.reduce((a, x) => a + x.total, 0);
@@ -186,16 +116,14 @@
       <td>${p.customer?.name || "Umum"}</td>
       <td>${pm(p.payment_method)}</td>
       <td style="font-weight:700">${fmtRp(p.total)}</td>
-      <td>${sb(p.status)}</td>
       <td style="white-space:nowrap">
         <button class="bsm bv" onclick="showDetail(${p.id})">Detail</button>
         <button class="bsm be" onclick="cetakNota(${p.id})">🖨️</button>
-        ${p.status !== "paid" ? `<button class="bsm bp" onclick="openBayar(${p.id},${p.total},${p.paid || 0})">Bayar</button>` : ""}
         <button class="bsm bd" onclick="hapus(${p.id})">Batalkan</button>
       </td></tr>`,
                 )
                 .join("")
-            : "<tr><td colspan='7' style='text-align:center;padding:24px;color:var(--text-muted)'>Tidak ada data</td></tr>";
+            : "<tr><td colspan='6' style='text-align:center;padding:24px;color:var(--text-muted)'>Tidak ada data</td></tr>";
         } catch (e) {
           showToast(e.message, "error");
         }
@@ -225,7 +153,6 @@
         <div><div style="font-size:13px;color:var(--text-muted)">Tanggal</div><div style="font-weight:700">${fmtDate(s.date)}</div></div>
         <div><div style="font-size:13px;color:var(--text-muted)">Pelanggan</div><div style="font-weight:700">${s.customer?.name || "Umum"}</div></div>
         <div><div style="font-size:13px;color:var(--text-muted)">Metode</div><div style="font-weight:700">${pm(s.payment_method)}</div></div>
-        <div><div style="font-size:13px;color:var(--text-muted)">Status</div>${sb(s.status)}</div>
       </div>
       <table class="tbl" style="margin-bottom:16px">
         <thead><tr><th>Barang</th><th style="text-align:right">Qty</th><th style="text-align:right">Harga</th>${marginColumns}<th style="text-align:right">Total</th></tr></thead>
@@ -274,41 +201,6 @@
           showToast(`Struk masuk antrean printer (job #${result.job_id})`);
         } catch (e) {
           showToast("Gagal cetak: " + e.message, "error");
-        }
-      }
-
-      function openBayar(id, total, paid) {
-        document.getElementById("bayarId").value = id;
-        const sisa = total - (paid || 0);
-        document.getElementById("bayarInfo").innerHTML = `
-    <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Total</span><b>${fmtRp(total)}</b></div>
-    <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Sudah Bayar</span><b style="color:#10b981">${fmtRp(paid || 0)}</b></div>
-    <div style="display:flex;justify-content:space-between;font-size:18px;font-weight:800;border-top:1px solid var(--border-color);padding-top:8px"><span>Sisa</span><b style="color:#ef4444">${fmtRp(sisa)}</b></div>`;
-        document.getElementById("bayarAmt").value = toDesimal(sisa);
-        document.getElementById("bayarNote").value = "";
-        openModal("mBayar");
-      }
-
-      async function doBayar() {
-        const id = document.getElementById("bayarId").value,
-          amt = parseDesimal(document.getElementById("bayarAmt"));
-        if (!amt) {
-          showToast("Jumlah harus diisi", "error");
-          return;
-        }
-        try {
-          showLoading();
-          await api("POST", `/sales/${id}/pay`, {
-            amount: amt,
-            notes: document.getElementById("bayarNote").value,
-          });
-          hideLoading();
-          showToast("Pembayaran berhasil ✓");
-          closeModal("mBayar");
-          load();
-        } catch (e) {
-          hideLoading();
-          showToast(e.message, "error");
         }
       }
 

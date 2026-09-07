@@ -341,6 +341,7 @@ function createPurchaseGrid(container, config = {}) {
     const row = document.createElement("div");
     row.className = "purchase-grid-row";
     row.id = `pg-row-${id}`;
+    row._sourceRequestItemId = item?.source_request_item_id || null;
     row.style = `display:grid; grid-template-columns: ${columns}; gap:10px; padding:8px 10px; border-bottom:1px solid var(--border-color); align-items:center`;
 
     // Default kolom "Terima" (qty_received) mengikuti kolom "Pesan" (qty_ordered)
@@ -759,6 +760,7 @@ function createPurchaseGrid(container, config = {}) {
             // Tarif PPN baris → dari master barang (grid ini tak punya kolom PPN).
             // null aman: backend mundur ke Item.ppn_percent / tarif toko.
             ppn_percent: row._itemData?.ppn_percent ?? null,
+            source_request_item_id: row._sourceRequestItemId,
           });
         }
       });
@@ -1648,7 +1650,8 @@ function createFilterBar(container, config = {}) {
  * createPaymentModal
  */
 function createPaymentModal(config = {}) {
-  const { type = "ap", onSuccess = null } = config;
+  const { type = "ap", onSuccess = null, layout = "default" } = config;
+  const isWideLayout = layout === "wide";
   const modalId = `mPayShared_${type}_${Math.floor(Math.random() * 1000)}`;
   const overlay = document.createElement("div");
   overlay.id = modalId;
@@ -1657,18 +1660,58 @@ function createPaymentModal(config = {}) {
   const title =
     type === "ap" ? "Bayar Hutang Supplier" : "Terima Pembayaran Piutang";
   const apiPath = type === "ap" ? "/purchases" : "/sales";
-  overlay.innerHTML = `<div class="modal-box" style="width:min(92vw, 480px)"><div class="modal-hdr"><h2>💸 ${title}</h2><button class="btn-x">×</button></div><input type="hidden" class="p-id" /><input type="hidden" class="p-remaining" /><div class="p-info" style="background:var(--bg-color); border-radius:var(--radius-sm); padding:0.875rem; margin-bottom:var(--space-md); font-size:0.9375rem;"></div><div class="input-group" style="margin-bottom:16px"><label>Metode Pembayaran *</label><select class="input-control p-method"><option value="cash">Kas</option><option value="bank">Bank</option><option value="mix">Gabungan</option></select></div><div class="p-balances" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;"><div style="background:var(--bg-color); border-radius:10px; padding:12px"><div>Saldo Kas</div><div class="p-cash-balance" style="font-weight:800">Rp 0</div></div><div style="background:var(--bg-color); border-radius:10px; padding:12px"><div>Saldo Bank</div><div class="p-bank-balance" style="font-weight:800">Rp 0</div></div></div><div class="row2" style="margin-bottom:16px"><div class="input-group p-cash-group"><label>Dari Kas</label><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control p-cash-amt" placeholder="0,00" /></div><div class="input-group p-bank-group"><label>Dari Bank</label><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control p-bank-amt" placeholder="0,00" /></div></div><div style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2); border-radius:12px; padding:14px; margin-bottom:16px;"><div style="display:flex; justify-content:space-between;"><span>Total Bayar</span><b class="p-total-label" style="font-size:1.125rem; color:#10b981">Rp 0</b></div></div><div class="input-group"><label>Catatan</label><input type="text" class="input-control p-note" /></div><div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px;"><button class="btn p-cancel">Batal</button><button class="btn btn-primary p-submit">✓ Konfirmasi</button></div></div>`;
+  const modalLayoutClass = isWideLayout ? " payment-modal-box-wide" : "";
+  const modalWidth = isWideLayout ? "min(94vw, 920px)" : "min(92vw, 480px)";
+  overlay.innerHTML = `<div class="modal-box payment-modal-box${modalLayoutClass}" style="width:${modalWidth}"><div class="modal-hdr"><h2>💸 ${title}</h2><button class="btn-x">×</button></div><input type="hidden" class="p-id" /><input type="hidden" class="p-remaining" /><div class="p-info" style="background:var(--bg-color); border-radius:var(--radius-sm); padding:0.875rem; margin-bottom:var(--space-md); font-size:0.9375rem;"></div><div class="input-group p-method-group" style="margin-bottom:16px"><label>Metode Pembayaran *</label><select class="input-control p-method"><option value="cash">Kas</option><option value="bank">Bank</option><option value="mix">Gabungan</option></select></div><div class="p-balances" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;"><div style="background:var(--bg-color); border-radius:10px; padding:12px"><div>Saldo Kas</div><div class="p-cash-balance" style="font-weight:800">Rp 0</div></div><div style="background:var(--bg-color); border-radius:10px; padding:12px"><div>Saldo Bank</div><div class="p-bank-balance" style="font-weight:800">Rp 0</div></div></div><div class="row2 p-amounts" style="margin-bottom:16px"><div class="input-group p-cash-group"><label>Dari Kas</label><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control p-cash-amt" placeholder="0,00" /></div><div class="input-group p-bank-group"><label>Dari Bank</label><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control p-bank-amt" placeholder="0,00" /></div></div><div class="p-total" style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2); border-radius:12px; padding:14px; margin-bottom:16px;"><div style="display:flex; justify-content:space-between;"><span>Total Bayar</span><b class="p-total-label" style="font-size:1.125rem; color:#10b981">Rp 0</b></div></div><div class="input-group p-note-group"><label>Catatan</label><input type="text" class="input-control p-note" /></div><div class="p-actions" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px;"><button class="btn p-cancel">Batal</button><button class="btn btn-primary p-submit">✓ Konfirmasi</button></div></div>`;
+  if (type === "ap") {
+    overlay.querySelector('.p-method option[value="mix"]').insertAdjacentHTML(
+      "beforebegin",
+      '<option value="deposit">Deposit Supplier</option>',
+    );
+    const balances = overlay.querySelector(".p-balances");
+    balances.style.gridTemplateColumns = "repeat(3, 1fr)";
+    balances.insertAdjacentHTML(
+      "beforeend",
+      '<div style="background:var(--bg-color);border-radius:10px;padding:12px"><div>Deposit Supplier</div><div class="p-deposit-balance" style="font-weight:800">Rp 0</div></div>',
+    );
+    overlay.querySelector(".row2").insertAdjacentHTML(
+      "beforeend",
+      '<div class="input-group p-deposit-group"><label>Dari Deposit</label><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control p-deposit-amt" placeholder="0,00" /></div>',
+    );
+  }
+  if (isWideLayout) {
+    const modalBox = overlay.querySelector(".payment-modal-box");
+    const modalLayout = document.createElement("div");
+    const leftColumn = document.createElement("section");
+    const rightColumn = document.createElement("section");
+    modalLayout.className = "payment-modal-layout";
+    leftColumn.className = "payment-modal-column payment-modal-column-left";
+    rightColumn.className = "payment-modal-column payment-modal-column-right";
+    leftColumn.setAttribute("aria-label", "Informasi dan sumber dana");
+    rightColumn.setAttribute("aria-label", "Nominal dan konfirmasi pembayaran");
+    modalBox.insertBefore(modalLayout, modalBox.querySelector(".p-info"));
+    modalLayout.append(leftColumn, rightColumn);
+    [".p-info", ".p-method-group", ".p-balances"].forEach((selector) =>
+      leftColumn.appendChild(modalBox.querySelector(selector)),
+    );
+    [".p-amounts", ".p-total", ".p-note-group", ".p-actions"].forEach((selector) =>
+      rightColumn.appendChild(modalBox.querySelector(selector)),
+    );
+  }
   const idInp = overlay.querySelector(".p-id"),
     remInp = overlay.querySelector(".p-remaining"),
     infoDiv = overlay.querySelector(".p-info"),
     methodSel = overlay.querySelector(".p-method"),
     cashGroup = overlay.querySelector(".p-cash-group"),
     bankGroup = overlay.querySelector(".p-bank-group"),
+    depositGroup = overlay.querySelector(".p-deposit-group"),
     cashInp = overlay.querySelector(".p-cash-amt"),
     bankInp = overlay.querySelector(".p-bank-amt"),
+    depositInp = overlay.querySelector(".p-deposit-amt"),
     totalLabel = overlay.querySelector(".p-total-label"),
     cashBalDiv = overlay.querySelector(".p-cash-balance"),
     bankBalDiv = overlay.querySelector(".p-bank-balance"),
+    depositBalDiv = overlay.querySelector(".p-deposit-balance"),
     noteInp = overlay.querySelector(".p-note"),
     submitBtn = overlay.querySelector(".p-submit"),
     cancelBtn = overlay.querySelector(".p-cancel"),
@@ -1676,16 +1719,79 @@ function createPaymentModal(config = {}) {
   const fmtRp = (n) => "Rp " + Math.round(n).toLocaleString("id-ID");
   const parseNum = (s) => parseDesimal(s);
   const formatNum = (n) => toDesimal(n);
+  const getFocusableControls = () =>
+    Array.from(
+      overlay.querySelectorAll(
+        ".p-method, .p-cash-amt, .p-bank-amt, .p-deposit-amt, .p-note, .p-cancel, .p-submit, .btn-x",
+      ),
+    ).filter(
+      (control) =>
+        !control.disabled &&
+        control.getAttribute("aria-hidden") !== "true" &&
+        control.getClientRects().length > 0,
+    );
+  const focusPaymentControl = (control) => {
+    if (!control) return;
+    control.focus({ preventScroll: true });
+    if (control.matches('input[type="text"]')) control.select();
+  };
+  const focusNextPaymentControl = (current) => {
+    const controls = getFocusableControls();
+    const currentIndex = controls.indexOf(current);
+    focusPaymentControl(controls[(currentIndex + 1 + controls.length) % controls.length]);
+  };
+  const focusDirectionalPaymentControl = (current, key) => {
+    const controls = getFocusableControls();
+    const currentRect = current.getBoundingClientRect();
+    const currentX = currentRect.left + currentRect.width / 2;
+    const currentY = currentRect.top + currentRect.height / 2;
+    const candidates = controls
+      .filter((control) => control !== current)
+      .map((control) => {
+        const rect = control.getBoundingClientRect();
+        const dx = rect.left + rect.width / 2 - currentX;
+        const dy = rect.top + rect.height / 2 - currentY;
+        const isInDirection =
+          (key === "ArrowLeft" && dx < -1) ||
+          (key === "ArrowRight" && dx > 1) ||
+          (key === "ArrowUp" && dy < -1) ||
+          (key === "ArrowDown" && dy > 1);
+        if (!isInDirection) return null;
+        const primaryDistance = key === "ArrowLeft" || key === "ArrowRight" ? Math.abs(dx) : Math.abs(dy);
+        const secondaryDistance = key === "ArrowLeft" || key === "ArrowRight" ? Math.abs(dy) : Math.abs(dx);
+        return { control, score: primaryDistance + secondaryDistance * 2 };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.score - b.score);
+    focusPaymentControl(candidates[0]?.control);
+  };
+  overlay.addEventListener("keydown", (event) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const control = event.target.closest(
+      ".p-method, .p-cash-amt, .p-bank-amt, .p-deposit-amt, .p-note, .p-cancel, .p-submit, .btn-x",
+    );
+    if (!control) return;
+    if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
+      event.preventDefault();
+      focusDirectionalPaymentControl(control, event.key);
+      return;
+    }
+    if (event.key === "Enter" && !control.matches("button")) {
+      event.preventDefault();
+      focusNextPaymentControl(control);
+    }
+  });
   const syncTotal = () => {
     totalLabel.textContent = fmtRp(
-      parseNum(cashInp) + parseNum(bankInp),
+      parseNum(cashInp) + parseNum(bankInp) + (depositInp ? parseNum(depositInp) : 0),
     );
   };
   const applyMethod = (reset = false) => {
     const method = methodSel.value;
     const rem = parseNum(remInp.value);
-    cashGroup.style.display = method === "bank" ? "none" : "block";
-    bankGroup.style.display = method === "cash" ? "none" : "block";
+    cashGroup.style.display = method === "cash" || method === "mix" ? "block" : "none";
+    bankGroup.style.display = method === "bank" || method === "mix" ? "block" : "none";
+    if (depositGroup) depositGroup.style.display = method === "deposit" || method === "mix" ? "block" : "none";
     if (reset) {
       if (method === "cash") {
         cashInp.value = formatNum(rem);
@@ -1693,10 +1799,16 @@ function createPaymentModal(config = {}) {
       } else if (method === "bank") {
         bankInp.value = formatNum(rem);
         cashInp.value = "";
+      } else if (method === "deposit" && depositInp) {
+        const available = Number(depositBalDiv?.dataset.balance || 0);
+        depositInp.value = formatNum(Math.min(rem, available));
+        cashInp.value = "";
+        bankInp.value = "";
       } else {
         cashInp.value = "";
         bankInp.value = "";
       }
+      if (depositInp && method !== "deposit") depositInp.value = "";
     }
     syncTotal();
   };
@@ -1705,6 +1817,10 @@ function createPaymentModal(config = {}) {
     syncTotal();
   };
   bankInp.oninput = (e) => {
+    formatDesimal(e.target);
+    syncTotal();
+  };
+  if (depositInp) depositInp.oninput = (e) => {
     formatDesimal(e.target);
     syncTotal();
   };
@@ -1719,13 +1835,17 @@ function createPaymentModal(config = {}) {
     const id = idInp.value;
     const cash = parseNum(cashInp);
     const bank = parseNum(bankInp);
-    if (cash + bank <= 0) return showToast("Masukkan nominal", "error");
+    const deposit = depositInp ? parseNum(depositInp) : 0;
+    const availableDeposit = Number(depositBalDiv?.dataset.balance || 0);
+    if (cash + bank + deposit <= 0) return showToast("Masukkan nominal", "error");
+    if (deposit - availableDeposit > 0.01) return showToast("Deposit supplier tidak mencukupi", "error");
     try {
       showLoading("Memproses...");
       await api("POST", `${apiPath}/${id}/pay`, {
-        amount: cash + bank,
+        amount: cash + bank + deposit,
         cash_amount: cash,
         bank_amount: bank,
+        deposit_amount: deposit,
         notes: noteInp.value,
       });
       hideLoading();
@@ -1745,9 +1865,15 @@ function createPaymentModal(config = {}) {
       infoDiv.innerHTML = `<div style="font-weight:700; color:var(--primary)">${data.name || ""}</div><div style="display:flex;justify-content:space-between"><span>Tagihan</span><b>${fmtRp(data.total)}</b></div><div style="display:flex;justify-content:space-between"><span>Sisa</span><b style="color:#ef4444">${fmtRp(remaining)}</b></div>`;
       noteInp.value = "";
       methodSel.value = "cash";
+      if (depositBalDiv) {
+        const depositBalance = Number(data.depositBalance || 0);
+        depositBalDiv.dataset.balance = String(depositBalance);
+        depositBalDiv.textContent = fmtRp(depositBalance);
+      }
       applyMethod(true);
       overlay.style.display = "flex";
       document.body.style.overflow = "hidden";
+      requestAnimationFrame(() => focusPaymentControl(methodSel));
       try {
         const bal = await api("GET", "/accounting/liquid-balances");
         cashBalDiv.textContent = fmtRp(bal.cash_balance);
@@ -1895,8 +2021,14 @@ async function createOrderManager(containerId, config = {}) {
         id: it.item_id,
         name: it.item?.name,
         code: it.item?.code,
-        qty_ordered: it.qty_ordered || it.qty,
-        qty_received: it.qty_received || it.qty,
+        qty_ordered:
+          isSplitFulfillment && it.qty_outstanding !== null && it.qty_outstanding !== undefined
+            ? it.qty_outstanding
+            : (it.qty_ordered || it.qty),
+        qty_received:
+          isSplitFulfillment && it.qty_outstanding !== null && it.qty_outstanding !== undefined
+            ? it.qty_outstanding
+            : (it.qty_received || it.qty),
         buy_price: it.buy_price,
         sell_price: it.item?.sell_price,
         profit_margin: it.item?.profit_margin,
@@ -1907,6 +2039,8 @@ async function createOrderManager(containerId, config = {}) {
         supplier_id: it.item?.suppliers?.[0]?.id, // Default to first supplier if available
         suppliers: it.item?.suppliers || [],
         supplier_details: it.item?.supplier_details || [],
+        source_request_item_id:
+          it.source_request_item_id || (isSplitFulfillment ? it.id : null),
       })) || [],
     itemDataSource: [], // Will be updated
     onChange: recalc,

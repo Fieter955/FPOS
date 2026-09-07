@@ -100,9 +100,11 @@ def enqueue_print_job(
     document_type: Optional[str] = None,
     document_id: Optional[int] = None,
     created_by: Optional[int] = None,
+    device_id: Optional[str] = None,
 ) -> models.PrintJob:
     job = models.PrintJob(
         branch_id=branch_id,
+        device_id=device_id,
         content=content,
         content_type=content_type,
         document_type=document_type,
@@ -346,6 +348,8 @@ def claim_jobs(payload: AgentClaim, request: Request, db: Session = Depends(get_
     agent = _authenticate_agent(request, db)
     now = get_local_datetime()
     agent.last_seen_at = now
+    
+    device_id = request.headers.get("X-Device-Id", "").strip() or None
 
     expired = db.query(models.PrintJob).filter(
         models.PrintJob.branch_id == agent.branch_id,
@@ -360,11 +364,21 @@ def claim_jobs(payload: AgentClaim, request: Request, db: Session = Depends(get_
         job.lease_until = None
     db.flush()
 
-    candidates = db.query(models.PrintJob).filter(
+    filters = [
         models.PrintJob.branch_id == agent.branch_id,
         models.PrintJob.status == "pending",
         or_(models.PrintJob.attempt_count.is_(None), models.PrintJob.attempt_count < MAX_ATTEMPTS),
-    ).order_by(models.PrintJob.id.asc()).limit(payload.limit).all()
+    ]
+    if device_id:
+        filters.append(or_(models.PrintJob.device_id.is_(None), models.PrintJob.device_id == device_id))
+    else:
+        filters.append(models.PrintJob.device_id.is_(None))
+
+    candidates = db.query(models.PrintJob).filter(*filters).order_by(models.PrintJob.id.asc()).limit(payload.limit).all()
+    branch = db.query(models.Branch).filter(models.Branch.id == agent.branch_id).first()
+    paper_width_mm = int(getattr(branch, "receipt_paper_width_mm", 80) or 80) if branch else 80
+    if paper_width_mm not in {58, 80}:
+        paper_width_mm = 80
 
     claimed = []
     for job in candidates:
@@ -388,6 +402,8 @@ def claim_jobs(payload: AgentClaim, request: Request, db: Session = Depends(get_
             "id": job.id,
             "content": job.content,
             "content_type": job.content_type or "raw",
+            "document_type": job.document_type,
+            "paper_width_mm": paper_width_mm if (job.content_type or "raw") == "raw" else None,
             "attempt_count": next_attempt,
             "lease_seconds": LEASE_SECONDS,
         })

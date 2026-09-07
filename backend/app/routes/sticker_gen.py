@@ -1,6 +1,8 @@
 import io
 import math
 import os
+import time
+from functools import lru_cache
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
@@ -192,6 +194,7 @@ def fit_wrapped_text(
     return font, lines, line_gap, line_h
 
 
+@lru_cache(maxsize=1024)
 def render_code128_fit(
     code_text: str,
     max_w_px: int,
@@ -202,27 +205,42 @@ def render_code128_fit(
 ) -> Optional[Image.Image]:
     """
     Generate barcode tanpa resize paksa.
-    Dicoba beberapa module_width + quiet_zone sampai muat.
+    Dicoba dari module width terbesar yang masih muat, dengan quiet zone
+    yang cukup besar untuk menjaga pemisahan barcode dari elemen di sekitarnya.
     """
     code_text = str(code_text).strip()
     if not code_text:
         return None
 
+    # A quantity of 50 labels often contains only a few unique barcode
+    # values.  The renderer is pure for these arguments, so caching avoids
+    # rebuilding the same python-barcode image once per label copy.
     bc_class = barcode.get_barcode_class("code128")
     writer = ImageWriter()
 
-    module_width_candidates = [0.30, 0.27, 0.25, 0.22, 0.20, 0.18, 0.16]
-    quiet_zone_candidates = [1.2, 1.0, 0.8, 0.6]
+    # X-dimension yang lebih besar membuat garis barcode lebih mudah dibaca
+    # printer thermal/scanner. Nilai tetap diturunkan jika seluruh simbol
+    # tidak muat di lebar label.
+    module_width_candidates = [0.40, 0.36, 0.33, 0.30, 0.27, 0.25, 0.22, 0.20, 0.18, 0.16]
     height_factor_candidates = []
     for candidate in [preferred_height_factor, 1.0, 0.92, 0.84, 0.76, 0.68]:
         normalized = round(max(0.65, min(1.0, candidate)), 2)
         if normalized not in height_factor_candidates:
             height_factor_candidates.append(normalized)
 
-    for qz in quiet_zone_candidates:
-        for hf in height_factor_candidates:
-            module_height_mm = max(min_module_height_mm, ((max_h_px * hf) / dpi) * 25.4)
-            for mw in module_width_candidates:
+    for hf in height_factor_candidates:
+        module_height_mm = max(min_module_height_mm, ((max_h_px * hf) / dpi) * 25.4)
+        for mw in module_width_candidates:
+            # Target quiet zone 10x modul, dengan fallback bertahap untuk
+            # label kecil. Quiet zone tidak pernah dibuat lebih kecil dari
+            # 1.2 mm agar barcode tidak menempel ke teks/tepi label.
+            quiet_zone_candidates = []
+            for qz in (10.0 * mw, 3.0, 2.5, 2.0, 1.5, 1.2):
+                qz = round(max(1.2, qz), 2)
+                if qz not in quiet_zone_candidates:
+                    quiet_zone_candidates.append(qz)
+
+            for qz in quiet_zone_candidates:
                 options = {
                     "write_text": False,
                     "module_width": mw,
@@ -254,6 +272,7 @@ def render_code128_fit(
 # =========================================================
 @router.post("/render-sheet")
 def render_stiker_sheet(req: StikerBatchRequest):
+    render_started = time.perf_counter()
     if not req.data_produk:
         raise HTTPException(status_code=400, detail="data_produk tidak boleh kosong")
 
@@ -310,7 +329,9 @@ def render_stiker_sheet(req: StikerBatchRequest):
             name_max_lines = 1
             price_font_size = max(min_font_size, int(round(price_base_size * 0.90)))
             name_font_size = max(name_min_size, int(round(name_base_size * 0.74)))
-            barcode_fill_local = min(barcode_fill, 0.65)
+            # Pada label 2 Lin, barcode sebelumnya hanya memakai maksimal 65%
+            # tinggi area tengah sehingga garis menjadi terlalu pendek.
+            barcode_fill_local = min(barcode_fill, 0.85)
         else:
             top_padding = max(2, mm_to_px(0.35, dpi))
             bottom_padding = max(4, mm_to_px(0.75, dpi))
@@ -411,9 +432,15 @@ def render_stiker_sheet(req: StikerBatchRequest):
     out = io.BytesIO()
     sheet.save(out, format="PNG", dpi=(dpi, dpi))
     out.seek(0)
+    rendered = out.read()
+    print(
+        "STICKER RENDER SUCCESS | "
+        f"labels={len(req.data_produk)} | sheet={sheet.width}x{sheet.height}px | "
+        f"png={len(rendered)}B | render_ms={(time.perf_counter() - render_started) * 1000:.1f}"
+    )
 
     return Response(
-        content=out.read(),
+        content=rendered,
         media_type="image/png",
         headers={
             "Cache-Control": "no-store",

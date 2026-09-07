@@ -170,6 +170,10 @@
           targetContainer.style.display = "block";
 
           if (!isPotongan) {
+            // Kolom setelah Level 1 berasal dari master grup pelanggan. Tunggu
+            // datanya agar tab Level Harga tidak sempat dirender tanpa kolom grup.
+            if (type === "levelHarga" && !allGroups.length)
+              await loadCustomerGroups();
             ensureEmptySatuanRow();
             renderAdvancedGrid();
           } else {
@@ -1007,16 +1011,12 @@
             base.child_unit_id = document.getElementById("fSat")?.value || "";
           }
 
-          // Sinkronkan SEMUA grup dari state global groupPrices ke base row (ID-based)
+          // Level 1 adalah harga jual utama. Grup pelanggan adalah level terpisah;
+          // jangan pernah memakai grup pertama sebagai pengganti Level 1.
           if (allGroups.length > 0) {
-            allGroups.forEach((g, i) => {
+            allGroups.forEach((g) => {
               const key = g.name.toLowerCase();
-              if (i === 0) {
-                // Grup pertama (Umum) selalu sinkron dengan HJual utama
-                groupPrices[key] = base.sell_price;
-                base.group_prices[g.id] = base.sell_price;
-              } else if (groupPrices[key] !== undefined) {
-                // Grup lain sinkron dengan apa yang ada di state groupPrices (hasil load dari DB)
+              if (groupPrices[key] !== undefined) {
                 base.group_prices[g.id] = groupPrices[key];
               }
             });
@@ -1143,6 +1143,15 @@
         try {
           allGroups = await api("GET", "/customers/groups");
           populateDiscountGroupSelect();
+          // Pemuatan saat idle dapat selesai setelah barang dibuka. Sinkronkan
+          // harga grup yang sudah dibaca dari item, lalu segarkan tabel agar
+          // Level 2/Silver/Gold langsung muncul beserta nilainya.
+          if (satuanRows.length) syncGroupPricesFromMain();
+          else if (
+            currentAdvancedType === "levelHarga" &&
+            document.querySelector("#advancedContent tbody")
+          )
+            renderAdvancedGrid();
         } catch (ex) {
           console.error("Gagal load grup:", ex);
         }
@@ -2255,7 +2264,11 @@
             );
           }
 
-          if (currentAdvancedType === "satuan") {
+          if (
+            ["satuan", "levelHarga", "levelJumlah"].includes(
+              currentAdvancedType,
+            )
+          ) {
             await saveAllSatuanRows();
           }
           showToast("Barang disimpan ✓", "success");
@@ -2960,7 +2973,8 @@
           if (head) {
             let headHtml = `<tr>
                         <th colspan="5" class="header-spacer"></th>
-                        ${allGroups.map((g, i) => `<th colspan="2" class="group-label ${i > 0 ? "sep" : ""}">${i + 1}. ${g.name}</th>`).join("")}
+                        <th colspan="2" class="group-label sep">Level 1 — Harga Dasar</th>
+                        ${allGroups.map((g) => `<th colspan="2" class="group-label sep">${g.name}</th>`).join("")}
                         <th rowspan="2" style="width: 44px">Aksi</th>
                       </tr>
                       <tr>
@@ -2969,6 +2983,7 @@
                         <th>Jenis</th>
                         <th style="width: 60px" class="sep">Konv</th>
                         <th class="sep">H. Pokok</th>
+                        <th>% Mg</th><th class="sep">Harga</th>
                         ${allGroups.map((g) => `<th>% Mg</th><th class="sep">Harga</th>`).join("")}
                       </tr>`;
             head.innerHTML = headHtml;
@@ -3014,15 +3029,11 @@
             if (currentAdvancedType === "satuan") {
               cols += `<td><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control item-percent-input" value="${toPersen(row.margin_percent)}" oninput="formatInputPersen(this)" onchange="updateAdvancedRowField(${idx}, 'margin_percent', this.value)" style="text-align:right;"></td><td><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control" value="${toRibuan(row.sell_price)}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'sell_price', this.value, 'sell')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
             } else if (currentAdvancedType === "levelHarga") {
-              allGroups.forEach((group, gIdx) => {
-                let groupPrice = row.group_prices[group.id];
-                const isUmum = gIdx === 0;
+              // Level 1 selalu mengikuti harga jual dasar pada baris/satuan ini.
+              cols += `<td><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control item-percent-input" value="${toPersen(row.margin_percent)}" oninput="formatInputPersen(this)" onchange="updateAdvancedRowField(${idx}, 'margin_percent', this.value)" style="text-align:right;"></td><td class="sep"><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control" value="${toRibuan(row.sell_price)}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'sell_price', this.value, 'sell')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
 
-                // Hanya default-kan grup pertama (Umum) ke harga jual utama
-                if (isUmum && (groupPrice === undefined || groupPrice === 0)) {
-                  groupPrice = row.sell_price;
-                  row.group_prices[group.id] = groupPrice;
-                }
+              allGroups.forEach((group) => {
+                const groupPrice = row.group_prices[group.id];
 
                 const displayPrice = groupPrice > 0 ? toRibuan(groupPrice) : "";
                 const groupMargin =
@@ -3185,14 +3196,6 @@
             );
             if (group) {
               groupPrices[group.name.toLowerCase()] = row.group_prices[groupId];
-              // Sync back to main HJual if it's the first group of base row
-              if (allGroups[0] && String(allGroups[0].id) === String(groupId)) {
-                const fHJual = document.getElementById("fHJual");
-                if (fHJual) {
-                  fHJual.value = toRibuan(row.group_prices[groupId]);
-                  calcMarginFromHJual();
-                }
-              }
             }
           }
         } else if (field === "group_discount") {
@@ -3220,14 +3223,6 @@
             );
             if (group) {
               groupPrices[group.name.toLowerCase()] = row.group_prices[groupId];
-              // Sync back to main Margin if it's the first group of base row
-              if (allGroups[0] && String(allGroups[0].id) === String(groupId)) {
-                const fMargin = document.getElementById("fMargin");
-                if (fMargin) {
-                  fMargin.value = toPersen(margin);
-                  calcHJualFromMargin();
-                }
-              }
             }
           }
         } else if (field === "tier_sampai") {
@@ -3423,8 +3418,12 @@
         } else {
           try {
             const groups = await api("GET", "/customers/groups");
-            body.innerHTML = groups.length
-              ? groups
+            const levelOneRow = `
+                        <tr style="border-bottom: 1px solid var(--border-color)">
+                          <td style="padding: 8px 0; color: var(--text-main); font-weight: 700">Level 1 <span style="font-size:10px;color:var(--text-muted);font-weight:500">(Harga Umum)</span></td>
+                          <td style="padding: 8px 0; text-align: right; color: var(--text-muted); font-weight: 700; font-size: 14px">0%</td>
+                        </tr>`;
+            const customRows = groups
                   .map(
                     (g) => `
                         <tr style="border-bottom: 1px solid var(--border-color)">
@@ -3433,8 +3432,8 @@
                         </tr>
                       `,
                   )
-                  .join("")
-              : '<tr><td colspan="2" style="text-align: center; padding: 20px; color: var(--text-muted)">Belum ada grup diskon</td></tr>';
+                  .join("");
+            body.innerHTML = levelOneRow + customRows;
 
             container.style.display = "block";
           } catch (ex) {

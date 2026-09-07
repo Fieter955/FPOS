@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session, joinedload, selectinload
-from sqlalchemy import func
+from sqlalchemy import func, or_, and_
 from typing import Optional
 from datetime import date
 from dateutil.relativedelta import relativedelta
@@ -23,6 +23,34 @@ router = APIRouter()
 
 WITA = pytz.timezone("Asia/Makassar")
 REAL_PURCHASE_STATUSES = ["unpaid", "partial", "paid"]
+
+REPORT_LIMIT = 100
+
+
+def _report_dates(start_date: Optional[date], end_date: Optional[date]):
+    today = get_local_date()
+    return start_date or today.replace(day=1), end_date or today
+
+
+def _report_result(summary, rows, skip=0, limit=REPORT_LIMIT, total=None):
+    return {"summary": summary, "rows": rows, "pagination": {
+        "skip": skip, "limit": limit, "total": int(total if total is not None else len(rows))
+    }}
+
+
+def _report_purchase_query(db, current_user, start_date, end_date):
+    q = db.query(models.Purchase).options(
+        joinedload(models.Purchase.supplier),
+        selectinload(models.Purchase.items).joinedload(models.PurchaseItem.item),
+    ).filter(
+        models.Purchase.is_branch_request == False,
+        models.Purchase.status.in_(REAL_PURCHASE_STATUSES),
+        models.Purchase.date >= start_date,
+        models.Purchase.date <= end_date,
+    )
+    if current_user.active_branch_id is not None:
+        q = q.filter(models.Purchase.branch_id == current_user.active_branch_id)
+    return q
 
 def get_local_date():
     return datetime.now(WITA).date()
@@ -306,6 +334,96 @@ def get_inventory_valuation(db: Session = Depends(get_db), current_user: models.
     }
 
 # ─── 6. IMPROVED EXPORT EXCEL ────────────────────────────────────────────────
+@router.get("/sales-report")
+def sales_report(start_date: Optional[date] = None, end_date: Optional[date] = None, search: Optional[str] = None, skip: int = 0, limit: int = REPORT_LIMIT, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    start_date, end_date = _report_dates(start_date, end_date)
+    q = get_query(db, models.Sale, current_user).options(joinedload(models.Sale.customer)).filter(models.Sale.date.between(start_date, end_date), models.Sale.status != "cancelled")
+    if search: q = q.outerjoin(models.Customer).filter(or_(models.Sale.number.ilike(f"%{search}%"), models.Customer.name.ilike(f"%{search}%")))
+    total = q.count(); sales = q.order_by(models.Sale.date.desc(), models.Sale.id.desc()).offset(skip).limit(min(limit, 300)).all()
+    rows = [{"id": s.id, "number": s.number, "date": str(s.date), "customer": s.customer.name if s.customer else "Umum", "total": float(s.total or 0), "paid": float(s.paid or 0), "remaining": float((s.total or 0) - (s.paid or 0)), "payment_method": s.payment_method, "status": s.status} for s in sales]
+    return _report_result({"total": sum(r["total"] for r in rows), "paid": sum(r["paid"] for r in rows), "transactions": total}, rows, skip, limit, total)
+
+
+@router.get("/purchases-report")
+def purchases_report(start_date: Optional[date] = None, end_date: Optional[date] = None, search: Optional[str] = None, skip: int = 0, limit: int = REPORT_LIMIT, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    start_date, end_date = _report_dates(start_date, end_date); q = _report_purchase_query(db, current_user, start_date, end_date)
+    if search: q = q.outerjoin(models.Supplier).filter(or_(models.Purchase.number.ilike(f"%{search}%"), models.Supplier.name.ilike(f"%{search}%")))
+    total = q.count(); purchases = q.order_by(models.Purchase.date.desc(), models.Purchase.id.desc()).offset(skip).limit(min(limit, 300)).all()
+    rows = [{"id": p.id, "number": p.number, "date": str(p.date), "supplier": p.supplier.name if p.supplier else "-", "total": float(p.total or 0), "paid": float(p.paid or 0), "remaining": float((p.total or 0) - (p.paid or 0)), "status": p.status} for p in purchases]
+    return _report_result({"total": sum(r["total"] for r in rows), "paid": sum(r["paid"] for r in rows), "transactions": total}, rows, skip, limit, total)
+
+
+@router.get("/customers-report")
+def customers_report(start_date: Optional[date] = None, end_date: Optional[date] = None, search: Optional[str] = None, skip: int = 0, limit: int = REPORT_LIMIT, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    start_date, end_date = _report_dates(start_date, end_date)
+    q = db.query(models.Customer).options(joinedload(models.Customer.group)).filter(models.Customer.is_active == True)
+    if search: q = q.filter(or_(models.Customer.name.ilike(f"%{search}%"), models.Customer.code.ilike(f"%{search}%"), models.Customer.phone.ilike(f"%{search}%")))
+    total = q.count(); rows = []
+    for c in q.order_by(models.Customer.name).offset(skip).limit(min(limit, 300)).all():
+        sq = get_query(db, models.Sale, current_user).filter(models.Sale.customer_id == c.id, models.Sale.date.between(start_date, end_date), models.Sale.status != "cancelled")
+        rows.append({"id": c.id, "code": c.code, "name": c.name, "group": c.group.name if c.group else "-", "transactions": sq.count(), "total_purchase": float(sq.with_entities(func.sum(models.Sale.total)).scalar() or 0), "deposit": float(c.deposit_balance or 0), "credit_limit": float(c.credit_limit or 0)})
+    return _report_result({"customers": total, "deposit": sum(r["deposit"] for r in rows), "purchase": sum(r["total_purchase"] for r in rows)}, rows, skip, limit, total)
+
+
+@router.get("/receivables-report")
+def receivables_report(start_date: Optional[date] = None, end_date: Optional[date] = None, search: Optional[str] = None, skip: int = 0, limit: int = REPORT_LIMIT, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    start_date, end_date = _report_dates(start_date, end_date)
+    q = get_query(db, models.Sale, current_user).options(joinedload(models.Sale.customer)).filter(models.Sale.date.between(start_date, end_date), models.Sale.status.in_(["unpaid", "partial"]))
+    if search: q = q.outerjoin(models.Customer).filter(or_(models.Sale.number.ilike(f"%{search}%"), models.Customer.name.ilike(f"%{search}%")))
+    total = q.count(); rows = [{"id": s.id, "number": s.number, "date": str(s.date), "customer": s.customer.name if s.customer else "Umum", "total": float(s.total or 0), "paid": float(s.paid or 0), "remaining": float((s.total or 0) - (s.paid or 0))} for s in q.order_by(models.Sale.date.asc()).offset(skip).limit(min(limit, 300)).all()]
+    return _report_result({"remaining": sum(r["remaining"] for r in rows), "invoices": total}, rows, skip, limit, total)
+
+
+@router.get("/inventory-report")
+def inventory_report(search: Optional[str] = None, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    q = db.query(models.Item).filter(models.Item.is_active == True)
+    if search: q = q.filter(or_(models.Item.name.ilike(f"%{search}%"), models.Item.code.ilike(f"%{search}%"), models.Item.barcode.ilike(f"%{search}%")))
+    warehouse_ids = None
+    if current_user.active_branch_id is not None:
+        warehouse_ids = [wid for (wid,) in db.query(models.Warehouse.id).filter(models.Warehouse.branch_id == current_user.active_branch_id).all()]
+    rows = []
+    for item in q.order_by(models.Item.name).all():
+        stock = float(item.stock or 0)
+        if warehouse_ids:
+            stock = float(db.query(func.sum(models.WarehouseStock.stock)).filter(models.WarehouseStock.item_id == item.id, models.WarehouseStock.warehouse_id.in_(warehouse_ids)).scalar() or 0)
+        buy = float(item.buy_price or 0)
+        rows.append({"id": item.id, "code": item.code, "name": item.name, "stock": stock, "min_stock": float(item.min_stock or 0), "buy_price": buy, "sell_price": float(item.sell_price or 0), "value": stock * buy})
+    return _report_result({"items": len(rows), "low_stock": sum(1 for r in rows if r["stock"] <= r["min_stock"]), "value": sum(r["value"] for r in rows)}, rows)
+
+
+@router.get("/cash-report")
+def cash_report(start_date: Optional[date] = None, end_date: Optional[date] = None, search: Optional[str] = None, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    _require_financial_report_access(db, current_user); start_date, end_date = _report_dates(start_date, end_date)
+    q = get_query(db, models.CashTransaction, current_user).options(joinedload(models.CashTransaction.account)).filter(models.CashTransaction.date.between(start_date, end_date))
+    if search: q = q.filter(or_(models.CashTransaction.number.ilike(f"%{search}%"), models.CashTransaction.description.ilike(f"%{search}%")))
+    rows = [{"number": c.number, "date": str(c.date), "type": c.type, "amount": float(c.amount or 0), "description": c.description or "-", "account": c.account.name if c.account else "-"} for c in q.order_by(models.CashTransaction.date.desc()).all()]
+    flow = get_cash_flow_statement(start_date, end_date, db, current_user)
+    return _report_result({"in": sum(r["amount"] for r in rows if r["type"] in ("in", "income")), "out": sum(r["amount"] for r in rows if r["type"] in ("out", "expense")), "opening": flow["opening_balance"], "closing": flow["closing_balance"], "net": flow["net_cash_flow"]}, rows)
+
+
+@router.get("/report-export")
+def report_export(report_type: str, start_date: Optional[date] = None, end_date: Optional[date] = None,
+                  search: Optional[str] = None, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    if report_type in {"profit-loss", "cash"}: _require_financial_report_access(db, current_user)
+    if report_type == "sales": data = sales_report(start_date, end_date, search, 0, 300, db, current_user)
+    elif report_type == "purchases": data = purchases_report(start_date, end_date, search, 0, 300, db, current_user)
+    elif report_type == "customers": data = customers_report(start_date, end_date, search, 0, 300, db, current_user)
+    elif report_type == "receivables": data = receivables_report(start_date, end_date, search, 0, 300, db, current_user)
+    elif report_type == "inventory": data = inventory_report(search, db, current_user)
+    elif report_type == "cash": data = cash_report(start_date, end_date, search, db, current_user)
+    elif report_type == "profit-loss":
+        data = profit_loss(start_date, end_date, db, current_user)
+        data = {"rows": [{"keterangan": k.replace("_", " ").title(), "nilai": v} for k, v in data.items() if isinstance(v, (int, float))]}
+    else: raise HTTPException(400, "Jenis laporan tidak dikenal")
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = report_type[:31]
+    rows = data.get("rows", []); headers = list(rows[0].keys()) if rows else ["Keterangan", "Nilai"]
+    ws.append(headers)
+    for cell in ws[1]: cell.font = Font(bold=True, color="FFFFFF"); cell.fill = PatternFill(start_color="F97316", end_color="F97316", fill_type="solid")
+    for row in rows: ws.append([row.get(h) for h in headers])
+    output = io.BytesIO(); wb.save(output); output.seek(0)
+    return Response(content=output.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment; filename=laporan_{report_type}.xlsx"})
+
+
 @router.get("/export/full-report")
 def export_full_report(
     start_date: Optional[date] = None, 
