@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional, List, Literal
 from datetime import date, datetime
 
@@ -117,10 +117,10 @@ class SupplierSimpleOut(BaseModel):
 # ─── Item Supplier Settings ────────────────────────────────────────────────────
 class ItemSupplierCreate(BaseModel):
     supplier_id: int
-    buy_price: float = 0
+    buy_price: float = Field(default=0, ge=0, allow_inf_nan=False)
     barcode: Optional[str] = None
     ppn_type: Optional[str] = "included"   # included | excluded
-    ppn_percent: float = 0
+    ppn_percent: float = Field(default=0, ge=0, le=100, allow_inf_nan=False)
 
 class ItemSupplierOut(ItemSupplierCreate):
     model_config = {"from_attributes": True}
@@ -129,17 +129,17 @@ class ItemSupplierOut(ItemSupplierCreate):
 # Semua field selain supplier_id opsional → hanya field yang dikirim yang di-update.
 class HargaSupplierUpdate(BaseModel):
     supplier_id: int
-    harga_beli: Optional[float] = None
+    harga_beli: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     ppn_type: Optional[str] = None      # included | excluded
-    ppn_percent: Optional[float] = None
+    ppn_percent: Optional[float] = Field(default=None, ge=0, le=100, allow_inf_nan=False)
 
 # ─── Item Group Discount (Potongan Harga Jual per grup pelanggan) ───────────────
 class ItemGroupDiscountCreate(BaseModel):
     group_id: int
-    disc1: float = 0
-    disc2: float = 0
-    disc3: float = 0
-    disc4: float = 0
+    disc1: float = Field(default=0, ge=0, le=100, allow_inf_nan=False)
+    disc2: float = Field(default=0, ge=0, le=100, allow_inf_nan=False)
+    disc3: float = Field(default=0, ge=0, le=100, allow_inf_nan=False)
+    disc4: float = Field(default=0, ge=0, le=100, allow_inf_nan=False)
 
 class ItemGroupDiscountOut(ItemGroupDiscountCreate):
     id: int
@@ -152,12 +152,12 @@ class ItemCreate(BaseModel):
     category_id: Optional[int] = None
     brand_id: Optional[int] = None
     unit_id: Optional[int] = None
-    buy_price: float = 0
-    sell_price: float = 0
-    profit_margin: float = 0
-    ppn_percent: Optional[float] = None   # tarif PPN barang (%); None → ikut tarif toko
-    stock: float = 0
-    min_stock: float = 0
+    buy_price: float = Field(default=0, ge=0, allow_inf_nan=False)
+    sell_price: float = Field(default=0, ge=0, allow_inf_nan=False)
+    profit_margin: float = Field(default=0, ge=0, allow_inf_nan=False)
+    ppn_percent: Optional[float] = Field(default=None, ge=0, le=100, allow_inf_nan=False)   # tarif PPN barang (%); None → ikut tarif toko
+    stock: float = Field(default=0, ge=0, allow_inf_nan=False)
+    min_stock: float = Field(default=0, ge=0, allow_inf_nan=False)
     description: Optional[str] = None
     barcode: Optional[str] = None
     is_discountable: bool = False
@@ -171,11 +171,11 @@ class ItemUpdate(BaseModel):
     category_id: Optional[int] = None
     brand_id: Optional[int] = None
     unit_id: Optional[int] = None
-    buy_price: Optional[float] = None
-    sell_price: Optional[float] = None
-    profit_margin: Optional[float] = None
-    ppn_percent: Optional[float] = None   # tarif PPN barang (%); None → ikut tarif toko
-    min_stock: Optional[float] = None
+    buy_price: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    sell_price: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    profit_margin: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    ppn_percent: Optional[float] = Field(default=None, ge=0, le=100, allow_inf_nan=False)   # tarif PPN barang (%); None → ikut tarif toko
+    min_stock: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     description: Optional[str] = None
     barcode: Optional[str] = None
     is_active: Optional[bool] = None
@@ -372,33 +372,33 @@ class SalesPersonOut(SalesPersonCreate):
 # ─── Purchase ─────────────────────────────────────────────────────────────────
 class PurchaseItemCreate(BaseModel):
     item_id: int
-    qty: float
-    qty_ordered: float = 0
-    qty_received: float = 0
-    buy_price: float
-    disc1: float = 0
-    disc2: float = 0
-    disc3: float = 0
-    disc4: float = 0
-    sell_price: float = 0
-    profit_margin: float = 0
-    discount: float = 0
+    qty: float = Field(gt=0, allow_inf_nan=False)
+    qty_ordered: float = Field(default=0, ge=0, allow_inf_nan=False)
+    qty_received: float = Field(default=0, ge=0, allow_inf_nan=False)
+    buy_price: float = Field(ge=0, allow_inf_nan=False)
+    disc1: float = Field(default=0, ge=0, le=100, allow_inf_nan=False)
+    disc2: float = Field(default=0, ge=0, le=100, allow_inf_nan=False)
+    disc3: float = Field(default=0, ge=0, le=100, allow_inf_nan=False)
+    disc4: float = Field(default=0, ge=0, le=100, allow_inf_nan=False)
+    sell_price: float = Field(default=0, ge=0, allow_inf_nan=False)
+    profit_margin: float = Field(default=0, ge=0, allow_inf_nan=False)
+    discount: float = Field(default=0, ge=0, allow_inf_nan=False)
     source_request_item_id: Optional[int] = None
-    ppn_percent: Optional[float] = None   # tarif PPN baris (%); None → ikut tarif barang/toko (Included/PKP)
+    ppn_percent: Optional[float] = Field(default=None, ge=0, le=100, allow_inf_nan=False)   # tarif PPN baris (%); None → ikut tarif barang/toko (Included/PKP)
 
 class PurchaseCreate(BaseModel):
     number: Optional[str] = None
     date: date
     due_date: Optional[date] = None
     supplier_id: Optional[int] = None
-    discount: float = 0
-    tax: float = 0
-    tax_percent: float = 0
+    discount: float = Field(default=0, ge=0, le=100, allow_inf_nan=False)
+    tax: float = Field(default=0, ge=0, le=100, allow_inf_nan=False)
+    tax_percent: float = Field(default=0, ge=0, le=100, allow_inf_nan=False)
     is_tax_included: bool = True
     tax_type: Optional[Literal["include", "exclude", "none"]] = None
     notes: Optional[str] = None
-    items: List[PurchaseItemCreate]
-    paid: float = 0
+    items: List[PurchaseItemCreate] = Field(min_length=1)
+    paid: float = Field(default=0, ge=0, allow_inf_nan=False)
     status: Optional[str] = None
     document_type: Literal["purchase", "purchase_order", "branch_request"] = "purchase"
     is_branch_request: Optional[bool] = False
@@ -559,45 +559,45 @@ class DraftReceiveRequest(BaseModel):
 # ─── Sale ─────────────────────────────────────────────────────────────────────
 class SaleItemCreate(BaseModel):
     item_id: int
-    qty: float
-    sell_price: float
-    discount: float = 0
-    ppn_percent: Optional[float] = None   # tarif PPN baris (%); None → ikut tarif barang/toko di server
+    qty: float = Field(gt=0, allow_inf_nan=False)
+    sell_price: float = Field(ge=0, allow_inf_nan=False)
+    discount: float = Field(default=0, ge=0, le=100, allow_inf_nan=False)
+    ppn_percent: Optional[float] = Field(default=None, ge=0, le=100, allow_inf_nan=False)   # tarif PPN baris (%); None → ikut tarif barang/toko di server
 
 class SplitBayar(BaseModel):
     """Satu baris tender pembayaran (bayar campur di kasir).
     metode: cash | deposit | debit | credit_card | emoney
     """
     metode: str
-    jumlah: float
+    jumlah: float = Field(ge=0, allow_inf_nan=False)
 
 class SaleCreate(BaseModel):
     number: Optional[str] = None
     date: date
     customer_id: Optional[int] = None
     salesperson_id: Optional[int] = None
-    discount: float = 0
-    tax: float = 0
-    tax_percent: float = 0
+    discount: float = Field(default=0, ge=0, allow_inf_nan=False)
+    tax: float = Field(default=0, ge=0, allow_inf_nan=False)
+    tax_percent: float = Field(default=0, ge=0, le=100, allow_inf_nan=False)
     is_tax_included: bool = True
-    other_cost: float = 0   # biaya lain ditagihkan ke pelanggan (nambah total) → Pendapatan Lain-lain
-    paid: float = 0
+    other_cost: float = Field(default=0, ge=0, allow_inf_nan=False)   # biaya lain ditagihkan ke pelanggan (nambah total) → Pendapatan Lain-lain
+    paid: float = Field(default=0, ge=0, allow_inf_nan=False)
     # Uang tunai bruto yang diserahkan pelanggan, sebelum kembalian. `paid`
     # tetap menyatakan nilai bersih yang diterapkan ke tagihan/jurnal.
-    cash_received: Optional[float] = None
+    cash_received: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     payment_method: str = "cash"
     payments: Optional[List[SplitBayar]] = None   # rincian tender bayar campur; None → pakai logika lama (payment_method + paid)
     receipt_requested: bool = False  # tombol "Simpan + Cetak"; auto-print cabang diputuskan server
     notes: Optional[str] = None
-    items: List[SaleItemCreate]
+    items: List[SaleItemCreate] = Field(min_length=1)
 
 class BranchReturnItemCreate(BaseModel):
     purchase_item_id: int
-    qty: float
+    qty: float = Field(gt=0, allow_inf_nan=False)
 
 class BranchReturnCreate(BaseModel):
     date: date
-    items: List[BranchReturnItemCreate]
+    items: List[BranchReturnItemCreate] = Field(min_length=1)
     notes: Optional[str] = None
 
 class SaleItemOut(BaseModel):
@@ -636,7 +636,7 @@ class SaleOut(BaseModel):
     total: float
     paid: float
     change: float
-    cash_received: Optional[float] = None
+    cash_received: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     invoice_discount_gross: Optional[float] = None
     payment_method: str
     status: str

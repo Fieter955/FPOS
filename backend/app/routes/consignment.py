@@ -8,6 +8,14 @@ from ..auth import get_current_user
 
 router = APIRouter()
 
+
+def _block_legacy_consignment_mutation():
+    """Cegah modul lama menulis Item.stock tanpa gudang, FIFO, cabang, dan jurnal."""
+    raise HTTPException(
+        503,
+        "Transaksi konsinyasi sementara dinonaktifkan untuk melindungi integritas stok dan jurnal.",
+    )
+
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 def next_number(db, prefix, model):
     from datetime import date as d
@@ -103,6 +111,7 @@ def get_consignment_in(cid: int, db: Session = Depends(get_db), _=Depends(get_cu
 
 @router.post("/in")
 def create_consignment_in(data: dict, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    _block_legacy_consignment_mutation()
     number = data.get("number") or next_number(db, "KI", models.ConsignmentIn)
     tanggal = date.fromisoformat(data["date"])
     rec = models.ConsignmentIn(
@@ -142,6 +151,7 @@ def create_consignment_in(data: dict, db: Session = Depends(get_db), _=Depends(g
 def record_consignment_in_sale(cid: int, data: dict,
                                 db: Session = Depends(get_db), _=Depends(get_current_user)):
     """Catat barang konsinyasi yang terjual"""
+    _block_legacy_consignment_mutation()
     rec = db.query(models.ConsignmentIn).get(cid)
     if not rec: raise HTTPException(404, "Konsinyasi tidak ditemukan")
     if rec.status == "closed": raise HTTPException(400, "Konsinyasi sudah ditutup")
@@ -178,6 +188,7 @@ def record_consignment_in_sale(cid: int, data: dict,
 def return_consignment_in(cid: int, data: dict,
                            db: Session = Depends(get_db), _=Depends(get_current_user)):
     """Retur barang konsinyasi ke supplier"""
+    _block_legacy_consignment_mutation()
     rec = db.query(models.ConsignmentIn).get(cid)
     if not rec: raise HTTPException(404, "Konsinyasi tidak ditemukan")
 
@@ -211,6 +222,7 @@ def return_consignment_in(cid: int, data: dict,
 
 @router.post("/in/{cid}/bill")
 def create_consignment_in_bill(cid: int, data: dict, db: Session = Depends(get_db)):
+    _block_legacy_consignment_mutation()
     rec = db.query(models.ConsignmentIn).get(cid)
     if not rec: raise HTTPException(404, "Konsinyasi tidak ditemukan")
 
@@ -241,6 +253,7 @@ def create_consignment_in_bill(cid: int, data: dict, db: Session = Depends(get_d
 @router.post("/in/bill/{bid}/pay")
 def pay_consignment_in_bill(bid: int, data: dict,
                              db: Session = Depends(get_db), _=Depends(get_current_user)):
+    _block_legacy_consignment_mutation()
     bill = db.query(models.ConsignmentInBill).get(bid)
     if not bill: raise HTTPException(404, "Tagihan tidak ditemukan")
     bill.paid += data["amount"]
@@ -330,6 +343,7 @@ def get_consignment_out(cid: int, db: Session = Depends(get_db), _=Depends(get_c
 
 @router.post("/out")
 def create_consignment_out(data: dict, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    _block_legacy_consignment_mutation()
     number = data.get("number") or next_number(db, "KO", models.ConsignmentOut)
     # Tambahkan konversi tanggal agar tidak error SQLite Date
     tanggal = date.fromisoformat(data["date"]) if isinstance(data["date"], str) else data["date"]
@@ -374,6 +388,7 @@ def create_consignment_out(data: dict, db: Session = Depends(get_db), _=Depends(
 def report_consignment_out_sold(cid: int, data: dict,
                                  db: Session = Depends(get_db), _=Depends(get_current_user)):
     """Laporan barang yang terjual dari toko konsinyasi"""
+    _block_legacy_consignment_mutation()
     rec = db.query(models.ConsignmentOut).get(cid)
     if not rec: raise HTTPException(404, "Konsinyasi tidak ditemukan")
     if rec.status == "closed": raise HTTPException(400, "Konsinyasi sudah ditutup")
@@ -397,6 +412,7 @@ def report_consignment_out_sold(cid: int, data: dict,
 def return_consignment_out(cid: int, data: dict,
                             db: Session = Depends(get_db), _=Depends(get_current_user)):
     """Terima retur barang dari toko konsinyasi"""
+    _block_legacy_consignment_mutation()
     rec = db.query(models.ConsignmentOut).get(cid)
     if not rec: raise HTTPException(404, "Konsinyasi tidak ditemukan")
 
@@ -432,6 +448,7 @@ def return_consignment_out(cid: int, data: dict,
 def create_consignment_out_bill(cid: int, data: dict,
                                  db: Session = Depends(get_db), _=Depends(get_current_user)):
     """Buat tagihan piutang ke toko konsinyasi untuk barang yang terjual"""
+    _block_legacy_consignment_mutation()
     rec = db.query(models.ConsignmentOut).get(cid)
     if not rec: raise HTTPException(404, "Konsinyasi tidak ditemukan")
 
@@ -454,6 +471,7 @@ def create_consignment_out_bill(cid: int, data: dict,
 @router.post("/out/bill/{bid}/pay")
 def pay_consignment_out_bill(bid: int, data: dict,
                               db: Session = Depends(get_db), _=Depends(get_current_user)):
+    _block_legacy_consignment_mutation()
     bill = db.query(models.ConsignmentOutBill).get(bid)
     if not bill: raise HTTPException(404, "Tagihan tidak ditemukan")
     bill.paid += data["amount"]
@@ -464,6 +482,7 @@ def pay_consignment_out_bill(bid: int, data: dict,
 
 @router.post("/in/{cid}/cancel")
 def cancel_consignment_in(cid: int, db: Session = Depends(get_db)):
+    _block_legacy_consignment_mutation()
     rec = db.query(models.ConsignmentIn).get(cid)
     if not rec: raise HTTPException(404, "Data tidak ditemukan")
     if rec.status == "cancelled": raise HTTPException(400, "Sudah dibatalkan")
@@ -492,6 +511,7 @@ def cancel_consignment_in(cid: int, db: Session = Depends(get_db)):
 
 @router.post("/out/{cid}/cancel")
 def cancel_consignment_out(cid: int, db: Session = Depends(get_db)):
+    _block_legacy_consignment_mutation()
     # 1. Cari data Konsinyasi Keluar
     rec = db.query(models.ConsignmentOut).get(cid)
     

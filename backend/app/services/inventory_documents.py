@@ -24,6 +24,7 @@ from ..routes.accounting import (
 from .inventory_fifo import EPS, add_batch, consume_fifo
 
 WITA = pytz.timezone("Asia/Makassar")
+PUSAT_BRANCH_ID = 1
 TYPE_PREFIX = {
     "item_in": "IM",
     "item_out": "IK",
@@ -94,7 +95,9 @@ def _change_stock(db: Session, warehouse_id: int, item: models.Item, delta: floa
         db.add(row)
         db.flush()
     row.stock = float(row.stock or 0) + float(delta)
-    item.stock = float(item.stock or 0) + float(delta)
+    warehouse = db.query(models.Warehouse).get(warehouse_id)
+    if not warehouse or warehouse.branch_id == PUSAT_BRANCH_ID:
+        item.stock = float(item.stock or 0) + float(delta)
 
 
 def _next_number(db: Session, doc_type: str, branch_id: int, tx_date: date) -> str:

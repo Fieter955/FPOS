@@ -13,16 +13,24 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from datetime import date, datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..database import get_db
 from ..auth import get_current_user, write_audit
 from .. import models
+from ..services.inventory_fifo import add_batch, consume_fifo, reduce_batches_for_reversal
+from ..services.purchase_flow import (
+    adjust_warehouse_stock,
+    get_or_create_default_warehouse,
+    get_total_branch_stock,
+)
 from .accounting import create_auto_journal, pastikan_akun_ada, resolve_active_branch_id
+from ..services.virtual_units import get_required_stock_qty, is_virtual_variant
 from ..services.receipt_renderer import build_trade_in_receipt, settings_from_branch
 from .print_queue import enqueue_print_job
 
 router = APIRouter()
+PUSAT_BRANCH_ID = 1
 
 
 def next_trade_in_number(db: Session) -> str:
@@ -37,15 +45,15 @@ def next_trade_in_number(db: Session) -> str:
 
 class ReturnItemIn(BaseModel):
     item_id: int
-    qty: float
-    return_price: float
+    qty: float = Field(gt=0, allow_inf_nan=False)
+    return_price: float = Field(ge=0, allow_inf_nan=False)
     condition: str = "good"    # good | damaged
 
 
 class NewItemIn(BaseModel):
     item_id: int
-    qty: float
-    sell_price: float
+    qty: float = Field(gt=0, allow_inf_nan=False)
+    sell_price: float = Field(ge=0, allow_inf_nan=False)
 
 
 class TradeInCreate(BaseModel):
@@ -53,9 +61,9 @@ class TradeInCreate(BaseModel):
     customer_id: int  # Mandatory
     notes: Optional[str] = None
     payment_method: str = "cash"
-    cash_amount: float = 0
-    bank_amount: float = 0
-    deposit_amount: float = 0
+    cash_amount: float = Field(default=0, ge=0, allow_inf_nan=False)
+    bank_amount: float = Field(default=0, ge=0, allow_inf_nan=False)
+    deposit_amount: float = Field(default=0, ge=0, allow_inf_nan=False)
     return_items: List[ReturnItemIn]
     new_items: List[NewItemIn]
 
@@ -181,13 +189,19 @@ def create_trade_in(
     )
 
     b_id = resolve_active_branch_id(db, current_user)
+    branch = db.query(models.Branch).get(b_id)
+    warehouse = get_or_create_default_warehouse(db, b_id)
 
     # Validasi & hitung subtotal barang kembali
     return_subtotal = 0.0
     total_modal_return = 0.0
     good_return_subtotal = 0.0
     damaged_return_subtotal = 0.0
+    seen_return_items = set()
     for ri in data.return_items:
+        if ri.item_id in seen_return_items:
+            raise HTTPException(400, "Barang retur yang sama tidak boleh dikirim lebih dari sekali")
+        seen_return_items.add(ri.item_id)
         item = db.query(models.Item).get(ri.item_id)
         if not item:
             raise HTTPException(404, f"Item return {ri.item_id} tidak ditemukan")
@@ -210,16 +224,38 @@ def create_trade_in(
     # Validasi & hitung subtotal barang baru
     new_subtotal = 0.0
     total_modal_new = 0.0
+    total_sales_new = 0.0
+    total_tax_new = 0.0
+    seen_new_items = set()
     for ni in data.new_items:
-        item = db.query(models.Item).get(ni.item_id)
+        if ni.item_id in seen_new_items:
+            raise HTTPException(400, "Barang baru yang sama tidak boleh dikirim lebih dari sekali")
+        seen_new_items.add(ni.item_id)
+        item = db.query(models.Item).with_for_update().get(ni.item_id)
         if not item:
             raise HTTPException(404, f"Item baru {ni.item_id} tidak ditemukan")
         if ni.qty <= 0:
             raise HTTPException(400, f"Qty {item.name} harus > 0")
-        if item.stock < ni.qty:
-            raise HTTPException(400, f"Stok {item.name} tidak cukup ({item.stock} tersedia)")
-        new_subtotal += ni.qty * ni.sell_price
-        total_modal_new += ni.qty * (item.buy_price or 0)
+        stock_item = db.query(models.Item).with_for_update().get(item.parent_item_id) if is_virtual_variant(item) else item
+        required_qty = get_required_stock_qty(item, ni.qty)
+        warehouse_qty = db.query(models.WarehouseStock).filter(
+            models.WarehouseStock.warehouse_id == warehouse.id,
+            models.WarehouseStock.item_id == stock_item.id,
+        ).with_for_update().first()
+        available = float(warehouse_qty.stock or 0) if warehouse_qty else 0.0
+        if available + 1e-9 < required_qty:
+            raise HTTPException(400, f"Stok {item.name} tidak cukup ({available} tersedia)")
+        line_gross = ni.qty * ni.sell_price
+        new_subtotal += line_gross
+        rate = 0.0
+        if branch and branch.is_pkp:
+            rate = float(item.ppn_percent if item.ppn_percent is not None else branch.tarif_ppn or 0)
+        if rate > 0:
+            line_sales = line_gross / (1 + rate / 100)
+            total_sales_new += line_sales
+            total_tax_new += line_gross - line_sales
+        else:
+            total_sales_new += line_gross
 
     # difference > 0: pelanggan harus bayar
     # difference < 0: toko kembalikan uang ke pelanggan (masuk saldo)
@@ -228,10 +264,14 @@ def create_trade_in(
     total_tender = cash_amount + bank_amount + deposit_amount
     if difference <= 0.01 and total_tender > 0.01:
         raise HTTPException(400, "Pembayaran tidak diperlukan untuk transaksi ini")
+    if return_subtotal + total_tender + 0.01 < new_subtotal:
+        raise HTTPException(400, f"Pembayaran kurang {new_subtotal - return_subtotal - total_tender:,.2f}")
 
     required_accounts = ["4-1100", "1-1400", "5-1100", "1-1100", "1-1200", "2-1300"]
     if damaged_return_subtotal > 0:
         required_accounts.append("1-1450")
+    if total_tax_new > 0.005:
+        required_accounts.append("2-1200")
     pastikan_akun_ada(db, required_accounts)
 
     number = next_trade_in_number(db)
@@ -277,45 +317,67 @@ def create_trade_in(
 
     # Proses barang yang dikembalikan → tambah ke stok
     for ri in data.return_items:
-        item = db.query(models.Item).get(ri.item_id)
+        item = db.query(models.Item).with_for_update().get(ri.item_id)
         total = ri.qty * ri.return_price
-
-        db.add(models.TradeInReturnItem(
+        return_row = models.TradeInReturnItem(
             trade_in_id=trade.id, item_id=ri.item_id,
             qty=ri.qty, return_price=ri.return_price,
             condition=ri.condition, total=total,
-        ))
+        )
+        db.add(return_row)
 
         if ri.condition == "good":
-            # Hanya barang bagus yang kembali menjadi stok jual.
-            before = item.stock
-            item.stock += ri.qty
+            stock_item = db.query(models.Item).with_for_update().get(item.parent_item_id) if is_virtual_variant(item) else item
+            required_qty = get_required_stock_qty(item, ri.qty)
+            before = get_total_branch_stock(db, b_id, stock_item.id)
+            adjust_warehouse_stock(db, warehouse.id, stock_item.id, required_qty)
+            if b_id == PUSAT_BRANCH_ID:
+                stock_item.stock = float(stock_item.stock or 0) + required_qty
+            unit_cost = total / required_qty if required_qty > 0 else 0.0
+            batch = add_batch(
+                db, item_id=stock_item.id, warehouse_id=warehouse.id,
+                qty=required_qty, unit_cost=unit_cost, received_date=data.date,
+            )
+            return_row.stock_batch_id = batch.id
             db.add(models.StockMovement(
                 branch_id=b_id,
-                date=data.date, item_id=item.id,
-                type="in", qty=ri.qty,
-                qty_before=before, qty_after=item.stock,
+                date=data.date, item_id=stock_item.id,
+                type="in", qty=required_qty,
+                qty_before=before, qty_after=before + required_qty,
                 reference=number, notes="Tukar tambah - barang kembali (bagus)"
             ))
 
     # Proses barang baru → kurangi stok
     for ni in data.new_items:
-        item = db.query(models.Item).get(ni.item_id)
+        item = db.query(models.Item).with_for_update().get(ni.item_id)
         total = ni.qty * ni.sell_price
-
-        db.add(models.TradeInNewItem(
+        new_row = models.TradeInNewItem(
             trade_in_id=trade.id, item_id=ni.item_id,
             qty=ni.qty, sell_price=ni.sell_price, total=total,
-        ))
+        )
+        db.add(new_row)
+        db.flush()
 
-        # Kurangi stok
-        before = item.stock
-        item.stock -= ni.qty
+        stock_item = db.query(models.Item).with_for_update().get(item.parent_item_id) if is_virtual_variant(item) else item
+        required_qty = get_required_stock_qty(item, ni.qty)
+        before = get_total_branch_stock(db, b_id, stock_item.id)
+        allocations = consume_fifo(
+            db, item_id=stock_item.id, warehouse_id=warehouse.id, qty=required_qty,
+        )
+        total_modal_new += sum(qty * cost for _batch, qty, cost in allocations)
+        for batch, allocated_qty, cost in allocations:
+            db.add(models.TradeInNewItemBatch(
+                trade_in_new_item_id=new_row.id, batch_id=batch.id,
+                qty=allocated_qty, unit_cost=cost,
+            ))
+        adjust_warehouse_stock(db, warehouse.id, stock_item.id, -required_qty)
+        if b_id == PUSAT_BRANCH_ID:
+            stock_item.stock = float(stock_item.stock or 0) - required_qty
         db.add(models.StockMovement(
             branch_id=b_id,
-            date=data.date, item_id=item.id,
-            type="out", qty=ni.qty,
-            qty_before=before, qty_after=item.stock,
+            date=data.date, item_id=stock_item.id,
+            type="out", qty=required_qty,
+            qty_before=before, qty_after=before - required_qty,
             reference=number, notes="Tukar tambah - barang keluar"
         ))
 
@@ -323,7 +385,9 @@ def create_trade_in(
     entries = []
     # 1. Penjualan & Modal Barang Baru
     if new_subtotal > 0:
-        entries.append({"code": "4-1100", "debit": 0, "credit": new_subtotal})  # Penjualan
+        entries.append({"code": "4-1100", "debit": 0, "credit": total_sales_new})  # Penjualan
+        if total_tax_new > 0.005:
+            entries.append({"code": "2-1200", "debit": 0, "credit": total_tax_new})
         entries.append({"code": "1-1400", "debit": 0, "credit": total_modal_new}) # Stok Keluar
         entries.append({"code": "5-1100", "debit": total_modal_new, "credit": 0}) # HPP
 
@@ -345,9 +409,6 @@ def create_trade_in(
     if final_surplus > 0.01:
         # Kelebihan nilai (Barang Lama + Bayar Fisik > Barang Baru) -> Masuk ke Titipan/Deposit
         entries.append({"code": "2-1300", "debit": 0, "credit": final_surplus})
-    elif final_surplus < -0.01:
-        # Kurang bayar (Barang Baru > Barang Lama + Bayar Fisik) -> Asumsikan sisa masuk Kas
-        entries.append({"code": "1-1100", "debit": abs(final_surplus), "credit": 0})
 
     if entries:
         create_auto_journal(
@@ -356,7 +417,6 @@ def create_trade_in(
             entries=entries, user_id=current_user.id, branch_id=b_id
         )
 
-    db.commit()
     write_audit(db, current_user.id, "CREATE", "trade_ins", trade.id,
                 f"Tukar tambah {number}: selisih Rp {abs(difference):,.0f} "
                 f"({'dibayar pelanggan' if difference > 0 else 'masuk saldo pelanggan'})")
@@ -390,16 +450,71 @@ def delete_trade_in(
     if t.status == "cancelled":
         raise HTTPException(400, "Tukar tambah sudah dibatalkan")
 
+    if any(float(ri.returned_qty or 0) > 1e-9 for ri in t.return_items):
+        raise HTTPException(400, "Tukar tambah tidak dapat dibatalkan karena barang sudah diretur ke supplier")
+    warehouse = get_or_create_default_warehouse(db, branch_id)
+
     # Balik stok: barang yang kembali → kurangi, barang baru → tambah
     for ri in t.return_items:
-        item = db.query(models.Item).get(ri.item_id)
+        item = db.query(models.Item).with_for_update().get(ri.item_id)
         if item and ri.condition == "good":
-            item.stock -= ri.qty
+            stock_item = db.query(models.Item).with_for_update().get(item.parent_item_id) if is_virtual_variant(item) else item
+            required_qty = get_required_stock_qty(item, ri.qty)
+            before = get_total_branch_stock(db, branch_id, stock_item.id)
+            if before + 1e-9 < required_qty:
+                raise HTTPException(400, f"Tukar tambah tidak dapat dibatalkan; stok {item.name} sudah terpakai")
+            if ri.stock_batch_id:
+                batch = db.query(models.StockBatch).with_for_update().get(ri.stock_batch_id)
+                if not batch or batch.warehouse_id != warehouse.id or batch.item_id != stock_item.id:
+                    raise HTTPException(409, f"Batch tukar tambah {item.name} tidak ditemukan")
+                if float(batch.qty_remaining or 0) + 1e-9 < required_qty:
+                    raise HTTPException(400, f"Tukar tambah tidak dapat dibatalkan; batch {item.name} sudah terpakai")
+                batch.qty_remaining = float(batch.qty_remaining or 0) - required_qty
+            else:
+                reduce_batches_for_reversal(
+                    db, item_id=stock_item.id, warehouse_id=warehouse.id, qty=required_qty,
+                )
+            adjust_warehouse_stock(db, warehouse.id, stock_item.id, -required_qty)
+            if branch_id == PUSAT_BRANCH_ID:
+                stock_item.stock = float(stock_item.stock or 0) - required_qty
+            db.add(models.StockMovement(
+                branch_id=branch_id, date=date.today(), item_id=stock_item.id,
+                type="out", qty=required_qty, qty_before=before,
+                qty_after=before - required_qty, reference=f"BATAL-{t.number}",
+                notes="Pembatalan tukar tambah - barang kembali dikeluarkan",
+            ))
 
     for ni in t.new_items:
-        item = db.query(models.Item).get(ni.item_id)
+        item = db.query(models.Item).with_for_update().get(ni.item_id)
         if item:
-            item.stock += ni.qty
+            stock_item = db.query(models.Item).with_for_update().get(item.parent_item_id) if is_virtual_variant(item) else item
+            required_qty = get_required_stock_qty(item, ni.qty)
+            before = get_total_branch_stock(db, branch_id, stock_item.id)
+            allocation_rows = db.query(models.TradeInNewItemBatch).filter(
+                models.TradeInNewItemBatch.trade_in_new_item_id == ni.id,
+            ).with_for_update().all()
+            restored_qty = 0.0
+            for allocation in allocation_rows:
+                batch = db.query(models.StockBatch).with_for_update().get(allocation.batch_id)
+                if not batch or batch.warehouse_id != warehouse.id or batch.item_id != stock_item.id:
+                    raise HTTPException(409, f"Batch asal {item.name} tidak ditemukan")
+                batch.qty_remaining = float(batch.qty_remaining or 0) + float(allocation.qty or 0)
+                restored_qty += float(allocation.qty or 0)
+            if restored_qty + 1e-9 < required_qty:
+                add_batch(
+                    db, item_id=stock_item.id, warehouse_id=warehouse.id,
+                    qty=required_qty - restored_qty,
+                    unit_cost=float(item.buy_price or 0), received_date=t.date,
+                )
+            adjust_warehouse_stock(db, warehouse.id, stock_item.id, required_qty)
+            if branch_id == PUSAT_BRANCH_ID:
+                stock_item.stock = float(stock_item.stock or 0) + required_qty
+            db.add(models.StockMovement(
+                branch_id=branch_id, date=date.today(), item_id=stock_item.id,
+                type="in", qty=required_qty, qty_before=before,
+                qty_after=before + required_qty, reference=f"BATAL-{t.number}",
+                notes="Pembatalan tukar tambah - barang baru dipulihkan",
+            ))
 
     # Pulihkan dampak saldo pelanggan: pemakaian saldo dikembalikan, sedangkan
     # refund/kelebihan yang dulu masuk saldo ditarik kembali.

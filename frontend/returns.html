@@ -801,6 +801,9 @@
               purchase_id: isPurchase
                 ? transaction.purchase_id
                 : transaction.sale_id,
+              invoice_item_id: isPurchase
+                ? transaction.purchase_item_id
+                : transaction.sale_item_id,
               number: isPurchase
                 ? transaction.purchase_number
                 : transaction.sale_number,
@@ -809,10 +812,11 @@
                 : transaction.sale_date,
               qty: isPurchase ? transaction.qty_bought : transaction.qty_sold,
               qty_available: transaction.qty_available,
-              price: isPurchase
-                ? transaction.buy_price
-                : transaction.sell_price,
+              price:
+                transaction.return_price ??
+                (isPurchase ? transaction.buy_price : transaction.sell_price),
               tax_percent: transaction.tax_percent || 0,
+              is_tax_included: Boolean(transaction.is_tax_included),
             });
           }
           mManualValidItems = Array.from(itemsById.values()).sort((a, b) =>
@@ -1005,6 +1009,8 @@
         row.querySelector(".row-factur-info").textContent =
           transaction.number;
         row.dataset.purchaseId = transaction.purchase_id;
+        row.dataset.invoiceItemId = transaction.invoice_item_id || "";
+        row.dataset.isTaxIncluded = transaction.is_tax_included ? "1" : "0";
 
         const qtyInput = row.querySelector(".row-qty");
         const available = Number(transaction.qty_available) || 0;
@@ -1103,7 +1109,10 @@
           );
           const ppn = parseDesimal(row.querySelector(".row-ppn"));
 
-          const priceAkhir = priceAwal + (priceAwal * ppn) / 100;
+          const priceAkhir =
+            row.dataset.isTaxIncluded === "1"
+              ? priceAwal
+              : priceAwal + (priceAwal * ppn) / 100;
           row.querySelector(".row-price-akhir").value =
             formatRibuan(priceAkhir);
 
@@ -1194,7 +1203,7 @@
               qtyLeft = it.qty_available;
             } else {
               const isSales = type === "sales";
-              price = isSales ? it.sell_price : it.buy_price;
+              price = it.return_price ?? (isSales ? it.sell_price : it.buy_price);
               date = isSales ? it.sale_date : it.purchase_date;
               number = isSales ? it.sale_number : it.purchase_number;
               entity = isSales
@@ -1262,7 +1271,7 @@
         const entityName = isSales
           ? item.customer_name || "Umum"
           : item.supplier_name || "-";
-        const basePrice = isSales ? item.sell_price : item.buy_price;
+        const basePrice = item.return_price ?? (isSales ? item.sell_price : item.buy_price);
         const tax = item.tax_percent || 0;
         const price = item.is_tax_included
           ? basePrice
@@ -1293,9 +1302,9 @@
         const type = currentTab; // sales or purchase
 
         const isSales = type === "sales";
-        const basePrice = isSales
-          ? activeItem.sell_price
-          : activeItem.buy_price;
+        const basePrice =
+          activeItem.return_price ??
+          (isSales ? activeItem.sell_price : activeItem.buy_price);
 
         const payload = {
           date: new Date().toISOString().split("T")[0],
@@ -1306,6 +1315,9 @@
           items: [
             {
               item_id: activeItem.item_id,
+              ...(isSales
+                ? { sale_item_id: activeItem.sale_item_id }
+                : { purchase_item_id: activeItem.purchase_item_id }),
               qty: qty,
               price: basePrice,
               ...(isSales
@@ -1664,6 +1676,13 @@
             price: priceAwal,
             tax_percent: ppn,
           };
+          if (row.dataset.invoiceItemId) {
+            if (mManualMode === "purchase") {
+              itemData.purchase_item_id = parseInt(row.dataset.invoiceItemId);
+            } else {
+              itemData.sale_item_id = parseInt(row.dataset.invoiceItemId);
+            }
+          }
           if (mManualMode === "sales") {
             itemData.condition = row.querySelector(".row-condition").value;
           }
@@ -1688,7 +1707,6 @@
               date: document.getElementById("mManualDate").value,
               reason: document.getElementById("mManualReason").value,
               items: groups[pid],
-              is_tax_included: false, // UI hitung manual (Dasar + PPN)
             };
             if (mManualMode === "purchase") payload.purchase_id = parseInt(pid);
             else payload.sale_id = parseInt(pid);

@@ -493,6 +493,7 @@ class PurchaseReturnItem(Base):
     __tablename__ = "purchase_return_items"
     id = Column(Integer, primary_key=True, index=True)
     return_id = Column(Integer, ForeignKey("purchase_returns.id"), nullable=False)
+    purchase_item_id = Column(Integer, ForeignKey("purchase_items.id"), nullable=True, index=True)
     item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
     qty = Column(Float, nullable=False)
     price = Column(Float, nullable=False)
@@ -602,6 +603,7 @@ class SaleReturnItem(Base):
     __tablename__ = "sale_return_items"
     id = Column(Integer, primary_key=True, index=True)
     return_id = Column(Integer, ForeignKey("sale_returns.id"), nullable=False)
+    sale_item_id = Column(Integer, ForeignKey("sale_items.id"), nullable=True, index=True)
     item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
     qty = Column(Float, nullable=False)
     price = Column(Float, nullable=False)
@@ -982,6 +984,7 @@ class WarehouseStock(Base):
         Index("ix_warehouse_stocks_warehouse_id", "warehouse_id"),
         Index("ix_warehouse_stocks_item_id", "item_id"),
         Index("ix_warehouse_stocks_wh_item", "warehouse_id", "item_id"),
+        UniqueConstraint("warehouse_id", "item_id", name="uq_warehouse_stocks_wh_item"),
     )
     id = Column(Integer, primary_key=True, index=True)
     warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
@@ -1536,6 +1539,7 @@ class TradeInReturnItem(Base):
     return_price = Column(Float, nullable=False)  # harga yang diterima toko dari pelanggan
     condition = Column(String(50), default="good")  # good | damaged
     total = Column(Float, nullable=False)
+    stock_batch_id = Column(Integer, ForeignKey("stock_batches.id"), nullable=True)
 
     trade_in = relationship("TradeIn", back_populates="return_items")
     item = relationship("Item")
@@ -1553,6 +1557,19 @@ class TradeInNewItem(Base):
 
     trade_in = relationship("TradeIn", back_populates="new_items")
     item = relationship("Item")
+
+
+class TradeInNewItemBatch(Base):
+    """Snapshot alokasi FIFO barang baru pada transaksi tukar tambah."""
+    __tablename__ = "trade_in_new_item_batches"
+    id = Column(Integer, primary_key=True, index=True)
+    trade_in_new_item_id = Column(Integer, ForeignKey("trade_in_new_items.id"), nullable=False, index=True)
+    batch_id = Column(Integer, ForeignKey("stock_batches.id"), nullable=False, index=True)
+    qty = Column(Float, nullable=False)
+    unit_cost = Column(Float, nullable=False, default=0)
+
+    trade_in_new_item = relationship("TradeInNewItem")
+    batch = relationship("StockBatch")
 
 # ─── Building Materials AI ────────────────────────────────────────────────────
 

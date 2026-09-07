@@ -87,43 +87,27 @@ def get_branch_inventory_snapshot(db: Session, branch_id: int) -> dict:
     if warehouse_ids:
         inventory_value = (
             db.query(
-                func.sum(
-                    models.WarehouseStock.stock * func.coalesce(models.Item.buy_price, 0)
-                )
+                func.sum(models.StockBatch.qty_remaining * models.StockBatch.unit_cost)
             )
-            .join(models.Item, models.Item.id == models.WarehouseStock.item_id)
             .filter(
-                models.WarehouseStock.warehouse_id.in_(warehouse_ids),
-                models.WarehouseStock.stock > 0,
+                models.StockBatch.warehouse_id.in_(warehouse_ids),
+                models.StockBatch.qty_remaining > 0,
             )
             .scalar()
             or 0.0
         )
         item_count = (
-            db.query(func.count(func.distinct(models.WarehouseStock.item_id)))
-            .join(models.Item, models.Item.id == models.WarehouseStock.item_id)
+            db.query(func.count(func.distinct(models.StockBatch.item_id)))
             .filter(
-                models.WarehouseStock.warehouse_id.in_(warehouse_ids),
-                models.WarehouseStock.stock > 0,
+                models.StockBatch.warehouse_id.in_(warehouse_ids),
+                models.StockBatch.qty_remaining > 0,
             )
             .scalar()
             or 0
         )
     else:
-        inventory_value = (
-            db.query(
-                func.sum(models.Item.stock * func.coalesce(models.Item.buy_price, 0))
-            )
-            .filter(models.Item.stock > 0)
-            .scalar()
-            or 0.0
-        )
-        item_count = (
-            db.query(func.count(models.Item.id))
-            .filter(models.Item.stock > 0)
-            .scalar()
-            or 0
-        )
+        inventory_value = 0.0
+        item_count = 0
 
     return {
         "branch_id": branch_id,

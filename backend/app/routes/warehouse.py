@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import date, datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List
 import pytz
 
@@ -230,6 +230,15 @@ def get_warehouse_stock_list(
         )
 
     stocks = q.all()
+    fifo_values = dict(
+        db.query(
+            models.StockBatch.item_id,
+            func.sum(models.StockBatch.qty_remaining * models.StockBatch.unit_cost),
+        ).filter(
+            models.StockBatch.warehouse_id == wid,
+            models.StockBatch.qty_remaining > 0,
+        ).group_by(models.StockBatch.item_id).all()
+    )
     return {
         "warehouse": {"id": w.id, "name": w.name, "code": w.code},
         "items": [{
@@ -240,26 +249,24 @@ def get_warehouse_stock_list(
             "stock": s.stock,
             "min_stock": s.item.min_stock if s.item else 0,
             "low_stock": s.stock <= (s.item.min_stock if s.item else 0),
-            "stock_value": s.stock * (s.item.buy_price if s.item else 0)
+            "stock_value": float(fifo_values.get(s.item_id, 0) or 0)
         } for s in stocks],
         "total_items": len(stocks),
-        "total_value": sum(
-            s.stock * (s.item.buy_price if s.item else 0) for s in stocks
-        )
+        "total_value": sum(float(fifo_values.get(s.item_id, 0) or 0) for s in stocks)
     }
 
 # ─── Warehouse Transfer ───────────────────────────────────────────────────────
 
 class TransferItemIn(BaseModel):
     item_id: int
-    qty: float
+    qty: float = Field(gt=0, allow_inf_nan=False)
 
 class TransferCreate(BaseModel):
     date: date
     from_warehouse_id: int
     to_warehouse_id: int
     notes: Optional[str] = None
-    items: List[TransferItemIn]
+    items: List[TransferItemIn] = Field(min_length=1)
 
 @router.get("/transfers/all")
 def get_transfers(skip: int = 0, limit: int = 50,
@@ -328,7 +335,6 @@ def create_transfer(data: TransferCreate, db: Session = Depends(get_db),
 
     for it in data.items:
         item = db.query(models.Item).get(it.item_id)
-        total_nilai_transfer += (item.buy_price or 0) * it.qty
 
         db.add(models.WarehouseTransferItem(
             transfer_id=transfer.id,
@@ -346,8 +352,10 @@ def create_transfer(data: TransferCreate, db: Session = Depends(get_db),
             adjust_warehouse_stock(db, to_w.id, it.item_id, it.qty)
             # 🧱 FIFO: pindahkan lapisan biaya ikut barangnya (asal → tujuan)
             from ..services.inventory_fifo import transfer_batches
-            transfer_batches(db, item_id=it.item_id, from_warehouse_id=from_w.id,
-                             to_warehouse_id=to_w.id, qty=it.qty)
+            total_nilai_transfer += transfer_batches(
+                db, item_id=it.item_id, from_warehouse_id=from_w.id,
+                to_warehouse_id=to_w.id, qty=it.qty,
+            )
 
             db.add(models.StockMovement(
                 date=data.date, created_at=local_datetime,
@@ -370,8 +378,10 @@ def create_transfer(data: TransferCreate, db: Session = Depends(get_db),
             adjust_warehouse_stock(db, to_w.id, it.item_id, it.qty)
             # 🧱 FIFO: pindahkan lapisan biaya ikut barangnya (asal → tujuan)
             from ..services.inventory_fifo import transfer_batches
-            transfer_batches(db, item_id=it.item_id, from_warehouse_id=from_w.id,
-                             to_warehouse_id=to_w.id, qty=it.qty)
+            total_nilai_transfer += transfer_batches(
+                db, item_id=it.item_id, from_warehouse_id=from_w.id,
+                to_warehouse_id=to_w.id, qty=it.qty,
+            )
 
             # Mutasi KELUAR dari Cabang Asal
             db.add(models.StockMovement(

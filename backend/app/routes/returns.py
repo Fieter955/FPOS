@@ -1,3 +1,5 @@
+import math
+
 from fastapi import APIRouter, Depends, HTTPException
 import pytz
 from sqlalchemy.orm import Session
@@ -24,6 +26,47 @@ PUSAT_BRANCH_ID = 1
 
 def get_local_date() -> date:
     return datetime.now(WITA).date()
+
+
+def _positive_qty(payload: dict) -> float:
+    try:
+        qty = float(payload.get("qty"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Qty retur harus berupa angka")
+    if not math.isfinite(qty) or qty <= 0:
+        raise HTTPException(400, "Qty retur harus lebih dari 0")
+    return qty
+
+
+def _header_discount_ratio(document, line_gross_total: float) -> float:
+    """Rasio diskon header yang sudah tersimpan pada faktur asal."""
+    gross_snapshot = getattr(document, "invoice_discount_gross", None)
+    if gross_snapshot is not None and line_gross_total > 0:
+        ratio = float(gross_snapshot or 0) / line_gross_total
+    else:
+        subtotal = float(getattr(document, "subtotal", 0) or 0)
+        ratio = float(getattr(document, "discount", 0) or 0) / subtotal if subtotal > 0 else 0
+    return min(max(ratio, 0.0), 1.0)
+
+
+def _sale_return_unit_price(sale, sale_item) -> float:
+    line_gross_total = sum(float(line.total or 0) for line in sale.items)
+    ratio = _header_discount_ratio(sale, line_gross_total)
+    line_price_after_discount = float(sale_item.sell_price or 0) * (
+        1 - float(sale_item.discount or 0) / 100
+    )
+    return line_price_after_discount * (1 - ratio)
+
+
+def _purchase_return_unit_price(purchase, purchase_item) -> float:
+    qty = float(purchase_item.qty or 0)
+    line_net_unit = (
+        float(purchase_item.total or 0) / qty
+        if qty > 0
+        else float(purchase_item.buy_price or 0)
+    )
+    ratio = _header_discount_ratio(purchase, float(purchase.subtotal or 0))
+    return line_net_unit * (1 - ratio)
 
 
 @router.get("/branch-shipments")
@@ -254,7 +297,7 @@ def get_purchase_history_items(
     current_user: models.User = Depends(get_current_user)
 ):
     query = db.query(models.PurchaseItem).join(models.Purchase).filter(
-        models.Purchase.status != 'cancelled'
+        models.Purchase.status.notin_(['cancelled', 'draft', 'pending'])
     )
     
     branch_id = resolve_active_branch_id(db, current_user)
@@ -274,10 +317,15 @@ def get_purchase_history_items(
         # Hitung berapa yang sudah diretur untuk baris ini
         # Karena model kita PurchaseReturnItem merujuk ke purchase_id + item_id
         # Kita aggregasi retur yang merujuk ke purchase yang sama dan item yang sama
-        returned_qty = db.query(func.sum(models.PurchaseReturnItem.qty)).join(models.PurchaseReturn).filter(
-            models.PurchaseReturn.purchase_id == it.purchase_id,
-            models.PurchaseReturnItem.item_id == it.item_id
+        returned_qty = db.query(func.sum(models.PurchaseReturnItem.qty)).filter(
+            models.PurchaseReturnItem.purchase_item_id == it.id,
         ).scalar() or 0.0
+        legacy_returned = db.query(func.sum(models.PurchaseReturnItem.qty)).join(models.PurchaseReturn).filter(
+            models.PurchaseReturn.purchase_id == it.purchase_id,
+            models.PurchaseReturnItem.item_id == it.item_id,
+            models.PurchaseReturnItem.purchase_item_id.is_(None),
+        ).scalar() or 0.0
+        returned_qty += legacy_returned
         
         available_qty = it.qty - returned_qty
         
@@ -290,6 +338,7 @@ def get_purchase_history_items(
             continue
 
         result.append({
+            "purchase_item_id": it.id,
             "item_id": it.item_id,
             "item": {
                 "id": it.item_id,
@@ -298,6 +347,7 @@ def get_purchase_history_items(
                 "barcode": it.item.barcode,
             },
             "buy_price": it.buy_price,
+            "return_price": _purchase_return_unit_price(it.purchase, it),
             "qty_bought": it.qty,
             "qty_returned": returned_qty,
             "qty_available": available_qty,
@@ -308,7 +358,11 @@ def get_purchase_history_items(
             "supplier_name": it.purchase.supplier.name if it.purchase.supplier else "-",
             "is_tax_included": it.purchase.is_tax_included,
             "tax_type": purchase_tax_type(it.purchase),
-            "tax_percent": it.purchase.tax_percent
+            "tax_percent": (
+                it.ppn_percent
+                if it.ppn_percent is not None
+                else it.purchase.tax_percent
+            )
         })
     return result
 
@@ -340,10 +394,15 @@ def get_sale_history_items(
     
     result = []
     for it in items:
-        returned_qty = db.query(func.sum(models.SaleReturnItem.qty)).join(models.SaleReturn).filter(
-            models.SaleReturn.sale_id == it.sale_id,
-            models.SaleReturnItem.item_id == it.item_id
+        returned_qty = db.query(func.sum(models.SaleReturnItem.qty)).filter(
+            models.SaleReturnItem.sale_item_id == it.id,
         ).scalar() or 0.0
+        legacy_returned = db.query(func.sum(models.SaleReturnItem.qty)).join(models.SaleReturn).filter(
+            models.SaleReturn.sale_id == it.sale_id,
+            models.SaleReturnItem.item_id == it.item_id,
+            models.SaleReturnItem.sale_item_id.is_(None),
+        ).scalar() or 0.0
+        returned_qty += legacy_returned
         
         available_qty = it.qty - returned_qty
         
@@ -355,6 +414,7 @@ def get_sale_history_items(
             continue
             
         result.append({
+            "sale_item_id": it.id,
             "item_id": it.item_id,
             "item": {
                 "id": it.item_id,
@@ -363,6 +423,7 @@ def get_sale_history_items(
                 "barcode": it.item.barcode,
             },
             "sell_price": it.sell_price,
+            "return_price": _sale_return_unit_price(it.sale, it),
             "qty_sold": it.qty,
             "qty_returned": returned_qty,
             "qty_available": available_qty,
@@ -372,7 +433,11 @@ def get_sale_history_items(
             "sale_number": it.sale.number,
             "customer_name": it.sale.customer.name if it.sale.customer else "Umum",
             "is_tax_included": it.sale.is_tax_included,
-            "tax_percent": it.sale.tax_percent
+            "tax_percent": (
+                it.sale.tax_percent
+                if bool(it.sale.tax) and not any(float(line.ppn_percent or 0) > 0 for line in it.sale.items)
+                else float(it.ppn_percent or 0)
+            )
         })
     return result
 
@@ -407,17 +472,6 @@ def get_broken_history_items(
     def append_item(it, source_type, source_date, source_number, customer_name, unit_cost):
         returned_qty = it.returned_qty or 0.0
         available_qty = it.qty - returned_qty
-        # Faktur fulfillment pusat tidak pernah masuk stok pusat secara langsung.
-        # Hanya barang yang sudah dikembalikan cabang dan masih ada pada batch
-        # ber-provenance faktur ini yang boleh diteruskan ke supplier.
-        if it.purchase.from_po_id:
-            provenance_stock = db.query(func.sum(models.StockBatch.qty_remaining)).join(
-                models.Warehouse, models.StockBatch.warehouse_id == models.Warehouse.id
-            ).filter(
-                models.StockBatch.purchase_item_id == it.id,
-                models.Warehouse.branch_id == branch_id,
-            ).scalar() or 0
-            available_qty = min(available_qty, float(provenance_stock))
         item_status = "not_returned"
         if returned_qty >= it.qty: item_status = "returned"
         elif returned_qty > 0: item_status = "partial"
@@ -570,6 +624,8 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
         models.Sale.branch_id == branch_id,
     ).first()
     if not sale: raise HTTPException(404, "Penjualan tidak ditemukan")
+    if sale.status == "cancelled":
+        raise HTTPException(400, "Penjualan yang sudah dibatalkan tidak dapat diretur")
 
     gudang_aktif = None
     if sale.branch_id:
@@ -584,9 +640,9 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
     total_cogs = 0.0
     damaged_cogs = 0.0
     
-    # Ambil info pajak dari penjualan asli jika tidak dikirim dari frontend
-    is_tax_included = data.get("is_tax_included", sale.is_tax_included if hasattr(sale, 'is_tax_included') else True)
-    tax_percent = data.get("tax_percent", sale.tax_percent if hasattr(sale, 'tax_percent') else 0.0)
+    # Nilai retur wajib menjadi cermin faktur; mode pajak dari klien tidak dipercaya.
+    is_tax_included = bool(getattr(sale, "is_tax_included", True))
+    tax_percent = float(getattr(sale, "tax_percent", 0) or 0)
 
     # 🔒 Pastikan semua akun jurnal retur tersedia SEBELUM stok dimutasi, supaya jurnal tidak
     # gagal di tengah jalan dan meninggalkan stok berpindah tanpa pencatatan GL.
@@ -613,35 +669,61 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
     )
     db.add(retur); db.flush()
 
-    for it in data.get("items", []):
+    return_items = data.get("items") or []
+    if not return_items:
+        raise HTTPException(400, "Retur harus memiliki minimal satu barang")
+    seen_sale_lines = set()
+    legacy_header_rate = bool(getattr(sale, "tax", 0)) and not any(
+        float(line.ppn_percent or 0) > 0 for line in sale.items
+    )
+
+    for it in return_items:
         condition = str(it.get("condition", "good"))
         if condition not in {"good", "damaged"}:
             raise HTTPException(400, "Kondisi retur hanya boleh Bagus atau Rusak")
-        if float(it.get("qty") or 0) <= 0:
-            raise HTTPException(400, "Qty retur harus lebih dari 0")
+        qty = _positive_qty(it)
+        it["qty"] = qty
         item = db.query(models.Item).with_for_update().get(it["item_id"])
         if not item: raise HTTPException(404, f"Item {it['item_id']} tidak ditemukan")
 
-        # Validasi: qty retur tidak boleh lebih dari qty jual
-        sale_item = next((si for si in sale.items if si.item_id == it["item_id"]), None)
+        requested_line_id = it.get("sale_item_id")
+        if requested_line_id is not None:
+            try:
+                requested_line_id = int(requested_line_id)
+            except (TypeError, ValueError):
+                raise HTTPException(400, "sale_item_id tidak valid")
+        candidates = [si for si in sale.items if si.item_id == it["item_id"]]
+        sale_item = next(
+            (si for si in candidates if requested_line_id and si.id == requested_line_id),
+            None,
+        ) if requested_line_id else (candidates[0] if len(candidates) == 1 else None)
         if not sale_item:
+            if len(candidates) > 1 and not requested_line_id:
+                raise HTTPException(400, f"Barang {item.name} memiliki beberapa baris faktur; sale_item_id wajib dikirim")
             raise HTTPException(400, f"Item {item.name} tidak ada di faktur ini")
+        if sale_item.id in seen_sale_lines:
+            raise HTTPException(400, f"Baris retur {item.name} dikirim lebih dari sekali")
+        seen_sale_lines.add(sale_item.id)
 
-        # Cek total retur sebelumnya untuk item ini
-        prev_returned = db.query(
-            models.SaleReturnItem
-        ).join(models.SaleReturn).filter(
+        # Cek total retur sebelumnya untuk baris faktur yang tepat. Baris legacy
+        # tanpa sale_item_id tetap dihitung konservatif berdasarkan faktur+barang.
+        total_prev = db.query(func.coalesce(func.sum(models.SaleReturnItem.qty), 0.0)).filter(
+            models.SaleReturnItem.sale_item_id == sale_item.id,
+        ).scalar() or 0.0
+        total_prev += db.query(func.coalesce(func.sum(models.SaleReturnItem.qty), 0.0)).join(
+            models.SaleReturn
+        ).filter(
             models.SaleReturn.sale_id == sale_id,
-            models.SaleReturnItem.item_id == it["item_id"]
-        ).all()
-        total_prev = sum(p.qty for p in prev_returned)
+            models.SaleReturnItem.item_id == it["item_id"],
+            models.SaleReturnItem.sale_item_id.is_(None),
+        ).scalar() or 0.0
 
-        if total_prev + it["qty"] > sale_item.qty:
+        if total_prev + qty > sale_item.qty + 1e-9:
             raise HTTPException(400, f"Qty retur {item.name} melebihi qty terjual ({sale_item.qty - total_prev} tersisa)")
 
-        # Prioritaskan harga dari frontend jika ada
-        input_price = it.get("price")
-        actual_price = input_price if input_price is not None else sale_item.sell_price
+        # Harga retur berasal dari snapshot faktur setelah diskon baris dan
+        # alokasi diskon header, bukan dari angka yang dapat diubah klien.
+        actual_price = _sale_return_unit_price(sale, sale_item)
 
         gross_line = it["qty"] * actual_price
         # Pisahkan PPN agar KONSISTEN dgn jurnal JUAL: 4-1200 (Retur Penjualan) menerima nilai
@@ -649,8 +731,8 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
         # TERSIMPAN di baris penjualan (akurat utk faktur tarif-campur); penjualan LAMA (ppn baris
         # 0) → pakai tarif header sbg cadangan. Inklusif → kupas PPN MUNDUR (mirror
         # hitung_total_penjualan di sales.py); eksklusif → PPN di atas. Tarif 0 → tanpa PPN.
-        line_tarif = sale_item.ppn_percent
-        if not line_tarif or line_tarif <= 0:
+        line_tarif = float(sale_item.ppn_percent or 0)
+        if legacy_header_rate:
             line_tarif = tax_percent or 0
         if line_tarif and line_tarif > 0:
             if is_tax_included:
@@ -669,7 +751,7 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
         # yang NYATA dipulihkan (mode gudang) atau rata-rata buy_price (mode tanpa gudang).
         quarantine_unit_cost = float(sale_item.buy_price or 0) if condition == "damaged" else 0.0
         db.add(models.SaleReturnItem(
-            return_id=retur.id, item_id=it["item_id"],
+            return_id=retur.id, sale_item_id=sale_item.id, item_id=it["item_id"],
             qty=it["qty"], price=actual_price, total=line_sales + line_tax,
             condition=condition, quarantine_unit_cost=quarantine_unit_cost,
         ))
@@ -686,8 +768,13 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
             stock_item = db.query(models.Item).with_for_update().get(item.parent_item_id) or item
 
         required_qty = get_required_stock_qty(item, it["qty"])
-        before = float(stock_item.stock or 0)
-        stock_item.stock += required_qty
+        if gudang_aktif:
+            from .warehouse import get_total_branch_stock
+            before = get_total_branch_stock(db, sale.branch_id, stock_item.id)
+        else:
+            before = float(stock_item.stock or 0)
+        if sale.branch_id == PUSAT_BRANCH_ID or not gudang_aktif:
+            stock_item.stock += required_qty
         if gudang_aktif:
             from .warehouse import adjust_warehouse_stock
             adjust_warehouse_stock(db, gudang_aktif.id, stock_item.id, required_qty)
@@ -715,7 +802,7 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
             type="in",
             qty=required_qty,
             qty_before=before,
-            qty_after=stock_item.stock,
+            qty_after=before + required_qty,
             reference=number,
             notes=(
                 f"Retur Penjualan {sale.number} - restore dari {item.name}"
@@ -809,6 +896,8 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
         models.Purchase.branch_id == branch_id,
     ).first()
     if not purchase: raise HTTPException(404, "Pembelian tidak ditemukan")
+    if purchase.status in {"cancelled", "draft", "pending"}:
+        raise HTTPException(400, "Pembelian yang belum diterima atau sudah dibatalkan tidak dapat diretur")
 
     gudang_aktif = None
     if purchase.branch_id:
@@ -859,15 +948,51 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
     )
     db.add(retur); db.flush()
 
-    for it in data.get("items", []):
-        if float(it.get("qty") or 0) <= 0:
-            raise HTTPException(400, "Qty retur harus lebih dari 0")
+    return_items = data.get("items") or []
+    if not return_items:
+        raise HTTPException(400, "Retur harus memiliki minimal satu barang")
+    seen_purchase_lines = set()
+
+    for it in return_items:
+        qty = _positive_qty(it)
+        it["qty"] = qty
         item = db.query(models.Item).with_for_update().get(it["item_id"])
         if not item: raise HTTPException(404, f"Item {it['item_id']} tidak ditemukan")
 
-        pur_item = next((pi for pi in purchase.items if pi.item_id == it["item_id"]), None)
+        requested_line_id = it.get("purchase_item_id")
+        if requested_line_id is not None:
+            try:
+                requested_line_id = int(requested_line_id)
+            except (TypeError, ValueError):
+                raise HTTPException(400, "purchase_item_id tidak valid")
+        candidates = [pi for pi in purchase.items if pi.item_id == it["item_id"]]
+        pur_item = next(
+            (pi for pi in candidates if requested_line_id and pi.id == requested_line_id),
+            None,
+        ) if requested_line_id else (candidates[0] if len(candidates) == 1 else None)
         if not pur_item:
+            if len(candidates) > 1 and not requested_line_id:
+                raise HTTPException(400, f"Barang {item.name} memiliki beberapa baris faktur; purchase_item_id wajib dikirim")
             raise HTTPException(400, f"Item {item.name} tidak ada di pembelian ini")
+        if pur_item.id in seen_purchase_lines:
+            raise HTTPException(400, f"Baris retur {item.name} dikirim lebih dari sekali")
+        seen_purchase_lines.add(pur_item.id)
+
+        total_prev = db.query(func.coalesce(func.sum(models.PurchaseReturnItem.qty), 0.0)).filter(
+            models.PurchaseReturnItem.purchase_item_id == pur_item.id,
+        ).scalar() or 0.0
+        total_prev += db.query(func.coalesce(func.sum(models.PurchaseReturnItem.qty), 0.0)).join(
+            models.PurchaseReturn
+        ).filter(
+            models.PurchaseReturn.purchase_id == purchase_id,
+            models.PurchaseReturnItem.item_id == it["item_id"],
+            models.PurchaseReturnItem.purchase_item_id.is_(None),
+        ).scalar() or 0.0
+        if total_prev + qty > float(pur_item.qty or 0) + 1e-9:
+            raise HTTPException(
+                400,
+                f"Qty retur {item.name} melebihi qty pembelian ({float(pur_item.qty or 0) - total_prev} tersisa)",
+            )
         if purchase.from_po_id and gudang_aktif:
             provenance_stock = db.query(func.sum(models.StockBatch.qty_remaining)).filter(
                 models.StockBatch.purchase_item_id == pur_item.id,
@@ -879,9 +1004,9 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
                     f"Barang {item.name} dari kiriman cabang yang sudah kembali ke pusat hanya {provenance_stock}",
                 )
 
-        # Prioritaskan harga dari frontend jika ada
-        input_price = it.get("price")
-        actual_price = input_price if input_price is not None else pur_item.buy_price
+        # Harga retur dihitung dari snapshot faktur setelah diskon bertingkat
+        # dan diskon header; nilai harga dari klien hanya bersifat tampilan.
+        actual_price = _purchase_return_unit_price(purchase, pur_item)
 
         line_gross = it["qty"] * actual_price
         if tax_type == "include" and getattr(purchase, "ppn_dipisah", False):
@@ -931,7 +1056,7 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
             source_cost = unit_cost * float(it["qty"])
 
         db.add(models.PurchaseReturnItem(
-            return_id=retur.id, item_id=it["item_id"],
+            return_id=retur.id, purchase_item_id=pur_item.id, item_id=it["item_id"],
             qty=it["qty"], price=actual_price, total=line_inventory + line_tax,
             trade_in_return_item_id=(int(source_item_id) if source_type == "trade_in" else None),
             sale_return_item_id=(int(source_item_id) if source_type == "sale_return" else None),
@@ -954,8 +1079,13 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
         elif item.stock < it["qty"]:
             raise HTTPException(400, f"Stok {item.name} tidak cukup untuk retur pembelian.")
 
-        before = item.stock
-        item.stock -= it["qty"]
+        if gudang_aktif:
+            from .warehouse import get_total_branch_stock
+            before = get_total_branch_stock(db, purchase.branch_id, item.id)
+        else:
+            before = float(item.stock or 0)
+        if purchase.branch_id == PUSAT_BRANCH_ID or not gudang_aktif:
+            item.stock -= it["qty"]
         # Default (mode global / fallback): modal = nilai refund → tanpa selisih.
         line_carrying = line_inventory
         if gudang_aktif:
@@ -982,7 +1112,7 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
             branch_id=purchase.branch_id,
             type="out",
             qty=it["qty"],
-            qty_before=before, qty_after=item.stock,
+            qty_before=before, qty_after=before - it["qty"],
             reference=number, notes=f"Retur Pembelian {purchase.number}"
         ))
 

@@ -201,6 +201,8 @@ def get_or_create_default_warehouse(db: Session, branch_id: int) -> models.Wareh
 
 
 def validate_purchase_items(db: Session, data: schemas.PurchaseCreate):
+    if len({line.item_id for line in data.items}) != len(data.items):
+        raise HTTPException(400, "Barang yang sama tidak boleh muncul pada beberapa baris pembelian")
     for line in data.items:
         item = db.query(models.Item).get(line.item_id)
         if not item:
@@ -771,6 +773,14 @@ def cancel_purchase_flow(db: Session, *, purchase: models.Purchase,
                          current_user: models.User) -> dict:
     if purchase.status == "cancelled":
         raise HTTPException(400, "Faktur pembelian ini sudah dibatalkan sebelumnya")
+    has_return = db.query(models.PurchaseReturn.id).filter(
+        models.PurchaseReturn.purchase_id == purchase.id
+    ).first()
+    if has_return:
+        raise HTTPException(
+            400,
+            "Faktur yang sudah memiliki retur tidak dapat dibatalkan. Batalkan/koreksi retur terlebih dahulu.",
+        )
 
     local_date = get_local_date()
     local_datetime = get_local_datetime()

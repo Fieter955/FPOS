@@ -17,7 +17,7 @@ from ..database import get_db
 from ..permissions import has_permission
 from ..services.inventory_fifo import EPS, add_batch, consume_fifo
 from ..services.virtual_units import get_required_stock_qty, is_virtual_variant
-from .warehouse import adjust_warehouse_stock, get_warehouse_stock
+from .warehouse import adjust_warehouse_stock, get_total_branch_stock, get_warehouse_stock
 
 router = APIRouter()
 
@@ -329,8 +329,10 @@ def _add_stock_movement(
     reference: str,
     notes: str,
 ) -> None:
-    before = float(item.stock or 0)
-    item.stock = before + qty if movement_type == "in" else before - qty
+    branch_after = get_total_branch_stock(db, branch_id, item.id)
+    before = branch_after - qty if movement_type == "in" else branch_after + qty
+    if branch_id == 1:
+        item.stock = float(item.stock or 0) + qty if movement_type == "in" else float(item.stock or 0) - qty
     db.add(
         models.StockMovement(
             branch_id=branch_id,
@@ -339,7 +341,7 @@ def _add_stock_movement(
             type=movement_type,
             qty=qty,
             qty_before=before,
-            qty_after=item.stock,
+            qty_after=branch_after,
             reference=reference,
             notes=notes,
         )

@@ -19,6 +19,7 @@ from __future__ import annotations
 from datetime import date
 from typing import List, Optional, Tuple
 
+from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -89,9 +90,8 @@ def consume_fifo(
     Kembalikan daftar alokasi [(batch, qty, unit_cost)] untuk dicatat di
     SaleItemBatch dan menghitung COGS = Σ(qty × unit_cost).
 
-    Bila lapisan tak cukup (stok lama belum berbatch / drift), sisa dialokasikan
-    ke (None, sisa, fallback_cost) agar transaksi tidak gagal — guard rekonsiliasi
-    akan menandai selisihnya.
+    Bila lapisan tidak cukup (stok lama belum berbatch / drift), transaksi ditolak
+    agar HPP tidak dihitung dari harga cadangan yang dapat membuat valuasi menyimpang.
     """
     qty = float(qty or 0)
     allocations: List[Allocation] = []
@@ -110,6 +110,13 @@ def consume_fifo(
         .with_for_update()
         .all()
     )
+    available = sum(float(batch.qty_remaining or 0) for batch in batches)
+    if available + EPS < remaining:
+        raise HTTPException(
+            409,
+            "Lapisan FIFO tidak cukup untuk mutasi stok. Jalankan rekonsiliasi persediaan sebelum melanjutkan.",
+        )
+
     for b in batches:
         if remaining <= EPS:
             break
@@ -118,8 +125,6 @@ def consume_fifo(
         allocations.append((b, take, float(b.unit_cost)))
         remaining -= take
 
-    if remaining > EPS:
-        allocations.append((None, remaining, fallback_cost(db, item_id)))
     return allocations
 
 
@@ -127,7 +132,7 @@ def record_allocations(db: Session, *, sale_item_id: int, allocations: List[Allo
     """Simpan alokasi batch yang dikonsumsi sebuah baris penjualan."""
     for batch, qty, unit_cost in allocations:
         if batch is None:
-            continue  # sisa fallback tanpa lapisan — tak ada batch untuk dipulihkan
+            continue  # kompatibilitas untuk alokasi historis sebelum FIFO dibuat ketat
         db.add(
             models.SaleItemBatch(
                 sale_item_id=sale_item_id,
@@ -241,6 +246,8 @@ def reduce_batches_for_reversal(
             db.query(models.StockBatch)
             .filter(
                 models.StockBatch.purchase_item_id == prefer_purchase_item_id,
+                models.StockBatch.item_id == item_id,
+                models.StockBatch.warehouse_id == warehouse_id,
                 models.StockBatch.qty_remaining > EPS,
             )
             .with_for_update()
@@ -274,7 +281,13 @@ def reduce_batches_for_reversal(
             cost_consumed += take * float(b.unit_cost or 0)
             remaining -= take
 
-    return cost_consumed, remaining
+    if remaining > EPS:
+        raise HTTPException(
+            409,
+            "Lapisan FIFO tidak cukup untuk pembalikan stok. Jalankan rekonsiliasi persediaan sebelum melanjutkan.",
+        )
+
+    return cost_consumed, 0.0
 
 
 def transfer_batches(
@@ -284,14 +297,16 @@ def transfer_batches(
     from_warehouse_id: int,
     to_warehouse_id: int,
     qty: float,
-) -> None:
+) -> float:
     """Pindahkan lapisan biaya antar gudang (TRANSFER stok): konsumsi FIFO di gudang
     asal lalu buat ulang lapisan identik (biaya/tanggal/supplier) di gudang tujuan,
     sehingga biaya & urutan FIFO ikut berpindah bersama barangnya dan invarian
     Σ batch == stok tetap terjaga di KEDUA gudang. Pemanggil tetap meng-update
     WarehouseStock kedua gudang seperti biasa (fungsi ini hanya menyentuh lapisan)."""
     allocs = consume_fifo(db, item_id=item_id, warehouse_id=from_warehouse_id, qty=qty)
+    total_cost = 0.0
     for batch, q, cost in allocs:
+        total_cost += float(q) * float(cost or 0)
         add_batch(
             db,
             item_id=item_id,
@@ -303,6 +318,7 @@ def transfer_batches(
             purchase_item_id=batch.purchase_item_id if batch else None,
             source_inventory_line_id=batch.source_inventory_line_id if batch else None,
         )
+    return total_cost
 
 
 def total_remaining(db: Session, item_id: int, warehouse_id: int) -> float:

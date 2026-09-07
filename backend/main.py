@@ -271,12 +271,22 @@ def run_migrations():
     add_col("trade_ins", "deposit_amount", "REAL DEFAULT 0")
     add_col("trade_ins", "status", "TEXT NOT NULL DEFAULT 'completed'")
     add_col("trade_ins", "cancelled_at", "DATETIME")
+    add_col("trade_in_return_items", "stock_batch_id", "INTEGER")
     add_col("sale_return_items", "condition", "TEXT NOT NULL DEFAULT 'good'")
     add_col("sale_return_items", "returned_qty", "REAL NOT NULL DEFAULT 0")
     add_col("sale_return_items", "quarantine_unit_cost", "REAL NOT NULL DEFAULT 0")
+    add_col("sale_return_items", "sale_item_id", "INTEGER")
     add_col("purchase_return_items", "trade_in_return_item_id", "INTEGER")
     add_col("purchase_return_items", "sale_return_item_id", "INTEGER")
+    add_col("purchase_return_items", "purchase_item_id", "INTEGER")
     add_col("purchase_return_items", "quarantine_cost", "REAL NOT NULL DEFAULT 0")
+    try:
+        c.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_warehouse_stocks_wh_item "
+            "ON warehouse_stocks (warehouse_id, item_id)"
+        )
+    except Exception as e:
+        print(f"  WARNING Unique warehouse stock belum dapat dibuat: {e}")
     if col_exists("trade_in_return_items", "condition"):
         c.execute(
             "UPDATE trade_in_return_items SET condition = 'damaged' WHERE condition = 'partial'"

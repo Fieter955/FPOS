@@ -288,40 +288,35 @@ def get_sales_detailed(
 @router.get("/inventory-valuation")
 def get_inventory_valuation(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     _require_financial_report_access(db, current_user)
-    # Calculate stock value based on buy_price
-    # If branch active, filter by warehouse stocks
+    # Nilai persediaan resmi berasal dari lapisan FIFO, bukan harga beli terakhir.
+    stock_query = db.query(
+        models.Item.name,
+        models.Item.sell_price,
+        func.sum(models.StockBatch.qty_remaining).label("total_stock"),
+        func.sum(models.StockBatch.qty_remaining * models.StockBatch.unit_cost).label("fifo_value"),
+    ).join(models.StockBatch, models.StockBatch.item_id == models.Item.id).filter(
+        models.Item.is_active == True,
+        models.StockBatch.qty_remaining > 0,
+    )
     if current_user.active_branch_id:
-        gudang_ids = [g.id for g in db.query(models.Warehouse).filter(models.Warehouse.branch_id == current_user.active_branch_id).all()]
-        stock_data = db.query(
-            models.Item.name,
-            models.Item.buy_price,
-            models.Item.sell_price,
-            func.sum(models.WarehouseStock.stock).label("total_stock")
-        ).join(models.WarehouseStock).filter(
-            models.WarehouseStock.warehouse_id.in_(gudang_ids),
-            models.Item.is_active == True
-        ).group_by(models.Item.id).all()
-    else:
-        stock_data = db.query(
-            models.Item.name,
-            models.Item.buy_price,
-            models.Item.sell_price,
-            models.Item.stock.label("total_stock")
-        ).filter(models.Item.is_active == True).all()
+        stock_query = stock_query.join(
+            models.Warehouse, models.Warehouse.id == models.StockBatch.warehouse_id,
+        ).filter(models.Warehouse.branch_id == current_user.active_branch_id)
+    stock_data = stock_query.group_by(models.Item.id).all()
 
     results = []
     total_value_buy = 0
     total_value_sell = 0
     
     for row in stock_data:
-        val_buy = (row.total_stock or 0) * (row.buy_price or 0)
+        val_buy = float(row.fifo_value or 0)
         val_sell = (row.total_stock or 0) * (row.sell_price or 0)
         total_value_buy += val_buy
         total_value_sell += val_sell
         results.append({
             "name": row.name,
             "stock": row.total_stock or 0,
-            "buy_price": row.buy_price or 0,
+            "buy_price": val_buy / row.total_stock if row.total_stock else 0,
             "sell_price": row.sell_price or 0,
             "value_at_buy": val_buy,
             "value_at_sell": val_sell
@@ -339,18 +334,18 @@ def sales_report(start_date: Optional[date] = None, end_date: Optional[date] = N
     start_date, end_date = _report_dates(start_date, end_date)
     q = get_query(db, models.Sale, current_user).options(joinedload(models.Sale.customer)).filter(models.Sale.date.between(start_date, end_date), models.Sale.status != "cancelled")
     if search: q = q.outerjoin(models.Customer).filter(or_(models.Sale.number.ilike(f"%{search}%"), models.Customer.name.ilike(f"%{search}%")))
-    total = q.count(); sales = q.order_by(models.Sale.date.desc(), models.Sale.id.desc()).offset(skip).limit(min(limit, 300)).all()
+    total = q.count(); aggregate = q.with_entities(func.coalesce(func.sum(models.Sale.total), 0), func.coalesce(func.sum(models.Sale.paid), 0)).one(); sales = q.order_by(models.Sale.date.desc(), models.Sale.id.desc()).offset(skip).limit(min(limit, 300)).all()
     rows = [{"id": s.id, "number": s.number, "date": str(s.date), "customer": s.customer.name if s.customer else "Umum", "total": float(s.total or 0), "paid": float(s.paid or 0), "remaining": float((s.total or 0) - (s.paid or 0)), "payment_method": s.payment_method, "status": s.status} for s in sales]
-    return _report_result({"total": sum(r["total"] for r in rows), "paid": sum(r["paid"] for r in rows), "transactions": total}, rows, skip, limit, total)
+    return _report_result({"total": float(aggregate[0] or 0), "paid": float(aggregate[1] or 0), "transactions": total}, rows, skip, limit, total)
 
 
 @router.get("/purchases-report")
 def purchases_report(start_date: Optional[date] = None, end_date: Optional[date] = None, search: Optional[str] = None, skip: int = 0, limit: int = REPORT_LIMIT, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     start_date, end_date = _report_dates(start_date, end_date); q = _report_purchase_query(db, current_user, start_date, end_date)
     if search: q = q.outerjoin(models.Supplier).filter(or_(models.Purchase.number.ilike(f"%{search}%"), models.Supplier.name.ilike(f"%{search}%")))
-    total = q.count(); purchases = q.order_by(models.Purchase.date.desc(), models.Purchase.id.desc()).offset(skip).limit(min(limit, 300)).all()
+    total = q.count(); aggregate = q.with_entities(func.coalesce(func.sum(models.Purchase.total), 0), func.coalesce(func.sum(models.Purchase.paid), 0)).one(); purchases = q.order_by(models.Purchase.date.desc(), models.Purchase.id.desc()).offset(skip).limit(min(limit, 300)).all()
     rows = [{"id": p.id, "number": p.number, "date": str(p.date), "supplier": p.supplier.name if p.supplier else "-", "total": float(p.total or 0), "paid": float(p.paid or 0), "remaining": float((p.total or 0) - (p.paid or 0)), "status": p.status} for p in purchases]
-    return _report_result({"total": sum(r["total"] for r in rows), "paid": sum(r["paid"] for r in rows), "transactions": total}, rows, skip, limit, total)
+    return _report_result({"total": float(aggregate[0] or 0), "paid": float(aggregate[1] or 0), "transactions": total}, rows, skip, limit, total)
 
 
 @router.get("/customers-report")
@@ -381,13 +376,22 @@ def inventory_report(search: Optional[str] = None, db: Session = Depends(get_db)
     warehouse_ids = None
     if current_user.active_branch_id is not None:
         warehouse_ids = [wid for (wid,) in db.query(models.Warehouse.id).filter(models.Warehouse.branch_id == current_user.active_branch_id).all()]
+    fifo_query = db.query(
+        models.StockBatch.item_id,
+        func.sum(models.StockBatch.qty_remaining).label("qty"),
+        func.sum(models.StockBatch.qty_remaining * models.StockBatch.unit_cost).label("value"),
+    ).filter(models.StockBatch.qty_remaining > 0)
+    if warehouse_ids == []:
+        fifo_by_item = {}
+    else:
+        if warehouse_ids:
+            fifo_query = fifo_query.filter(models.StockBatch.warehouse_id.in_(warehouse_ids))
+        fifo_by_item = {item_id: (float(qty or 0), float(value or 0)) for item_id, qty, value in fifo_query.group_by(models.StockBatch.item_id).all()}
     rows = []
     for item in q.order_by(models.Item.name).all():
-        stock = float(item.stock or 0)
-        if warehouse_ids:
-            stock = float(db.query(func.sum(models.WarehouseStock.stock)).filter(models.WarehouseStock.item_id == item.id, models.WarehouseStock.warehouse_id.in_(warehouse_ids)).scalar() or 0)
-        buy = float(item.buy_price or 0)
-        rows.append({"id": item.id, "code": item.code, "name": item.name, "stock": stock, "min_stock": float(item.min_stock or 0), "buy_price": buy, "sell_price": float(item.sell_price or 0), "value": stock * buy})
+        stock, value = fifo_by_item.get(item.id, (0.0, 0.0))
+        buy = value / stock if stock else 0.0
+        rows.append({"id": item.id, "code": item.code, "name": item.name, "stock": stock, "min_stock": float(item.min_stock or 0), "buy_price": buy, "sell_price": float(item.sell_price or 0), "value": value})
     return _report_result({"items": len(rows), "low_stock": sum(1 for r in rows if r["stock"] <= r["min_stock"]), "value": sum(r["value"] for r in rows)}, rows)
 
 

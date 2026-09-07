@@ -29,6 +29,7 @@ from .print_queue import enqueue_print_job
 from .accounting import create_auto_journal, pastikan_akun_ada  # ✅ Import di atas, sekali saja
 
 router = APIRouter()
+PUSAT_BRANCH_ID = 1
 
 
 def hitung_total_penjualan(gross_subtotal: float, disc_persen: float, tarif_persen: float,
@@ -275,6 +276,11 @@ def create_sale(
         {"gross": (it.sell_price * (1 - it.discount / 100)) * it.qty, "tarif": line_rates[idx]}
         for idx, it in enumerate(data.items)
     ]
+    if len({item.item_id for item in data.items}) != len(data.items):
+        raise HTTPException(400, "Barang yang sama tidak boleh muncul pada beberapa baris penjualan")
+    gross_total = sum(float(line["gross"] or 0) for line in _baris)
+    if float(data.discount or 0) > gross_total + 0.01:
+        raise HTTPException(400, "Diskon faktur tidak boleh melebihi nilai barang")
     _t = hitung_total_penjualan_per_baris(_baris, data.discount or 0, is_inc)
     subtotal    = _t["subtotal"]
     disc_amount = _t["discount"]
@@ -408,8 +414,13 @@ def create_sale(
         db.flush()
         record_allocations(db, sale_item_id=sale_item.id, allocations=allocations)
 
-        before = float(stock_item.stock or 0)
-        stock_item.stock -= required_qty
+        if gudang_aktif:
+            from .warehouse import get_total_branch_stock
+            before = get_total_branch_stock(db, current_user.active_branch_id, stock_item.id) + required_qty
+        else:
+            before = float(stock_item.stock or 0)
+        if current_user.active_branch_id == PUSAT_BRANCH_ID or not gudang_aktif:
+            stock_item.stock -= required_qty
 
         db.add(models.StockMovement(
             date=local_date,
@@ -419,7 +430,7 @@ def create_sale(
             type="out",
             qty=required_qty,
             qty_before=before,
-            qty_after=stock_item.stock,
+            qty_after=before - required_qty,
             reference=number,
             notes=(
                 f"Penjualan Kasir - via {item.name}"
@@ -587,6 +598,14 @@ def cancel_sale(
         raise HTTPException(404, "Penjualan tidak ditemukan")
     if obj.status == "cancelled":
         raise HTTPException(400, "Faktur penjualan ini sudah dibatalkan sebelumnya")
+    has_return = db.query(models.SaleReturn.id).filter(
+        models.SaleReturn.sale_id == obj.id
+    ).first()
+    if has_return:
+        raise HTTPException(
+            400,
+            "Faktur yang sudah memiliki retur tidak dapat dibatalkan. Batalkan/koreksi retur terlebih dahulu.",
+        )
 
     from .accounting import get_books_locked_until
     locked_until = get_books_locked_until(db, obj.branch_id or current_user.active_branch_id)
@@ -611,8 +630,13 @@ def cancel_sale(
         if item:
             stock_item, _ = _get_locked_stock_item(db, item, require_active=False)
             required_qty = get_required_stock_qty(item, it.qty)
-            before = float(stock_item.stock or 0)
-            stock_item.stock += required_qty
+            if gudang_aktif:
+                from .warehouse import get_total_branch_stock
+                before = get_total_branch_stock(db, obj.branch_id, stock_item.id)
+            else:
+                before = float(stock_item.stock or 0)
+            if obj.branch_id == PUSAT_BRANCH_ID or not gudang_aktif:
+                stock_item.stock += required_qty
 
             if gudang_aktif:
                 from .warehouse import adjust_warehouse_stock
@@ -629,7 +653,7 @@ def cancel_sale(
                 type="in",
                 qty=required_qty,
                 qty_before=before,
-                qty_after=stock_item.stock,
+                qty_after=before + required_qty,
                 reference=obj.number,
                 notes=(
                     f"Batal Penjualan {obj.number} - restore dari {item.name}"
