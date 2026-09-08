@@ -686,6 +686,8 @@ class InventoryDocumentLineCreate(BaseModel):
     qty: Optional[float] = None
     physical_qty: Optional[float] = None
     snapshot_token: Optional[str] = None
+    unit_cost: Optional[float] = Field(default=None, ge=0)
+    allow_zero_cost: bool = False
     notes: Optional[str] = None
 
 
@@ -694,13 +696,27 @@ class InventoryDocumentCreate(BaseModel):
     date: date
     warehouse_id: int
     notes: Optional[str] = None
+    adjustment_account_id: Optional[int] = None
     surplus_account_id: Optional[int] = None
     shortage_account_id: Optional[int] = None
-    lines: List[InventoryDocumentLineCreate]
+    lines: List[InventoryDocumentLineCreate] = Field(min_length=1)
 
 
 class InventoryDocumentCancel(BaseModel):
     reason: str
+
+
+class InventoryReconciliationLineApply(BaseModel):
+    item_id: int
+    unit_cost: Optional[float] = Field(default=None, ge=0)
+    allow_zero_cost: bool = False
+
+
+class InventoryReconciliationApply(BaseModel):
+    warehouse_id: int
+    preview_token: str
+    reason: str = Field(min_length=3)
+    lines: List[InventoryReconciliationLineApply] = Field(default_factory=list)
 
 
 # ─── Cash Transaction ─────────────────────────────────────────────────────────

@@ -1198,16 +1198,17 @@ def reconcile_inventory_value(
 ):
     """Samakan saldo GL Persediaan (1-1400) dengan Σ nilai lapisan batch FIFO, PER CABANG.
 
-    Selisih (artefak setup/migrasi) dirapikan ke Modal Transisi (3-1999) → TIDAK menyentuh
-    laba-rugi. `dry_run=True` (default) hanya menampilkan angka; tanpa dry_run → posting jurnal.
-    Idempoten: cabang dengan |selisih| < 1 dilewati, jadi aman dijalankan ulang (setelah
-    Bagian A aktif, pembelian tak menambah selisih sehingga ini tetap ~0)."""
+    Endpoint lama ini dipertahankan untuk diagnostik (`dry_run=True`). Eksekusi koreksi
+    dilakukan melalui Persediaan > Perbaikan Saldo agar kuantitas FIFO, cache stok, dan
+    nilai buku diperiksa dalam satu pratinjau yang dapat diaudit."""
+    if not dry_run:
+        raise HTTPException(
+            409,
+            "Gunakan Persediaan > Perbaikan Saldo agar kuantitas FIFO dan nilai buku diperiksa dalam satu pratinjau.",
+        )
     akun = db.query(models.Account).filter(models.Account.code == "1-1400").first()
     if not akun:
         raise HTTPException(400, "Akun Persediaan (1-1400) tidak ditemukan.")
-    if not dry_run:
-        pastikan_akun_ada(db, ["1-1400", "3-1999"])
-
     hasil = []
     for br in db.query(models.Branch).order_by(models.Branch.id).all():
         gl = float(get_account_balance(db, akun.id, branch_id=br.id))
@@ -1226,33 +1227,7 @@ def reconcile_inventory_value(
             "gl_persediaan": round(gl, 2), "nilai_batch": round(nilai_batch, 2),
             "selisih": selisih, "diposting": False, "journal_number": None,
         }
-        if not dry_run and abs(selisih) >= 1:
-            # selisih>0 → GL lebih tinggi: turunkan Persediaan, lawan ke Modal Transisi.
-            if selisih > 0:
-                entries = [
-                    {"code": "1-1400", "debit": 0, "credit": selisih},
-                    {"code": "3-1999", "debit": selisih, "credit": 0},
-                ]
-            else:
-                entries = [
-                    {"code": "1-1400", "debit": -selisih, "credit": 0},
-                    {"code": "3-1999", "debit": 0, "credit": -selisih},
-                ]
-            j = create_auto_journal(
-                db=db, date_val=get_local_date(),
-                number_ref=f"RECON-INV-C{br.id}",
-                description=f"Penyetaraan nilai persediaan (GL vs batch FIFO) - {br.name}",
-                entries=entries, user_id=current_user.id, branch_id=br.id,
-                allow_closed_period=True,
-            )
-            baris["diposting"] = True
-            baris["journal_number"] = j.number
-            write_audit(db, current_user.id, "CREATE", "journals", j.id,
-                        f"Penyetaraan persediaan C{br.id}: {selisih}")
         hasil.append(baris)
-
-    if not dry_run:
-        db.commit()
     return {"dry_run": dry_run, "hasil": hasil}
 
 

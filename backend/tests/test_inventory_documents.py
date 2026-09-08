@@ -109,7 +109,7 @@ class InventoryDocumentTests(unittest.TestCase):
         self.assertEqual(second.qty_remaining, 4)
 
     def test_opname_uses_physical_qty_and_rejects_stale_snapshot(self):
-        token = service.snapshot_token(self.warehouse.id, self.item.id, 0)
+        token = service.inventory_state_token(self.db, self.warehouse.id, self.item.id, 0)
         payload = self.payload("stock_opname", physical_qty=2, snapshot_token=token)
         service.create_document(self.db, payload, self.user)
         self.db.commit()
@@ -122,17 +122,91 @@ class InventoryDocumentTests(unittest.TestCase):
         self.db.rollback()
         self.assertEqual(self.stock(), 2)
 
-    def test_zero_difference_opname_is_audited_without_movement_or_journal(self):
-        token = service.snapshot_token(self.warehouse.id, self.item.id, 0)
-        before = self.db.query(func.count(models.StockMovement.id)).scalar()
+    def test_opname_surplus_uses_latest_transaction_cost_and_single_variance_account(self):
+        add_batch(
+            self.db, item_id=self.item.id, warehouse_id=self.warehouse.id,
+            qty=2, unit_cost=7, received_date=service.local_date(),
+        )
+        self.db.query(models.WarehouseStock).filter_by(
+            warehouse_id=self.warehouse.id, item_id=self.item.id,
+        ).one().stock = 2
+        self.item.stock = 2
+        self.db.commit()
+        token = service.inventory_state_token(self.db, self.warehouse.id, self.item.id, 2)
+
         document = service.create_document(
-            self.db,
-            self.payload("stock_opname", physical_qty=0, snapshot_token=token),
-            self.user,
+            self.db, self.payload("stock_opname", physical_qty=3, snapshot_token=token), self.user,
         )
         self.db.commit()
-        self.assertEqual(document.lines[0].qty_delta, 0)
-        self.assertIsNone(document.journal_id)
+
+        self.assertEqual(document.lines[0].unit_cost, 7)
+        self.assertEqual(document.lines[0].total_cost, 7)
+        variance = self.db.query(models.Account).filter_by(code="5-1200").one()
+        self.assertTrue(any(line.credit_account_id == variance.id for line in document.journal.lines))
+
+    def test_opname_requires_fifo_reconciliation_first(self):
+        add_batch(
+            self.db, item_id=self.item.id, warehouse_id=self.warehouse.id,
+            qty=1, unit_cost=10, received_date=service.local_date(),
+        )
+        self.db.query(models.WarehouseStock).filter_by(
+            warehouse_id=self.warehouse.id, item_id=self.item.id,
+        ).one().stock = 2
+        self.item.stock = 2
+        self.db.commit()
+        token = service.inventory_state_token(self.db, self.warehouse.id, self.item.id, 2)
+
+        with self.assertRaises(HTTPException) as ctx:
+            service.create_document(
+                self.db, self.payload("stock_opname", physical_qty=3, snapshot_token=token), self.user,
+            )
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn("Perbaikan Saldo", ctx.exception.detail)
+
+    def test_zero_cost_surplus_requires_explicit_confirmation_and_reason(self):
+        self.item.buy_price = 0
+        self.db.commit()
+        token = service.inventory_state_token(self.db, self.warehouse.id, self.item.id, 0)
+        payload = self.payload("stock_opname", physical_qty=1, snapshot_token=token)
+        with self.assertRaises(HTTPException) as ctx:
+            service.create_document(self.db, payload, self.user)
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.db.rollback()
+
+        payload = self.payload("stock_opname", physical_qty=1, snapshot_token=token)
+        payload.lines[0].allow_zero_cost = True
+        payload.lines[0].unit_cost = 0
+        payload.lines[0].notes = "Barang bonus tanpa modal"
+        service.create_document(self.db, payload, self.user)
+        self.db.commit()
+        self.assertEqual(self.stock(), 1)
+
+    def test_opname_token_changes_when_fifo_composition_changes(self):
+        batch = add_batch(
+            self.db, item_id=self.item.id, warehouse_id=self.warehouse.id,
+            qty=1, unit_cost=10, received_date=service.local_date(),
+        )
+        self.db.query(models.WarehouseStock).filter_by(
+            warehouse_id=self.warehouse.id, item_id=self.item.id,
+        ).one().stock = 1
+        self.db.commit()
+        before = service.inventory_state_token(self.db, self.warehouse.id, self.item.id, 1)
+        batch.unit_cost = 11
+        self.db.commit()
+        after = service.inventory_state_token(self.db, self.warehouse.id, self.item.id, 1)
+        self.assertNotEqual(before, after)
+
+    def test_zero_difference_opname_is_rejected_without_movement_or_journal(self):
+        token = service.inventory_state_token(self.db, self.warehouse.id, self.item.id, 0)
+        before = self.db.query(func.count(models.StockMovement.id)).scalar()
+        with self.assertRaises(HTTPException) as ctx:
+            service.create_document(
+                self.db,
+                self.payload("stock_opname", physical_qty=0, snapshot_token=token),
+                self.user,
+            )
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.db.rollback()
         self.assertEqual(self.db.query(func.count(models.StockMovement.id)).scalar(), before)
 
     def test_opening_stock_is_one_time_only(self):

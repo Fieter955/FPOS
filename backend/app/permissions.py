@@ -270,6 +270,9 @@ def request_permission(path: str, method: str) -> tuple[str, str] | None:
     elif prefix == "inventory":
         if "movements" in tail:
             key, action = "master.stock_card", "view"
+        elif "reconciliation" in tail:
+            key = "inventory.repair_balance"
+            action = "update" if method.upper() == "POST" else "view"
         elif "adjust" in tail:
             key = "inventory.item_in"
     elif prefix == "reports":

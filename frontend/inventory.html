@@ -51,6 +51,7 @@
           <button class="inventory-tab" data-tab="item_out" data-permission="inventory.item_out">⬆ Item Keluar</button>
           <button class="inventory-tab" data-tab="opening_stock" data-permission="inventory.opening_stock">🏁 Saldo Awal</button>
           <button class="inventory-tab" data-tab="stock_opname" data-permission="inventory.stock_opname">📊 Stok Opname</button>
+          <button class="inventory-tab" data-tab="reconciliation" data-permission="inventory.repair_balance">🛠 Perbaikan Saldo</button>
         </div>
 
         <section id="pnlMutasi" class="inventory-panel">
@@ -86,7 +87,7 @@
                 <div class="input-group wide"><label>Keterangan dokumen</label><input id="docNotes" class="input-control" placeholder="Contoh: bonus supplier, barang rusak, atau opname bulanan" /></div>
                 <div class="input-group wide search-wrap"><label>Scan barcode atau cari barang</label><input id="docSearch" class="input-control" autocomplete="off" placeholder="Ketik kode, barcode, atau nama barang..." /><div id="docSearchResults" class="search-results"></div></div>
               </div>
-              <div class="tbl-wrap" style="margin-top:16px"><table class="tbl document-table"><thead><tr><th>Barang</th><th id="systemStockHead">Stok Buku</th><th id="qtyHead">Jumlah</th><th id="diffHead">Selisih</th><th>Keterangan</th><th></th></tr></thead><tbody id="docLines"></tbody></table></div>
+              <div class="tbl-wrap" style="margin-top:16px"><table class="tbl document-table"><thead><tr><th>Barang</th><th id="systemStockHead">Stok Buku</th><th id="qtyHead">Jumlah</th><th id="diffHead">Selisih</th><th id="costHead">Harga Modal Surplus</th><th>Keterangan</th><th></th></tr></thead><tbody id="docLines"></tbody></table></div>
               <button id="saveDocumentBtn" class="btn btn-primary" style="width:100%;padding:13px;margin-top:16px;font-weight:800" onclick="saveDocument()">Simpan Dokumen</button>
             </div>
 
@@ -96,6 +97,25 @@
               <button class="btn" style="width:100%;margin-bottom:12px" onclick="loadHistory()">Cari Riwayat</button>
               <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Tanggal / Nomor</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="tblHistory"></tbody></table></div>
             </div>
+          </div>
+        </section>
+
+        <section id="pnlReconciliation" class="inventory-panel" style="display:none">
+          <div class="card" style="padding:20px">
+            <h2 style="margin-top:0">Proses Perbaikan Saldo</h2>
+            <div class="hint-box">Memperbaiki ketidaksamaan internal antara stok gudang, batch FIFO, stok pusat, dan nilai buku. Proses ini tidak mengganti hasil hitung fisik; gunakan Stok Opname bila jumlah fisik berbeda.</div>
+            <div class="filter-bar">
+              <select id="reconWarehouse" class="input-control"></select>
+              <button class="btn btn-primary" onclick="loadReconciliation()">Analisa Saldo</button>
+            </div>
+            <div id="reconSummary" style="margin:14px 0"></div>
+            <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Barang</th><th style="text-align:right">Stok Gudang</th><th style="text-align:right">FIFO</th><th style="text-align:right">Selisih</th><th style="text-align:right">Harga Modal</th><th>Sumber</th></tr></thead><tbody id="reconLines"><tr><td colspan="6" class="empty-state">Klik Analisa Saldo untuk memeriksa.</td></tr></tbody></table></div>
+            <div id="reconApplyBox" style="display:none;margin-top:16px">
+              <div class="input-group"><label>Alasan perbaikan *</label><input id="reconReason" class="input-control" placeholder="Contoh: rekonsiliasi data setelah migrasi" /></div>
+              <button class="btn btn-primary" style="width:100%;margin-top:12px" onclick="applyReconciliation()">Pratinjau sudah benar — Perbaiki Saldo</button>
+            </div>
+            <h3>Riwayat Perbaikan</h3>
+            <div id="reconHistory"></div>
           </div>
         </section>
       </main>
@@ -111,9 +131,9 @@
         item_in:{title:"Item Masuk",badge:"BARANG MASUK",description:"Barang yang diterima tanpa transaksi pembelian, misalnya bonus atau hadiah supplier.",hint:"Jumlah yang dimasukkan akan menambah stok gudang dan dinilai memakai harga beli pada master barang.",qty:"Jumlah Masuk"},
         item_out:{title:"Item Keluar",badge:"BARANG KELUAR",description:"Barang keluar tanpa pendapatan, misalnya rusak, hilang, atau dipakai operasional.",hint:"Stok dan nilai FIFO akan berkurang. Gunakan Penjualan untuk barang yang menghasilkan pendapatan.",qty:"Jumlah Keluar"},
         opening_stock:{title:"Saldo Awal Item",badge:"SATU KALI",description:"Stok saat pertama kali mulai menggunakan aplikasi.",hint:"Hanya dapat diisi untuk barang dan gudang yang belum memiliki stok atau riwayat batch. Nilainya masuk Modal Transisi, bukan laba-rugi.",qty:"Stok Awal"},
-        stock_opname:{title:"Stok Opname",badge:"STOK FISIK",description:"Cocokkan stok buku dengan jumlah barang yang benar-benar ada di gudang.",hint:"Masukkan jumlah fisik saat ini. Arah masuk/keluar dan selisih dihitung otomatis oleh sistem.",qty:"Stok Fisik"}
+        stock_opname:{title:"Stok Opname",badge:"STOK FISIK",description:"Cocokkan stok buku dengan jumlah barang yang benar-benar ada di gudang.",hint:"Masukkan hanya barang yang berbeda. Barang masuk biasa tetap dicatat melalui Pembelian atau Item Masuk.",qty:"Stok Fisik"}
       };
-      const state={tab:"mutasi",docType:null,warehouses:[],accounts:null,lines:[],searchItems:[],searchIndex:-1,searchTimer:null};
+      const state={tab:"mutasi",docType:null,warehouses:[],accounts:null,lines:[],searchItems:[],searchIndex:-1,searchTimer:null,reconciliation:null};
       const esc=(v)=>String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
       const num=(v)=>new Intl.NumberFormat("id-ID",{maximumFractionDigits:4}).format(Number(v)||0);
       const money=(v)=>new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0}).format(Number(v)||0);
@@ -125,7 +145,7 @@
         document.querySelectorAll("[data-permission]").forEach(b=>{if(!allowed(b.dataset.permission))b.style.display="none"});
         bindEvents();
         const requested=new URLSearchParams(location.search).get("tab");
-        const valid=["mutasi","low",...Object.keys(DOCS)];const requestedButton=document.querySelector(`[data-tab="${requested}"]`);const fallback=[...document.querySelectorAll(".inventory-tab")].find(b=>b.style.display!=="none")?.dataset.tab;
+        const valid=["mutasi","low","reconciliation",...Object.keys(DOCS)];const requestedButton=document.querySelector(`[data-tab="${requested}"]`);const fallback=[...document.querySelectorAll(".inventory-tab")].find(b=>b.style.display!=="none")?.dataset.tab;
         if(fallback)switchTab(valid.includes(requested)&&requestedButton?.style.display!=="none"?requested:fallback);else renderAccessDenied();
       }
       function bindEvents(){
@@ -141,6 +161,7 @@
         document.querySelectorAll(".inventory-panel").forEach(p=>p.style.display="none");
         if(tab==="mutasi"){document.getElementById("pnlMutasi").style.display="block";loadMutasi();return}
         if(tab==="low"){document.getElementById("pnlLow").style.display="block";loadLow();return}
+        if(tab==="reconciliation"){document.getElementById("pnlReconciliation").style.display="block";await ensureDocumentMeta();setupReconWarehouses();loadReconciliationHistory();history.replaceState(null,"",`/inventory?tab=${tab}`);return}
         state.docType=tab;state.lines=[];document.getElementById("pnlDocument").style.display="block";
         await ensureDocumentMeta();configureDocument();renderLines();loadHistory();setTimeout(()=>document.getElementById("docSearch").focus(),80);
         history.replaceState(null,"",`/inventory?tab=${tab}`);
@@ -153,16 +174,16 @@
       }
       function configureDocument(){
         const cfg=DOCS[state.docType];document.getElementById("docTitle").textContent=cfg.title;document.getElementById("docDescription").textContent=cfg.description;document.getElementById("docHint").textContent=cfg.hint;document.getElementById("docBadge").textContent=cfg.badge;document.getElementById("qtyHead").textContent=cfg.qty;
-        const opname=state.docType==="stock_opname";document.getElementById("systemStockHead").style.display=opname?"":"none";document.getElementById("diffHead").style.display=opname?"":"none";
+        const opname=state.docType==="stock_opname";document.getElementById("systemStockHead").style.display=opname?"":"none";document.getElementById("diffHead").style.display=opname?"":"none";document.getElementById("costHead").style.display=opname?"":"none";
         setupAccounts();const save=document.getElementById("saveDocumentBtn"),permission={item_in:"inventory.item_in",item_out:"inventory.item_out",opening_stock:"inventory.opening_stock",stock_opname:"inventory.stock_opname"}[state.docType];save.disabled=!allowed(permission,"create");save.textContent=save.disabled?`Tidak memiliki izin membuat ${cfg.title}`:`Simpan ${cfg.title}`;
       }
       function setupAccounts(){
         const meta=state.accounts||{};const defs=meta.defaults?.[state.docType]||{};const showPlus=!!defs.surplus,showMinus=!!defs.shortage;
-        const plus=document.getElementById("surplusAccountGroup"),minus=document.getElementById("shortageAccountGroup");plus.style.display=showPlus?"block":"none";minus.style.display=showMinus?"block":"none";
+        const plus=document.getElementById("surplusAccountGroup"),minus=document.getElementById("shortageAccountGroup");plus.style.display=showPlus&&state.docType!=="stock_opname"?"block":"none";minus.style.display=showMinus?"block":"none";
         const options=(type,code)=>{const eligible=(meta.accounts||[]).filter(a=>type.includes(a.type));if(!meta.can_override)return `<option value="">${esc(code)} (akun default)</option>`;return eligible.map(a=>`<option value="${a.id}" ${a.code===code?"selected":""}>${esc(a.code)} - ${esc(a.name)}</option>`).join("")};
         document.getElementById("surplusAccount").innerHTML=options(state.docType==="opening_stock"?["equity"]:["revenue","equity"],defs.surplus);document.getElementById("shortageAccount").innerHTML=options(["expense"],defs.shortage);
         document.getElementById("surplusAccount").disabled=!meta.can_override;document.getElementById("shortageAccount").disabled=!meta.can_override;
-        document.getElementById("surplusAccountLabel").textContent=state.docType==="stock_opname"?"Akun Surplus":"Akun Lawan Persediaan";document.getElementById("shortageAccountLabel").textContent=state.docType==="stock_opname"?"Akun Kekurangan":"Akun Beban";
+        document.getElementById("surplusAccountLabel").textContent="Akun Lawan Persediaan";document.getElementById("shortageAccountLabel").textContent=state.docType==="stock_opname"?"Akun Selisih Opname":"Akun Beban";
       }
       async function searchItems(){
         const q=document.getElementById("docSearch").value.trim(),wid=document.getElementById("docWarehouse").value;if(!q||!wid)return closeSearch();
@@ -175,22 +196,25 @@
       function addLineByIndex(k){addLine(state.searchItems[k])}
       function addLine(item){
         if(state.lines.some(x=>x.id===item.id)){showToast("Barang sudah ada dalam dokumen","warning");return}
-        state.lines.push({...item,qty:state.docType==="stock_opname"?0:1,notes:""});document.getElementById("docSearch").value="";closeSearch();renderLines();document.getElementById("docSearch").focus();
+        if(state.docType==="stock_opname"&&Math.abs(Number(item.fifo_drift||0))>.0001){showToast("FIFO barang belum seimbang. Jalankan Perbaikan Saldo dahulu.","warning");return}
+        state.lines.push({...item,qty:state.docType==="stock_opname"?"":1,unit_cost:item.suggested_cost??item.buy_price??0,allow_zero_cost:false,notes:""});document.getElementById("docSearch").value="";closeSearch();renderLines();document.getElementById("docSearch").focus();
       }
       function closeSearch(){document.getElementById("docSearchResults").style.display="none";state.searchItems=[];state.searchIndex=-1}
-      function updateLine(index,field,value){state.lines[index][field]=field==="qty"?Math.max(0,Number(String(value).replace(",","."))||0):value;if(field==="qty")renderDiff(index)}
-      function renderDiff(index){const cell=document.getElementById(`diff-${index}`);if(!cell)return;const line=state.lines[index];if(line.stock===null){cell.textContent="Dihitung saat simpan";cell.className="";return}const diff=line.qty-Number(line.stock||0);cell.textContent=(diff>0?"+":"")+num(diff);cell.className=diff>0?"diff-plus":diff<0?"diff-minus":""}
+      function updateLine(index,field,value){if(field==="qty")state.lines[index][field]=value===""?"":Math.max(0,Number(String(value).replace(",","."))||0);else if(field==="unit_cost")state.lines[index][field]=Math.max(0,Number(String(value).replace(",","."))||0);else state.lines[index][field]=value;if(field==="qty"){renderDiff(index);renderCost(index)}}
+      function renderDiff(index){const cell=document.getElementById(`diff-${index}`);if(!cell)return;const line=state.lines[index];if(line.qty===""){cell.textContent="Isi stok fisik";cell.className="";return}if(line.stock===null){cell.textContent="Dihitung saat simpan";cell.className="";return}const diff=Number(line.qty)-Number(line.stock||0);cell.textContent=(diff>0?"+":"")+num(diff);cell.className=diff>0?"diff-plus":diff<0?"diff-minus":""}
+      function renderCost(index){const cell=document.getElementById(`cost-${index}`);if(!cell)return;const i=state.lines[index],surplus=i.qty!==""&&Number(i.qty)>Number(i.stock||0);cell.innerHTML=surplus?`<input class="input-control qty-input" inputmode="decimal" value="${i.unit_cost}" ${i.cost_editable?`oninput="updateLine(${index},'unit_cost',this.value)"`:'disabled'} />${Number(i.unit_cost)===0?`<label><input type="checkbox" ${i.allow_zero_cost?"checked":""} onchange="state.lines[${index}].allow_zero_cost=this.checked"> modal nol</label>`:""}`:"-"}
       function removeLine(index){state.lines.splice(index,1);renderLines()}
       function renderLines(){
-        const body=document.getElementById("docLines"),opname=state.docType==="stock_opname";if(!state.lines.length){body.innerHTML='<tr><td colspan="6" class="empty-state">Belum ada barang. Scan barcode atau cari barang di atas.</td></tr>';return}
-        body.innerHTML=state.lines.map((i,k)=>`<tr><td><b>${esc(i.name)}</b><br><small>${esc(i.code)}</small></td><td style="display:${opname?"table-cell":"none"}">${i.stock===null?"••••":num(i.stock)}</td><td><input class="input-control qty-input" inputmode="decimal" value="${i.qty}" oninput="updateLine(${k},'qty',this.value)" /></td><td id="diff-${k}" style="display:${opname?"table-cell":"none"}"></td><td><input class="input-control" value="${esc(i.notes)}" oninput="updateLine(${k},'notes',this.value)" placeholder="Opsional" /></td><td><button class="btn" style="color:#dc2626" onclick="removeLine(${k})">✕</button></td></tr>`).join("");if(opname)state.lines.forEach((_,k)=>renderDiff(k));
+        const body=document.getElementById("docLines"),opname=state.docType==="stock_opname";if(!state.lines.length){body.innerHTML='<tr><td colspan="7" class="empty-state">Belum ada barang. Scan barcode atau cari barang di atas.</td></tr>';return}
+        body.innerHTML=state.lines.map((i,k)=>`<tr><td><b>${esc(i.name)}</b><br><small>${esc(i.code)}</small></td><td style="display:${opname?"table-cell":"none"}">${i.stock===null?"••••":num(i.stock)}</td><td><input class="input-control qty-input" inputmode="decimal" value="${i.qty}" oninput="updateLine(${k},'qty',this.value)" /></td><td id="diff-${k}" style="display:${opname?"table-cell":"none"}"></td><td id="cost-${k}" style="display:${opname?"table-cell":"none"}">-</td><td><input class="input-control" value="${esc(i.notes)}" oninput="updateLine(${k},'notes',this.value)" placeholder="Opsional" /></td><td><button class="btn" style="color:#dc2626" onclick="removeLine(${k})">✕</button></td></tr>`).join("");if(opname)state.lines.forEach((_,k)=>{renderDiff(k);renderCost(k)});
       }
       async function saveDocument(){
         if(!state.lines.length)return showToast("Tambahkan minimal satu barang","warning");const wid=Number(document.getElementById("docWarehouse").value);if(!wid)return showToast("Pilih gudang","warning");
-        const lines=state.lines.map(i=>state.docType==="stock_opname"?{item_id:i.id,physical_qty:i.qty,snapshot_token:i.snapshot_token,notes:i.notes}:{item_id:i.id,qty:i.qty,notes:i.notes});
+        if(state.docType==="stock_opname"&&state.lines.some(i=>i.qty===""))return showToast("Isi stok fisik semua barang","warning");
+        const lines=state.lines.map(i=>{if(state.docType!=="stock_opname")return {item_id:i.id,qty:i.qty,notes:i.notes};const line={item_id:i.id,physical_qty:Number(i.qty),snapshot_token:i.snapshot_token,notes:i.notes};if(i.cost_editable){line.unit_cost=i.unit_cost;line.allow_zero_cost=!!i.allow_zero_cost}return line});
         if(lines.some(x=>(state.docType==="stock_opname"?x.physical_qty:x.qty)<0)||lines.some(x=>state.docType!=="stock_opname"&&x.qty<=0))return showToast("Jumlah barang tidak valid","error");
         const payload={type:state.docType,date:document.getElementById("docDate").value,warehouse_id:wid,notes:document.getElementById("docNotes").value.trim(),lines};
-        const plus=document.getElementById("surplusAccount").value,minus=document.getElementById("shortageAccount").value;if(plus)payload.surplus_account_id=Number(plus);if(minus)payload.shortage_account_id=Number(minus);
+        const plus=document.getElementById("surplusAccount").value,minus=document.getElementById("shortageAccount").value;if(state.docType==="stock_opname"&&minus)payload.adjustment_account_id=Number(minus);else{if(plus)payload.surplus_account_id=Number(plus);if(minus)payload.shortage_account_id=Number(minus)}
         if(!(await showConfirm(`Simpan ${DOCS[state.docType].title} berisi ${lines.length} barang?`)))return;
         try{if(typeof showLoading==="function")showLoading("Menyimpan dokumen persediaan...");const saved=await api("POST","/inventory/documents",payload);if(typeof hideLoading==="function")hideLoading();showToast(`${saved.number} berhasil disimpan`,"success");state.lines=[];document.getElementById("docNotes").value="";renderLines();loadHistory();loadMutasi()}catch(e){if(typeof hideLoading==="function")hideLoading();showToast(e.message,e.message.includes("berubah saat opname")?"warning":"error")}
       }
@@ -208,7 +232,11 @@
       }
       async function loadLow(){try{const rows=await api("GET","/inventory/low-stock");document.getElementById("tblLow").innerHTML=rows.length?rows.map(i=>`<tr><td>${esc(i.code)}</td><td><b>${esc(i.name)}</b></td><td style="text-align:right">${num(i.stock)}</td><td style="text-align:right">${num(i.min_stock)}</td><td>${i.stock<=0?'<span class="br">HABIS</span>':'<span class="bo">MENIPIS</span>'}</td><td>${allowed("inventory.stock_opname")?`<button class="btn" onclick="openLowInOpname(${i.id})">Opname</button>`:""}</td></tr>`).join(""):'<tr><td colspan="6" class="empty-state">Semua stok aman</td></tr>'}catch(e){showToast(e.message,"error")}}
       async function openLowInOpname(id){await switchTab("stock_opname");const wid=document.getElementById("docWarehouse").value;if(!wid)return;const items=await api("GET",`/inventory/item-snapshot?warehouse_id=${wid}&item_id=${id}`);if(items[0])addLine(items[0])}
-      window.addEventListener("message",e=>{if(e.origin!==location.origin||e.data?.type!=="fpos-route-state")return;const tab=new URL(e.data.url,location.origin).searchParams.get("tab");if(["mutasi","low",...Object.keys(DOCS)].includes(tab))switchTab(tab)});
+      function setupReconWarehouses(){const select=document.getElementById("reconWarehouse"),selected=select.value;select.innerHTML=state.warehouses.map(w=>`<option value="${w.id}">${esc(w.name)}${w.is_default?" (Default)":""}</option>`).join("");if(selected)select.value=selected}
+      async function loadReconciliation(){const wid=Number(document.getElementById("reconWarehouse").value);if(!wid)return showToast("Pilih gudang","warning");try{if(typeof showLoading==="function")showLoading("Menganalisa saldo persediaan...");const r=await api("GET",`/inventory/reconciliation-preview?warehouse_id=${wid}`);if(typeof hideLoading==="function")hideLoading();state.reconciliation=r;document.getElementById("reconSummary").innerHTML=r.balanced?'<span class="bg">Semua saldo sudah seimbang.</span>':`<b>${r.item_count} barang perlu diperbaiki.</b>${r.show_cost?` Nilai FIFO ${money(r.fifo_value)}, GL ${money(r.gl_persediaan)}, selisih ${money(r.value_gap)}.`:""}`;document.getElementById("reconLines").innerHTML=r.items.length?r.items.map((i,k)=>`<tr><td><b>${esc(i.name)}</b><br><small>${esc(i.code)}</small></td><td style="text-align:right">${num(i.warehouse_qty)}</td><td style="text-align:right">${num(i.fifo_qty)}</td><td style="text-align:right" class="${i.qty_gap>0?"diff-plus":"diff-minus"}">${i.qty_gap>0?"+":""}${num(i.qty_gap)}</td><td style="text-align:right">${i.qty_gap>0&&r.show_cost?`<input id="recon-cost-${k}" class="input-control qty-input" value="${i.suggested_cost}" ${r.can_apply?"":"disabled"}>${Number(i.suggested_cost)===0?`<label><input id="recon-zero-${k}" type="checkbox"> modal nol</label>`:""}`:"-"}</td><td>${esc(i.cost_source||"-")}</td></tr>`).join(""):'<tr><td colspan="6" class="empty-state">Tidak ada selisih kuantitas/cache.</td></tr>';document.getElementById("reconApplyBox").style.display=!r.balanced&&r.can_apply?"block":"none";loadReconciliationHistory()}catch(e){if(typeof hideLoading==="function")hideLoading();showToast(e.message,"error")}}
+      async function applyReconciliation(){const r=state.reconciliation,reason=document.getElementById("reconReason").value.trim();if(!r)return;if(reason.length<3)return showToast("Alasan perbaikan wajib diisi","warning");const lines=r.items.map((i,k)=>({item_id:i.item_id,unit_cost:i.qty_gap>0&&r.show_cost?Number(document.getElementById(`recon-cost-${k}`)?.value||0):null,allow_zero_cost:!!document.getElementById(`recon-zero-${k}`)?.checked}));if(!(await showConfirm(`Perbaiki ${r.item_count} barang dan samakan nilai persediaan? Semua dampak sudah ditampilkan pada pratinjau.`)))return;try{if(typeof showLoading==="function")showLoading("Memperbaiki saldo...");const saved=await api("POST","/inventory/reconciliations",{warehouse_id:r.warehouse_id,preview_token:r.preview_token,reason,lines});if(typeof hideLoading==="function")hideLoading();showToast(`${saved.number} berhasil diterapkan`,"success");document.getElementById("reconReason").value="";await loadReconciliation()}catch(e){if(typeof hideLoading==="function")hideLoading();showToast(e.message,e.message.includes("pratinjau")?"warning":"error")}}
+      async function loadReconciliationHistory(){const wid=document.getElementById("reconWarehouse").value;if(!wid)return;try{const rows=await api("GET",`/inventory/reconciliations?warehouse_id=${wid}&limit=20`);document.getElementById("reconHistory").innerHTML=rows.length?`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nomor</th><th>Alasan</th><th>Jurnal</th></tr></thead><tbody>${rows.map(r=>`<tr><td><b>${esc(r.number)}</b><br><small>${esc(r.created_at||"")}</small></td><td>${esc(r.reason)}</td><td>${esc(r.journal_number||"Tidak ada")}</td></tr>`).join("")}</tbody></table></div>`:'<div class="empty-state">Belum ada perbaikan saldo.</div>'}catch(e){document.getElementById("reconHistory").textContent=e.message}}
+      window.addEventListener("message",e=>{if(e.origin!==location.origin||e.data?.type!=="fpos-route-state")return;const tab=new URL(e.data.url,location.origin).searchParams.get("tab");if(["mutasi","low","reconciliation",...Object.keys(DOCS)].includes(tab))switchTab(tab)});
       init();
     </script>
   </body>

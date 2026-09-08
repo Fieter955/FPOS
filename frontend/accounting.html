@@ -445,7 +445,7 @@
                 style="display: none; background: #10b981; color: #fff"
                 onclick="samakanPersediaan()"
               >
-                ✓ Samakan Sekarang
+                Buka Perbaikan Saldo
               </button>
             </div>
             <div id="reconResult" style="margin-top: 16px; color: var(--text-muted); font-size: 14px"></div>
@@ -1322,7 +1322,7 @@
         });
         html +=
           "</tbody></table></div>" +
-          '<div style="margin-top:8px;font-size:13px">Klik <b>Samakan Sekarang</b> untuk merapikan — tidak memengaruhi laba/rugi.</div>';
+          '<div style="margin-top:8px;font-size:13px">Buka <b>Perbaikan Saldo</b> untuk meninjau kuantitas FIFO dan nilai sebelum memperbaiki.</div>';
         box.innerHTML = html;
         btn.style.display = "inline-block";
       }
@@ -1344,31 +1344,7 @@
 
       async function samakanPersediaan() {
         if (!_reconPerluSamakan) return;
-        const ok = await showConfirm(
-          "Samakan nilai persediaan sekarang?\n\n" +
-            "Selisih dicatat sebagai pembetulan modal awal. Laba/rugi TIDAK berubah.",
-        );
-        if (!ok) return;
-        try {
-          if (typeof showLoading === "function") showLoading("Menyamakan...");
-          const res = await api(
-            "POST",
-            "/accounting/reconcile-inventory-value?dry_run=false",
-          );
-          if (typeof hideLoading === "function") hideLoading();
-          const n = (res.hasil || []).filter((r) => r.diposting).length;
-          showToast(`Selesai. ${n} cabang disamakan ✓`, "success");
-          // Tampilkan ulang (harusnya jadi "sudah sama") + segarkan neraca bila ada.
-          const ulang = await api(
-            "POST",
-            "/accounting/reconcile-inventory-value?dry_run=true",
-          );
-          renderReconResult(ulang);
-          if (typeof loadNeraca === "function") loadNeraca();
-        } catch (e) {
-          if (typeof hideLoading === "function") hideLoading();
-          showToast(e.message, "error");
-        }
+        location.href = "/inventory?tab=reconciliation";
       }
 
       // ── Status PKP toko (pisah/lebur PPN pembelian) ──────────────────────────

@@ -21,7 +21,7 @@ from ..routes.accounting import (
     next_journal_number,
     pastikan_akun_ada,
 )
-from .inventory_fifo import EPS, add_batch, consume_fifo
+from .inventory_fifo import EPS, add_batch, consume_fifo, total_remaining
 
 WITA = pytz.timezone("Asia/Makassar")
 PUSAT_BRANCH_ID = 1
@@ -35,7 +35,9 @@ DEFAULT_ACCOUNT = {
     "item_in": ("4-1300", None),
     "item_out": (None, "5-2700"),
     "opening_stock": ("3-1999", None),
-    "stock_opname": ("4-1300", "5-1200"),
+    # Seperti iPOS, opname memakai satu akun selisih untuk surplus maupun susut.
+    # Kode 5-2200 milik iPOS tidak disalin karena pada COA FPOS berarti Beban Sewa.
+    "stock_opname": ("5-1200", "5-1200"),
 }
 TYPE_PERMISSION = {
     "item_in": "inventory.item_in",
@@ -56,6 +58,48 @@ def local_datetime() -> datetime:
 def snapshot_token(warehouse_id: int, item_id: int, qty: float) -> str:
     payload = f"{warehouse_id}:{item_id}:{float(qty):.6f}".encode()
     return hmac.new(settings.SECRET_KEY.encode(), payload, hashlib.sha256).hexdigest()
+
+
+def inventory_state_token(db: Session, warehouse_id: int, item_id: int, qty: float | None = None) -> str:
+    """Token optimistik yang berubah bila stok atau komposisi FIFO berubah."""
+    if qty is None:
+        qty = warehouse_stock(db, warehouse_id, item_id)
+    batches = db.query(
+        models.StockBatch.id,
+        models.StockBatch.qty_remaining,
+        models.StockBatch.unit_cost,
+        models.StockBatch.received_date,
+    ).filter(
+        models.StockBatch.warehouse_id == warehouse_id,
+        models.StockBatch.item_id == item_id,
+    ).order_by(models.StockBatch.id).all()
+    batch_state = ";".join(
+        f"{bid}:{float(bqty or 0):.6f}:{float(cost or 0):.6f}:{received}"
+        for bid, bqty, cost, received in batches
+    )
+    payload = f"{warehouse_id}:{item_id}:{float(qty):.6f}:{batch_state}".encode()
+    return hmac.new(settings.SECRET_KEY.encode(), payload, hashlib.sha256).hexdigest()
+
+
+def suggested_inbound_cost(db: Session, warehouse_id: int, item: models.Item) -> tuple[float, str]:
+    """Ambil biaya dari transaksi/batch aktual; harga master hanya fallback terakhir."""
+    batch = db.query(models.StockBatch).outerjoin(
+        models.InventoryReconciliationBatchAction,
+        models.InventoryReconciliationBatchAction.batch_id == models.StockBatch.id,
+    ).filter(
+        models.StockBatch.warehouse_id == warehouse_id,
+        models.StockBatch.item_id == item.id,
+        models.InventoryReconciliationBatchAction.id.is_(None),
+    ).order_by(models.StockBatch.received_date.desc(), models.StockBatch.id.desc()).first()
+    if batch:
+        return float(batch.unit_cost or 0), "batch_transaksi_terakhir"
+    batch = db.query(models.StockBatch).filter(
+        models.StockBatch.warehouse_id == warehouse_id,
+        models.StockBatch.item_id == item.id,
+    ).order_by(models.StockBatch.received_date.desc(), models.StockBatch.id.desc()).first()
+    if batch:
+        return float(batch.unit_cost or 0), "batch_rekonsiliasi_terakhir"
+    return float(item.buy_price or 0), "harga_master_fallback"
 
 
 def _warehouse_stock_row(db: Session, warehouse_id: int, item_id: int):
@@ -185,9 +229,18 @@ def create_document(
         raise HTTPException(403, "Gudang tidak tersedia pada cabang aktif")
 
     plus_code, minus_code = DEFAULT_ACCOUNT[data.type]
-    surplus_types = {"revenue", "equity"} if data.type != "opening_stock" else {"equity"}
-    surplus = _resolve_account(db, user, data.surplus_account_id, plus_code, surplus_types)
-    shortage = _resolve_account(db, user, data.shortage_account_id, minus_code, {"expense"})
+    if data.type == "stock_opname":
+        requested_account = (
+            getattr(data, "adjustment_account_id", None)
+            or getattr(data, "shortage_account_id", None)
+            or getattr(data, "surplus_account_id", None)
+        )
+        adjustment = _resolve_account(db, user, requested_account, "5-1200", {"expense"})
+        surplus = shortage = adjustment
+    else:
+        surplus_types = {"revenue", "equity"} if data.type != "opening_stock" else {"equity"}
+        surplus = _resolve_account(db, user, data.surplus_account_id, plus_code, surplus_types)
+        shortage = _resolve_account(db, user, data.shortage_account_id, minus_code, {"expense"})
     inventory = _account_by_code(db, "1-1400")
 
     document = models.InventoryDocument(
@@ -220,7 +273,13 @@ def create_document(
         if data.type == "stock_opname":
             if payload.physical_qty is None or float(payload.physical_qty) < 0:
                 raise HTTPException(400, f"Stok fisik {item.name} wajib diisi dan tidak boleh negatif")
-            expected_token = snapshot_token(warehouse.id, item.id, current)
+            fifo_qty = total_remaining(db, item.id, warehouse.id)
+            if abs(fifo_qty - current) > 1e-4:
+                raise HTTPException(
+                    409,
+                    f"FIFO {item.name} belum sama dengan stok gudang; jalankan Perbaikan Saldo dahulu",
+                )
+            expected_token = inventory_state_token(db, warehouse.id, item.id, current)
             if not payload.snapshot_token or not hmac.compare_digest(payload.snapshot_token, expected_token):
                 raise HTTPException(409, f"Stok {item.name} berubah saat opname; muat ulang lalu hitung kembali")
             physical = float(payload.physical_qty)
@@ -241,13 +300,35 @@ def create_document(
         if delta < -EPS and current + delta < -EPS:
             raise HTTPException(400, f"Stok {item.name} di {warehouse.name} tidak cukup")
 
+        # iPOS hanya mencatat item yang berbeda. Jangan membuat dokumen/jurnal nol.
+        if data.type == "stock_opname" and abs(delta) <= EPS:
+            continue
+
+        suggested_cost = float(item.buy_price or 0)
+        if data.type == "stock_opname":
+            suggested_cost, _cost_source = suggested_inbound_cost(db, warehouse.id, item)
+        selected_cost = suggested_cost
+        requested_cost = getattr(payload, "unit_cost", None)
+        if data.type == "stock_opname" and delta > EPS and requested_cost is not None:
+            selected_cost = float(requested_cost)
+            if abs(selected_cost - suggested_cost) > 0.005 and not has_permission(
+                db, user, "inventory.account_override", "view"
+            ):
+                raise HTTPException(403, "Anda tidak memiliki izin mengubah harga modal opname")
+        if data.type == "stock_opname" and delta > EPS and selected_cost <= EPS:
+            if not getattr(payload, "allow_zero_cost", False) or not (payload.notes or data.notes or "").strip():
+                raise HTTPException(
+                    400,
+                    f"Harga modal {item.name} nol; konfirmasi modal nol dan isi alasan",
+                )
+
         line = models.InventoryDocumentLine(
             document_id=document.id,
             item_id=item.id,
             system_qty=current,
             physical_qty=physical,
             qty_delta=delta,
-            unit_cost=float(item.buy_price or 0),
+            unit_cost=selected_cost,
             total_cost=0,
             notes=(payload.notes or "").strip() or None,
         )
@@ -256,13 +337,13 @@ def create_document(
 
         value = 0.0
         if delta > EPS:
-            value = delta * float(item.buy_price or 0)
+            value = delta * selected_cost
             add_batch(
                 db,
                 item_id=item.id,
                 warehouse_id=warehouse.id,
                 qty=delta,
-                unit_cost=float(item.buy_price or 0),
+                unit_cost=selected_cost,
                 received_date=data.date,
                 source_inventory_line_id=line.id,
             )
@@ -280,7 +361,7 @@ def create_document(
                 ))
                 value += qty * cost
             minus_value += value
-        line.unit_cost = value / abs(delta) if abs(delta) > EPS else float(item.buy_price or 0)
+        line.unit_cost = value / abs(delta) if abs(delta) > EPS else selected_cost
         line.total_cost = value
 
         if abs(delta) > EPS:
@@ -303,6 +384,9 @@ def create_document(
                 reference=document.number,
                 notes=line.notes or document.notes,
             ))
+
+    if not document.lines:
+        raise HTTPException(400, "Tidak ada selisih stok yang perlu disimpan")
 
     entries = _journal_entries(inventory.code, surplus, shortage, plus_value, minus_value)
     if entries:

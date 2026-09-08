@@ -161,7 +161,7 @@ PERMISSION_CATALOG = [
             _p("inventory.serial", "Serial Manajemen", VIEW, False),
             _p("inventory.show_cost_in", "Tampil Harga Pokok pada Item Masuk", VIEW),
             _p("inventory.show_cost_out", "Tampil Harga Pokok Dasar pada Item Keluar", VIEW),
-            _p("inventory.repair_balance", "Proses Perbaikan Saldo", VIEW, True, True),
+            _p("inventory.repair_balance", "Proses Perbaikan Saldo", ("view", "update"), True, True),
             _p("inventory.export_transfer", "Export Import Transfer Item", VIEW, False),
             _p("inventory.export_transaction", "Export Import Transaksi", VIEW, False),
             _p("inventory.export_discount", "Export Import Diskon dan Promo", VIEW, False),

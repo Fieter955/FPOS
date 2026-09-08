@@ -13,11 +13,13 @@ from ..schemas import (
     InventoryDocumentCancel,
     InventoryDocumentCreate,
     InventoryDocumentLineCreate,
+    InventoryReconciliationApply,
 )
 from sqlalchemy import func 
 from ..services.low_stock import get_low_stock_items
 from ..services.virtual_units import is_virtual_variant
 from ..services import inventory_documents as inventory_document_service
+from ..services import inventory_reconciliation as reconciliation_service
 from ..permissions import has_permission
 
 router = APIRouter()
@@ -189,6 +191,10 @@ def get_item_snapshot(
     result = []
     for item in q.order_by(models.Item.name).limit(min(max(limit, 1), 200)).all():
         qty = inventory_document_service.warehouse_stock(db, warehouse.id, item.id)
+        fifo_qty = inventory_document_service.total_remaining(db, item.id, warehouse.id)
+        suggested_cost, cost_source = inventory_document_service.suggested_inbound_cost(
+            db, warehouse.id, item
+        )
         result.append({
             "id": item.id,
             "code": item.code,
@@ -197,7 +203,14 @@ def get_item_snapshot(
             "unit": item.unit.abbreviation if item.unit else None,
             "stock": qty if show_stock else None,
             "buy_price": float(item.buy_price or 0) if show_cost else None,
-            "snapshot_token": inventory_document_service.snapshot_token(warehouse.id, item.id, qty),
+            "fifo_qty": fifo_qty,
+            "fifo_drift": round(fifo_qty - qty, 4),
+            "suggested_cost": suggested_cost if show_cost else None,
+            "cost_source": cost_source if show_cost else None,
+            "cost_editable": has_permission(db, current_user, "inventory.account_override", "view"),
+            "snapshot_token": inventory_document_service.inventory_state_token(
+                db, warehouse.id, item.id, qty
+            ),
         })
     return result
 
@@ -228,6 +241,51 @@ def get_document_accounts(
             for account in accounts
         ] if can_override else [],
     }
+
+
+@router.get("/reconciliation-preview")
+def reconciliation_preview(
+    warehouse_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    return reconciliation_service.preview(db, warehouse_id, current_user)
+
+
+@router.post("/reconciliations")
+def apply_inventory_reconciliation(
+    data: InventoryReconciliationApply,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    try:
+        result = reconciliation_service.apply(db, data, current_user)
+        db.commit()
+        db.refresh(result)
+        return reconciliation_service.serialize(result)
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.get("/reconciliations")
+def list_inventory_reconciliations(
+    warehouse_id: Optional[int] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    reconciliation_service.assert_access(db, current_user, "view")
+    q = db.query(models.InventoryReconciliation).filter(
+        models.InventoryReconciliation.branch_id == current_user.active_branch_id
+    )
+    if warehouse_id:
+        q = q.filter(models.InventoryReconciliation.warehouse_id == warehouse_id)
+    rows = q.options(
+        joinedload(models.InventoryReconciliation.warehouse),
+        joinedload(models.InventoryReconciliation.journal),
+    ).order_by(models.InventoryReconciliation.id.desc()).limit(min(max(limit, 1), 200)).all()
+    return [reconciliation_service.serialize(row) for row in rows]
 
 
 @router.get("/documents")
@@ -368,7 +426,9 @@ def legacy_stock_adjustment_adapter(
         line = InventoryDocumentLineCreate(
             item_id=data.item_id,
             physical_qty=data.qty,
-            snapshot_token=inventory_document_service.snapshot_token(warehouse.id, data.item_id, current),
+            snapshot_token=inventory_document_service.inventory_state_token(
+                db, warehouse.id, data.item_id, current
+            ),
             notes=data.description,
         )
     else:

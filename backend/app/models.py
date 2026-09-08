@@ -723,6 +723,86 @@ class InventoryDocumentBatchAllocation(Base):
     line = relationship("InventoryDocumentLine", back_populates="allocations")
     batch = relationship("StockBatch", foreign_keys=[batch_id])
 
+
+class InventoryReconciliation(Base):
+    """Jejak audit proses Perbaikan Saldo/FIFO yang dijalankan pengguna."""
+    __tablename__ = "inventory_reconciliations"
+    __table_args__ = (
+        Index("ix_inventory_reconciliations_branch_created", "branch_id", "created_at"),
+        Index("ix_inventory_reconciliations_warehouse_id", "warehouse_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    number = Column(String(60), unique=True, nullable=False)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    reason = Column(Text, nullable=False)
+    gl_before = Column(Float, nullable=False, default=0)
+    fifo_value_before = Column(Float, nullable=False, default=0)
+    gl_after = Column(Float, nullable=False, default=0)
+    fifo_value_after = Column(Float, nullable=False, default=0)
+    journal_id = Column(Integer, ForeignKey("journals.id"), nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    branch = relationship("Branch")
+    warehouse = relationship("Warehouse")
+    journal = relationship("Journal")
+    creator = relationship("User")
+    lines = relationship(
+        "InventoryReconciliationLine",
+        back_populates="reconciliation",
+        cascade="all, delete-orphan",
+        order_by="InventoryReconciliationLine.id",
+    )
+
+
+class InventoryReconciliationLine(Base):
+    __tablename__ = "inventory_reconciliation_lines"
+    __table_args__ = (
+        UniqueConstraint("reconciliation_id", "item_id", name="uq_inventory_reconciliation_item"),
+        Index("ix_inventory_reconciliation_lines_item_id", "item_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    reconciliation_id = Column(Integer, ForeignKey("inventory_reconciliations.id"), nullable=False)
+    item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    action = Column(String(50), nullable=False)
+    warehouse_qty = Column(Float, nullable=False, default=0)
+    fifo_qty_before = Column(Float, nullable=False, default=0)
+    fifo_qty_after = Column(Float, nullable=False, default=0)
+    fifo_value_before = Column(Float, nullable=False, default=0)
+    fifo_value_after = Column(Float, nullable=False, default=0)
+    unit_cost = Column(Float, nullable=False, default=0)
+    cost_source = Column(String(50), nullable=False, default="not_applicable")
+    item_stock_before = Column(Float, nullable=True)
+    item_stock_after = Column(Float, nullable=True)
+
+    reconciliation = relationship("InventoryReconciliation", back_populates="lines")
+    item = relationship("Item")
+    batch_actions = relationship(
+        "InventoryReconciliationBatchAction",
+        back_populates="line",
+        cascade="all, delete-orphan",
+    )
+
+
+class InventoryReconciliationBatchAction(Base):
+    __tablename__ = "inventory_reconciliation_batch_actions"
+    __table_args__ = (
+        Index("ix_inventory_reconciliation_batch_line", "line_id"),
+        Index("ix_inventory_reconciliation_batch_batch", "batch_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    line_id = Column(Integer, ForeignKey("inventory_reconciliation_lines.id"), nullable=False)
+    batch_id = Column(Integer, ForeignKey("stock_batches.id"), nullable=False)
+    qty_delta = Column(Float, nullable=False)
+    unit_cost = Column(Float, nullable=False, default=0)
+
+    line = relationship("InventoryReconciliationLine", back_populates="batch_actions")
+    batch = relationship("StockBatch")
+
 class CashTransaction(Base):
     __tablename__ = "cash_transactions"
     id = Column(Integer, primary_key=True, index=True)
