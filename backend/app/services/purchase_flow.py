@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from typing import Optional
+import json
 
 import pytz
 from fastapi import HTTPException
@@ -17,6 +18,7 @@ from .journal_service import (
 from .virtual_units import is_virtual_variant
 from .inventory_fifo import add_batch, reduce_batches_for_reversal
 from .tax_context import normalize_purchase_tax_type, purchase_line_ppn_rates
+from .serials import receive_serials, reverse_reference_serials
 
 
 PUSAT_BRANCH_ID = 1
@@ -233,6 +235,8 @@ def add_purchase_items(db: Session, purchase: models.Purchase, data: schemas.Pur
             discount=line.buy_price - net_price,
             total=net_price * qty,
             source_request_item_id=line.source_request_item_id,
+            serials_json=(json.dumps(getattr(line, "serials", []), ensure_ascii=False)
+                          if getattr(line, "serials", []) else None),
             ppn_percent=line.ppn_percent,  # tarif PPN baris (Included/PKP) → kupas biaya batch & retur
         ))
 
@@ -418,11 +422,18 @@ def receive_branch_stock(db: Session, *, purchase: models.Purchase,
             supplier_id=purchase.supplier_id,
             purchase_item_id=purchase_item.id,
         )
+        receive_serials(
+            db, item=item, qty=purchase_item.qty,
+            serial_values=json.loads(purchase_item.serials_json or "[]"),
+            warehouse=warehouse, reference_type="purchase", reference_id=purchase.id,
+            reference_number=purchase.number, user_id=purchase.created_by,
+        )
         db.add(models.StockMovement(
             date=local_date,
             created_at=local_datetime,
             item_id=item.id,
             branch_id=target_branch_id,
+            warehouse_id=warehouse.id,
             type="in",
             qty=purchase_item.qty,
             qty_before=qty_before,
@@ -441,6 +452,10 @@ def reverse_received_stock(db: Session, *, purchase: models.Purchase,
                            local_datetime: datetime):
     warehouse = get_or_create_default_warehouse(db, stock_branch_id)
     is_pusat_stock = stock_branch_id == PUSAT_BRANCH_ID
+    reverse_reference_serials(
+        db, reference_type="purchase", reference_id=purchase.id,
+        reversal_reference_number=f"REV-{purchase.number}", user_id=purchase.created_by,
+    )
 
     for purchase_item in purchase.items:
         item = db.query(models.Item).with_for_update().get(purchase_item.item_id)
@@ -471,6 +486,7 @@ def reverse_received_stock(db: Session, *, purchase: models.Purchase,
             created_at=local_datetime,
             item_id=item.id,
             branch_id=stock_branch_id,
+            warehouse_id=warehouse.id,
             type="out",
             qty=purchase_item.qty,
             qty_before=qty_before,

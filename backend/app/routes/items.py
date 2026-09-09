@@ -8,6 +8,7 @@ import pandas as pd
 from io import BytesIO
 import uuid
 import sys
+import math
 from pathlib import Path
 
 from ..database import get_db
@@ -677,6 +678,7 @@ def delete_item_image(
 @router.post("/import")
 async def import_items_from_excel(
     file: UploadFile = File(...),
+    stock_mode: str = Query("opening_balance", pattern="^(opening_balance|ignore)$"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
@@ -694,10 +696,10 @@ async def import_items_from_excel(
     contents = await file.read()
     # Parsing pandas + ribuan insert = kerja blocking berat. Jalankan di threadpool
     # agar TIDAK membekukan event loop (request cabang lain tetap responsif).
-    return await run_in_threadpool(_import_items_sync, contents, file.filename, db, current_user)
+    return await run_in_threadpool(_import_items_sync, contents, file.filename, db, current_user, stock_mode)
 
 
-def _import_items_sync(contents: bytes, filename: str, db: Session, current_user: models.User):
+def _import_items_sync(contents: bytes, filename: str, db: Session, current_user: models.User, stock_mode: str = "opening_balance"):
     import pytz
     from datetime import datetime
 
@@ -713,17 +715,53 @@ def _import_items_sync(contents: bytes, filename: str, db: Session, current_user
             'SUPPLIER2': 'SUPPLIER',  # jaga-jaga
         })
 
+        optional_defaults = {
+            'KODEITEM': '', 'KODEBARCODE': '', 'JENIS': '', 'MEREK': '', 'SATUAN': '',
+            'HARGAPOKOK': 0, 'HARGAJUAL': 0, 'STOK': 0, 'STOKMIN': 0,
+            'KETERANGAN': '', 'SUPPLIER': '',
+        }
+        for column, default in optional_defaults.items():
+            if column not in df.columns:
+                df[column] = default
+
         df = df.fillna({
             'KODEBARCODE': '', 'NAMAITEM': '', 'JENIS': '', 'MEREK': '', 'SATUAN': '',
             'HARGAPOKOK': 0, 'HARGAJUAL': 0, 'STOK': 0, 'STOKMIN': 0, 'KETERANGAN': '',
             'SUPPLIER': ''
         })
 
+        # Validate the complete file before creating any catalog or stock rows.
+        if 'NAMAITEM' not in df.columns:
+            raise HTTPException(400, "Kolom wajib NAMAITEM tidak tersedia")
+        validation_errors = []
+        for index, row in df.iterrows():
+            if not str(row.get('NAMAITEM', '')).strip():
+                continue
+            for column in ('HARGAPOKOK', 'HARGAJUAL', 'STOK', 'STOKMIN'):
+                try:
+                    value = float(row.get(column, 0) or 0)
+                except (TypeError, ValueError):
+                    validation_errors.append(f"baris {index + 2}: {column} bukan angka")
+                    continue
+                if not math.isfinite(value) or value < 0:
+                    validation_errors.append(f"baris {index + 2}: {column} harus angka non-negatif")
+        if validation_errors:
+            raise HTTPException(400, {"message": "File import tidak valid", "errors": validation_errors[:100]})
+
+        if not current_user.active_branch_id:
+            raise HTTPException(400, "Pilih cabang aktif terlebih dahulu")
+        if not has_permission(db, current_user, "settings.import", "access"):
+            raise HTTPException(403, "Akses import data ditolak")
+        if stock_mode == "opening_balance" and any(float(value or 0) > 0 for value in df['STOK']):
+            if not has_permission(db, current_user, "inventory.opening_stock", "create"):
+                raise HTTPException(403, "Import stok awal memerlukan izin Saldo Awal")
+
         # ── 1. AUTO-CREATE GUDANG JIKA BELUM ADA ──────────────────────────
         b_id = current_user.active_branch_id
         gudang_aktif = db.query(models.Warehouse).filter(
-            models.Warehouse.branch_id == b_id
-        ).first()
+            models.Warehouse.branch_id == b_id,
+            models.Warehouse.is_active.is_(True),
+        ).order_by(models.Warehouse.is_default.desc(), models.Warehouse.id).first()
 
         if not gudang_aktif:
             kode_gudang = f"WH-{b_id or 'PUSAT'}-{uuid.uuid4().hex[:4].upper()}"
@@ -763,6 +801,8 @@ def _import_items_sync(contents: bytes, filename: str, db: Session, current_user
         wita_time      = datetime.now(pytz.timezone("Asia/Makassar"))
         items_imported = 0
         items_skipped  = 0
+        opening_lines = []
+        warnings = []
 
         # ── 3. LOOP BARIS PER BARIS ───────────────────────────────────────
         for index, row in df.iterrows():
@@ -839,7 +879,7 @@ def _import_items_sync(contents: bytes, filename: str, db: Session, current_user
                 unit_id=unit_id,
                 buy_price=buy_price,
                 sell_price=sell_price,
-                stock=imported_stock,
+                stock=0,
                 min_stock=min_stock,
                 description=desc,
                 barcode=kode_barcode if barcode_valid else None,
@@ -865,51 +905,56 @@ def _import_items_sync(contents: bytes, filename: str, db: Session, current_user
                 db,
                 new_item.id,
                 warehouse_ids=catalog_warehouse_ids,
-                stock_overrides={gudang_aktif.id: imported_stock},
+                stock_overrides={gudang_aktif.id: 0},
             )
 
-            # ── 7. KARTU STOK (hanya jika ada saldo awal) ──────────────────
-            if imported_stock > 0:
-                db.add(models.StockMovement(
-                    date=wita_time.date(),
-                    created_at=wita_time,
+            if imported_stock > 0 and stock_mode == "opening_balance":
+                opening_lines.append(schemas.InventoryDocumentLineCreate(
                     item_id=new_item.id,
-                    branch_id=b_id,
-                    type="in",
-                    qty=imported_stock,
-                    qty_before=0.0,
-                    qty_after=imported_stock,
-                    reference="IMPORT-EXCEL",
-                    notes=f"Saldo Awal - {gudang_aktif.name}"
-                ))
-                # 🧱 FIFO: lapisan saldo awal. Tanggal sentinel 2000-01-01 (sama dgn
-                # seed di main.py) agar stok awal dianggap TERTUA → keluar duluan.
-                from ..services.inventory_fifo import add_batch
-                from datetime import date as _date
-                add_batch(
-                    db,
-                    item_id=new_item.id,
-                    warehouse_id=gudang_aktif.id,
                     qty=imported_stock,
                     unit_cost=buy_price,
-                    received_date=_date(2000, 1, 1),
-                )
+                    notes="Saldo awal dari import barang",
+                ))
+            elif imported_stock > 0:
+                warnings.append(f"Stok {item_code} diabaikan sesuai stock_mode=ignore")
 
             items_imported += 1
 
-        # ── COMMIT SEMUA SEKALIGUS ─────────────────────────────────────────
+        opening_document = None
+        if opening_lines:
+            from ..services.inventory_documents import create_document
+            opening_document = create_document(
+                db,
+                schemas.InventoryDocumentCreate(
+                    type="opening_stock",
+                    date=wita_time.date(),
+                    warehouse_id=gudang_aktif.id,
+                    notes=f"Saldo awal import {filename}",
+                    lines=opening_lines,
+                ),
+                current_user,
+            )
+
+        # Catalog and the auditable stock document commit as one transaction.
         db.commit()
 
         return {
             "success":  True,
             "imported": items_imported,
             "skipped":  items_skipped,
+            "stock_mode": stock_mode,
+            "opening_document_id": opening_document.id if opening_document else None,
+            "opening_document_number": opening_document.number if opening_document else None,
+            "warnings": warnings,
             "message": (
                 f"Import selesai: {items_imported} barang berhasil ditambahkan"
                 + (f", {items_skipped} dilewati karena sudah ada." if items_skipped else ".")
             )
         }
 
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(500, f"Gagal import: {str(e)}")

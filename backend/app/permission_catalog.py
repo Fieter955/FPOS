@@ -158,7 +158,7 @@ PERMISSION_CATALOG = [
             _p("inventory.branch_transfer", "Transfer Item Beda Cabang"),
             _p("inventory.opening_stock", "Saldo Awal Item", CRUD + ("lock_date",)),
             _p("inventory.stock_opname", "Stok Opname", CRUD + ("lock_date",)),
-            _p("inventory.serial", "Serial Manajemen", VIEW, False),
+            _p("inventory.serial", "Serial Manajemen", CRUD),
             _p("inventory.show_cost_in", "Tampil Harga Pokok pada Item Masuk", VIEW),
             _p("inventory.show_cost_out", "Tampil Harga Pokok Dasar pada Item Keluar", VIEW),
             _p("inventory.repair_balance", "Proses Perbaikan Saldo", ("view", "update"), True, True),

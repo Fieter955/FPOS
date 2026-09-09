@@ -21,6 +21,7 @@ from ..services.virtual_units import (
     is_virtual_variant,
 )
 from ..services.inventory_fifo import consume_fifo, record_allocations, restore_allocations
+from ..services.serials import reverse_reference_serials, transition_serials
 from ..services.shift_service import require_single_open_branch_shift
 from ..services.tax_context import _sale_line_ppn_rates, _sales_ppn_context
 from ..services.payment_change import calculate_change
@@ -413,6 +414,13 @@ def create_sale(
         db.add(sale_item)
         db.flush()
         record_allocations(db, sale_item_id=sale_item.id, allocations=allocations)
+        transition_serials(
+            db, item=stock_item, qty=required_qty, serial_values=getattr(it, "serials", []),
+            from_statuses={"in_stock"}, to_status="sold",
+            from_warehouse_id=gudang_aktif.id if gudang_aktif else None,
+            to_warehouse=None, reference_type="sale", reference_id=sale.id,
+            reference_number=number, user_id=current_user.id, event_type="sold",
+        )
 
         if gudang_aktif:
             from .warehouse import get_total_branch_stock
@@ -427,6 +435,7 @@ def create_sale(
             created_at=local_datetime,
             item_id=stock_item.id,
             branch_id=current_user.active_branch_id,
+            warehouse_id=gudang_aktif.id if gudang_aktif else None,
             type="out",
             qty=required_qty,
             qty_before=before,
@@ -623,6 +632,10 @@ def cancel_sale(
         models.Warehouse.branch_id == obj.branch_id,
         models.Warehouse.is_default == True
     ).first()
+    reverse_reference_serials(
+        db, reference_type="sale", reference_id=obj.id,
+        reversal_reference_number=f"REV-{obj.number}", user_id=current_user.id,
+    )
 
     # ── Kembalikan Stok ───────────────────────────────────────────────────────
     for it in obj.items:
@@ -650,6 +663,7 @@ def cancel_sale(
                 created_at=local_datetime,
                 item_id=stock_item.id,
                 branch_id=obj.branch_id,
+                warehouse_id=gudang_aktif.id if gudang_aktif else None,
                 type="in",
                 qty=required_qty,
                 qty_before=before,

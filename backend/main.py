@@ -113,7 +113,7 @@ from app.routes import (
     shifts, returns, backup, ai_advisor,
     email_backup, updater,
     license, warehouse, assembly, notification, discounts, onboarding,
-    unit_conversion, barcode_gen, delivery, trade_in, ai_bangunan, branches, employees, print_queue, sticker_gen, po
+    unit_conversion, barcode_gen, delivery, trade_in, ai_bangunan, branches, employees, print_queue, sticker_gen, po, serials
 )
 
 # ─── Create all DB tables ──────────────────────────────────────────────────────
@@ -814,6 +814,7 @@ app.include_router(print_queue.router, prefix="/api/print", tags=["Print Queue"]
 app.include_router(sticker_gen.router, prefix="/api/sticker", tags=["Sticker Generation"])
 app.include_router(sticker_gen.router, prefix="/api/stiker", tags=["Sticker Generation (Legacy)"])
 app.include_router(po.router, prefix="/api/po", tags=["Purchase Orders / Requests"])
+app.include_router(serials.router, prefix="/api/serials", tags=["Serial Management"])
 
 
 

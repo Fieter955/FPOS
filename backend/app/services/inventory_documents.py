@@ -22,6 +22,8 @@ from ..routes.accounting import (
     pastikan_akun_ada,
 )
 from .inventory_fifo import EPS, add_batch, consume_fifo, total_remaining
+from .virtual_units import get_conversion_factor, get_stock_source_item, is_virtual_variant
+from .serials import receive_serials, reverse_reference_serials, transition_serials
 
 WITA = pytz.timezone("Asia/Makassar")
 PUSAT_BRANCH_ID = 1
@@ -261,12 +263,18 @@ def create_document(
 
     plus_value = 0.0
     minus_value = 0.0
+    resolved_item_ids = set()
     for payload in data.lines:
-        item = db.query(models.Item).filter(models.Item.id == payload.item_id).with_for_update().first()
-        if not item or not item.is_active:
+        entered_item = db.query(models.Item).filter(models.Item.id == payload.item_id).first()
+        if not entered_item or not entered_item.is_active:
             raise HTTPException(404, f"Barang {payload.item_id} tidak ditemukan atau nonaktif")
-        if item.is_virtual_variant or item.parent_item_id:
-            raise HTTPException(400, f"{item.name} adalah barang multi-satuan; pilih barang induknya")
+        item = get_stock_source_item(db, entered_item)
+        if not item or not item.is_active:
+            raise HTTPException(404, "Barang induk multi-satuan tidak ditemukan atau nonaktif")
+        if item.id in resolved_item_ids:
+            raise HTTPException(400, f"{item.name} dicatat lebih dari sekali setelah konversi satuan")
+        resolved_item_ids.add(item.id)
+        factor = get_conversion_factor(entered_item) if is_virtual_variant(entered_item) else 1.0
 
         current = warehouse_stock(db, warehouse.id, item.id)
         physical = None
@@ -282,12 +290,12 @@ def create_document(
             expected_token = inventory_state_token(db, warehouse.id, item.id, current)
             if not payload.snapshot_token or not hmac.compare_digest(payload.snapshot_token, expected_token):
                 raise HTTPException(409, f"Stok {item.name} berubah saat opname; muat ulang lalu hitung kembali")
-            physical = float(payload.physical_qty)
+            physical = float(payload.physical_qty) * factor
             delta = physical - current
         else:
             if payload.qty is None or float(payload.qty) <= 0:
                 raise HTTPException(400, f"Jumlah {item.name} harus lebih dari nol")
-            qty = float(payload.qty)
+            qty = float(payload.qty) * factor
             delta = -qty if data.type == "item_out" else qty
             if data.type == "opening_stock":
                 existing_batch = db.query(models.StockBatch.id).filter(
@@ -325,6 +333,9 @@ def create_document(
         line = models.InventoryDocumentLine(
             document_id=document.id,
             item_id=item.id,
+            entered_item_id=entered_item.id,
+            entered_qty=float(payload.physical_qty if data.type == "stock_opname" else payload.qty),
+            conversion_factor=factor,
             system_qty=current,
             physical_qty=physical,
             qty_delta=delta,
@@ -372,6 +383,7 @@ def create_document(
                 created_at=local_datetime(),
                 item_id=item.id,
                 branch_id=warehouse.branch_id,
+                warehouse_id=warehouse.id,
                 type={
                     "item_in": "item_in",
                     "item_out": "item_out",
@@ -384,6 +396,20 @@ def create_document(
                 reference=document.number,
                 notes=line.notes or document.notes,
             ))
+            if delta > 0:
+                receive_serials(
+                    db, item=item, qty=delta, serial_values=getattr(payload, "serials", []),
+                    warehouse=warehouse, reference_type="inventory_document",
+                    reference_id=document.id, reference_number=document.number, user_id=user.id,
+                )
+            else:
+                transition_serials(
+                    db, item=item, qty=-delta, serial_values=getattr(payload, "serials", []),
+                    from_statuses={"in_stock", "quarantine"}, to_status="removed",
+                    from_warehouse_id=warehouse.id, to_warehouse=None,
+                    reference_type="inventory_document", reference_id=document.id,
+                    reference_number=document.number, user_id=user.id, event_type="stock_out",
+                )
 
     if not document.lines:
         raise HTTPException(400, "Tidak ada selisih stok yang perlu disimpan")
@@ -440,6 +466,10 @@ def cancel_document(db: Session, document: models.InventoryDocument, reason: str
         raise HTTPException(400, "Alasan pembatalan wajib diisi")
 
     assert_books_open(db, document.branch_id, local_date(), "Pembatalan dokumen persediaan")
+    reverse_reference_serials(
+        db, reference_type="inventory_document", reference_id=document.id,
+        reversal_reference_number=f"REV-{document.number}", user_id=user.id,
+    )
 
     for line in document.lines:
         item = db.query(models.Item).filter(models.Item.id == line.item_id).with_for_update().first()
@@ -495,6 +525,7 @@ def cancel_document(db: Session, document: models.InventoryDocument, reason: str
                 created_at=local_datetime(),
                 item_id=line.item_id,
                 branch_id=document.branch_id,
+                warehouse_id=document.warehouse_id,
                 type="reversal_in" if inverse > 0 else "reversal_out",
                 qty=abs(inverse),
                 qty_before=before_branch,
@@ -555,6 +586,9 @@ def serialize_document(db: Session, document: models.InventoryDocument, user: mo
                 "item_id": line.item_id,
                 "item_code": line.item.code if line.item else "-",
                 "item_name": line.item.name if line.item else "Item dihapus",
+                "entered_item_id": line.entered_item_id,
+                "entered_qty": line.entered_qty,
+                "conversion_factor": line.conversion_factor,
                 "system_qty": line.system_qty if show_stock else None,
                 "physical_qty": line.physical_qty,
                 "qty_delta": line.qty_delta,

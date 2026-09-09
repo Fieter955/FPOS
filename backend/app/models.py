@@ -242,6 +242,7 @@ class Item(Base):
     is_virtual_variant = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     is_discountable = Column(Boolean, default=True)
+    tracks_serial = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -463,6 +464,7 @@ class PurchaseItem(Base):
     # (PKP) untuk mengupas PPN mundur per-barang saat menghitung biaya batch FIFO & retur.
     ppn_percent = Column(Float, nullable=True)
     source_request_item_id = Column(Integer, ForeignKey("purchase_items.id"), nullable=True)
+    serials_json = Column(Text, nullable=True)
     purchase = relationship("Purchase", back_populates="items")
     item = relationship("Item", back_populates="purchase_items")
 
@@ -627,6 +629,8 @@ class StockMovement(Base):
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     date = Column(Date, nullable=False)
     item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=True)
+    counterparty_warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=True)
     type = Column(String(20), nullable=False)
     qty = Column(Float, nullable=False)
     qty_before = Column(Float, default=0)
@@ -635,6 +639,8 @@ class StockMovement(Base):
     notes = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     item = relationship("Item", back_populates="stock_movements")
+    warehouse = relationship("Warehouse", foreign_keys=[warehouse_id])
+    counterparty_warehouse = relationship("Warehouse", foreign_keys=[counterparty_warehouse_id])
 
 
 class InventoryDocument(Base):
@@ -690,6 +696,9 @@ class InventoryDocumentLine(Base):
     id = Column(Integer, primary_key=True, index=True)
     document_id = Column(Integer, ForeignKey("inventory_documents.id"), nullable=False)
     item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    entered_item_id = Column(Integer, ForeignKey("items.id"), nullable=True)
+    entered_qty = Column(Float, nullable=True)
+    conversion_factor = Column(Float, nullable=False, default=1)
     system_qty = Column(Float, nullable=False, default=0)
     physical_qty = Column(Float, nullable=True)
     qty_delta = Column(Float, nullable=False, default=0)
@@ -698,7 +707,8 @@ class InventoryDocumentLine(Base):
     notes = Column(Text)
 
     document = relationship("InventoryDocument", back_populates="lines")
-    item = relationship("Item")
+    item = relationship("Item", foreign_keys=[item_id])
+    entered_item = relationship("Item", foreign_keys=[entered_item_id])
     allocations = relationship(
         "InventoryDocumentBatchAllocation",
         back_populates="line",
@@ -1164,10 +1174,15 @@ class WarehouseTransfer(Base):
     date = Column(Date, nullable=False)
     from_warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
     to_warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
-    status = Column(String(20), default="pending")  # pending | confirmed
+    status = Column(String(20), default="pending")  # pending | confirmed | cancelled
     transfer_kind = Column(String(30), default="standard", nullable=False)
     source_purchase_id = Column(Integer, ForeignKey("purchases.id"), nullable=True)
     received_at = Column(DateTime(timezone=True), nullable=True)
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+    cancelled_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    cancellation_reason = Column(Text, nullable=True)
+    reversal_journal_id = Column(Integer, ForeignKey("journals.id"), nullable=True)
+    can_cancel = Column(Boolean, nullable=False, default=True)
     notes = Column(Text)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -1178,7 +1193,9 @@ class WarehouseTransfer(Base):
                                  back_populates="transfers_to")
     items = relationship("WarehouseTransferItem", back_populates="transfer",
                          cascade="all, delete-orphan")
-    creator = relationship("User")
+    creator = relationship("User", foreign_keys=[created_by])
+    canceller = relationship("User", foreign_keys=[cancelled_by])
+    reversal_journal = relationship("Journal", foreign_keys=[reversal_journal_id])
     source_purchase = relationship("Purchase", foreign_keys=[source_purchase_id])
 
 
@@ -1187,6 +1204,10 @@ class WarehouseTransferItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     transfer_id = Column(Integer, ForeignKey("warehouse_transfers.id"), nullable=False)
     item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    entered_item_id = Column(Integer, ForeignKey("items.id"), nullable=True)
+    entered_qty = Column(Float, nullable=True)
+    conversion_factor = Column(Float, nullable=False, default=1)
+    serials_json = Column(Text, nullable=True)
     qty = Column(Float, nullable=False)
     qty_received = Column(Float, nullable=False, default=0)
     purchase_item_id = Column(Integer, ForeignKey("purchase_items.id"), nullable=True)
@@ -1195,9 +1216,89 @@ class WarehouseTransferItem(Base):
     total_cost = Column(Float, nullable=False, default=0)
 
     transfer = relationship("WarehouseTransfer", back_populates="items")
-    item = relationship("Item")
+    item = relationship("Item", foreign_keys=[item_id])
+    entered_item = relationship("Item", foreign_keys=[entered_item_id])
     purchase_item = relationship("PurchaseItem", foreign_keys=[purchase_item_id])
     source_request_item = relationship("PurchaseItem", foreign_keys=[source_request_item_id])
+    batch_allocations = relationship(
+        "WarehouseTransferBatchAllocation",
+        back_populates="transfer_item",
+        cascade="all, delete-orphan",
+    )
+
+
+class WarehouseTransferBatchAllocation(Base):
+    """Exact FIFO lineage used to safely reverse a warehouse transfer."""
+    __tablename__ = "warehouse_transfer_batch_allocations"
+    __table_args__ = (
+        Index("ix_transfer_batch_alloc_item", "transfer_item_id"),
+        Index("ix_transfer_batch_alloc_source", "source_batch_id"),
+        Index("ix_transfer_batch_alloc_destination", "destination_batch_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    transfer_item_id = Column(Integer, ForeignKey("warehouse_transfer_items.id"), nullable=False)
+    source_batch_id = Column(Integer, ForeignKey("stock_batches.id"), nullable=False)
+    destination_batch_id = Column(Integer, ForeignKey("stock_batches.id"), nullable=False)
+    qty = Column(Float, nullable=False)
+    unit_cost = Column(Float, nullable=False, default=0)
+
+    transfer_item = relationship("WarehouseTransferItem", back_populates="batch_allocations")
+    source_batch = relationship("StockBatch", foreign_keys=[source_batch_id])
+    destination_batch = relationship("StockBatch", foreign_keys=[destination_batch_id])
+
+
+class ItemSerial(Base):
+    """Current state of one globally unique physical serial number."""
+    __tablename__ = "item_serials"
+    __table_args__ = (
+        UniqueConstraint("normalized_serial", name="uq_item_serials_normalized"),
+        Index("ix_item_serials_item_status", "item_id", "status"),
+        Index("ix_item_serials_warehouse", "warehouse_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    serial = Column(String(255), nullable=False)
+    normalized_serial = Column(String(255), nullable=False)
+    status = Column(String(30), nullable=False, default="in_stock")
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    item = relationship("Item")
+    warehouse = relationship("Warehouse")
+    branch = relationship("Branch")
+    events = relationship("ItemSerialEvent", back_populates="serial_record", cascade="all, delete-orphan")
+
+
+class ItemSerialEvent(Base):
+    """Immutable append-only serial ledger."""
+    __tablename__ = "item_serial_events"
+    __table_args__ = (
+        Index("ix_item_serial_events_serial_created", "serial_id", "created_at"),
+        Index("ix_item_serial_events_reference", "reference_type", "reference_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    serial_id = Column(Integer, ForeignKey("item_serials.id"), nullable=False)
+    event_type = Column(String(40), nullable=False)
+    from_status = Column(String(30), nullable=True)
+    to_status = Column(String(30), nullable=False)
+    from_warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=True)
+    to_warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=True)
+    reference_type = Column(String(50), nullable=False)
+    reference_id = Column(Integer, nullable=True)
+    reference_number = Column(String(100), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    serial_record = relationship("ItemSerial", back_populates="events")
+    from_warehouse = relationship("Warehouse", foreign_keys=[from_warehouse_id])
+    to_warehouse = relationship("Warehouse", foreign_keys=[to_warehouse_id])
+    creator = relationship("User")
 
 
 # ─── Perakitan (Assembly) ──────────────────────────────────────────────────────

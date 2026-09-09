@@ -18,7 +18,10 @@ from ..database import get_db
 from ..auth import get_current_user, write_audit
 from .. import models
 from ..services.item_catalog_sync import ensure_all_items_in_warehouse
-from ..services.virtual_units import is_virtual_variant
+from ..permissions import has_permission
+from ..routes.accounting import assert_books_open, next_journal_number
+from ..services.virtual_units import get_conversion_factor, get_stock_source_item, is_virtual_variant
+from ..services.serials import reverse_reference_serials, transition_serials
 
 router = APIRouter()
 WITA = pytz.timezone("Asia/Makassar")
@@ -34,12 +37,12 @@ def get_total_branch_stock(db: Session, branch_id: int, item_id: int) -> float:
     ).scalar()
     return float(total or 0.0)
 
-def next_transfer_number(db: Session) -> str:
-    today = datetime.now(WITA).strftime("%Y%m%d")
+def next_transfer_number(db: Session, transfer_date: Optional[date] = None) -> str:
+    today = (transfer_date or datetime.now(WITA).date()).strftime("%Y%m%d")
     prefix = f"TR{today}"
     last = db.query(models.WarehouseTransfer).filter(
         models.WarehouseTransfer.number.like(f"{prefix}%")
-    ).order_by(models.WarehouseTransfer.id.desc()).first()
+    ).order_by(models.WarehouseTransfer.id.desc()).with_for_update().first()
     seq = int(last.number[-4:]) + 1 if last else 1
     return f"{prefix}{seq:04d}"
 
@@ -47,7 +50,7 @@ def get_warehouse_stock(db: Session, warehouse_id: int, item_id: int) -> float:
     ws = db.query(models.WarehouseStock).filter(
         models.WarehouseStock.warehouse_id == warehouse_id,
         models.WarehouseStock.item_id == item_id
-    ).first()
+    ).with_for_update().first()
     return ws.stock if ws else 0.0
 
 def adjust_warehouse_stock(db: Session, warehouse_id: int, item_id: int,
@@ -55,7 +58,7 @@ def adjust_warehouse_stock(db: Session, warehouse_id: int, item_id: int,
     ws = db.query(models.WarehouseStock).filter(
         models.WarehouseStock.warehouse_id == warehouse_id,
         models.WarehouseStock.item_id == item_id
-    ).first()
+    ).with_for_update().first()
     if ws:
         ws.stock += delta
     else:
@@ -260,6 +263,7 @@ def get_warehouse_stock_list(
 class TransferItemIn(BaseModel):
     item_id: int
     qty: float = Field(gt=0, allow_inf_nan=False)
+    serials: List[str] = Field(default_factory=list)
 
 class TransferCreate(BaseModel):
     date: date
@@ -286,6 +290,9 @@ def get_transfers(skip: int = 0, limit: int = 50,
         "from_warehouse": t.from_warehouse.name if t.from_warehouse else "-",
         "to_warehouse": t.to_warehouse.name if t.to_warehouse else "-",
         "status": t.status, "notes": t.notes,
+        "can_cancel": bool(t.can_cancel and t.status == "confirmed"),
+        "cancelled_at": t.cancelled_at.isoformat() if t.cancelled_at else None,
+        "cancellation_reason": t.cancellation_reason,
         "items_count": len(t.items),
         "creator": t.creator.username if t.creator else "-"
     } for t in transfers]
@@ -293,9 +300,10 @@ def get_transfers(skip: int = 0, limit: int = 50,
 # =====================================================================
 # 3. TIMPA FUNGSI create_transfer (Fix Bug Mutasi Stok Aneh)
 # =====================================================================
-@router.post("/transfers")
+@router.post("/transfers/legacy-disabled", include_in_schema=False)
 def create_transfer(data: TransferCreate, db: Session = Depends(get_db),
                     current_user: models.User = Depends(get_current_user)):
+    raise HTTPException(410, "Endpoint transfer lama dinonaktifkan")
     if data.from_warehouse_id == data.to_warehouse_id:
         raise HTTPException(400, "Gudang asal dan tujuan tidak boleh sama")
 
@@ -433,6 +441,232 @@ def create_transfer(data: TransferCreate, db: Session = Depends(get_db),
 
     db.commit()
     return {"id": transfer.id, "number": number, "message": "Transfer stok & jurnal berhasil dicatat!"}
+
+
+@router.post("/transfers")
+def create_transfer_secure(data: TransferCreate, db: Session = Depends(get_db),
+                           current_user: models.User = Depends(get_current_user)):
+    """Atomic, branch-scoped transfer with exact FIFO lineage."""
+    try:
+        if not current_user.active_branch_id:
+            raise HTTPException(400, "Pilih cabang aktif terlebih dahulu")
+        if data.from_warehouse_id == data.to_warehouse_id:
+            raise HTTPException(400, "Gudang asal dan tujuan tidak boleh sama")
+        from_w = db.query(models.Warehouse).filter(models.Warehouse.id == data.from_warehouse_id).with_for_update().first()
+        to_w = db.query(models.Warehouse).filter(models.Warehouse.id == data.to_warehouse_id).with_for_update().first()
+        if not from_w or not from_w.is_active:
+            raise HTTPException(404, "Gudang asal tidak ditemukan atau nonaktif")
+        if not to_w or not to_w.is_active:
+            raise HTTPException(404, "Gudang tujuan tidak ditemukan atau nonaktif")
+        if from_w.branch_id != current_user.active_branch_id:
+            raise HTTPException(403, "Gudang asal harus berada pada cabang aktif")
+        if not has_permission(db, current_user, "inventory.transfer", "create"):
+            raise HTTPException(403, "Akses membuat transfer ditolak")
+        internal = from_w.branch_id == to_w.branch_id
+        if not internal and not has_permission(db, current_user, "inventory.branch_transfer", "create"):
+            raise HTTPException(403, "Transfer beda cabang memerlukan izin khusus")
+        if data.date != datetime.now(WITA).date() and not has_permission(db, current_user, "inventory.transfer", "lock_date"):
+            raise HTTPException(403, "Tanggal transfer dikunci; gunakan tanggal hari ini")
+        assert_books_open(db, from_w.branch_id, data.date, "Transfer stok")
+        assert_books_open(db, to_w.branch_id, data.date, "Transfer stok")
+
+        resolved, source_ids = [], set()
+        for payload in data.items:
+            entered = db.query(models.Item).get(payload.item_id)
+            if not entered or not entered.is_active:
+                raise HTTPException(404, f"Item {payload.item_id} tidak ditemukan atau nonaktif")
+            item = get_stock_source_item(db, entered)
+            factor = get_conversion_factor(entered) if is_virtual_variant(entered) else 1.0
+            base_qty = float(payload.qty) * factor
+            if item.id in source_ids:
+                raise HTTPException(400, f"{item.name} dicatat lebih dari sekali setelah konversi satuan")
+            source_ids.add(item.id)
+            available = get_warehouse_stock(db, from_w.id, item.id)
+            if available + 1e-9 < base_qty:
+                raise HTTPException(400, f"Stok {item.name} di {from_w.name} tidak cukup")
+            resolved.append((payload, entered, item, factor, base_qty))
+
+        number = next_transfer_number(db, data.date)
+        now = datetime.now(WITA)
+        transfer = models.WarehouseTransfer(
+            number=number, date=data.date, from_warehouse_id=from_w.id,
+            to_warehouse_id=to_w.id, status="confirmed", notes=data.notes,
+            created_by=current_user.id, can_cancel=True,
+        )
+        db.add(transfer)
+        db.flush()
+        total_value = 0.0
+        from ..services.inventory_fifo import transfer_batches_with_lineage
+
+        for payload, entered, item, factor, base_qty in resolved:
+            row = models.WarehouseTransferItem(
+                transfer_id=transfer.id, item_id=item.id, entered_item_id=entered.id,
+                entered_qty=payload.qty, conversion_factor=factor, qty=base_qty,
+                qty_received=base_qty,
+            )
+            db.add(row)
+            db.flush()
+            from_before = get_total_branch_stock(db, from_w.branch_id, item.id)
+            to_before = get_total_branch_stock(db, to_w.branch_id, item.id)
+            adjust_warehouse_stock(db, from_w.id, item.id, -base_qty)
+            adjust_warehouse_stock(db, to_w.id, item.id, base_qty)
+            allocations = transfer_batches_with_lineage(
+                db, item_id=item.id, from_warehouse_id=from_w.id,
+                to_warehouse_id=to_w.id, qty=base_qty,
+            )
+            line_value = 0.0
+            for source, destination, moved_qty, cost in allocations:
+                line_value += moved_qty * cost
+                db.add(models.WarehouseTransferBatchAllocation(
+                    transfer_item_id=row.id, source_batch_id=source.id,
+                    destination_batch_id=destination.id, qty=moved_qty, unit_cost=cost,
+                ))
+            row.total_cost = line_value
+            row.unit_cost = line_value / base_qty
+            total_value += line_value
+            transition_serials(
+                db, item=item, qty=base_qty, serial_values=payload.serials,
+                from_statuses={"in_stock", "quarantine"}, to_status="in_stock",
+                from_warehouse_id=from_w.id, to_warehouse=to_w,
+                reference_type="warehouse_transfer", reference_id=transfer.id,
+                reference_number=number, user_id=current_user.id, event_type="transfer",
+            )
+            if internal:
+                db.add(models.StockMovement(
+                    date=data.date, created_at=now, item_id=item.id, branch_id=from_w.branch_id,
+                    warehouse_id=from_w.id, counterparty_warehouse_id=to_w.id,
+                    type="internal_transfer", qty=base_qty, qty_before=from_before,
+                    qty_after=from_before, reference=number,
+                    notes=f"Pindah Rak: {from_w.name} -> {to_w.name}",
+                ))
+            else:
+                db.add(models.StockMovement(
+                    date=data.date, created_at=now, item_id=item.id, branch_id=from_w.branch_id,
+                    warehouse_id=from_w.id, counterparty_warehouse_id=to_w.id,
+                    type="transfer_out", qty=base_qty, qty_before=from_before,
+                    qty_after=from_before - base_qty, reference=number, notes=f"Dikirim ke {to_w.name}",
+                ))
+                db.add(models.StockMovement(
+                    date=data.date, created_at=now, item_id=item.id, branch_id=to_w.branch_id,
+                    warehouse_id=to_w.id, counterparty_warehouse_id=from_w.id,
+                    type="transfer_in", qty=base_qty, qty_before=to_before,
+                    qty_after=to_before + base_qty, reference=number, notes=f"Diterima dari {from_w.name}",
+                ))
+
+        if not internal and total_value > 0:
+            from ..services.journal_service import create_transfer_journal
+            create_transfer_journal(db=db, date_val=data.date, number_ref=number,
+                total=total_value, direction="out", description=f"Transfer Keluar ke {to_w.name}",
+                user_id=current_user.id, branch_id=from_w.branch_id)
+            create_transfer_journal(db=db, date_val=data.date, number_ref=number,
+                total=total_value, direction="in", description=f"Transfer Masuk dari {from_w.name}",
+                user_id=current_user.id, branch_id=to_w.branch_id)
+        write_audit(db, current_user.id, "CREATE", "warehouse_transfers", transfer.id, number)
+        db.commit()
+        return {"id": transfer.id, "number": number, "message": "Transfer stok & jurnal berhasil dicatat!"}
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise
+
+
+class TransferCancel(BaseModel):
+    reason: str = Field(min_length=3)
+
+
+@router.post("/transfers/{transfer_id}/cancel")
+def cancel_transfer(transfer_id: int, data: TransferCancel, db: Session = Depends(get_db),
+                    current_user: models.User = Depends(get_current_user)):
+    transfer = db.query(models.WarehouseTransfer).filter(
+        models.WarehouseTransfer.id == transfer_id
+    ).with_for_update().first()
+    if not transfer:
+        raise HTTPException(404, "Transfer tidak ditemukan")
+    if transfer.from_warehouse.branch_id != current_user.active_branch_id:
+        raise HTTPException(403, "Transfer bukan milik cabang aktif")
+    if not has_permission(db, current_user, "inventory.transfer", "delete"):
+        raise HTTPException(403, "Akses membatalkan transfer ditolak")
+    if transfer.status != "confirmed":
+        raise HTTPException(400, "Transfer tidak berstatus confirmed")
+    if not transfer.can_cancel:
+        raise HTTPException(409, "Transfer lama tidak memiliki alokasi FIFO presisi dan tidak aman dibatalkan")
+    today = datetime.now(WITA).date()
+    assert_books_open(db, transfer.from_warehouse.branch_id, today, "Pembatalan transfer")
+    assert_books_open(db, transfer.to_warehouse.branch_id, today, "Pembatalan transfer")
+    try:
+        # Validate every destination layer before changing any quantity.
+        for row in transfer.items:
+            if not row.batch_allocations:
+                raise HTTPException(409, "Alokasi batch transfer tidak lengkap")
+            for allocation in row.batch_allocations:
+                batch = db.query(models.StockBatch).filter(
+                    models.StockBatch.id == allocation.destination_batch_id
+                ).with_for_update().first()
+                if not batch or float(batch.qty_remaining or 0) + 1e-9 < float(allocation.qty):
+                    raise HTTPException(409, f"Stok tujuan {row.item.name} sudah dipakai; transfer tidak dapat dibatalkan")
+        reverse_reference_serials(
+            db, reference_type="warehouse_transfer", reference_id=transfer.id,
+            reversal_reference_number=f"REV-{transfer.number}", user_id=current_user.id,
+        )
+        now = datetime.now(WITA)
+        for row in transfer.items:
+            from_before = get_total_branch_stock(db, transfer.from_warehouse.branch_id, row.item_id)
+            to_before = get_total_branch_stock(db, transfer.to_warehouse.branch_id, row.item_id)
+            for allocation in row.batch_allocations:
+                source = db.query(models.StockBatch).filter(models.StockBatch.id == allocation.source_batch_id).with_for_update().first()
+                destination = db.query(models.StockBatch).filter(models.StockBatch.id == allocation.destination_batch_id).with_for_update().first()
+                destination.qty_remaining = float(destination.qty_remaining or 0) - float(allocation.qty)
+                source.qty_remaining = float(source.qty_remaining or 0) + float(allocation.qty)
+            adjust_warehouse_stock(db, transfer.to_warehouse_id, row.item_id, -float(row.qty))
+            adjust_warehouse_stock(db, transfer.from_warehouse_id, row.item_id, float(row.qty))
+            db.add(models.StockMovement(
+                date=today, created_at=now, item_id=row.item_id,
+                branch_id=transfer.from_warehouse.branch_id, warehouse_id=transfer.from_warehouse_id,
+                counterparty_warehouse_id=transfer.to_warehouse_id, type="transfer_reversal_in",
+                qty=row.qty, qty_before=from_before, qty_after=from_before + row.qty,
+                reference=f"REV-{transfer.number}", notes=data.reason,
+            ))
+            if transfer.from_warehouse.branch_id != transfer.to_warehouse.branch_id:
+                db.add(models.StockMovement(
+                    date=today, created_at=now, item_id=row.item_id,
+                    branch_id=transfer.to_warehouse.branch_id, warehouse_id=transfer.to_warehouse_id,
+                    counterparty_warehouse_id=transfer.from_warehouse_id, type="transfer_reversal_out",
+                    qty=row.qty, qty_before=to_before, qty_after=to_before - row.qty,
+                    reference=f"REV-{transfer.number}", notes=data.reason,
+                ))
+        journals = db.query(models.Journal).filter(models.Journal.reference == transfer.number).all()
+        for original in journals:
+            reversal = models.Journal(
+                number=next_journal_number(db, original.branch_id), date=today,
+                description=f"REVERSAL {transfer.number}: {data.reason}", reference=transfer.number,
+                source="auto", created_by=current_user.id, branch_id=original.branch_id,
+            )
+            db.add(reversal)
+            db.flush()
+            for line in original.lines:
+                db.add(models.JournalEntryLine(
+                    journal_id=reversal.id, debit_account_id=line.credit_account_id,
+                    credit_account_id=line.debit_account_id, amount=line.amount,
+                    description=reversal.description,
+                ))
+            if original.branch_id == transfer.from_warehouse.branch_id:
+                transfer.reversal_journal_id = reversal.id
+        transfer.status = "cancelled"
+        transfer.cancelled_at = now
+        transfer.cancelled_by = current_user.id
+        transfer.cancellation_reason = data.reason.strip()
+        write_audit(db, current_user.id, "CANCEL", "warehouse_transfers", transfer.id,
+                    f"{transfer.number}: {data.reason.strip()}")
+        db.commit()
+        return {"id": transfer.id, "number": transfer.number, "status": transfer.status}
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise
 
 
 #ambil semua history barang masuk ke gudang tertentu (baik dari transfer antar gudang, pembelian, atau penyesuaian stok masuk)

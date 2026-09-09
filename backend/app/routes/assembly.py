@@ -17,6 +17,7 @@ from ..database import get_db
 from ..permissions import has_permission
 from ..services.inventory_fifo import EPS, add_batch, consume_fifo
 from ..services.virtual_units import get_required_stock_qty, is_virtual_variant
+from ..services.serials import receive_serials, reverse_reference_serials, transition_serials
 from .warehouse import adjust_warehouse_stock, get_total_branch_stock, get_warehouse_stock
 
 router = APIRouter()
@@ -63,6 +64,7 @@ class AssemblyProcessLineIn(BaseModel):
     bom_id: Optional[int] = None
     order_line_id: Optional[int] = None
     qty_target: float
+    material_serials: dict[int, List[str]] = Field(default_factory=dict)
 
 
 class AssemblyProcessCreate(BaseModel):
@@ -77,6 +79,7 @@ class AssemblyProcessCreate(BaseModel):
 class AssemblyResultLineIn(BaseModel):
     process_line_id: int
     qty_finished: float
+    serials: List[str] = Field(default_factory=list)
 
 
 class AssemblyResultCreate(BaseModel):
@@ -328,6 +331,7 @@ def _add_stock_movement(
     qty: float,
     reference: str,
     notes: str,
+    warehouse_id: Optional[int] = None,
 ) -> None:
     branch_after = get_total_branch_stock(db, branch_id, item.id)
     before = branch_after - qty if movement_type == "in" else branch_after + qty
@@ -338,6 +342,7 @@ def _add_stock_movement(
             branch_id=branch_id,
             date=tx_date,
             item_id=item.id,
+            warehouse_id=warehouse_id,
             type=movement_type,
             qty=qty,
             qty_before=before,
@@ -815,7 +820,7 @@ def create_process(
                 raise HTTPException(400, "Salah satu bahan formula sudah tidak tersedia")
             stock_item = _stock_item(db, material, lock=False)
             qty_required = get_required_stock_qty(material, float(bom_line.qty_needed) * scale)
-            material_specs.append((material, stock_item, qty_required))
+            material_specs.append((material, stock_item, qty_required, payload.material_serials.get(material.id, [])))
             aggregate_needed[stock_item.id] = aggregate_needed.get(stock_item.id, 0.0) + qty_required
         if not material_specs:
             raise HTTPException(400, f"Formula {bom.product.name} tidak memiliki bahan")
@@ -831,7 +836,7 @@ def create_process(
         raise HTTPException(400, "Stok bahan tidak cukup:\n" + "\n".join(shortages))
 
     for process_line, order_line, material_specs in prepared:
-        for material, stock_item_ref, required in material_specs:
+        for material, stock_item_ref, required, serial_values in material_specs:
             stock_item = db.query(models.Item).with_for_update().get(stock_item_ref.id)
             material_line = models.AssemblyProcessMaterial(
                 process_line_id=process_line.id,
@@ -855,6 +860,14 @@ def create_process(
             material_line.total_cost = total_cost
             process_line.material_cost_total += total_cost
             adjust_warehouse_stock(db, warehouse.id, stock_item.id, -required)
+            transition_serials(
+                db, item=stock_item, qty=required, serial_values=serial_values,
+                from_statuses={"in_stock"}, to_status="consumed",
+                from_warehouse_id=warehouse.id, to_warehouse=None,
+                reference_type="assembly_process", reference_id=process.id,
+                reference_number=process.number, user_id=current_user.id,
+                event_type="assembly_consumed",
+            )
             _add_stock_movement(
                 db,
                 branch_id=branch_id,
@@ -864,6 +877,7 @@ def create_process(
                 qty=required,
                 reference=process.number,
                 notes=f"Bahan proses perakitan {process_line.product.name}",
+                warehouse_id=warehouse.id,
             )
         if order_line:
             order_line.qty_processed = float(order_line.qty_processed or 0) + float(process_line.qty_target)
@@ -904,6 +918,10 @@ def cancel_process(
         raise HTTPException(400, "Balikkan seluruh Proses Jadi terlebih dahulu")
     if not process.warehouse_id:
         raise HTTPException(400, "Gudang proses tidak tersedia")
+    reverse_reference_serials(
+        db, reference_type="assembly_process", reference_id=process.id,
+        reversal_reference_number=f"REV-{process.number}", user_id=current_user.id,
+    )
 
     for line in process.lines:
         for material in line.materials:
@@ -928,6 +946,7 @@ def cancel_process(
                 db, branch_id=branch_id, tx_date=Date.today(), item=stock_item,
                 movement_type="in", qty=material.qty_required, reference=f"REV-{process.number}",
                 notes="Pembatalan proses perakitan",
+                warehouse_id=process.warehouse_id,
             )
         if line.order_line:
             line.order_line.qty_processed = max(
@@ -1024,7 +1043,7 @@ def create_result(
             raise HTTPException(400, "Hasil melebihi target hanya diperbolehkan saat menutup proses")
         if abs(new_total - float(process_line.qty_target)) > EPS:
             has_variance = True
-        prepared.append((process_line, payload.qty_finished))
+        prepared.append((process_line, payload))
 
     projected_totals = {
         line.id: float(line.qty_completed or 0) + float(payload_by_id[line.id].qty_finished)
@@ -1069,7 +1088,8 @@ def create_result(
     db.add(result)
     db.flush()
 
-    for process_line, qty_finished in prepared:
+    for process_line, payload in prepared:
+        qty_finished = payload.qty_finished
         product = db.query(models.Item).get(process_line.product_id)
         if not product:
             raise HTTPException(400, "Produk hasil sudah tidak tersedia")
@@ -1093,10 +1113,17 @@ def create_result(
             received_date=data.date,
         )
         adjust_warehouse_stock(db, process.warehouse_id, stock_item.id, stock_qty)
+        receive_serials(
+            db, item=stock_item, qty=stock_qty, serial_values=payload.serials,
+            warehouse=process.warehouse, reference_type="assembly_result",
+            reference_id=result.id, reference_number=result.number,
+            user_id=current_user.id,
+        )
         _add_stock_movement(
             db, branch_id=branch_id, tx_date=data.date, item=stock_item,
             movement_type="in", qty=stock_qty, reference=result.number,
             notes=f"Hasil perakitan {product.name}",
+            warehouse_id=process.warehouse_id,
         )
         stock_item.buy_price = batch_unit_cost
         process_line.qty_completed = float(process_line.qty_completed or 0) + float(qty_finished)
@@ -1160,6 +1187,10 @@ def reverse_result(
     )
     if not newest or newest.id != result.id:
         raise HTTPException(400, "Balikkan Proses Jadi terbaru terlebih dahulu")
+    reverse_reference_serials(
+        db, reference_type="assembly_result", reference_id=result.id,
+        reversal_reference_number=f"REV-{result.number}", user_id=current_user.id,
+    )
 
     for line in result.lines:
         batch = db.query(models.StockBatch).with_for_update().get(line.batch_id) if line.batch_id else None
@@ -1181,6 +1212,7 @@ def reverse_result(
             db, branch_id=branch_id, tx_date=Date.today(), item=stock_item,
             movement_type="out", qty=float(line.stock_qty_finished), reference=f"REV-{result.number}",
             notes="Reversal Proses Jadi",
+            warehouse_id=result.warehouse_id,
         )
         line.process_line.qty_completed = max(
             0.0, float(line.process_line.qty_completed or 0) - float(line.qty_finished)

@@ -1,4 +1,5 @@
 import math
+import json
 
 from fastapi import APIRouter, Depends, HTTPException
 import pytz
@@ -11,6 +12,7 @@ from .. import models, schemas
 from ..auth import get_current_user, write_audit, require_admin
 from ..services.virtual_units import get_required_stock_qty, is_virtual_variant
 from ..services.tax_context import purchase_tax_type
+from ..services.serials import transition_serials
 from ..services.receipt_renderer import (
     build_purchase_return_receipt,
     build_sale_return_receipt,
@@ -180,10 +182,19 @@ def create_branch_return_to_center(
             qty_received=0, purchase_item_id=line.id,
             source_request_item_id=line.source_request_item_id,
             unit_cost=unit_cost, total_cost=line_cost,
+            serials_json=json.dumps(requested.serials, ensure_ascii=False) if requested.serials else None,
         ))
+        transition_serials(
+            db, item=line.item, qty=requested.qty, serial_values=requested.serials,
+            from_statuses={"in_stock", "quarantine"}, to_status="in_transit",
+            from_warehouse_id=from_w.id, to_warehouse=None,
+            reference_type="branch_return_dispatch", reference_id=transfer.id,
+            reference_number=number, user_id=current_user.id, event_type="branch_return_dispatch",
+        )
         db.add(models.StockMovement(
             date=data.date, created_at=local_datetime, item_id=line.item_id,
             branch_id=branch_id, type="transfer_out", qty=requested.qty,
+            warehouse_id=from_w.id, counterparty_warehouse_id=to_w.id,
             qty_before=before, qty_after=before-requested.qty,
             reference=number, notes="Retur kiriman ke Toko Utama",
         ))
@@ -268,11 +279,20 @@ def receive_branch_return_at_center(
             supplier_id=purchase.supplier_id if purchase else None,
             purchase_item_id=line.purchase_item_id,
         )
+        transition_serials(
+            db, item=item, qty=line.qty, serial_values=json.loads(line.serials_json or "[]"),
+            from_statuses={"in_transit"}, to_status="in_stock", from_warehouse_id=None,
+            to_warehouse=transfer.to_warehouse, reference_type="branch_return_receive",
+            reference_id=transfer.id, reference_number=transfer.number,
+            user_id=current_user.id, event_type="branch_return_receive",
+        )
         line.qty_received = line.qty
         total_cost += float(line.total_cost or 0)
         db.add(models.StockMovement(
             date=get_local_date(), created_at=local_datetime, item_id=line.item_id,
             branch_id=PUSAT_BRANCH_ID, type="transfer_in", qty=line.qty,
+            warehouse_id=transfer.to_warehouse_id,
+            counterparty_warehouse_id=transfer.from_warehouse_id,
             qty_before=before, qty_after=before+line.qty,
             reference=transfer.number, notes="Terima retur kiriman dari cabang",
         ))
@@ -760,6 +780,16 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
             # Barang rusak adalah aset karantina: tidak menambah stok etalase dan tidak
             # memulihkan lapisan FIFO yang dapat dijual.
             damaged_cogs += float(it["qty"]) * quarantine_unit_cost
+            stock_item = item
+            if is_virtual_variant(item):
+                stock_item = db.query(models.Item).get(item.parent_item_id) or item
+            transition_serials(
+                db, item=stock_item, qty=get_required_stock_qty(item, it["qty"]),
+                serial_values=it.get("serials", []), from_statuses={"sold"},
+                to_status="quarantine", from_warehouse_id=None, to_warehouse=None,
+                reference_type="sale_return", reference_id=retur.id,
+                reference_number=number, user_id=current_user.id, event_type="sale_return_damaged",
+            )
             continue
 
         # Kembalikan stok
@@ -768,6 +798,12 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
             stock_item = db.query(models.Item).with_for_update().get(item.parent_item_id) or item
 
         required_qty = get_required_stock_qty(item, it["qty"])
+        transition_serials(
+            db, item=stock_item, qty=required_qty, serial_values=it.get("serials", []),
+            from_statuses={"sold"}, to_status="in_stock", from_warehouse_id=None,
+            to_warehouse=gudang_aktif, reference_type="sale_return", reference_id=retur.id,
+            reference_number=number, user_id=current_user.id, event_type="sale_return",
+        )
         if gudang_aktif:
             from .warehouse import get_total_branch_stock
             before = get_total_branch_stock(db, sale.branch_id, stock_item.id)
@@ -799,6 +835,7 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
             date=get_local_date(),
             item_id=stock_item.id,
             branch_id=sale.branch_id,
+            warehouse_id=gudang_aktif.id if gudang_aktif else None,
             type="in",
             qty=required_qty,
             qty_before=before,
@@ -1067,8 +1104,24 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
             damaged_source.returned_qty = float(damaged_source.returned_qty or 0) + float(it["qty"])
             total_carrying += source_cost
             damaged_carrying += source_cost
+            transition_serials(
+                db, item=item, qty=it["qty"], serial_values=it.get("serials", []),
+                from_statuses={"quarantine"}, to_status="returned_supplier",
+                from_warehouse_id=None, to_warehouse=None,
+                reference_type="purchase_return", reference_id=retur.id,
+                reference_number=number, user_id=current_user.id,
+                event_type="purchase_return_quarantine",
+            )
             # Sumbernya stok karantina; stok etalase dan lapisan FIFO tidak disentuh.
             continue
+
+        transition_serials(
+            db, item=item, qty=it["qty"], serial_values=it.get("serials", []),
+            from_statuses={"in_stock", "quarantine"}, to_status="returned_supplier",
+            from_warehouse_id=gudang_aktif.id if gudang_aktif else None,
+            to_warehouse=None, reference_type="purchase_return", reference_id=retur.id,
+            reference_number=number, user_id=current_user.id, event_type="purchase_return",
+        )
         
         # Kurangi stok
         if gudang_aktif:
@@ -1110,6 +1163,7 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
             date=get_local_date(),
             item_id=item.id,
             branch_id=purchase.branch_id,
+            warehouse_id=gudang_aktif.id if gudang_aktif else None,
             type="out",
             qty=it["qty"],
             qty_before=before, qty_after=before - it["qty"],

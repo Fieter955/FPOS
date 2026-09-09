@@ -195,6 +195,7 @@ class ItemOut(BaseModel):
     parent_item_id: Optional[int] = None
     conversion_factor_to_parent: float = 1
     is_virtual_variant: bool = False
+    tracks_serial: bool = False
     buy_price: float
     min_price: float = 0
     sell_price: float
@@ -372,6 +373,7 @@ class SalesPersonOut(SalesPersonCreate):
 # ─── Purchase ─────────────────────────────────────────────────────────────────
 class PurchaseItemCreate(BaseModel):
     item_id: int
+    serials: List[str] = Field(default_factory=list)
     qty: float = Field(gt=0, allow_inf_nan=False)
     qty_ordered: float = Field(default=0, ge=0, allow_inf_nan=False)
     qty_received: float = Field(default=0, ge=0, allow_inf_nan=False)
@@ -458,6 +460,7 @@ class PurchaseOut(BaseModel):
 # ─── Returns ──────────────────────────────────────────────────────────────────
 class PurchaseReturnItemCreate(BaseModel):
     item_id: int
+    serials: List[str] = Field(default_factory=list)
     qty: float
     price: float
     trade_in_return_item_id: Optional[int] = None
@@ -494,6 +497,7 @@ class PurchaseReturnOut(BaseModel):
 
 class SaleReturnItemCreate(BaseModel):
     item_id: int
+    serials: List[str] = Field(default_factory=list)
     qty: float
     price: float
 
@@ -559,6 +563,7 @@ class DraftReceiveRequest(BaseModel):
 # ─── Sale ─────────────────────────────────────────────────────────────────────
 class SaleItemCreate(BaseModel):
     item_id: int
+    serials: List[str] = Field(default_factory=list)
     qty: float = Field(gt=0, allow_inf_nan=False)
     sell_price: float = Field(ge=0, allow_inf_nan=False)
     discount: float = Field(default=0, ge=0, le=100, allow_inf_nan=False)
@@ -594,6 +599,7 @@ class SaleCreate(BaseModel):
 class BranchReturnItemCreate(BaseModel):
     purchase_item_id: int
     qty: float = Field(gt=0, allow_inf_nan=False)
+    serials: List[str] = Field(default_factory=list)
 
 class BranchReturnCreate(BaseModel):
     date: date
@@ -683,12 +689,16 @@ class AdjustmentCreate(BaseModel):
 
 class InventoryDocumentLineCreate(BaseModel):
     item_id: int
+    entered_item_id: Optional[int] = None
+    entered_qty: Optional[float] = None
+    conversion_factor: Optional[float] = Field(default=None, gt=0)
     qty: Optional[float] = None
     physical_qty: Optional[float] = None
     snapshot_token: Optional[str] = None
     unit_cost: Optional[float] = Field(default=None, ge=0)
     allow_zero_cost: bool = False
     notes: Optional[str] = None
+    serials: List[str] = Field(default_factory=list)
 
 
 class InventoryDocumentCreate(BaseModel):

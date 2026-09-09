@@ -395,6 +395,77 @@ def inventory_report(search: Optional[str] = None, db: Session = Depends(get_db)
     return _report_result({"items": len(rows), "low_stock": sum(1 for r in rows if r["stock"] <= r["min_stock"]), "value": sum(r["value"] for r in rows)}, rows)
 
 
+@router.get("/inventory-transactions")
+def inventory_transactions_report(
+    start_date: Optional[date] = None, end_date: Optional[date] = None,
+    item_id: Optional[int] = None, warehouse_id: Optional[int] = None,
+    movement_type: Optional[str] = None, search: Optional[str] = None,
+    skip: int = 0, limit: int = REPORT_LIMIT, db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    start_date, end_date = _report_dates(start_date, end_date)
+    q = db.query(models.StockMovement).options(
+        joinedload(models.StockMovement.item), joinedload(models.StockMovement.warehouse),
+        joinedload(models.StockMovement.counterparty_warehouse),
+    ).filter(models.StockMovement.date.between(start_date, end_date))
+    if current_user.active_branch_id:
+        q = q.filter(models.StockMovement.branch_id == current_user.active_branch_id)
+    if item_id:
+        q = q.filter(models.StockMovement.item_id == item_id)
+    if warehouse_id:
+        q = q.filter(models.StockMovement.warehouse_id == warehouse_id)
+    if movement_type:
+        q = q.filter(models.StockMovement.type == movement_type)
+    if search:
+        q = q.join(models.Item).filter(or_(models.Item.code.ilike(f"%{search}%"), models.Item.name.ilike(f"%{search}%"), models.StockMovement.reference.ilike(f"%{search}%")))
+    total = q.count()
+    rows = [{
+        "id": row.id, "date": str(row.date), "reference": row.reference,
+        "item_id": row.item_id, "item_code": row.item.code if row.item else "-",
+        "item_name": row.item.name if row.item else "-", "type": row.type,
+        "qty": float(row.qty or 0), "qty_before": float(row.qty_before or 0),
+        "qty_after": float(row.qty_after or 0), "warehouse_id": row.warehouse_id,
+        "warehouse": row.warehouse.name if row.warehouse else None,
+        "counterparty_warehouse_id": row.counterparty_warehouse_id,
+        "counterparty_warehouse": row.counterparty_warehouse.name if row.counterparty_warehouse else None,
+        "notes": row.notes,
+    } for row in q.order_by(models.StockMovement.date.desc(), models.StockMovement.id.desc()).offset(skip).limit(min(limit, 500)).all()]
+    return _report_result({"movements": total, "quantity": sum(row["qty"] for row in rows)}, rows, skip, limit, total)
+
+
+@router.get("/serials-report")
+def serials_report(
+    status: Optional[str] = None, item_id: Optional[int] = None,
+    warehouse_id: Optional[int] = None, search: Optional[str] = None,
+    skip: int = 0, limit: int = REPORT_LIMIT, db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if not has_permission(db, current_user, "inventory.serial", "view"):
+        raise HTTPException(403, "Akses laporan serial ditolak")
+    q = db.query(models.ItemSerial).options(joinedload(models.ItemSerial.item), joinedload(models.ItemSerial.warehouse))
+    if current_user.active_branch_id:
+        q = q.filter(models.ItemSerial.branch_id == current_user.active_branch_id)
+    if status: q = q.filter(models.ItemSerial.status == status)
+    if item_id: q = q.filter(models.ItemSerial.item_id == item_id)
+    if warehouse_id: q = q.filter(models.ItemSerial.warehouse_id == warehouse_id)
+    if search: q = q.filter(models.ItemSerial.normalized_serial.contains(search.strip().upper()))
+    total = q.count()
+    rows = [{"id": row.id, "serial": row.serial, "item_code": row.item.code,
+             "item_name": row.item.name, "status": row.status,
+             "warehouse": row.warehouse.name if row.warehouse else None,
+             "updated_at": row.updated_at.isoformat() if row.updated_at else None}
+            for row in q.order_by(models.ItemSerial.id.desc()).offset(skip).limit(min(limit, 500)).all()]
+    return _report_result({"serials": total}, rows, skip, limit, total)
+
+
+@router.get("/items/{item_id}/inventory-history")
+def item_inventory_history(item_id: int, start_date: Optional[date] = None,
+                           end_date: Optional[date] = None, db: Session = Depends(get_db),
+                           current_user: models.User = Depends(get_current_user)):
+    return inventory_transactions_report(start_date, end_date, item_id, None, None, None,
+                                         0, 500, db, current_user)
+
+
 @router.get("/cash-report")
 def cash_report(start_date: Optional[date] = None, end_date: Optional[date] = None, search: Optional[str] = None, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     _require_financial_report_access(db, current_user); start_date, end_date = _report_dates(start_date, end_date)
@@ -414,6 +485,8 @@ def report_export(report_type: str, start_date: Optional[date] = None, end_date:
     elif report_type == "customers": data = customers_report(start_date, end_date, search, 0, 300, db, current_user)
     elif report_type == "receivables": data = receivables_report(start_date, end_date, search, 0, 300, db, current_user)
     elif report_type == "inventory": data = inventory_report(search, db, current_user)
+    elif report_type == "inventory-transactions": data = inventory_transactions_report(start_date, end_date, None, None, None, search, 0, 500, db, current_user)
+    elif report_type == "serials": data = serials_report(None, None, None, search, 0, 500, db, current_user)
     elif report_type == "cash": data = cash_report(start_date, end_date, search, db, current_user)
     elif report_type == "profit-loss":
         data = profit_loss(start_date, end_date, db, current_user)

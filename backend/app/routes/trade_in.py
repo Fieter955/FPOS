@@ -27,6 +27,7 @@ from ..services.purchase_flow import (
 from .accounting import create_auto_journal, pastikan_akun_ada, resolve_active_branch_id
 from ..services.virtual_units import get_required_stock_qty, is_virtual_variant
 from ..services.receipt_renderer import build_trade_in_receipt, settings_from_branch
+from ..services.serials import reverse_reference_serials, transition_serials
 from .print_queue import enqueue_print_job
 
 router = APIRouter()
@@ -48,12 +49,14 @@ class ReturnItemIn(BaseModel):
     qty: float = Field(gt=0, allow_inf_nan=False)
     return_price: float = Field(ge=0, allow_inf_nan=False)
     condition: str = "good"    # good | damaged
+    serials: List[str] = Field(default_factory=list)
 
 
 class NewItemIn(BaseModel):
     item_id: int
     qty: float = Field(gt=0, allow_inf_nan=False)
     sell_price: float = Field(ge=0, allow_inf_nan=False)
+    serials: List[str] = Field(default_factory=list)
 
 
 class TradeInCreate(BaseModel):
@@ -339,13 +342,29 @@ def create_trade_in(
                 qty=required_qty, unit_cost=unit_cost, received_date=data.date,
             )
             return_row.stock_batch_id = batch.id
+            transition_serials(
+                db, item=stock_item, qty=required_qty, serial_values=ri.serials,
+                from_statuses={"sold"}, to_status="in_stock", from_warehouse_id=None,
+                to_warehouse=warehouse, reference_type="trade_in", reference_id=trade.id,
+                reference_number=number, user_id=current_user.id, event_type="trade_in_return",
+            )
             db.add(models.StockMovement(
                 branch_id=b_id,
+                warehouse_id=warehouse.id,
                 date=data.date, item_id=stock_item.id,
                 type="in", qty=required_qty,
                 qty_before=before, qty_after=before + required_qty,
                 reference=number, notes="Tukar tambah - barang kembali (bagus)"
             ))
+        else:
+            stock_item = db.query(models.Item).get(item.parent_item_id) if is_virtual_variant(item) else item
+            transition_serials(
+                db, item=stock_item, qty=get_required_stock_qty(item, ri.qty),
+                serial_values=ri.serials, from_statuses={"sold"}, to_status="quarantine",
+                from_warehouse_id=None, to_warehouse=None, reference_type="trade_in",
+                reference_id=trade.id, reference_number=number, user_id=current_user.id,
+                event_type="trade_in_return_damaged",
+            )
 
     # Proses barang baru → kurangi stok
     for ni in data.new_items:
@@ -364,6 +383,12 @@ def create_trade_in(
         allocations = consume_fifo(
             db, item_id=stock_item.id, warehouse_id=warehouse.id, qty=required_qty,
         )
+        transition_serials(
+            db, item=stock_item, qty=required_qty, serial_values=ni.serials,
+            from_statuses={"in_stock"}, to_status="sold", from_warehouse_id=warehouse.id,
+            to_warehouse=None, reference_type="trade_in", reference_id=trade.id,
+            reference_number=number, user_id=current_user.id, event_type="trade_in_sale",
+        )
         total_modal_new += sum(qty * cost for _batch, qty, cost in allocations)
         for batch, allocated_qty, cost in allocations:
             db.add(models.TradeInNewItemBatch(
@@ -375,6 +400,7 @@ def create_trade_in(
             stock_item.stock = float(stock_item.stock or 0) - required_qty
         db.add(models.StockMovement(
             branch_id=b_id,
+            warehouse_id=warehouse.id,
             date=data.date, item_id=stock_item.id,
             type="out", qty=required_qty,
             qty_before=before, qty_after=before - required_qty,
@@ -453,6 +479,10 @@ def delete_trade_in(
     if any(float(ri.returned_qty or 0) > 1e-9 for ri in t.return_items):
         raise HTTPException(400, "Tukar tambah tidak dapat dibatalkan karena barang sudah diretur ke supplier")
     warehouse = get_or_create_default_warehouse(db, branch_id)
+    reverse_reference_serials(
+        db, reference_type="trade_in", reference_id=t.id,
+        reversal_reference_number=f"REV-{t.number}", user_id=current_user.id,
+    )
 
     # Balik stok: barang yang kembali → kurangi, barang baru → tambah
     for ri in t.return_items:
@@ -479,6 +509,7 @@ def delete_trade_in(
                 stock_item.stock = float(stock_item.stock or 0) - required_qty
             db.add(models.StockMovement(
                 branch_id=branch_id, date=date.today(), item_id=stock_item.id,
+                warehouse_id=warehouse.id,
                 type="out", qty=required_qty, qty_before=before,
                 qty_after=before - required_qty, reference=f"BATAL-{t.number}",
                 notes="Pembatalan tukar tambah - barang kembali dikeluarkan",
@@ -511,6 +542,7 @@ def delete_trade_in(
                 stock_item.stock = float(stock_item.stock or 0) + required_qty
             db.add(models.StockMovement(
                 branch_id=branch_id, date=date.today(), item_id=stock_item.id,
+                warehouse_id=warehouse.id,
                 type="in", qty=required_qty, qty_before=before,
                 qty_after=before + required_qty, reference=f"BATAL-{t.number}",
                 notes="Pembatalan tukar tambah - barang baru dipulihkan",

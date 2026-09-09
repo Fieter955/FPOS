@@ -17,7 +17,7 @@ from ..schemas import (
 )
 from sqlalchemy import func 
 from ..services.low_stock import get_low_stock_items
-from ..services.virtual_units import is_virtual_variant
+from ..services.virtual_units import get_conversion_factor, get_effective_stock_from_source, get_stock_source_item, is_virtual_variant
 from ..services import inventory_documents as inventory_document_service
 from ..services import inventory_reconciliation as reconciliation_service
 from ..permissions import has_permission
@@ -170,11 +170,7 @@ def get_item_snapshot(
     warehouse = db.query(models.Warehouse).filter(models.Warehouse.id == warehouse_id).first()
     if not warehouse or warehouse.branch_id != current_user.active_branch_id:
         raise HTTPException(403, "Gudang tidak tersedia pada cabang aktif")
-    q = db.query(models.Item).filter(
-        models.Item.is_active == True,
-        models.Item.is_virtual_variant == False,
-        models.Item.parent_item_id.is_(None),
-    )
+    q = db.query(models.Item).filter(models.Item.is_active == True)
     if item_id:
         q = q.filter(models.Item.id == item_id)
     if search:
@@ -190,10 +186,13 @@ def get_item_snapshot(
     )
     result = []
     for item in q.order_by(models.Item.name).limit(min(max(limit, 1), 200)).all():
-        qty = inventory_document_service.warehouse_stock(db, warehouse.id, item.id)
-        fifo_qty = inventory_document_service.total_remaining(db, item.id, warehouse.id)
+        source_item = get_stock_source_item(db, item)
+        source_qty = inventory_document_service.warehouse_stock(db, warehouse.id, source_item.id)
+        qty = get_effective_stock_from_source(item, source_qty)
+        source_fifo_qty = inventory_document_service.total_remaining(db, source_item.id, warehouse.id)
+        fifo_qty = get_effective_stock_from_source(item, source_fifo_qty)
         suggested_cost, cost_source = inventory_document_service.suggested_inbound_cost(
-            db, warehouse.id, item
+            db, warehouse.id, source_item
         )
         result.append({
             "id": item.id,
@@ -208,8 +207,11 @@ def get_item_snapshot(
             "suggested_cost": suggested_cost if show_cost else None,
             "cost_source": cost_source if show_cost else None,
             "cost_editable": has_permission(db, current_user, "inventory.account_override", "view"),
+            "tracks_serial": bool(source_item.tracks_serial),
+            "stock_item_id": source_item.id,
+            "conversion_factor": get_conversion_factor(item) if is_virtual_variant(item) else 1.0,
             "snapshot_token": inventory_document_service.inventory_state_token(
-                db, warehouse.id, item.id, qty
+                db, warehouse.id, source_item.id, source_qty
             ),
         })
     return result

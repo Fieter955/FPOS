@@ -213,6 +213,7 @@ def request_permission(path: str, method: str) -> tuple[str, str] | None:
         "updater": "settings.general",
         "license": "settings.general",
         "warehouses": "inventory.transfer",
+        "serials": "inventory.serial",
         "assembly": "assembly.transaction",
         "notification": "settings.general",
         "discounts": "master.discount_period",
@@ -276,7 +277,9 @@ def request_permission(path: str, method: str) -> tuple[str, str] | None:
         elif "adjust" in tail:
             key = "inventory.item_in"
     elif prefix == "reports":
-        if any(word in tail for word in ("profit", "payable", "receivable", "deposit")):
+        if "serial" in tail:
+            key = "inventory.serial"
+        elif any(word in tail for word in ("profit", "payable", "receivable", "deposit")):
             key = "report.financial"
         elif "purchase" in tail:
             key = "report.purchase"

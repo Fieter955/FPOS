@@ -321,6 +321,34 @@ def transfer_batches(
     return total_cost
 
 
+def transfer_batches_with_lineage(
+    db: Session,
+    *,
+    item_id: int,
+    from_warehouse_id: int,
+    to_warehouse_id: int,
+    qty: float,
+):
+    """Transfer FIFO and return (source batch, destination batch, qty, cost)."""
+    allocs = consume_fifo(db, item_id=item_id, warehouse_id=from_warehouse_id, qty=qty)
+    result = []
+    for source, moved_qty, cost in allocs:
+        destination = add_batch(
+            db,
+            item_id=item_id,
+            warehouse_id=to_warehouse_id,
+            qty=moved_qty,
+            unit_cost=cost,
+            received_date=source.received_date,
+            supplier_id=source.supplier_id,
+            purchase_item_id=source.purchase_item_id,
+            source_inventory_line_id=source.source_inventory_line_id,
+        )
+        db.flush()
+        result.append((source, destination, float(moved_qty), float(cost or 0)))
+    return result
+
+
 def total_remaining(db: Session, item_id: int, warehouse_id: int) -> float:
     return float(
         db.query(func.coalesce(func.sum(models.StockBatch.qty_remaining), 0.0))
