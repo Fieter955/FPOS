@@ -343,8 +343,11 @@ def build_purchase_return_receipt(return_doc, settings: ReceiptSettings) -> str:
     receipt.header("NOTA RETUR PEMBELIAN")
     receipt.pair(f"No.   : {return_doc.number}", _date(return_doc.date))
     receipt.pair(f"Kasir : {_creator_name(getattr(return_doc, 'creator', None))}", _time(return_doc.created_at))
-    receipt.line(f"Faktur: {getattr(purchase, 'number', '-')}")
-    receipt.line(f"Supplier: {getattr(getattr(purchase, 'supplier', None), 'name', None) or '-'}")
+    receipt.line(f"Faktur: {getattr(purchase, 'number', None) or 'Tanpa Faktur'}")
+    supplier = getattr(return_doc, "supplier", None) or getattr(purchase, "supplier", None)
+    receipt.line(f"Supplier: {getattr(supplier, 'name', None) or '-'}")
+    if getattr(return_doc, "evidence_reference", None):
+        receipt.line(f"Bukti: {return_doc.evidence_reference}")
     receipt.rule()
     for line in return_doc.items:
         item = getattr(line, "item", None)

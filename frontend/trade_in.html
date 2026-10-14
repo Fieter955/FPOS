@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Tukar Tambah - iPos 5.0</title>
     <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/serial-picker.css" />
     <link rel="stylesheet" href="/css/components.css" />
     <style>
       #mBuat {
@@ -63,7 +64,7 @@
       }
     </style>
   </head>
-  <body>
+  <body class="transaction-density keyboard-workflow">
     <div class="app-container">
       <main class="main-content">
         <button
@@ -443,19 +444,25 @@
     <script src="/js/api.js"></script>
     <script src="/js/theme.js"></script>
     <script src="/js/components.js"></script>
+    <script src="/js/serial-picker.js"></script>
     <script>
       requireAuth();
       let allItems = [],
         allCusts = [],
         retIdx = 0,
         newIdx = 0,
+        defaultWarehouseId = null,
         custCombo = null;
 
       async function init() {
-        [allItems, allCusts] = await Promise.all([
+        const [items, customers, warehouses] = await Promise.all([
           api("GET", "/items/?limit=2000"),
           api("GET", "/customers/?limit=2000"),
+          api("GET", "/warehouses/"),
         ]);
+        allItems = items;
+        allCusts = customers;
+        defaultWarehouseId = (warehouses.find((row) => row.is_default) || warehouses[0] || {}).id || null;
         subscribeItemMasterChanges(refreshTradeInItems);
 
         custCombo = createPremiumCombo("custComboContainer", allCusts, {
@@ -529,8 +536,8 @@
           "beforeend",
           `
       <div style="display:grid;grid-template-columns:3fr 1fr 2fr 1fr 36px;gap:8px;margin-bottom:8px;align-items:center" id="rrow${idx}">
-        <select class="input-control" style="margin:0;padding:10px 12px;font-size:14px" onchange="fillReturnPrice(${idx},this);recalc()">${makeItemOpts()}</select>
-        <input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" value="1" class="input-control" style="margin:0;padding:10px;text-align:center;font-weight:700" oninput="recalc()">
+        <div><select class="input-control" style="margin:0;padding:10px 12px;font-size:14px" onchange="fillReturnPrice(${idx},this);recalc()">${makeItemOpts()}</select><button type="button" class="btn serial-picker-trigger ti-serial" style="display:none;margin-top:4px" onclick="pickTradeInSerials('rrow${idx}','trade_in_return')">Serial 0/0</button></div>
+        <input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" value="1" class="input-control" style="margin:0;padding:10px;text-align:center;font-weight:700" oninput="renderTradeInSerialButton(document.getElementById('rrow${idx}'));recalc()">
         <input type="text" inputmode="decimal" data-input-desimal data-min="0" value="0" class="input-control rp" style="margin:0;padding:10px;font-size:14px" oninput="recalc()">
         <select class="input-control condition-sel" style="margin:0;padding:10px;font-size:12px">
           <option value="good">Bagus</option>
@@ -544,6 +551,7 @@
         const opt = sel.options[sel.selectedIndex];
         document.querySelector(`#rrow${idx} .rp`).value =
           opt?.dataset?.sell || 0;
+        const row = document.getElementById(`rrow${idx}`); row._serials = []; renderTradeInSerialButton(row);
         recalc();
       }
 
@@ -553,8 +561,8 @@
           "beforeend",
           `
       <div style="display:grid;grid-template-columns:3fr 1fr 2fr 36px;gap:8px;margin-bottom:8px;align-items:center" id="nrow${idx}">
-        <select class="input-control" style="margin:0;padding:10px 12px;font-size:14px" onchange="fillNewPrice(${idx},this);recalc()">${makeItemOpts()}</select>
-        <input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" value="1" class="input-control" style="margin:0;padding:10px;text-align:center;font-weight:700" oninput="recalc()">
+        <div><select class="input-control" style="margin:0;padding:10px 12px;font-size:14px" onchange="fillNewPrice(${idx},this);recalc()">${makeItemOpts()}</select><button type="button" class="btn serial-picker-trigger ti-serial" style="display:none;margin-top:4px" onclick="pickTradeInSerials('nrow${idx}','trade_in_sale')">Serial 0/0</button></div>
+        <input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" value="1" class="input-control" style="margin:0;padding:10px;text-align:center;font-weight:700" oninput="renderTradeInSerialButton(document.getElementById('nrow${idx}'));recalc()">
         <input type="text" inputmode="decimal" data-input-desimal data-min="0" value="0" class="input-control np" style="margin:0;padding:10px;font-size:14px" oninput="recalc()">
         <button onclick="document.getElementById('nrow${idx}').remove();recalc()" style="width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,.15);color:#ef4444;border:none;cursor:pointer;font-size:16px;font-weight:700">✕</button>
       </div>`,
@@ -564,7 +572,27 @@
         const opt = sel.options[sel.selectedIndex];
         document.querySelector(`#nrow${idx} .np`).value =
           opt?.dataset?.sell || 0;
+        const row = document.getElementById(`nrow${idx}`); row._serials = []; renderTradeInSerialButton(row);
         recalc();
+      }
+
+      function renderTradeInSerialButton(row) {
+        const item = allItems.find((value) => value.id == row?.querySelector("select")?.value);
+        const button = row?.querySelector(".ti-serial");
+        if (!button || !item || !SerialPicker.isTracked(item, allItems)) { if(button)button.style.display="none"; return; }
+        const qty = parseDesimal(row.querySelector("input[data-input-desimal]"));
+        const needed = SerialPicker.requiredQuantity(item, qty, allItems);
+        button.style.display = "inline-flex";
+        button.textContent = SerialPicker.buttonText(row._serials || [], needed);
+        button.classList.toggle("complete", (row._serials || []).length === Math.round(needed));
+        button.classList.toggle("invalid", (row._serials || []).length !== Math.round(needed));
+      }
+
+      function pickTradeInSerials(rowId, purpose) {
+        const row = document.getElementById(rowId);
+        const item = allItems.find((value) => value.id == row?.querySelector("select")?.value);
+        if (!row || !item) return showToast("Pilih barang terlebih dahulu", "error");
+        SerialPicker.open({purpose,item,itemId:item.id,quantity:parseDesimal(row.querySelector("input[data-input-desimal]")),warehouseId:purpose==="trade_in_sale"?defaultWarehouseId:null,initialSerials:row._serials || [],onSave(serials){row._serials=serials;renderTradeInSerialButton(row);}});
       }
 
       function sumRows(containerId) {
@@ -713,23 +741,33 @@
           const sel = row.querySelector("select");
           const inps = row.querySelectorAll("input[data-input-desimal]");
           const cond = row.querySelector(".condition-sel").value;
-          if (sel.value)
+          if (sel.value) {
+            const item = allItems.find((value) => value.id == sel.value);
+            const qty = parseDesimal(inps[0]) || 1;
             returnItems.push({
               item_id: parseInt(sel.value),
-              qty: parseDesimal(inps[0]) || 1,
+              qty,
               return_price: parseDesimal(inps[1]),
               condition: cond,
+              serials: row._serials || [],
+              _serialError: SerialPicker.validate(item, qty, row._serials || [], allItems),
             });
+          }
         });
         document.querySelectorAll("#newRows > div").forEach((row) => {
           const sel = row.querySelector("select");
           const inps = row.querySelectorAll("input[data-input-desimal]");
-          if (sel.value)
+          if (sel.value) {
+            const item = allItems.find((value) => value.id == sel.value);
+            const qty = parseDesimal(inps[0]) || 1;
             newItems.push({
               item_id: parseInt(sel.value),
-              qty: parseDesimal(inps[0]) || 1,
+              qty,
               sell_price: parseDesimal(inps[1]),
+              serials: row._serials || [],
+              _serialError: SerialPicker.validate(item, qty, row._serials || [], allItems),
             });
+          }
         });
 
         if (returnItems.length === 0) {
@@ -740,6 +778,11 @@
           showToast("Barang baru wajib diisi minimal 1", "warning");
           return;
         }
+        const serialError = [...returnItems, ...newItems].find((item) => item._serialError)?._serialError;
+        if (serialError) return showToast(serialError, "error");
+        const duplicateSerial = SerialPicker.validateUnique([...returnItems, ...newItems].map((item) => item.serials));
+        if (duplicateSerial) return showToast(duplicateSerial, "error");
+        [...returnItems, ...newItems].forEach((item) => delete item._serialError);
 
         try {
           const cashAmount = toAngka(
@@ -862,6 +905,8 @@
 
       async function printReceipt(tradeId) {
         try {
+          if (typeof ensureFposLocalDeviceId === "function")
+            await ensureFposLocalDeviceId();
           const result = await api("POST", `/trade-in/print/${tradeId}`, {});
           showToast(`Struk masuk antrean printer (job #${result.job_id})`);
         } catch (e) {

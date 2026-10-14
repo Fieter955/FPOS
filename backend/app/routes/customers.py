@@ -160,7 +160,7 @@ def get_customer_history(
             "transaction_total": float(return_doc.total or 0),
             "deposit_change": sum(float(m.amount or 0) for m in linked),
             "balance_after": linked[-1].balance_after if linked else balance_at(return_doc.created_at),
-            "status": "completed",
+            "status": return_doc.status,
         })
 
     trades = db.query(models.TradeIn).filter(models.TradeIn.customer_id == cid).all()
@@ -193,6 +193,7 @@ def get_customer_history(
                 "transfer_in": "Transfer Masuk", "transfer_out": "Transfer Keluar",
                 "write_off": "Penghangusan", "purchase_cancel": "Pembatalan Pembelian",
                 "trade_in_cancel": "Pembatalan Tukar Tambah",
+                "sale_return_reversal": "Pembatalan Retur",
                 "opening_adjustment": "Saldo Awal/Penyesuaian",
             }.get(movement.event_type, "Mutasi Saldo"),
             "source_type": "movement", "source_id": movement.id,
@@ -457,7 +458,8 @@ def get_customer_item_sale_history(
     for h in history:
         returned_qty = db.query(func.sum(models.SaleReturnItem.qty)).join(models.SaleReturn).filter(
             models.SaleReturn.sale_id == h.id,
-            models.SaleReturnItem.item_id == iid
+            models.SaleReturnItem.item_id == iid,
+            models.SaleReturn.status != "cancelled",
         ).scalar() or 0.0
         
         results.append({

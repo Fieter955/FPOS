@@ -52,6 +52,35 @@ class InventorySerialMigrationTests(unittest.TestCase):
             self.assertNotIn("tracks_serial", {c["name"] for c in inspector.get_columns("items")})
             self.assertNotIn("item_serials", inspector.get_table_names())
 
+    def test_return_audit_migration_adds_provenance_and_reversal_columns(self):
+        engine = sa.create_engine("sqlite:///:memory:")
+        metadata = sa.MetaData()
+        sa.Table("users", metadata, sa.Column("id", sa.Integer, primary_key=True))
+        sa.Table("journals", metadata, sa.Column("id", sa.Integer, primary_key=True))
+        sa.Table("sale_items", metadata, sa.Column("id", sa.Integer, primary_key=True))
+        sa.Table("sale_returns", metadata, sa.Column("id", sa.Integer, primary_key=True))
+        sa.Table("sale_return_items", metadata, sa.Column("id", sa.Integer, primary_key=True))
+        sa.Table("purchase_returns", metadata, sa.Column("id", sa.Integer, primary_key=True))
+        sa.Table("purchase_return_items", metadata, sa.Column("id", sa.Integer, primary_key=True))
+        metadata.create_all(engine)
+
+        migration_path = Path(__file__).parents[1] / "alembic" / "versions" / "d0e1f2a3b4c5_return_serial_audit.py"
+        spec = importlib.util.spec_from_file_location("return_serial_audit_migration", migration_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with engine.begin() as connection:
+            module.op = Operations(MigrationContext.configure(connection, opts={"render_as_batch": True}))
+            module.upgrade()
+            inspector = sa.inspect(connection)
+            self.assertIn("serials_json", {c["name"] for c in inspector.get_columns("sale_items")})
+            self.assertIn("carrying_cost", {c["name"] for c in inspector.get_columns("sale_return_items")})
+            self.assertIn("status", {c["name"] for c in inspector.get_columns("sale_returns")})
+            self.assertIn("reversal_journal_id", {c["name"] for c in inspector.get_columns("purchase_returns")})
+            module.downgrade()
+            inspector = sa.inspect(connection)
+            self.assertNotIn("serials_json", {c["name"] for c in inspector.get_columns("sale_items")})
+            self.assertNotIn("status", {c["name"] for c in inspector.get_columns("sale_returns")})
+
 
 if __name__ == "__main__":
     unittest.main()

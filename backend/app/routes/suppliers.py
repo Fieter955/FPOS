@@ -342,7 +342,8 @@ def get_supplier_item_purchase_history(
     for h in history:
         returned_qty = db.query(func.sum(models.PurchaseReturnItem.qty)).join(models.PurchaseReturn).filter(
             models.PurchaseReturn.purchase_id == h.id,
-            models.PurchaseReturnItem.item_id == iid
+            models.PurchaseReturnItem.item_id == iid,
+            models.PurchaseReturn.status != "cancelled",
         ).scalar() or 0.0
         
         results.append({

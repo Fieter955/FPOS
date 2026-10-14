@@ -9,6 +9,54 @@
     z-index: 10001;
   }
 
+  #mSerialActivation {
+    z-index: 10002;
+  }
+
+  #mSerialActivation .serial-activation-box {
+    width: min(920px, calc(100vw - 32px));
+    max-width: 920px;
+    max-height: min(860px, calc(100dvh - 32px));
+    display: flex;
+    flex-direction: column;
+    padding: 24px;
+  }
+
+  #serialActivationWarehouses {
+    display: grid;
+    gap: 12px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+
+  .serial-warehouse-card {
+    padding: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--bg-color);
+  }
+
+  .serial-warehouse-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+
+  .serial-warehouse-input {
+    width: 100%;
+    min-height: 112px;
+    resize: vertical;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  }
+
+  .serial-activation-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 16px;
+  }
+
   #mHapusKonversi .conversion-delete-box {
     max-width: 440px;
     padding: 28px;
@@ -428,9 +476,9 @@
           </div>
 
           <div class="input-group" style="grid-area: sat">
-            <label>Satuan</label>
+            <label>Satuan <span style="color:var(--danger)">*</span></label>
             <div style="display: flex; gap: 8px">
-              <select id="fSat" class="input-control" style="flex: 1; margin: 0" onchange="syncGroupPricesFromMain()">
+              <select id="fSat" class="input-control" style="flex: 1; margin: 0" required aria-required="true" onchange="syncGroupPricesFromMain()">
                 <option value="">-- Pilih --</option>
               </select>
               <button type="button" onclick="quickAddSat()" class="btn" style="
@@ -673,6 +721,16 @@
         </div>
       </div>
 
+      <div id="serialTrackingGroup" data-item-keyboard-section style="margin-bottom:16px;padding:14px 16px;border:1px solid var(--border-color);border-radius:12px;background:var(--bg-color)">
+        <label style="display:flex;align-items:center;gap:10px;font-weight:700;cursor:pointer">
+          <input id="fTracksSerial" type="checkbox" style="width:18px;height:18px" />
+          Menggunakan Serial
+        </label>
+        <div id="serialTrackingHint" style="margin-top:6px;font-size:12px;color:var(--text-muted)">
+          Seperti iPOS 5, aktifkan untuk barang yang setiap unitnya memiliki nomor serial unik.
+        </div>
+      </div>
+
       <!-- === PILIH SUPPLIER === -->
       <div class="sup-selection-section" data-item-keyboard-section>
         <div class="sup-selection-header">
@@ -705,6 +763,27 @@
         <button type="submit" id="btnSimpanBarang" class="btn btn-primary">Simpan Barang</button>
       </div>
     </form>
+  </div>
+</div>
+
+<div class="modal-overlay" id="mSerialActivation" aria-hidden="true" onclick="if(event.target===this)cancelSerialActivationWizard()">
+  <div class="modal-box serial-activation-box" role="dialog" aria-modal="true" aria-labelledby="serialActivationTitle">
+    <div class="modal-hdr">
+      <div>
+        <h2 id="serialActivationTitle" style="margin:0">Aktifkan Serial Barang</h2>
+        <div id="serialActivationSubtitle" style="margin-top:4px;color:var(--text-muted)"></div>
+      </div>
+      <button type="button" class="btn-x" onclick="cancelSerialActivationWizard()">×</button>
+    </div>
+    <div class="hint-box">
+      Masukkan satu nomor serial per baris. Aktivasi belum disimpan sampai seluruh gudang lengkap dan tombol Aktifkan Serial ditekan.
+    </div>
+    <div id="serialActivationWarehouses"></div>
+    <div id="serialActivationStatus" style="margin-top:12px;font-weight:700"></div>
+    <div class="serial-activation-actions">
+      <button type="button" class="btn" onclick="cancelSerialActivationWizard()">Batal — Jangan Ubah Serial</button>
+      <button type="button" id="serialActivationSubmit" class="btn btn-primary" disabled onclick="submitSerialActivationWizard()">Aktifkan Serial</button>
+    </div>
   </div>
 </div>
 

@@ -1401,6 +1401,8 @@
         const { blob, widthMm, heightMm } = sheet;
         const imageBase64 = await blobToBase64(blob);
 
+        if (typeof ensureFposLocalDeviceId === "function")
+          await ensureFposLocalDeviceId();
         const printResult = await api("POST", "/print/", {
           content: JSON.stringify({
             image_base64: imageBase64,

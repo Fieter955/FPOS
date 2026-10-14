@@ -206,6 +206,7 @@
         initialGroupPrices = {},
         initialBuyPrice = 0,
         initialSellPrice = 0,
+        initialTracksSerial = false,
         supplierSettingsMap = {},
         generalBuyPrice = 0,
         generalBarcode = "",
@@ -214,8 +215,11 @@
         sharedFieldNotified = false,
         currentSupplierContext = "",
         satuanRows = [],
+        pendingUnitRebase = null,
         advancedDeleteModalResolver = null,
         advancedDeleteModalReturnFocus = null,
+        serialActivationResolver = null,
+        serialActivationPreview = null,
         masterUnits = [],
         groupDiscounts = [], // Potongan Harga Jual per grup: [{group_id, disc1..disc4}]
         lastPpnStatus = "none";
@@ -1866,6 +1870,19 @@
           : "none";
         document.getElementById("mBarangTitle").textContent = "Tambah Barang";
         document.getElementById("fBarang").reset();
+        const serialCheckbox = document.getElementById("fTracksSerial");
+        const serialHint = document.getElementById("serialTrackingHint");
+        const serialRoles = String(getUser()?.role || "")
+          .split(",")
+          .map((role) => role.trim().toLowerCase());
+        const canChangeSerial = serialRoles.includes("admin");
+        initialTracksSerial = false;
+        if (serialCheckbox) {
+          serialCheckbox.checked = false;
+          serialCheckbox.disabled = !canChangeSerial;
+        }
+        if (serialHint && !canChangeSerial)
+          serialHint.textContent = "Status serial hanya dapat diubah oleh admin.";
         resetFotoUI(null); // kosongkan foto (default barang baru; ditimpa di bawah bila edit)
         document.getElementById("autoBarcode").checked = true;
         toggleBarcodeUI();
@@ -1965,6 +1982,8 @@
               item.is_discountable;
           document.getElementById("fHBeli").value = toRibuan(item.buy_price);
           document.getElementById("fHJual").value = toRibuan(item.sell_price);
+          initialTracksSerial = Boolean(item.tracks_serial);
+          if (serialCheckbox) serialCheckbox.checked = initialTracksSerial;
           // Barang lama tetap memakai status PPN tersimpannya saat diedit. Nilai null
           // adalah data lama yang mengikuti tarif toko; hanya barang BARU yang default
           // ke Tanpa PPN.
@@ -2113,8 +2132,143 @@
         }
       }
 
+      function splitSerialValues(raw) {
+        return String(raw || "")
+          .split(/\r?\n|,/)
+          .map((value) => value.trim())
+          .filter(Boolean);
+      }
+
+      function normalizedSerialKey(value) {
+        return String(value || "").normalize("NFKC").trim().toUpperCase();
+      }
+
+      function escapeItemHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        })[character]);
+      }
+
+      function updateSerialActivationProgress() {
+        if (!serialActivationPreview) return false;
+        const allKeys = [];
+        let totalNeeded = 0;
+        let totalEntered = 0;
+        let complete = true;
+        serialActivationPreview.warehouses.forEach((warehouse) => {
+          const needed = Math.round(Number(warehouse.stock) || 0);
+          const input = document.getElementById(
+            `serialWarehouseInput-${warehouse.warehouse_id}`,
+          );
+          const serials = splitSerialValues(input?.value);
+          const count = document.getElementById(
+            `serialWarehouseCount-${warehouse.warehouse_id}`,
+          );
+          totalNeeded += needed;
+          totalEntered += serials.length;
+          allKeys.push(...serials.map(normalizedSerialKey));
+          const rowValid = serials.length === needed;
+          complete = complete && rowValid;
+          if (count) {
+            count.textContent = `${serials.length} / ${needed}`;
+            count.className = rowValid ? "bg" : "bo";
+          }
+        });
+        const duplicateCount = allKeys.length - new Set(allKeys).size;
+        const valid = complete && duplicateCount === 0;
+        const status = document.getElementById("serialActivationStatus");
+        const submit = document.getElementById("serialActivationSubmit");
+        if (status) {
+          status.textContent = duplicateCount
+            ? `Ada ${duplicateCount} nomor serial duplikat. Setiap serial harus unik.`
+            : valid
+              ? `Lengkap: ${totalEntered} dari ${totalNeeded} serial siap diaktifkan.`
+              : `Belum lengkap: ${totalEntered} dari ${totalNeeded} serial.`;
+          status.style.color = valid ? "#16a34a" : "#d97706";
+        }
+        if (submit) submit.disabled = !valid;
+        return valid;
+      }
+
+      function openSerialActivationWizard(preview) {
+        serialActivationPreview = preview;
+        document.getElementById("serialActivationSubtitle").textContent =
+          `${preview.item_code} — isi serial untuk seluruh stok yang sudah ada`;
+        document.getElementById("serialActivationWarehouses").innerHTML =
+          preview.warehouses
+            .map((warehouse) => {
+              const needed = Math.round(Number(warehouse.stock) || 0);
+              return `<div class="serial-warehouse-card">
+                <div class="serial-warehouse-head"><div><b>${escapeItemHtml(warehouse.warehouse_name)}</b><br><small>Stok saat ini: ${needed}</small></div><span id="serialWarehouseCount-${warehouse.warehouse_id}" class="${needed ? "bo" : "bg"}">0 / ${needed}</span></div>
+                ${needed ? `<textarea id="serialWarehouseInput-${warehouse.warehouse_id}" class="input-control serial-warehouse-input" placeholder="Contoh:\nSN-0001\nSN-0002" oninput="updateSerialActivationProgress()"></textarea>` : '<div style="color:var(--text-muted)">Tidak ada stok yang perlu diberi serial.</div>'}
+              </div>`;
+            })
+            .join("");
+        openModal("mSerialActivation");
+        updateSerialActivationProgress();
+        setTimeout(
+          () =>
+            document
+              .querySelector("#serialActivationWarehouses textarea")
+              ?.focus(),
+          50,
+        );
+        return new Promise((resolve) => {
+          serialActivationResolver = resolve;
+        });
+      }
+
+      function finishSerialActivationWizard(result) {
+        closeModal("mSerialActivation");
+        const resolve = serialActivationResolver;
+        serialActivationResolver = null;
+        serialActivationPreview = null;
+        if (resolve) resolve(result);
+      }
+
+      function cancelSerialActivationWizard() {
+        finishSerialActivationWizard(null);
+      }
+
+      function submitSerialActivationWizard() {
+        if (!serialActivationPreview || !updateSerialActivationProgress()) return;
+        const warehouses = serialActivationPreview.warehouses.map((warehouse) => ({
+          warehouse_id: warehouse.warehouse_id,
+          serials: splitSerialValues(
+            document.getElementById(
+              `serialWarehouseInput-${warehouse.warehouse_id}`,
+            )?.value,
+          ),
+        }));
+        finishSerialActivationWizard({
+          item_id: serialActivationPreview.item_id,
+          preview_token: serialActivationPreview.preview_token,
+          warehouses,
+        });
+      }
+
+      async function prepareSerialActivation(itemId) {
+        const preview = await api("POST", "/serials/reconciliations/preview", {
+          item_id: itemId,
+          warehouses: [],
+        });
+        if (!preview.can_apply)
+          throw new Error(preview.blockers.join("; "));
+        return openSerialActivationWizard(preview);
+      }
+
       async function saveItem(e) {
         e.preventDefault();
+        const unitSelect = document.getElementById("fSat");
+        if (!parseInt(unitSelect?.value, 10)) {
+          showToast("Satuan dasar barang wajib dipilih", "error");
+          unitSelect?.focus({ preventScroll: true });
+          return;
+        }
         const lastSupplierId =
           document.getElementById("fSupplierContext").value;
         const lastBuyPrice = toAngka(document.getElementById("fHBeli").value);
@@ -2240,10 +2394,47 @@
         };
         try {
           const isCreate = !editItemId; // simpan status sebelum editItemId ditimpa id baru
+          const requestedTracksSerial = Boolean(
+            document.getElementById("fTracksSerial")?.checked,
+          );
+          if (pendingUnitRebase && requestedTracksSerial) {
+            throw new Error(
+              "Barang berserial belum dapat diubah ke satuan dasar virtual.",
+            );
+          }
+          let serialActivation = null;
+          let deactivateSerial = false;
+          if (isCreate) {
+            p.tracks_serial = requestedTracksSerial;
+          } else if (requestedTracksSerial !== initialTracksSerial) {
+            if (requestedTracksSerial) {
+              serialActivation = await prepareSerialActivation(editItemId);
+              if (!serialActivation) return;
+            } else {
+              if (
+                !(await showConfirm(
+                  "Nonaktifkan serial untuk barang ini? Tindakan hanya berhasil jika tidak ada serial dalam stok atau transit.",
+                ))
+              )
+                return;
+              deactivateSerial = true;
+            }
+          }
           let saved;
           if (editItemId) saved = await api("PUT", `/items/${editItemId}`, p);
           else saved = await api("POST", "/items/", p);
           editItemId = saved.id;
+          if (serialActivation) {
+            await api("POST", "/serials/reconciliations", serialActivation);
+            saved.tracks_serial = true;
+          } else if (deactivateSerial) {
+            await api("POST", "/serials/deactivate-item", {
+              item_id: editItemId,
+              warehouses: [],
+            });
+            saved.tracks_serial = false;
+          }
+          initialTracksSerial = Boolean(saved.tracks_serial);
 
           // Foto barang: upload / hapus. Disimpan sebagai FILE di server (bukan di DB).
           // Dilakukan setelah barang tersimpan agar id-nya sudah pasti ada.
@@ -2264,12 +2455,20 @@
             );
           }
 
+          let rebaseContext = null;
+          if (pendingUnitRebase) {
+            rebaseContext = await applyPendingUnitRebase();
+            editItemId = rebaseContext.base_item_id;
+            saved = await api("GET", `/items/${editItemId}`);
+          }
+
           if (
             ["satuan", "levelHarga", "levelJumlah"].includes(
               currentAdvancedType,
             )
           ) {
-            await saveAllSatuanRows();
+            if (rebaseContext) await saveAllSatuanRows(rebaseContext);
+            else await saveAllSatuanRows();
           }
           showToast("Barang disimpan ✓", "success");
 
@@ -2667,6 +2866,7 @@
       }
 
       async function initSatuanGrid(item = null) {
+        pendingUnitRebase = null;
         const gridBaseUnitSelect = document.getElementById("fSatuanDasarGrid");
         if (gridBaseUnitSelect) {
           gridBaseUnitSelect.innerHTML =
@@ -2677,6 +2877,7 @@
           parseInt(document.getElementById("fSat")?.value) || 0;
         const baseRow = {
           is_base: true,
+          factor_basis: "current_base",
           child_unit_id: baseUnitId,
           conversion_factor: 1,
           buy_price_auto:
@@ -2701,7 +2902,7 @@
 
         satuanRows = [baseRow];
         syncGroupPricesFromMain();
-        if (editItemId && !window._editFromBOM) {
+        if (editItemId && baseUnitId && !window._editFromBOM) {
           try {
             const data = await api(
               "GET",
@@ -2715,6 +2916,7 @@
               child_name: row.child_name || "",
               child_unit_id: row.child_unit_id,
               conversion_factor: row.conversion_factor || 1,
+              factor_basis: "current_base",
               buy_price_auto: row.buy_price_auto || 0,
               sell_price: row.sell_price || 0,
               margin_percent: row.margin_percent || 0,
@@ -2735,6 +2937,9 @@
         if (!last || last.child_unit_id || last.is_base) {
           satuanRows.push({
             is_draft: true,
+            factor_basis: pendingUnitRebase
+              ? "pending_base"
+              : "current_base",
             child_unit_id: "",
             conversion_factor: 0,
             buy_price_auto: 0,
@@ -2888,7 +3093,12 @@
           const row = target?.closest?.(
             "#advancedContent tbody tr[data-advanced-row]",
           );
-          if (!row || row.classList.contains("base-row")) return;
+          if (
+            !row ||
+            row.classList.contains("base-row") ||
+            row.classList.contains("new-base-row")
+          )
+            return;
 
           event.preventDefault();
           event.stopPropagation();
@@ -2961,6 +3171,183 @@
         }
       }
 
+      function getPendingBaseRow() {
+        if (!pendingUnitRebase) return null;
+        return satuanRows.find(
+          (row) =>
+            !row.is_base &&
+            String(row.child_unit_id) ===
+              String(pendingUnitRebase.base_unit_id),
+        );
+      }
+
+      function isPendingBaseRow(row) {
+        return Boolean(
+          pendingUnitRebase &&
+            row &&
+            !row.is_base &&
+            String(row.child_unit_id) ===
+              String(pendingUnitRebase.base_unit_id),
+        );
+      }
+
+      function getEffectiveConversionFactor(row) {
+        const factor = Number(row?.conversion_factor) || 0;
+        if (!pendingUnitRebase || row?.is_base) return factor;
+        if (isPendingBaseRow(row)) return 1;
+        return row.factor_basis === "pending_base"
+          ? factor
+          : factor * Number(pendingUnitRebase.units_per_source || 0);
+      }
+
+      function normalizePendingRowsToCurrentBase() {
+        if (!pendingUnitRebase) return;
+        const unitsPerSource = Number(pendingUnitRebase.units_per_source) || 0;
+        if (!(unitsPerSource > 0)) return;
+        satuanRows.forEach((row) => {
+          if (
+            !row.is_base &&
+            !isPendingBaseRow(row) &&
+            row.factor_basis === "pending_base"
+          ) {
+            row.conversion_factor =
+              Number(row.conversion_factor || 0) / unitsPerSource;
+            row.factor_basis = "current_base";
+          }
+        });
+      }
+
+      function renderVirtualBaseControls() {
+        const wrap = document.getElementById("virtualBaseControls");
+        if (!wrap || currentAdvancedType !== "satuan") return;
+        const current = satuanRows[0];
+        if (!current) return;
+        const currentUnit = masterUnits.find(
+          (unit) => String(unit.id) === String(current.child_unit_id),
+        );
+        const selectedId = pendingUnitRebase?.base_unit_id || current.child_unit_id;
+        const options = (masterUnits || [])
+          .map(
+            (unit) =>
+              `<option value="${unit.id}" ${String(unit.id) === String(selectedId) ? "selected" : ""}>${escapeItemHtml(unit.name)}${unit.abbreviation ? ` (${escapeItemHtml(unit.abbreviation)})` : ""}</option>`,
+          )
+          .join("");
+        const currentLabel = escapeItemHtml(
+          currentUnit?.abbreviation || currentUnit?.name || "satuan lama",
+        );
+        const pendingRow = getPendingBaseRow();
+        const pendingUnit = pendingUnitRebase
+          ? masterUnits.find(
+              (unit) =>
+                String(unit.id) === String(pendingUnitRebase.base_unit_id),
+            )
+          : null;
+        const pendingLabel = escapeItemHtml(
+          pendingUnit?.abbreviation || pendingUnit?.name || "satuan baru",
+        );
+        wrap.innerHTML = `
+          <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
+            <div style="min-width:230px;flex:1">
+              <label style="display:block;font-weight:700;margin-bottom:6px">Satuan dasar stok</label>
+              <select class="input-control" onchange="selectVirtualBaseUnit(this.value)">${options}</select>
+            </div>
+            ${pendingUnitRebase ? `<div style="min-width:210px;flex:1">
+              <label style="display:block;font-weight:700;margin-bottom:6px">Isi dalam 1 ${currentLabel}</label>
+              <input class="input-control" type="text" inputmode="decimal" data-input-desimal data-min="0.0001" value="${toDesimal(pendingUnitRebase.units_per_source, { maximumFractionDigits: 4 })}" onchange="updateVirtualBaseFactor(this.value)">
+            </div>` : ""}
+          </div>
+          <div style="margin-top:8px;font-size:12px;color:${pendingUnitRebase ? "#047857" : "var(--text-muted)"}">
+            ${pendingUnitRebase
+              ? `Setelah disimpan: <b>1 ${currentLabel} = ${toDesimal(pendingUnitRebase.units_per_source, { maximumFractionDigits: 4 })} ${pendingLabel}</b>. HPP ${pendingLabel}: <b>${toRibuan(pendingRow?.buy_price_auto || 0)}</b>. ${currentLabel} tetap tersedia dan memakai stok ${pendingLabel} yang sama.`
+              : `Saat ini ${currentLabel} memegang stok fisik. Pilih satuan lebih kecil untuk menjadikannya dasar stok.`}
+          </div>`;
+      }
+
+      window.selectVirtualBaseUnit = function (unitId) {
+        const current = satuanRows[0];
+        if (!current) return;
+        normalizePendingRowsToCurrentBase();
+        pendingUnitRebase = null;
+        if (!unitId || String(unitId) === String(current.child_unit_id)) {
+          satuanRows.forEach((row, idx) => {
+            if (!row.is_base && !row.is_draft)
+              recalcAdvancedRow(idx, "factor");
+          });
+          renderAdvancedGrid();
+          return;
+        }
+        let row = satuanRows.find(
+          (candidate) =>
+            !candidate.is_base &&
+            String(candidate.child_unit_id) === String(unitId),
+        );
+        const isNew = !row;
+        if (!row) {
+          const unit = masterUnits.find(
+            (candidate) => String(candidate.id) === String(unitId),
+          );
+          row = {
+            rebase_draft_created: true,
+            factor_basis: "current_base",
+            child_unit_id: unitId,
+            conversion_factor: 1,
+            buy_price_auto: current.buy_price_auto || 0,
+            sell_price: current.sell_price || 0,
+            margin_percent: current.margin_percent || 0,
+            child_name: `${document.getElementById("fNama")?.value || "Barang"} ${unit?.abbreviation || unit?.name || ""}`.trim(),
+            group_prices: Object.fromEntries(
+              Object.entries(current.group_prices || {}).map(([key, price]) => [
+                key,
+                Number(price) || 0,
+              ]),
+            ),
+            tier_prices: (current.tier_prices || []).map((tier) => ({
+              ...tier,
+            })),
+          };
+          satuanRows.splice(Math.max(1, satuanRows.length - 1), 0, row);
+        }
+        const inferredFactor =
+          row.conversion_factor > 0 ? 1 / row.conversion_factor : 1;
+        pendingUnitRebase = {
+          base_unit_id: Number(unitId),
+          units_per_source: inferredFactor,
+        };
+        if (isNew) {
+          row.conversion_factor = 1 / inferredFactor;
+        }
+        satuanRows.forEach((candidate, idx) => {
+          if (!candidate.is_base && !candidate.is_draft)
+            recalcAdvancedRow(idx, "factor");
+        });
+        ensureEmptySatuanRow();
+        renderAdvancedGrid();
+      };
+
+      window.updateVirtualBaseFactor = function (value) {
+        const factor = parseDesimal(value, { maximumFractionDigits: 4 });
+        const row = getPendingBaseRow();
+        if (!pendingUnitRebase || !row || !(factor > 0)) {
+          showToast("Isi per satuan lama harus lebih dari 0", "error");
+          return;
+        }
+        const previousFactor = Number(pendingUnitRebase.units_per_source) || 1;
+        if (row.rebase_draft_created && previousFactor > 0) {
+          const ratio = factor / previousFactor;
+          (row.tier_prices || []).forEach((tier) => {
+            if (tier.min_qty > 0) tier.min_qty *= ratio;
+            if (tier.sampai_qty > 0) tier.sampai_qty *= ratio;
+          });
+        }
+        pendingUnitRebase.units_per_source = factor;
+        row.conversion_factor = 1 / factor;
+        satuanRows.forEach((candidate, idx) => {
+          if (!candidate.is_base && !candidate.is_draft)
+            recalcAdvancedRow(idx, "factor");
+        });
+        renderAdvancedGrid();
+      };
+
       function renderAdvancedGrid() {
         const body = document.querySelector("#advancedContent tbody");
         if (!body) return;
@@ -3016,15 +3403,32 @@
         body.innerHTML = satuanRows
           .map((row, idx) => {
             const isBase = row.is_base,
-              isDraft = row.is_draft;
-            const canDelete = !isBase && (!isDraft || row.conversion_id);
+              isDraft = row.is_draft,
+              isNewBase = isPendingBaseRow(row),
+              isOldBase = Boolean(pendingUnitRebase && row.is_base);
+            const canDelete =
+              !isBase && !isNewBase && (!isDraft || row.conversion_id);
             const unitOptions = (masterUnits || [])
               .map(
                 (u) =>
                   `<option value="${u.id}" ${parseInt(row.child_unit_id) === u.id ? "selected" : ""}>${u.name}${u.abbreviation ? " (" + u.abbreviation + ")" : ""}</option>`,
               )
               .join("");
-            let cols = `<td style="text-align:center; color:var(--primary); font-size:10px;">${isBase ? "▶" : isDraft ? "*" : "•"}</td><td><select class="input-control" onchange="updateAdvancedRowField(${idx}, 'child_unit_id', this.value)"><option value="">-- Pilih --</option>${unitOptions}</select></td><td><input class="input-control" value="${isBase ? "Dasar" : "Konversi"}" disabled></td><td class="sep"><input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" class="input-control" value="${row.conversion_factor || ""}" ${isBase ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'conversion_factor', this.value)" style="text-align:right;"></td><td class="sep"><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control" value="${toRibuan(row.buy_price_auto)}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'buy_price_auto', this.value)" style="text-align:right;"></td>`;
+            const displayType = isNewBase
+              ? "Dasar baru"
+              : isOldBase
+                ? "Kemasan virtual"
+                : isBase
+                  ? "Dasar"
+                  : "Konversi";
+            const displayFactor = isNewBase
+              ? 1
+              : isOldBase
+                ? pendingUnitRebase.units_per_source
+                : getEffectiveConversionFactor(row) || "";
+            const lockUnit = isBase || isNewBase;
+            const lockFactor = isBase || isNewBase;
+            let cols = `<td style="text-align:center; color:var(--primary); font-size:10px;">${isNewBase ? "✓" : isBase ? "▶" : isDraft ? "*" : "•"}</td><td><select class="input-control" ${lockUnit ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'child_unit_id', this.value)"><option value="">-- Pilih --</option>${unitOptions}</select></td><td><input class="input-control" value="${displayType}" disabled></td><td class="sep"><input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" class="input-control" value="${displayFactor}" ${lockFactor ? "disabled" : ""} onchange="updateAdvancedRowField(${idx}, 'conversion_factor', this.value)" style="text-align:right;"></td><td class="sep"><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control" value="${toRibuan(row.buy_price_auto)}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'buy_price_auto', this.value)" style="text-align:right;"></td>`;
 
             if (currentAdvancedType === "satuan") {
               cols += `<td><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control item-percent-input" value="${toPersen(row.margin_percent)}" oninput="formatInputPersen(this)" onchange="updateAdvancedRowField(${idx}, 'margin_percent', this.value)" style="text-align:right;"></td><td><input type="text" inputmode="decimal" data-input-desimal data-min="0" class="input-control" value="${toRibuan(row.sell_price)}" oninput="formatInputRibuan(this)" onchange="updateAdvancedRowField(${idx}, 'sell_price', this.value, 'sell')" style="text-align:right; font-weight:700; color:var(--primary)"></td>`;
@@ -3084,19 +3488,25 @@
             cols += canDelete
               ? `<td style="text-align:center; white-space:nowrap;"><button type="button" title="Hapus baris konversi" onclick="deleteAdvancedRow(${idx})" style="border:none; background:transparent; color:#ef4444; cursor:pointer; font-weight:700; font-size:16px; line-height:1; padding:4px 6px;">×</button></td>`
               : `<td style="text-align:center; color:var(--text-muted); font-size:12px;">&nbsp;</td>`;
-            return `<tr class="${isBase ? "base-row" : ""} ${isDraft ? "empty-row" : ""}" data-advanced-row="${idx}" tabindex="-1"> ${cols} </tr>`;
+            return `<tr class="${isBase ? "base-row" : ""} ${isNewBase ? "new-base-row" : ""} ${isDraft ? "empty-row" : ""}" data-advanced-row="${idx}" tabindex="-1"> ${cols} </tr>`;
           })
           .join("");
 
+        renderVirtualBaseControls();
         restoreAdvancedGridFocus(body, focusState);
       }
 
       window.reverseSyncToBase = function (idx) {
         const row = satuanRows[idx];
-        if (!row || row.is_base || row.conversion_factor <= 0) return;
+        const factor = getEffectiveConversionFactor(row);
+        if (!row || row.is_base || factor <= 0) return;
 
-        const factor = row.conversion_factor;
-        const baseBuyPrice = Math.round(row.buy_price_auto / factor);
+        const pendingBaseBuyPrice = row.buy_price_auto / factor;
+        const baseBuyPrice = Math.round(
+          pendingUnitRebase
+            ? pendingBaseBuyPrice * pendingUnitRebase.units_per_source
+            : pendingBaseBuyPrice,
+        );
 
         // Update form utama
         const fHBeli = document.getElementById("fHBeli");
@@ -3142,6 +3552,9 @@
           }
           if (row.is_draft) {
             row.is_draft = false;
+            row.factor_basis = pendingUnitRebase
+              ? "pending_base"
+              : "current_base";
             row.conversion_factor = 1;
             row.margin_percent = parseInputPersen(
               document.getElementById("fMargin")?.value,
@@ -3156,6 +3569,8 @@
           row.conversion_factor = parseDesimal(val, {
             maximumFractionDigits: 4,
           });
+          if (pendingUnitRebase && !isPendingBaseRow(row))
+            row.factor_basis = "pending_base";
           recalcAdvancedRow(idx);
         } else if (field === "buy_price_auto") {
           row.buy_price_auto = toAngka(val);
@@ -3311,12 +3726,19 @@
           }
         }
 
-        // Jika bukan buy, margin, atau sell yang dirubah langsung (misal: factor atau base price utama berubah)
-        // Maka buy_price_auto dihitung ulang dari base.
+        // HPP semua kemasan harus berakar pada satuan stok yang akan aktif.
         if (changedBy === "factor" || changedBy === "base") {
+          const sourceBuyPrice =
+            toAngka(document.getElementById("fHBeli")?.value) || 0;
+          const pendingBaseBuyPrice = pendingUnitRebase
+            ? sourceBuyPrice /
+              Number(pendingUnitRebase.units_per_source || 1)
+            : sourceBuyPrice;
+          const factor = getEffectiveConversionFactor(row);
           row.buy_price_auto = Math.round(
-            (toAngka(document.getElementById("fHBeli")?.value) || 0) *
-              row.conversion_factor,
+            row.is_base
+              ? sourceBuyPrice
+              : pendingBaseBuyPrice * factor,
           );
         }
 
@@ -3364,33 +3786,79 @@
         }
       }
 
-      async function saveAllSatuanRows() {
+      function pricesFromSatuanRow(row) {
+        const prices = [];
+        for (const gid in row.group_prices || {}) {
+          const group = allGroups.find(
+            (candidate) => String(candidate.id) === String(gid),
+          );
+          const price = Number(row.group_prices[gid]) || 0;
+          if (group && price > 0)
+            prices.push({ name: group.name, price, min_qty: 1 });
+        }
+        (row.tier_prices || []).forEach((tier) => {
+          if (tier.min_qty > 0 && tier.price > 0)
+            prices.push({
+              name: "Grosir",
+              price: tier.price,
+              min_qty: tier.min_qty,
+            });
+        });
+        return prices;
+      }
+
+      async function applyPendingUnitRebase() {
+        const baseRow = getPendingBaseRow();
+        if (
+          !pendingUnitRebase ||
+          !baseRow ||
+          !(pendingUnitRebase.units_per_source > 0)
+        )
+          throw new Error("Pengaturan satuan dasar baru belum lengkap.");
+
+        const payload = {
+          source_item_id: editItemId,
+          base_unit_id: Number(pendingUnitRebase.base_unit_id),
+          units_per_source: Number(pendingUnitRebase.units_per_source),
+          base_name: baseRow.child_name || null,
+          base_code: baseRow.child_code || null,
+          base_barcode: baseRow.child_barcode || null,
+          base_sell_price: Number(baseRow.sell_price) || 0,
+          prices: pricesFromSatuanRow(baseRow),
+        };
+        const preview = await api(
+          "POST",
+          "/unit-conversion/rebase/preview",
+          payload,
+        );
+        const result = await api("POST", "/unit-conversion/rebase/confirm", {
+          ...payload,
+          snapshot_token: preview.snapshot_token,
+        });
+        return {
+          ...result,
+          base_unit_id: payload.base_unit_id,
+          units_per_source: payload.units_per_source,
+        };
+      }
+
+      async function saveAllSatuanRows(rebaseContext = null) {
         for (let i = 1; i < satuanRows.length; i++) {
           const row = satuanRows[i];
           if (row.is_draft || !row.child_unit_id) continue;
-          let multi = [];
-          for (let gid in row.group_prices) {
-            const g = allGroups.find((x) => String(x.id) === String(gid));
-            if (g)
-              multi.push({
-                name: g.name,
-                price: row.group_prices[gid],
-                min_qty: 1,
-              });
-          }
-          row.tier_prices.forEach((t) => {
-            if (t.min_qty > 0)
-              multi.push({
-                name: `Grosir`,
-                price: t.price,
-                min_qty: t.min_qty,
-              });
-          });
+          if (
+            rebaseContext &&
+            String(row.child_unit_id) ===
+              String(rebaseContext.base_unit_id)
+          )
+            continue;
+          const multi = pricesFromSatuanRow(row);
+          const factor = getEffectiveConversionFactor(row);
           const payload = {
-            source_item_id: editItemId,
+            source_item_id: rebaseContext?.base_item_id || editItemId,
             child_name: row.child_name || "Turunan",
             child_unit_id: parseInt(row.child_unit_id),
-            conversion_factor: row.conversion_factor,
+            conversion_factor: factor,
             sell_price: row.sell_price,
             prices: multi,
           };
@@ -3404,6 +3872,9 @@
             else await api("POST", "/unit-conversion/variant", payload);
           } catch (e) {
             console.error(e);
+            throw new Error(
+              `Gagal menyimpan satuan ${row.child_name || row.child_unit_id}: ${e.message}`,
+            );
           }
         }
       }

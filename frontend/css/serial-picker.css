@@ -1,0 +1,51 @@
+.serial-picker-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: none;
+  place-items: center;
+  padding: clamp(.35rem, 1vw, 1rem);
+  background: rgba(15, 23, 42, .62);
+}
+.serial-picker-overlay.open { display: grid; }
+.serial-picker-dialog {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(45rem, 100%);
+  max-height: min(47.5rem, calc(100dvh - 2rem));
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 1rem;
+  background: var(--card-bg, #fff);
+  box-shadow: 0 1.5rem 3.75rem rgba(15, 23, 42, .3);
+}
+.serial-picker-head,
+.serial-picker-actions { padding: clamp(.65rem, .5rem + .35vw, 1rem); }
+.serial-picker-head { border-bottom: 1px solid var(--border-color); }
+.serial-picker-headline { display: flex; justify-content: space-between; gap: .75rem; align-items: start; }
+.serial-picker-head h2 { margin: 0 0 .2rem; font-size: clamp(1rem,.95rem + .3vw,1.2rem); }
+.serial-picker-meta { color: var(--text-muted); font-size: .78rem; }
+.serial-picker-body { overflow: auto; padding: clamp(.65rem, .5rem + .35vw, 1rem); }
+.serial-picker-counter { font-weight: 800; color: var(--primary); }
+.serial-picker-counter.invalid { color: var(--danger, #dc2626); }
+.serial-picker-search { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; margin: .6rem 0; }
+.serial-picker-selected { display: flex; flex-wrap: wrap; gap: .4rem; min-height: 2.1rem; margin-bottom: .6rem; }
+.serial-picker-chip { display: inline-flex; align-items: center; gap: .4rem; padding: .3em .55em; border-radius: 100vmax; background: var(--primary-light); font-size: .78rem; font-weight: 700; }
+.serial-picker-chip button { border: 0; padding: 0; background: transparent; color: inherit; cursor: pointer; }
+.serial-picker-list { border: 1px solid var(--border-color); border-radius: .65rem; overflow: hidden; }
+.serial-picker-option { display: flex; align-items: center; gap: .65rem; min-height: 2.65rem; padding: .5em .65em; border-bottom: 1px solid var(--border-color); cursor: pointer; }
+.serial-picker-option:last-child { border-bottom: 0; }
+.serial-picker-option:hover { background: var(--primary-light); }
+.serial-picker-empty { padding: 1.25rem .65rem; text-align: center; color: var(--text-muted); }
+.serial-picker-new { min-height: 12rem; resize: vertical; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.serial-picker-actions { display: flex; justify-content: flex-end; gap: .5rem; border-top: 1px solid var(--border-color); }
+.serial-picker-trigger { white-space: nowrap; padding: .4em .65em; font-size: .78rem; }
+.serial-picker-trigger.complete { color: #059669; border-color: #059669; }
+.serial-picker-trigger.invalid { color: #dc2626; border-color: #dc2626; }
+@media (max-width: 40rem) {
+  .serial-picker-overlay { align-items: end; padding: 0; }
+  .serial-picker-dialog { width: 100%; max-height: calc(100dvh - env(safe-area-inset-top)); border-radius: 1rem 1rem 0 0; }
+  .serial-picker-head, .serial-picker-body { padding: .75rem; }
+  .serial-picker-actions { padding: .65rem .75rem max(.65rem, env(safe-area-inset-bottom)); }
+  .serial-picker-actions .btn { min-height: 2.75rem; flex: 1; }
+}

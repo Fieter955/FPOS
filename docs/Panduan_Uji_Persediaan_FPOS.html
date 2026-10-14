@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Panduan Uji Persediaan FPOS</title>
+  <style>
+    @page { size: A4; margin: 16mm 14mm 17mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #172033; font: 10.4pt/1.48 Arial, sans-serif; }
+    h1, h2, h3 { color: #153b66; page-break-after: avoid; }
+    h1 { margin: 0 0 10px; font-size: 29pt; line-height: 1.08; }
+    h2 { margin: 0 0 10px; padding-bottom: 6px; border-bottom: 2px solid #d7e5f4; font-size: 19pt; }
+    h3 { margin: 16px 0 7px; font-size: 12.5pt; }
+    p { margin: 6px 0 9px; }
+    ul, ol { margin: 6px 0 10px 20px; padding: 0; }
+    li { margin: 3px 0; }
+    code { padding: 1px 4px; border-radius: 4px; background: #edf3f9; font: 9pt Consolas, monospace; }
+    table { width: 100%; margin: 9px 0 13px; border-collapse: collapse; page-break-inside: auto; }
+    thead { display: table-header-group; }
+    tr { page-break-inside: avoid; }
+    th, td { padding: 7px 8px; border: 1px solid #b9cada; vertical-align: top; }
+    th { background: #174d7d; color: white; text-align: left; }
+    td:first-child { width: 8%; text-align: center; }
+    .cover { height: 245mm; padding: 29mm 16mm 20mm; border: 2px solid #174d7d; background: linear-gradient(145deg, #f2f8fd 0%, #fff 55%, #e9f4ec 100%); page-break-after: always; }
+    .cover-kicker { margin-bottom: 22mm; color: #237346; font-size: 11pt; font-weight: bold; letter-spacing: 2px; text-transform: uppercase; }
+    .cover-sub { width: 82%; margin-top: 15px; color: #405469; font-size: 15pt; }
+    .cover-meta { margin-top: 34mm; padding: 14px 17px; border-left: 5px solid #237346; background: white; box-shadow: 0 4px 15px #bfd0dd66; }
+    .cover-meta div { margin: 7px 0; border-bottom: 1px dotted #9aabba; }
+    .page { page-break-before: always; }
+    .keep { page-break-inside: avoid; }
+    .callout { margin: 10px 0 14px; padding: 11px 13px; border-left: 5px solid #2878b8; background: #eef7ff; }
+    .warning { border-left-color: #c57a00; background: #fff6df; }
+    .danger { border-left-color: #be3b3b; background: #ffeded; }
+    .success { border-left-color: #237346; background: #edf8f0; }
+    .test-card { margin: 13px 0 18px; padding: 12px; border: 1px solid #afc4d6; border-radius: 8px; page-break-inside: avoid; }
+    .test-card h3 { margin-top: 0; }
+    .label { display: inline-block; margin-right: 4px; padding: 2px 7px; border-radius: 10px; background: #dbeaf6; color: #174d7d; font-size: 8.5pt; font-weight: bold; }
+    .result { margin-top: 9px; padding: 8px 10px; border: 1px dashed #71879a; background: #fbfdff; }
+    .check { font-family: "Segoe UI Symbol", Arial, sans-serif; white-space: nowrap; }
+    .line { display: inline-block; min-width: 185px; height: 14px; border-bottom: 1px solid #66798b; }
+    .small { color: #52677a; font-size: 8.8pt; }
+    .toc td:first-child { width: auto; text-align: left; }
+    .toc td:last-child { width: 16%; text-align: center; }
+    .step th:nth-child(1) { width: 7%; }
+    .step th:nth-child(2) { width: 43%; }
+    .step th:nth-child(3) { width: 42%; }
+    .step th:nth-child(4) { width: 8%; }
+    .step td:nth-child(1), .step td:nth-child(4) { text-align: center; }
+    .bug-form td:first-child { width: 28%; text-align: left; font-weight: bold; background: #eff4f8; }
+    .bug-page { font-size: 8.8pt; line-height: 1.25; }
+    .bug-page table { margin: 6px 0 8px; }
+    .bug-page th, .bug-page td { padding: 4px 6px; }
+    .bug-page h3 { margin: 8px 0 4px; }
+    .bug-page .callout { margin: 6px 0 8px; padding: 7px 9px; }
+    .bug-page .bug-form td[style] { height: 32px !important; }
+  </style>
+</head>
+<body>
+  <section class="cover">
+    <div class="cover-kicker">Checklist Pengujian Pemilik / Admin</div>
+    <h1>Panduan Uji<br>Fitur Persediaan FPOS</h1>
+    <p class="cover-sub">Langkah satu per satu, hasil yang seharusnya, pemeriksaan dampak terkait, dan format konfirmasi bug.</p>
+    <div class="cover-meta">
+      <div>Nama penguji: <span class="line"></span></div>
+      <div>Tanggal uji: <span class="line"></span></div>
+      <div>Nama database salinan: <span class="line"></span></div>
+      <div>Versi aplikasi: <span class="line"></span></div>
+    </div>
+    <div class="callout danger" style="margin-top:24mm"><strong>Penting:</strong> jangan menjalankan skenario perubahan stok pada database operasional. Gunakan salinan database atau data khusus pengujian.</div>
+  </section>
+
+  <section>
+    <h2>Cara memakai panduan ini</h2>
+    <ol>
+      <li>Kerjakan bagian <strong>Persiapan</strong> terlebih dahulu.</li>
+      <li>Ikuti urutan fitur mulai dari Saldo Awal sampai Perbaikan Saldo. Urutan ini sengaja dibuat agar data uji dapat dipakai kembali.</li>
+      <li>Centang <span class="check">☐ Lulus</span> bila hasil aplikasi sama dengan kolom “Seharusnya”.</li>
+      <li>Bila berbeda, berhenti pada skenario tersebut, jangan mengulang berkali-kali, lalu isi Form Konfirmasi Bug di bagian akhir.</li>
+      <li>Catat nomor dokumen dan ambil tangkapan layar sebelum menutup halaman.</li>
+    </ol>
+    <div class="callout success"><strong>Patokan utama:</strong> sebuah transaksi belum dianggap benar hanya karena stok berubah. Mutasi, lapisan FIFO, nilai persediaan, jurnal, gudang, dan cabangnya juga harus benar.</div>
+
+    <h3>Daftar isi</h3>
+    <table class="toc">
+      <tr><td>1. Persiapan dan data uji</td><td>Wajib</td></tr>
+      <tr><td>2. Saldo Awal</td><td>Mulai di sini</td></tr>
+      <tr><td>3. Item Masuk</td><td>Normal + batal</td></tr>
+      <tr><td>4. Item Keluar dan FIFO</td><td>Normal + ditolak</td></tr>
+      <tr><td>5. Mutasi Stok</td><td>Riwayat</td></tr>
+      <tr><td>6. Stok Menipis</td><td>Batas minimum</td></tr>
+      <tr><td>7. Stok Opname</td><td>Surplus + susut</td></tr>
+      <tr><td>8. Perbaikan Saldo</td><td>Salinan DB</td></tr>
+      <tr><td>9. Fitur terkait dan isolasi cabang</td><td>Regresi</td></tr>
+      <tr><td>10. Form Konfirmasi Bug</td><td>Kirim balik</td></tr>
+    </table>
+  </section>
+
+  <section class="page">
+    <h2>1. Persiapan dan data uji</h2>
+    <div class="callout warning"><strong>Gunakan akun Admin</strong> untuk putaran pertama. Pengujian hak akses dilakukan belakangan dengan akun staf/kasir.</div>
+    <h3>A. Siapkan lingkungan aman</h3>
+    <table class="step">
+      <thead><tr><th>No.</th><th>Yang dilakukan</th><th>Seharusnya</th><th>Hasil</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Tutup transaksi yang sedang berjalan, lalu buat backup/salinan database.</td><td>Nama file salinan berbeda dari database asli.</td><td class="check">☐</td></tr>
+        <tr><td>2</td><td>Buka aplikasi menggunakan salinan tersebut.</td><td>Aplikasi dapat login dan data terlihat seperti biasa.</td><td class="check">☐</td></tr>
+        <tr><td>3</td><td>Pilih cabang <strong>Toko Pusat</strong> dan catat gudang aktif.</td><td>Nama cabang/gudang jelas dan tidak berubah sendiri.</td><td class="check">☐</td></tr>
+        <tr><td>4</td><td>Buka Persediaan → Perbaikan Saldo → pilih gudang → <strong>Analisa Saldo</strong>.</td><td>Pratinjau tampil; jangan tekan Perbaiki Saldo dahulu.</td><td class="check">☐</td></tr>
+      </tbody>
+    </table>
+
+    <h3>B. Buat barang khusus uji</h3>
+    <table>
+      <thead><tr><th>Kode</th><th>Nama</th><th>Harga modal</th><th>Stok minimum</th><th>Kegunaan</th></tr></thead>
+      <tbody>
+        <tr><td>UJI-FIFO-01</td><td>Barang Uji FIFO</td><td>Rp10.000</td><td>5</td><td>Saldo awal, masuk, keluar, opname</td></tr>
+        <tr><td>UJI-SERIAL-01</td><td>Barang Uji Serial</td><td>Rp25.000</td><td>1</td><td>Nomor seri masuk/keluar</td></tr>
+        <tr><td>UJI-CABANG-01</td><td>Barang Uji Cabang</td><td>Rp20.000</td><td>2</td><td>Transfer dan isolasi cabang</td></tr>
+      </tbody>
+    </table>
+    <p class="small">Bila kode sudah ada, tambahkan tanggal/jam pada belakang kode. Jangan memakai barang dagangan sungguhan untuk percobaan.</p>
+
+    <div class="result">
+      Cabang uji: <span class="line"></span> &nbsp; Gudang uji: <span class="line"></span><br>
+      ID/kode barang aktual: <span class="line"></span> &nbsp; <span class="check">☐ Persiapan lulus</span>
+    </div>
+  </section>
+
+  <section class="page">
+    <h2>2. Saldo Awal</h2>
+    <p><span class="label">TUJUAN</span> Memastikan stok pertama hanya dapat dicatat sekali, bernilai benar, dan tidak dianggap pendapatan.</p>
+    <h3>Skenario SA-01 — Saldo awal normal</h3>
+    <table class="step">
+      <thead><tr><th>No.</th><th>Yang dilakukan</th><th>Seharusnya</th><th>Hasil</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Buka Persediaan → <strong>Saldo Awal</strong>.</td><td>Judul “Saldo Awal Item” dan gudang aktif tampil.</td><td class="check">☐</td></tr>
+        <tr><td>2</td><td>Cari <code>UJI-FIFO-01</code>, tambahkan, isi jumlah <strong>5</strong>.</td><td>Barang hanya muncul satu kali di daftar.</td><td class="check">☐</td></tr>
+        <tr><td>3</td><td>Isi keterangan “Saldo awal pengujian”, lalu Simpan dan konfirmasi.</td><td>Muncul pesan berhasil dan nomor dokumen berawalan <code>SA-</code>.</td><td class="check">☐</td></tr>
+        <tr><td>4</td><td>Buka riwayat Saldo Awal dan detail dokumen.</td><td>Jumlah +5, nilai Rp50.000, gudang dan tanggal benar.</td><td class="check">☐</td></tr>
+        <tr><td>5</td><td>Buka Mutasi Stok.</td><td>Ada “SALDO AWAL”, perubahan +5 dan angka sebelum 0 → sesudah 5.</td><td class="check">☐</td></tr>
+      </tbody>
+    </table>
+    <h3>Skenario SA-02 — Tidak boleh dua kali</h3>
+    <table class="step">
+      <thead><tr><th>No.</th><th>Yang dilakukan</th><th>Seharusnya</th><th>Hasil</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Coba buat Saldo Awal lagi untuk barang dan gudang yang sama sebanyak 1.</td><td>Ditolak dengan pesan bahwa saldo awal sudah pernah diisi/memiliki riwayat.</td><td class="check">☐</td></tr>
+        <tr><td>2</td><td>Periksa stok dan mutasi kembali.</td><td>Stok tetap 5 dan tidak ada mutasi/dokumen tambahan.</td><td class="check">☐</td></tr>
+      </tbody>
+    </table>
+    <div class="callout"><strong>Periksa terkait:</strong> nilai Saldo Awal seharusnya berpasangan dengan Modal Transisi, bukan masuk ke laba penjualan.</div>
+    <div class="result">Nomor dokumen: <span class="line"></span> &nbsp; <span class="check">☐ Lulus ☐ Gagal</span><br>Catatan: <span class="line" style="min-width:75%"></span></div>
+  </section>
+
+  <section class="page">
+    <h2>3. Item Masuk</h2>
+    <p><span class="label">TUJUAN</span> Memastikan penerimaan non-pembelian menambah stok, nilai FIFO, mutasi, dan jurnal secara bersamaan.</p>
+    <h3>Skenario IM-01 — Item masuk normal</h3>
+    <table class="step">
+      <thead><tr><th>No.</th><th>Yang dilakukan</th><th>Seharusnya</th><th>Hasil</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Ubah Harga Modal master <code>UJI-FIFO-01</code> menjadi <strong>Rp15.000</strong>.</td><td>Master tersimpan. Ini membuat lapisan harga kedua untuk uji FIFO.</td><td class="check">☐</td></tr>
+        <tr><td>2</td><td>Buka Item Masuk, pilih gudang yang sama, masukkan jumlah <strong>5</strong>.</td><td>Form menerima jumlah positif dan barang tidak ganda.</td><td class="check">☐</td></tr>
+        <tr><td>3</td><td>Isi “Bonus supplier untuk pengujian”, Simpan dan konfirmasi.</td><td>Nomor berawalan <code>IM-</code>; stok menjadi 10.</td><td class="check">☐</td></tr>
+        <tr><td>4</td><td>Buka detail dan Mutasi Stok.</td><td>Nilai masuk Rp75.000; mutasi +5, sebelum 5 → sesudah 10.</td><td class="check">☐</td></tr>
+      </tbody>
+    </table>
+    <h3>Skenario IM-02 — Input salah dan pembatalan</h3>
+    <table class="step">
+      <thead><tr><th>No.</th><th>Yang dilakukan</th><th>Seharusnya</th><th>Hasil</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Coba jumlah 0, negatif, atau kosong.</td><td>Ditolak; tidak ada stok, mutasi, FIFO, maupun jurnal baru.</td><td class="check">☐</td></tr>
+        <tr><td>2</td><td>Buat Item Masuk terpisah sebanyak 2, catat nomornya, lalu buka Riwayat dan Batalkan.</td><td>Alasan wajib diisi. Setelah batal, stok kembali seperti sebelum dokumen 2 unit tersebut.</td><td class="check">☐</td></tr>
+        <tr><td>3</td><td>Periksa mutasi.</td><td>Ada reversal keluar dengan referensi dokumen yang dibatalkan.</td><td class="check">☐</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warning"><strong>Kasus penting:</strong> bila barang dari Item Masuk sudah dijual/dipakai, pembatalan dokumen masuk harus ditolak agar stok tidak menjadi salah.</div>
+    <div class="result">Dokumen normal: <span class="line"></span> &nbsp; Dokumen batal: <span class="line"></span><br><span class="check">☐ Lulus ☐ Gagal</span></div>
+  </section>
+
+  <section class="page">
+    <h2>4. Item Keluar dan FIFO</h2>
+    <p><span class="label">DATA AWAL</span> <code>UJI-FIFO-01</code> mempunyai 5 unit @Rp10.000 dan 5 unit @Rp15.000; total stok 10.</p>
+    <h3>Skenario IK-01 — Mengambil stok tertua</h3>
+    <table class="step">
+      <thead><tr><th>No.</th><th>Yang dilakukan</th><th>Seharusnya</th><th>Hasil</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Buka Item Keluar dan masukkan <code>UJI-FIFO-01</code> sebanyak <strong>7</strong>.</td><td>Jumlah diterima karena stok tersedia 10.</td><td class="check">☐</td></tr>
+        <tr><td>2</td><td>Isi “Barang rusak uji FIFO”, Simpan dan konfirmasi.</td><td>Stok turun dari 10 menjadi 3.</td><td class="check">☐</td></tr>
+        <tr><td>3</td><td>Buka detail dokumen.</td><td>Nilai modal keluar <strong>Rp80.000</strong>: 5×10.000 + 2×15.000.</td><td class="check">☐</td></tr>
+        <tr><td>4</td><td>Buka Mutasi Stok.</td><td>“ITEM KELUAR” −7, sebelum 10 → sesudah 3.</td><td class="check">☐</td></tr>
+      </tbody>
+    </table>
+    <h3>Skenario IK-02 — Stok tidak cukup</h3>
+    <table class="step">
+      <thead><tr><th>No.</th><th>Yang dilakukan</th><th>Seharusnya</th><th>Hasil</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Coba keluarkan 4 ketika stok tersisa 3.</td><td>Ditolak “stok tidak cukup”.</td><td class="check">☐</td></tr>
+        <tr><td>2</td><td>Muat ulang Item Keluar dan Mutasi.</td><td>Stok tetap 3; tidak ada dokumen, mutasi, atau jurnal gagal yang tertinggal.</td><td class="check">☐</td></tr>
+      </tbody>
+    </table>
+    <h3>Skenario IK-03 — Pembatalan presisi</h3>
+    <p>Batalkan dokumen IK-01 sebelum stok sisanya dipakai. Stok harus kembali 10 dan komposisi FIFO kembali 5 @Rp10.000 + 5 @Rp15.000. Mutasi reversal dan jurnal balik harus terbentuk.</p>
+    <div class="result">Nilai FIFO aktual: Rp <span class="line"></span> &nbsp; <span class="check">☐ Lulus ☐ Gagal</span><br>Nomor dokumen: <span class="line"></span></div>
+  </section>
+
+  <section class="page">
+    <h2>5. Mutasi Stok</h2>
+    <p><span class="label">TUJUAN</span> Memastikan setiap perubahan dapat dilacak dan angka sebelum–sesudah tidak menyesatkan.</p>
+    <table class="step">
+      <thead><tr><th>No.</th><th>Yang dilakukan</th><th>Seharusnya</th><th>Hasil</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Pilih rentang tanggal yang mencakup semua transaksi uji.</td><td>Saldo Awal, Item Masuk, Item Keluar, Opname, transfer, dan reversal terlihat.</td><td class="check">☐</td></tr>
+        <tr><td>2</td><td>Filter satu per satu: Item Masuk, Item Keluar, Saldo Awal, Opname +, Opname −.</td><td>Hanya tipe yang dipilih tampil; jumlah baris kembali normal saat filter dikosongkan.</td><td class="check">☐</td></tr>
+        <tr><td>3</td><td>Bandingkan referensi dengan nomor dokumen di Riwayat.</td><td>Nomor dan barang cocok; tidak ada kejadian ganda atau tanpa referensi.</td><td class="check">☐</td></tr>
+        <tr><td>4</td><td>Periksa warna/tanda dan angka sebelum → sesudah.</td><td>Masuk hijau/+; keluar merah/−; perhitungannya tepat.</td><td class="check">☐</td></tr>
+        <tr><td>5</td><td>Pindah cabang lalu buka Mutasi pada tanggal yang sama.</td><td>Mutasi cabang sebelumnya tidak bocor ke cabang baru.</td><td class="check">☐</td></tr>
+      </tbody>
+    </table>
+    <div class="callout"><strong>Transfer dalam satu cabang:</strong> total aset cabang tidak berubah. Riwayat harus bersifat netral dan menjelaskan gudang asal → tujuan. Transfer beda cabang harus menghasilkan keluar pada asal dan masuk pada tujuan.</div>
+    <div class="result">Jumlah baris yang diperiksa: <span class="line"></span> &nbsp; <span class="check">☐ Lulus ☐ Gagal</span><br>Referensi yang bermasalah: <span class="line" style="min-width:60%"></span></div>
+  </section>
+
+  <section class="page">
+    <h2>6. Stok Menipis</h2>
+    <p><span class="label">ATURAN</span> Barang tampil bila stok <strong>sama dengan atau di bawah</strong> batas minimum.</p>
+    <table class="step">
+      <thead><tr><th>No.</th><th>Yang dilakukan</th><th>Seharusnya</th><th>Hasil</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Atur <code>UJI-FIFO-01</code> minimum 5 dan pastikan stok 10.</td><td>Tidak tampil pada Stok Menipis.</td><td class="check">☐</td></tr>
+        <tr><td>2</td><td>Keluarkan stok hingga tepat 5.</td><td>Barang mulai tampil karena stok sama dengan minimum.</td><td class="check">☐</td></tr>
+        <tr><td>3</td><td>Keluarkan hingga stok 1.</td><td>Status “MENIPIS”; stok dan minimum tampil benar.</td><td class="check">☐</td></tr>
+        <tr><td>4</td><td>Keluarkan unit terakhir hingga stok 0.</td><td>Status berubah menjadi “HABIS” dan berada di urutan lebih mendesak.</td><td class="check">☐</td></tr>
+        <tr><td>5</td><td>Bandingkan tab Stok Menipis dengan kartu Dashboard dan Laporan Persediaan.</td><td>Jumlah dan barang yang dihitung sama.</td><td class="check">☐</td></tr>
+        <tr><td>6</td><td>Klik tombol Opname dari baris barang menipis.</td><td>Form Stok Opname terbuka dengan barang yang sama sudah terpilih.</td><td class="check">☐</td></tr>
+      </tbody>
+    </table>
+    <h3>Tambahan untuk satuan turunan</h3>
+    <p>Bila satu dus = 10 pcs dan stok fisik induk 2 dus, tampilan varian pcs harus memakai hasil konversi 20 pcs. Status menipis tidak boleh memakai stok lama dari master barang.</p>
+    <div class="result">Jumlah Dashboard: <span class="line"></span> &nbsp; Jumlah tab: <span class="line"></span><br><span class="check">☐ Sama/Lulus ☐ Berbeda/Gagal</span></div>
+  </section>
+
+  <section class="page">
+    <h2>7. Stok Opname</h2>
+    <p><span class="label">TUJUAN</span> Mengubah stok buku menjadi hasil hitung fisik, bukan menambah/mengurangi secara relatif.</p>
+    <h3>Skenario OP-01 — Surplus</h3>
+    <table class="step">
+      <thead><tr><th>No.</th><th>Yang dilakukan</th><th>Seharusnya</th><th>Hasil</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Catat stok buku yang terlihat, misalnya 3. Masukkan stok fisik <strong>5</strong>.</td><td>Kolom selisih menunjukkan +2, bukan +5.</td><td class="check">☐</td></tr>
+        <tr><td>2</td><td>Periksa HPP Sistem, lalu Simpan.</td><td>Stok akhir tepat 5. Nilai surplus memakai HPP sistem dan jurnal selisih terbentuk.</td><td class="check">☐</td></tr>
+        <tr><td>3</td><td>Buka Mutasi.</td><td>“OPNAME +” sebanyak 2, sebelum 3 → sesudah 5.</td><td class="check">☐</td></tr>
+      </tbody>
+    </table>
+    <h3>Skenario OP-02 — Susut dan tanpa selisih</h3>
+    <table class="step">
+      <thead><tr><th>No.</th><th>Yang dilakukan</th><th>Seharusnya</th><th>Hasil</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Dari stok buku 5, masukkan stok fisik 2.</td><td>Selisih −3; stok akhir 2; biaya susut memakai FIFO nyata.</td><td class="check">☐</td></tr>
+        <tr><td>2</td><td>Coba opname lagi dengan stok fisik sama persis dengan stok buku.</td><td>Ditolak karena tidak ada selisih; tidak membuat dokumen/jurnal nol.</td><td class="check">☐</td></tr>
+      </tbody>
+    </table>
+    <h3>Skenario OP-03 — Data berubah saat form terbuka</h3>
+    <ol>
+      <li>Buka Stok Opname dan pilih barang, tetapi jangan simpan.</li>
+      <li>Di tab/perangkat lain, lakukan transaksi yang mengubah barang tersebut.</li>
+      <li>Kembali ke form lama lalu Simpan.</li>
+    </ol>
+    <p><strong>Seharusnya:</strong> ditolak dengan pesan stok berubah; pengguna diminta memuat ulang. Tidak boleh ada perubahan sebagian.</p>
+    <div class="callout danger"><strong>Bila muncul pesan FIFO belum seimbang:</strong> jangan paksa opname. Jalankan Analisa pada Perbaikan Saldo terlebih dahulu.</div>
+    <div class="result">Stok buku awal: <span class="line"></span> &nbsp; Fisik: <span class="line"></span> &nbsp; Akhir: <span class="line"></span><br><span class="check">☐ Lulus ☐ Gagal</span></div>
+  </section>
+
+  <section class="page">
+    <h2>8. Perbaikan Saldo</h2>
+    <div class="callout warning"><strong>Jalankan hanya pada salinan database.</strong> Fitur ini memperbaiki ketidaksamaan internal stok/FIFO/nilai buku. Ia bukan pengganti hitung fisik.</div>
+    <h3>Skenario PS-01 — Analisa tanpa mengubah data</h3>
+    <table class="step">
+      <thead><tr><th>No.</th><th>Yang dilakukan</th><th>Seharusnya</th><th>Hasil</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Pilih gudang lalu klik Analisa Saldo.</td><td>Daftar barang, stok gudang, FIFO, selisih, nilai, dan sumber biaya tampil sesuai izin.</td><td class="check">☐</td></tr>
+        <tr><td>2</td><td>Catat jumlah barang dan selisih nilai. Pindah tab lalu kembali tanpa menekan Perbaiki.</td><td>Stok dan jurnal tidak berubah hanya karena analisa.</td><td class="check">☐</td></tr>
+      </tbody>
+    </table>
+    <h3>Skenario PS-02 — Terapkan pada salinan</h3>
+    <table class="step">
+      <thead><tr><th>No.</th><th>Yang dilakukan</th><th>Seharusnya</th><th>Hasil</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Isi alasan jelas, misalnya “Audit persediaan 14-09-2026”.</td><td>Alasan kosong atau hanya spasi ditolak.</td><td class="check">☐</td></tr>
+        <tr><td>2</td><td>Periksa biaya yang disarankan. Bila biaya 0, jangan konfirmasi sebelum asal modal diketahui.</td><td>Tidak ada nilai persediaan yang ditebak.</td><td class="check">☐</td></tr>
+        <tr><td>3</td><td>Klik Perbaiki Saldo dan konfirmasi.</td><td>Nomor rekonsiliasi muncul dan histori menyimpan alasan serta nomor jurnal.</td><td class="check">☐</td></tr>
+        <tr><td>4</td><td>Klik Analisa Saldo sekali lagi.</td><td>“Semua saldo sudah seimbang”, item 0, selisih nilai sekitar Rp0.</td><td class="check">☐</td></tr>
+        <tr><td>5</td><td>Jalankan lagi tanpa ada selisih.</td><td>Ditolak/ditampilkan sudah seimbang; tidak membuat jurnal kedua.</td><td class="check">☐</td></tr>
+      </tbody>
+    </table>
+    <h3>Skenario PS-03 — Pratinjau kedaluwarsa</h3>
+    <p>Setelah Analisa, ubah stok di tab lain kemudian coba terapkan pratinjau lama. Sistem harus menolak dan meminta analisa ulang; tidak boleh menerapkan angka lama.</p>
+    <div class="result">Sebelum: item <span class="line"></span>, selisih Rp <span class="line"></span><br>Sesudah: item <span class="line"></span>, selisih Rp <span class="line"></span> &nbsp; <span class="check">☐ Lulus ☐ Gagal</span></div>
+  </section>
+
+  <section class="page">
+    <h2>9. Fitur terkait yang wajib dicek</h2>
+    <table>
+      <thead><tr><th>Fitur terkait</th><th>Uji singkat</th><th>Seharusnya</th><th>Hasil</th></tr></thead>
+      <tbody>
+        <tr><td>Pembelian</td><td>Beli barang dengan harga berbeda.</td><td>Stok/FIFO bertambah dan nilai buku bertambah sebesar nilai pembelian yang benar.</td><td class="check">☐</td></tr>
+        <tr><td>Penjualan</td><td>Jual melewati dua batch harga.</td><td>Stok berkurang dari FIFO tertua dan HPP jurnal sama dengan biaya FIFO.</td><td class="check">☐</td></tr>
+        <tr><td>Retur penjualan</td><td>Retur sebagian dari faktur.</td><td>Stok dan lapisan biaya yang dahulu keluar dipulihkan.</td><td class="check">☐</td></tr>
+        <tr><td>Retur pembelian</td><td>Retur barang ke supplier.</td><td>Stok dan batch berkurang; pembatalan mengembalikan secara tepat.</td><td class="check">☐</td></tr>
+        <tr><td>Transfer gudang</td><td>Pindah stok antar gudang satu cabang.</td><td>Asal turun, tujuan naik, total cabang dan nilai total tetap.</td><td class="check">☐</td></tr>
+        <tr><td>Transfer cabang</td><td>Kirim dari pusat ke cabang.</td><td>Pusat turun, cabang naik, mutasi dan jurnal tercatat pada cabang masing-masing.</td><td class="check">☐</td></tr>
+        <tr><td>Nomor serial</td><td>Masukkan dua serial, keluarkan satu.</td><td>Jumlah serial harus sama dengan qty; serial yang sama tidak bisa dipakai dua kali.</td><td class="check">☐</td></tr>
+        <tr><td>Perakitan/tukar tambah</td><td>Jalankan satu transaksi lalu batalkan.</td><td>Bahan/produk, FIFO, mutasi, dan jurnal kembali tepat.</td><td class="check">☐</td></tr>
+        <tr><td>Hak akses</td><td>Login staf tanpa izin biaya/perbaikan.</td><td>Harga modal disembunyikan dan tombol terlarang tidak dapat dipakai lewat URL langsung.</td><td class="check">☐</td></tr>
+        <tr><td>Laporan/neraca</td><td>Bandingkan sebelum dan sesudah transaksi.</td><td>Nilai persediaan sesuai FIFO dan neraca tetap seimbang.</td><td class="check">☐</td></tr>
+      </tbody>
+    </table>
+    <div class="callout"><strong>Setelah setiap skenario besar:</strong> buka Perbaikan Saldo → Analisa. Kondisi sehat adalah stok gudang sama dengan FIFO dan selisih nilai mendekati Rp0.</div>
+  </section>
+
+  <section class="page">
+    <h2>10. Pemeriksaan otomatis pada salinan DB</h2>
+    <p>Buka PowerShell dari folder proyek, kemudian jalankan:</p>
+    <div class="callout"><code>python backend/inventory_audit.py backend/backups/NAMA-SALINAN.db --json</code></div>
+    <p>Makna hasil utama:</p>
+    <table>
+      <thead><tr><th>Nama pemeriksaan</th><th>Kondisi sehat</th><th>Jika ada temuan</th></tr></thead>
+      <tbody>
+        <tr><td>fifo_quantity_drift</td><td>0</td><td>Analisa Perbaikan Saldo.</td></tr>
+        <tr><td>fifo_invalid_batches</td><td>0</td><td>Jangan transaksi; kirim hasil audit.</td></tr>
+        <tr><td>negative_warehouse_stock</td><td>0</td><td>Catat barang/gudang dan transaksi terakhir.</td></tr>
+        <tr><td>invalid_movements</td><td>0</td><td>Periksa referensi mutasi nol/negatif.</td></tr>
+        <tr><td>movement_math_drift</td><td>0</td><td>Bandingkan angka sebelum–sesudah.</td></tr>
+        <tr><td>zero_cost_inventory_documents</td><td>Ditinjau</td><td>Pastikan barang memang gratis; jangan menebak biaya.</td></tr>
+        <tr><td>central_stock_cache_drift</td><td>0</td><td>Perbaikan Saldo dapat menyamakan cache.</td></tr>
+        <tr><td>inventory_value_drift</td><td>0</td><td>Periksa nilai lalu jalankan Perbaikan Saldo pada salinan.</td></tr>
+      </tbody>
+    </table>
+    <p class="small">Program mengembalikan exit code 1 bila menemukan sesuatu. Itu berarti “perlu ditinjau”, bukan program rusak.</p>
+    <div class="result">Nama file audit JSON: <span class="line" style="min-width:55%"></span><br>Total temuan: <span class="line"></span> &nbsp; <span class="check">☐ Sudah dilampirkan</span></div>
+  </section>
+
+  <section class="page bug-page">
+    <h2>11. Form Konfirmasi Bug</h2>
+    <p>Salin format ini saat mengirim konfirmasi kembali. Satu bug memakai satu formulir agar tidak tercampur.</p>
+    <table class="bug-form">
+      <tr><td>ID bug</td><td>INV-<span class="line"></span></td></tr>
+      <tr><td>Fitur/skenario</td><td><span class="line" style="min-width:90%"></span></td></tr>
+      <tr><td>Tanggal dan jam WITA</td><td><span class="line" style="min-width:70%"></span></td></tr>
+      <tr><td>Cabang dan gudang</td><td><span class="line" style="min-width:90%"></span></td></tr>
+      <tr><td>Pengguna/role</td><td><span class="line" style="min-width:70%"></span></td></tr>
+      <tr><td>Kode barang</td><td><span class="line" style="min-width:70%"></span></td></tr>
+      <tr><td>Nomor dokumen</td><td><span class="line" style="min-width:70%"></span></td></tr>
+      <tr><td>Kondisi sebelum</td><td style="height:45px"></td></tr>
+      <tr><td>Langkah yang dilakukan</td><td style="height:75px"></td></tr>
+      <tr><td>Hasil yang tampil</td><td style="height:55px"></td></tr>
+      <tr><td>Seharusnya</td><td style="height:55px"></td></tr>
+      <tr><td>Apakah dapat diulang?</td><td class="check">☐ Ya &nbsp; ☐ Tidak &nbsp; ☐ Belum dicoba ulang</td></tr>
+      <tr><td>Lampiran</td><td class="check">☐ Screenshot &nbsp; ☐ Video &nbsp; ☐ Audit JSON &nbsp; ☐ Nomor dokumen</td></tr>
+    </table>
+    <div class="callout danger"><strong>Jangan kirim database asli melalui chat.</strong> Cukup kirim screenshot, nomor dokumen, kode barang, nama cabang/gudang, dan hasil audit JSON. Bila database diperlukan, buat salinan dan hapus data sensitif terlebih dahulu.</div>
+
+    <h3>Ringkasan akhir pengujian</h3>
+    <table>
+      <thead><tr><th>Bagian</th><th>Lulus</th><th>Gagal</th><th>Belum diuji</th></tr></thead>
+      <tbody>
+        <tr><td>Saldo Awal</td><td class="check">☐</td><td class="check">☐</td><td class="check">☐</td></tr>
+        <tr><td>Item Masuk</td><td class="check">☐</td><td class="check">☐</td><td class="check">☐</td></tr>
+        <tr><td>Item Keluar/FIFO</td><td class="check">☐</td><td class="check">☐</td><td class="check">☐</td></tr>
+        <tr><td>Mutasi Stok</td><td class="check">☐</td><td class="check">☐</td><td class="check">☐</td></tr>
+        <tr><td>Stok Menipis</td><td class="check">☐</td><td class="check">☐</td><td class="check">☐</td></tr>
+        <tr><td>Stok Opname</td><td class="check">☐</td><td class="check">☐</td><td class="check">☐</td></tr>
+        <tr><td>Perbaikan Saldo</td><td class="check">☐</td><td class="check">☐</td><td class="check">☐</td></tr>
+        <tr><td>Fitur terkait</td><td class="check">☐</td><td class="check">☐</td><td class="check">☐</td></tr>
+      </tbody>
+    </table>
+    <p>Tanda tangan penguji: <span class="line"></span> &nbsp; Tanggal selesai: <span class="line"></span></p>
+  </section>
+</body>
+</html>

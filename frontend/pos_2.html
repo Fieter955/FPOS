@@ -1717,6 +1717,8 @@
       const paid = payMethod === "cash" ? total : tendered;
       try {
         if (typeof showLoading === "function") showLoading("Memproses...");
+        if (receiptRequested && typeof ensureFposLocalDeviceId === "function")
+          await ensureFposLocalDeviceId();
         const sale = await api("POST", "/sales/", {
           date: today(), // Menggunakan tanggal WITA
           customer_id: document.getElementById("custSel").value || null,
@@ -1796,6 +1798,8 @@
       const button = document.getElementById("btnRcptCetak");
       try {
         if (button) button.disabled = true;
+        if (typeof ensureFposLocalDeviceId === "function")
+          await ensureFposLocalDeviceId();
         const result = await api("POST", `/sales/print/${saleData.id}`, {});
         showToast(`Struk masuk antrean printer (job #${result.job_id})`);
         if (button) button.textContent = "✓ Diantrekan";

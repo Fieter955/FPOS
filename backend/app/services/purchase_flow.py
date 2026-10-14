@@ -15,10 +15,11 @@ from .journal_service import (
     create_purchase_journal,
     create_purchase_reversal_journal,
 )
-from .virtual_units import is_virtual_variant
+from .virtual_units import get_conversion_factor, get_stock_source_item, is_virtual_variant
 from .inventory_fifo import add_batch, reduce_batches_for_reversal
 from .tax_context import normalize_purchase_tax_type, purchase_line_ppn_rates
 from .serials import receive_serials, reverse_reference_serials
+from .stok_gudang import ubah_stok_gudang
 
 
 PUSAT_BRANCH_ID = 1
@@ -157,17 +158,9 @@ def get_warehouse_stock(db: Session, warehouse_id: int, item_id: int) -> float:
 
 
 def adjust_warehouse_stock(db: Session, warehouse_id: int, item_id: int, delta: float):
-    stock = db.query(models.WarehouseStock).filter(
-        models.WarehouseStock.warehouse_id == warehouse_id,
-        models.WarehouseStock.item_id == item_id,
-    ).with_for_update().first()
-    if stock:
-        stock.stock += delta
-        return stock
-
-    stock = models.WarehouseStock(warehouse_id=warehouse_id, item_id=item_id, stock=delta)
-    db.add(stock)
-    return stock
+    return ubah_stok_gudang(
+        db, warehouse_id=warehouse_id, item_id=item_id, delta=delta
+    )
 
 
 def get_or_create_default_warehouse(db: Session, branch_id: int) -> models.Warehouse:
@@ -209,11 +202,8 @@ def validate_purchase_items(db: Session, data: schemas.PurchaseCreate):
         item = db.query(models.Item).get(line.item_id)
         if not item:
             raise HTTPException(404, f"Barang ID {line.item_id} tidak ada")
-        if is_virtual_variant(item):
-            raise HTTPException(
-                400,
-                f"Barang multi-satuan {item.name} tidak boleh dibeli langsung. Beli barang induknya.",
-            )
+        if is_virtual_variant(item) and get_stock_source_item(db, item) is item:
+            raise HTTPException(400, f"Satuan dasar {item.name} tidak ditemukan")
 
 
 def add_purchase_items(db: Session, purchase: models.Purchase, data: schemas.PurchaseCreate,
@@ -221,22 +211,36 @@ def add_purchase_items(db: Session, purchase: models.Purchase, data: schemas.Pur
     for line in data.items:
         qty = line.qty_received if received else line.qty
         net_price = harga_neto_bertingkat(line)
+        entered_item = db.query(models.Item).get(line.item_id)
+        item = get_stock_source_item(db, entered_item)
+        factor = get_conversion_factor(entered_item) if is_virtual_variant(entered_item) else 1.0
+        base_qty = qty * factor
+        base_ordered = (line.qty_ordered or line.qty) * factor
+        base_received = ((line.qty_received if received else 0) or (qty if received else 0)) * factor
+        base_buy_price = float(line.buy_price or 0) / factor
+        base_net_price = net_price / factor
         db.add(models.PurchaseItem(
             purchase_id=purchase.id,
-            item_id=line.item_id,
-            qty=qty,
-            qty_ordered=line.qty_ordered or line.qty,
-            qty_received=(line.qty_received if received else 0) or (qty if received else 0),
-            buy_price=line.buy_price,
+            item_id=item.id,
+            entered_item_id=entered_item.id,
+            entered_qty=qty,
+            conversion_factor=factor,
+            qty=base_qty,
+            qty_ordered=base_ordered,
+            qty_received=base_received,
+            buy_price=base_buy_price,
             disc1=line.disc1,
             disc2=line.disc2,
             disc3=line.disc3,
             disc4=line.disc4,
-            discount=line.buy_price - net_price,
+            discount=base_buy_price - base_net_price,
             total=net_price * qty,
             source_request_item_id=line.source_request_item_id,
             serials_json=(json.dumps(getattr(line, "serials", []), ensure_ascii=False)
                           if getattr(line, "serials", []) else None),
+            item_code_snapshot=entered_item.code if entered_item else None,
+            item_name_snapshot=entered_item.name if entered_item else None,
+            unit_snapshot=entered_item.unit.abbreviation if entered_item and entered_item.unit else None,
             ppn_percent=line.ppn_percent,  # tarif PPN baris (Included/PKP) → kupas biaya batch & retur
         ))
 
@@ -393,11 +397,10 @@ def receive_branch_stock(db: Session, *, purchase: models.Purchase,
     hd = (float(purchase.discount or 0) / _subtotal) if _subtotal > 0 else 0.0  # fraksi diskon header
 
     for purchase_item in purchase.items:
+        if float(purchase_item.qty or 0) <= 1e-9:
+            continue
         item = db.query(models.Item).with_for_update().get(purchase_item.item_id)
         qty_before = get_total_branch_stock(db, target_branch_id, item.id)
-
-        if is_pusat_stock:
-            item.stock += purchase_item.qty
 
         adjust_warehouse_stock(db, warehouse.id, item.id, purchase_item.qty)
         # ── FIFO: catat lapisan persediaan baru pada BIAYA LANDED supaya nilai batch = nilai
@@ -435,6 +438,10 @@ def receive_branch_stock(db: Session, *, purchase: models.Purchase,
             branch_id=target_branch_id,
             warehouse_id=warehouse.id,
             type="in",
+            event_category="purchase_in",
+            direction="in",
+            source_type="purchase",
+            source_id=purchase.id,
             qty=purchase_item.qty,
             qty_before=qty_before,
             qty_after=qty_before + purchase_item.qty,
@@ -476,11 +483,6 @@ def reverse_received_stock(db: Session, *, purchase: models.Purchase,
             qty=purchase_item.qty,
             prefer_purchase_item_id=purchase_item.id,
         )
-        if is_pusat_stock:
-            if item.stock < purchase_item.qty:
-                raise HTTPException(400, f"Gagal dibatalkan! Stok pusat {item.name} tidak cukup.")
-            item.stock -= purchase_item.qty
-
         db.add(models.StockMovement(
             date=local_date,
             created_at=local_datetime,
@@ -488,6 +490,10 @@ def reverse_received_stock(db: Session, *, purchase: models.Purchase,
             branch_id=stock_branch_id,
             warehouse_id=warehouse.id,
             type="out",
+            event_category="purchase_reversal",
+            direction="out",
+            source_type="purchase",
+            source_id=purchase.id,
             qty=purchase_item.qty,
             qty_before=qty_before,
             qty_after=qty_before - purchase_item.qty,

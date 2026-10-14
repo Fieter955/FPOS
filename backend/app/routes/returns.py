@@ -2,6 +2,7 @@ import math
 import json
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 import pytz
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -10,9 +11,10 @@ from datetime import date, datetime
 from ..database import get_db
 from .. import models, schemas
 from ..auth import get_current_user, write_audit, require_admin
-from ..services.virtual_units import get_required_stock_qty, is_virtual_variant
+from ..permissions import has_role
+from ..services.virtual_units import get_required_stock_qty, get_stock_source_item, is_virtual_variant
 from ..services.tax_context import purchase_tax_type
-from ..services.serials import transition_serials
+from ..services.serials import normalize_serial, reverse_reference_serials, transition_serials
 from ..services.receipt_renderer import (
     build_purchase_return_receipt,
     build_sale_return_receipt,
@@ -38,6 +40,100 @@ def _positive_qty(payload: dict) -> float:
     if not math.isfinite(qty) or qty <= 0:
         raise HTTPException(400, "Qty retur harus lebih dari 0")
     return qty
+
+
+def _serial_keys(values) -> set[str]:
+    return {normalize_serial(value) for value in (values or []) if str(value).strip()}
+
+
+class ReturnCancel(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+
+def _default_branch_warehouse(db: Session, branch_id: int):
+    return db.query(models.Warehouse).filter(
+        models.Warehouse.branch_id == branch_id,
+        models.Warehouse.is_active == True,
+    ).order_by(models.Warehouse.is_default.desc(), models.Warehouse.id.asc()).first()
+
+
+def _reverse_return_journal(db: Session, *, reference: str, branch_id: int, user_id: int):
+    from .accounting import next_journal_number
+
+    original = db.query(models.Journal).filter(
+        models.Journal.reference == reference,
+        models.Journal.branch_id == branch_id,
+    ).order_by(models.Journal.id.desc()).first()
+    if not original:
+        raise HTTPException(409, "Jurnal retur tidak ditemukan; reversal otomatis diblokir")
+    reversal = models.Journal(
+        number=next_journal_number(db, branch_id), date=get_local_date(), branch_id=branch_id,
+        reference=f"REV-{reference}", source=original.source,
+        description=f"REVERSAL {reference}", created_by=user_id,
+    )
+    db.add(reversal)
+    db.flush()
+    for line in original.lines:
+        db.add(models.JournalEntryLine(
+            journal_id=reversal.id,
+            debit_account_id=line.credit_account_id,
+            credit_account_id=line.debit_account_id,
+            amount=line.amount,
+            description=reversal.description,
+        ))
+    return reversal
+
+
+def _validate_return_serial_origin(
+    db: Session,
+    *,
+    entered_item: models.Item,
+    source_line,
+    serial_values,
+    source_type: str,
+) -> None:
+    """Pastikan serial retur benar-benar berasal dari baris faktur terkait.
+
+    Data baru memakai snapshot ``serials_json``. Untuk penjualan legacy, ledger
+    serial dipakai hanya bila referensi transaksinya tunggal dan dapat dibuktikan.
+    """
+    stock_item = get_stock_source_item(db, entered_item)
+    if not stock_item.tracks_serial:
+        if serial_values:
+            raise HTTPException(400, f"Barang {entered_item.name} tidak memakai serial")
+        return
+
+    supplied = _serial_keys(serial_values)
+    expected_count = int(round(get_required_stock_qty(entered_item, float(source_line.qty or 0))))
+    raw = getattr(source_line, "serials_json", None)
+    allowed = _serial_keys(json.loads(raw or "[]"))
+
+    if not allowed and source_type == "sale":
+        rows = (
+            db.query(models.ItemSerial.normalized_serial)
+            .join(models.ItemSerialEvent, models.ItemSerialEvent.serial_id == models.ItemSerial.id)
+            .filter(
+                models.ItemSerial.item_id == stock_item.id,
+                models.ItemSerialEvent.reference_type == "sale",
+                models.ItemSerialEvent.reference_id == source_line.sale_id,
+                models.ItemSerialEvent.to_status == "sold",
+            )
+            .all()
+        )
+        # Ledger lama mereferensikan header transaksi. Jika item yang sama ada
+        # pada beberapa baris, relasi tidak cukup pasti dan tidak boleh ditebak.
+        same_item_lines = db.query(models.SaleItem.id).filter(
+            models.SaleItem.sale_id == source_line.sale_id,
+            models.SaleItem.item_id == source_line.item_id,
+        ).count()
+        if same_item_lines == 1:
+            allowed = {row.normalized_serial for row in rows}
+
+    if not allowed and expected_count:
+        raise HTTPException(409, f"Asal serial {entered_item.name} pada faktur lama tidak dapat dipastikan")
+    unknown = supplied - allowed
+    if unknown:
+        raise HTTPException(400, f"Serial {sorted(unknown)[0]} tidak berasal dari faktur yang dipilih")
 
 
 def _header_discount_ratio(document, line_gross_total: float) -> float:
@@ -270,7 +366,6 @@ def receive_branch_return_at_center(
         item = db.query(models.Item).with_for_update().get(line.item_id)
         before = get_total_branch_stock(db, PUSAT_BRANCH_ID, line.item_id)
         adjust_warehouse_stock(db, transfer.to_warehouse_id, line.item_id, line.qty)
-        item.stock = float(item.stock or 0) + float(line.qty)
         purchase_item = db.query(models.PurchaseItem).get(line.purchase_item_id)
         purchase = purchase_item.purchase if purchase_item else None
         add_batch(
@@ -337,13 +432,17 @@ def get_purchase_history_items(
         # Hitung berapa yang sudah diretur untuk baris ini
         # Karena model kita PurchaseReturnItem merujuk ke purchase_id + item_id
         # Kita aggregasi retur yang merujuk ke purchase yang sama dan item yang sama
-        returned_qty = db.query(func.sum(models.PurchaseReturnItem.qty)).filter(
+        returned_qty = db.query(func.sum(models.PurchaseReturnItem.qty)).join(
+            models.PurchaseReturn
+        ).filter(
             models.PurchaseReturnItem.purchase_item_id == it.id,
+            models.PurchaseReturn.status != "cancelled",
         ).scalar() or 0.0
         legacy_returned = db.query(func.sum(models.PurchaseReturnItem.qty)).join(models.PurchaseReturn).filter(
             models.PurchaseReturn.purchase_id == it.purchase_id,
             models.PurchaseReturnItem.item_id == it.item_id,
             models.PurchaseReturnItem.purchase_item_id.is_(None),
+            models.PurchaseReturn.status != "cancelled",
         ).scalar() or 0.0
         returned_qty += legacy_returned
         
@@ -365,6 +464,7 @@ def get_purchase_history_items(
                 "name": it.item.name,
                 "code": it.item.code,
                 "barcode": it.item.barcode,
+                "tracks_serial": bool(get_stock_source_item(db, it.item).tracks_serial),
             },
             "buy_price": it.buy_price,
             "return_price": _purchase_return_unit_price(it.purchase, it),
@@ -414,13 +514,17 @@ def get_sale_history_items(
     
     result = []
     for it in items:
-        returned_qty = db.query(func.sum(models.SaleReturnItem.qty)).filter(
+        returned_qty = db.query(func.sum(models.SaleReturnItem.qty)).join(
+            models.SaleReturn
+        ).filter(
             models.SaleReturnItem.sale_item_id == it.id,
+            models.SaleReturn.status != "cancelled",
         ).scalar() or 0.0
         legacy_returned = db.query(func.sum(models.SaleReturnItem.qty)).join(models.SaleReturn).filter(
             models.SaleReturn.sale_id == it.sale_id,
             models.SaleReturnItem.item_id == it.item_id,
             models.SaleReturnItem.sale_item_id.is_(None),
+            models.SaleReturn.status != "cancelled",
         ).scalar() or 0.0
         returned_qty += legacy_returned
         
@@ -441,6 +545,7 @@ def get_sale_history_items(
                 "name": it.item.name,
                 "code": it.item.code,
                 "barcode": it.item.barcode,
+                "tracks_serial": bool(get_stock_source_item(db, it.item).tracks_serial),
             },
             "sell_price": it.sell_price,
             "return_price": _sale_return_unit_price(it.sale, it),
@@ -481,13 +586,19 @@ def get_broken_history_items(
     sale_query = db.query(models.SaleReturnItem).join(models.SaleReturn).filter(
         models.SaleReturnItem.condition == "damaged",
         models.SaleReturn.branch_id == branch_id,
+        models.SaleReturn.status != "cancelled",
+    )
+    quarantine_query = db.query(models.InventoryQuarantine).filter(
+        models.InventoryQuarantine.branch_id == branch_id,
     )
     if start_date:
         trade_query = trade_query.filter(models.TradeIn.date >= start_date)
         sale_query = sale_query.filter(models.SaleReturn.date >= start_date)
+        quarantine_query = quarantine_query.filter(models.InventoryQuarantine.date >= start_date)
     if end_date:
         trade_query = trade_query.filter(models.TradeIn.date <= end_date)
         sale_query = sale_query.filter(models.SaleReturn.date <= end_date)
+        quarantine_query = quarantine_query.filter(models.InventoryQuarantine.date <= end_date)
 
     def append_item(it, source_type, source_date, source_number, customer_name, unit_cost):
         returned_qty = it.returned_qty or 0.0
@@ -508,6 +619,7 @@ def get_broken_history_items(
                 "name": it.item.name,
                 "code": it.item.code,
                 "barcode": it.item.barcode,
+                "tracks_serial": bool(get_stock_source_item(db, it.item).tracks_serial),
             },
             "return_price": unit_cost,
             "quarantine_unit_cost": unit_cost,
@@ -536,6 +648,32 @@ def get_broken_history_items(
             sale.customer.name if sale and sale.customer else "Umum",
             float(it.quarantine_unit_cost or 0),
         )
+    for it in quarantine_query.all():
+        returned_qty = float(db.query(func.coalesce(func.sum(models.PurchaseReturnItem.qty), 0.0)).join(
+            models.PurchaseReturn, models.PurchaseReturn.id == models.PurchaseReturnItem.return_id
+        ).filter(
+            models.PurchaseReturnItem.inventory_quarantine_id == it.id,
+            models.PurchaseReturn.status != "cancelled",
+        ).scalar() or 0)
+        if float(it.qty_open or 0) <= 1e-9 and returned_qty <= 1e-9:
+            continue
+        item_status = "returned" if returned_qty >= float(it.qty or 0) - 1e-9 else ("partial" if returned_qty > 0 else "not_returned")
+        if status and status != item_status:
+            continue
+        result.append({
+            "source_type": "inventory_quarantine", "source_item_id": it.id,
+            "inventory_quarantine_id": it.id, "item_id": it.item_id,
+            "item": {"id": it.item_id, "name": it.item.name, "code": it.item.code,
+                     "barcode": it.item.barcode,
+                     "tracks_serial": bool(get_stock_source_item(db, it.item).tracks_serial)},
+            "return_price": float(it.unit_cost or 0),
+            "quarantine_unit_cost": float(it.unit_cost or 0),
+            "qty": float(it.qty or 0), "qty_returned": returned_qty,
+            "qty_available": float(it.qty_open or 0), "status": item_status,
+            "date": str(it.date), "trade_in_number": it.number, "source_number": it.number,
+            "customer_name": it.supplier.name if it.supplier else "Karantina Gudang",
+            "condition": "damaged",
+        })
     result.sort(key=lambda row: row["date"], reverse=True)
     return result
 
@@ -554,6 +692,13 @@ def _damaged_source(db: Session, source_type: str, source_item_id: int,
             models.SaleReturnItem.id == source_item_id,
             models.SaleReturnItem.condition == "damaged",
             models.SaleReturn.branch_id == branch_id,
+            models.SaleReturn.status != "cancelled",
+        )
+    elif source_type == "inventory_quarantine":
+        query = db.query(models.InventoryQuarantine).filter(
+            models.InventoryQuarantine.id == source_item_id,
+            models.InventoryQuarantine.branch_id == branch_id,
+            models.InventoryQuarantine.qty_open > 0,
         )
     else:
         raise HTTPException(400, "Sumber barang rusak tidak valid")
@@ -563,6 +708,87 @@ def _damaged_source(db: Session, source_type: str, source_item_id: int,
     if not source:
         raise HTTPException(404, "Barang rusak tidak ditemukan")
     return source
+
+
+@router.get("/unlinked-stock-options/{item_id}")
+def get_unlinked_stock_options(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Saldo stok yang sah untuk satu baris retur pembelian tanpa faktur."""
+    if not has_role(current_user, "admin"):
+        raise HTTPException(403, "Retur tanpa faktur hanya dapat dibuat admin")
+
+    branch_id = resolve_active_branch_id(db, current_user)
+    item = db.query(models.Item).filter(
+        models.Item.id == item_id,
+        models.Item.is_active == True,
+    ).first()
+    if not item:
+        raise HTTPException(404, "Barang tidak ditemukan")
+
+    warehouse = _default_branch_warehouse(db, branch_id)
+    good_available = 0.0
+    if warehouse:
+        good_available = float(db.query(models.WarehouseStock.stock).filter(
+            models.WarehouseStock.warehouse_id == warehouse.id,
+            models.WarehouseStock.item_id == item.id,
+        ).scalar() or 0)
+
+    damaged_sources = []
+
+    trade_rows = db.query(models.TradeInReturnItem).join(models.TradeIn).filter(
+        models.TradeInReturnItem.item_id == item.id,
+        models.TradeInReturnItem.condition == "damaged",
+        models.TradeIn.branch_id == branch_id,
+    ).all()
+    for row in trade_rows:
+        available = float(row.qty or 0) - float(row.returned_qty or 0)
+        if available > 1e-9:
+            damaged_sources.append({
+                "source_type": "trade_in", "source_item_id": row.id,
+                "source_number": row.trade_in.number, "date": str(row.trade_in.date),
+                "qty_available": available,
+            })
+
+    sale_rows = db.query(models.SaleReturnItem).join(models.SaleReturn).filter(
+        models.SaleReturnItem.item_id == item.id,
+        models.SaleReturnItem.condition == "damaged",
+        models.SaleReturn.branch_id == branch_id,
+        models.SaleReturn.status != "cancelled",
+    ).all()
+    for row in sale_rows:
+        available = float(row.qty or 0) - float(row.returned_qty or 0)
+        if available > 1e-9:
+            damaged_sources.append({
+                "source_type": "sale_return", "source_item_id": row.id,
+                "source_number": row.return_.number, "date": str(row.return_.date),
+                "qty_available": available,
+            })
+
+    quarantine_rows = db.query(models.InventoryQuarantine).filter(
+        models.InventoryQuarantine.branch_id == branch_id,
+        models.InventoryQuarantine.item_id == item.id,
+        models.InventoryQuarantine.qty_open > 1e-9,
+    ).all()
+    for row in quarantine_rows:
+        damaged_sources.append({
+            "source_type": "inventory_quarantine", "source_item_id": row.id,
+            "source_number": row.number, "date": str(row.date),
+            "qty_available": float(row.qty_open or 0),
+        })
+
+    damaged_sources.sort(key=lambda row: (row["date"], row["source_item_id"]), reverse=True)
+    return {
+        "item_id": item.id,
+        "good": {
+            "warehouse_id": warehouse.id if warehouse else None,
+            "warehouse_name": warehouse.name if warehouse else None,
+            "qty_available": max(0.0, good_available),
+        },
+        "damaged_sources": damaged_sources,
+    }
 
 
 @router.get("/history/broken/{source_type}/{source_item_id}/suppliers")
@@ -628,6 +854,9 @@ def get_sale_returns(skip: int = 0, limit: int = 100,
             "sale_id": r.sale_id,
             "sale_number": sale.number if sale else "-",
             "total": r.total, "reason": r.reason, "notes": r.notes,
+            "status": r.status,
+            "cancelled_at": r.cancelled_at.isoformat() if r.cancelled_at else None,
+            "cancellation_reason": r.cancellation_reason,
             "items": items_out,
             "created_at": r.created_at.isoformat() if r.created_at else None
         })
@@ -642,7 +871,7 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
     sale = db.query(models.Sale).filter(
         models.Sale.id == sale_id,
         models.Sale.branch_id == branch_id,
-    ).first()
+    ).with_for_update().first()
     if not sale: raise HTTPException(404, "Penjualan tidak ditemukan")
     if sale.status == "cancelled":
         raise HTTPException(400, "Penjualan yang sudah dibatalkan tidak dapat diretur")
@@ -727,8 +956,11 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
 
         # Cek total retur sebelumnya untuk baris faktur yang tepat. Baris legacy
         # tanpa sale_item_id tetap dihitung konservatif berdasarkan faktur+barang.
-        total_prev = db.query(func.coalesce(func.sum(models.SaleReturnItem.qty), 0.0)).filter(
+        total_prev = db.query(func.coalesce(func.sum(models.SaleReturnItem.qty), 0.0)).join(
+            models.SaleReturn
+        ).filter(
             models.SaleReturnItem.sale_item_id == sale_item.id,
+            models.SaleReturn.status != "cancelled",
         ).scalar() or 0.0
         total_prev += db.query(func.coalesce(func.sum(models.SaleReturnItem.qty), 0.0)).join(
             models.SaleReturn
@@ -736,10 +968,19 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
             models.SaleReturn.sale_id == sale_id,
             models.SaleReturnItem.item_id == it["item_id"],
             models.SaleReturnItem.sale_item_id.is_(None),
+            models.SaleReturn.status != "cancelled",
         ).scalar() or 0.0
 
         if total_prev + qty > sale_item.qty + 1e-9:
             raise HTTPException(400, f"Qty retur {item.name} melebihi qty terjual ({sale_item.qty - total_prev} tersisa)")
+
+        _validate_return_serial_origin(
+            db,
+            entered_item=item,
+            source_line=sale_item,
+            serial_values=it.get("serials", []),
+            source_type="sale",
+        )
 
         # Harga retur berasal dari snapshot faktur setelah diskon baris dan
         # alokasi diskon header, bukan dari angka yang dapat diubah klien.
@@ -770,16 +1011,19 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
         # COGS yang dibalik dihitung di bawah (blok "Kembalikan stok"): dari biaya lapisan FIFO
         # yang NYATA dipulihkan (mode gudang) atau rata-rata buy_price (mode tanpa gudang).
         quarantine_unit_cost = float(sale_item.buy_price or 0) if condition == "damaged" else 0.0
-        db.add(models.SaleReturnItem(
+        return_line = models.SaleReturnItem(
             return_id=retur.id, sale_item_id=sale_item.id, item_id=it["item_id"],
             qty=it["qty"], price=actual_price, total=line_sales + line_tax,
             condition=condition, quarantine_unit_cost=quarantine_unit_cost,
-        ))
+            serials_json=json.dumps(it.get("serials", []), ensure_ascii=False),
+        )
+        db.add(return_line)
 
         if condition == "damaged":
             # Barang rusak adalah aset karantina: tidak menambah stok etalase dan tidak
             # memulihkan lapisan FIFO yang dapat dijual.
-            damaged_cogs += float(it["qty"]) * quarantine_unit_cost
+            return_line.carrying_cost = float(it["qty"]) * quarantine_unit_cost
+            damaged_cogs += return_line.carrying_cost
             stock_item = item
             if is_virtual_variant(item):
                 stock_item = db.query(models.Item).get(item.parent_item_id) or item
@@ -809,7 +1053,7 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
             before = get_total_branch_stock(db, sale.branch_id, stock_item.id)
         else:
             before = float(stock_item.stock or 0)
-        if sale.branch_id == PUSAT_BRANCH_ID or not gudang_aktif:
+        if not gudang_aktif:
             stock_item.stock += required_qty
         if gudang_aktif:
             from .warehouse import adjust_warehouse_stock
@@ -820,7 +1064,7 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
             # dipulihkan → dipakai sebagai COGS yang dibalik supaya GL Persediaan/HPP tetap
             # sama dengan ledger batch (anti-drift pada retur sebagian).
             from ..services.inventory_fifo import restore_sale_return
-            total_cogs += restore_sale_return(
+            line_carrying = restore_sale_return(
                 db,
                 sale_item_id=sale_item.id,
                 qty=required_qty,
@@ -830,7 +1074,9 @@ def create_sale_return(data: dict, db: Session = Depends(get_db),
             )
         else:
             # Mode tanpa gudang (tak ada lapisan FIFO) → rata-rata buy_price seperti semula.
-            total_cogs += it["qty"] * (sale_item.buy_price or 0)
+            line_carrying = it["qty"] * (sale_item.buy_price or 0)
+        return_line.carrying_cost = line_carrying
+        total_cogs += line_carrying
         db.add(models.StockMovement(
             date=get_local_date(),
             item_id=stock_item.id,
@@ -912,15 +1158,163 @@ def get_purchase_returns(skip: int = 0, limit: int = 100,
         result.append({
             "id": r.id, "number": r.number, "date": str(r.date),
             "purchase_id": r.purchase_id,
-            "purchase_number": purchase.number if purchase else "-",
-            "supplier_name": purchase.supplier.name if purchase and purchase.supplier else "-",
+            "purchase_number": purchase.number if purchase else "Tanpa Faktur",
+            "supplier_name": r.supplier.name if r.supplier else (purchase.supplier.name if purchase and purchase.supplier else "-"),
+            "return_mode": r.return_mode or "invoice",
+            "evidence_reference": r.evidence_reference,
             "total": r.total,
             "total_carrying": r.total_carrying, "selisih": r.selisih,
             "reason": r.reason, "notes": r.notes,
+            "status": r.status,
+            "cancelled_at": r.cancelled_at.isoformat() if r.cancelled_at else None,
+            "cancellation_reason": r.cancellation_reason,
             "items": items_out,
             "created_at": r.created_at.isoformat() if r.created_at else None,
         })
     return result
+
+
+def _create_unlinked_purchase_return(data: dict, db: Session, current_user: models.User, branch_id: int):
+    """Retur di luar transaksi: klaim supplier terpisah dari arus biaya FIFO aktual."""
+    if not has_role(current_user, "admin"):
+        raise HTTPException(403, "Retur tanpa faktur hanya dapat dibuat admin")
+    reason = str(data.get("reason") or "").strip()
+    evidence = str(data.get("evidence_reference") or "").strip()
+    if not reason:
+        raise HTTPException(400, "Alasan retur tanpa faktur wajib diisi")
+    if not evidence:
+        raise HTTPException(400, "Referensi bukti retur tanpa faktur wajib diisi")
+    supplier_id = data.get("supplier_id")
+    supplier = db.query(models.Supplier).with_for_update().get(supplier_id)
+    if not supplier:
+        raise HTTPException(404, "Supplier tidak ditemukan")
+    warehouse = _default_branch_warehouse(db, branch_id)
+    items = data.get("items") or []
+    if not items:
+        raise HTTPException(400, "Retur harus memiliki minimal satu barang")
+
+    from .accounting import pastikan_akun_ada
+    has_damaged = any(i.get("damaged_source_item_id") or i.get("trade_in_return_item_id") for i in items)
+    required_accounts = ["1-1600", "1-1400", "4-2000", "5-1200"]
+    if has_damaged:
+        required_accounts.append("1-1450")
+    pastikan_akun_ada(db, required_accounts)
+
+    number = _next_number(db, "RP", models.PurchaseReturn)
+    document = models.PurchaseReturn(
+        number=number, date=get_local_date(), purchase_id=None, supplier_id=supplier.id,
+        return_mode="unlinked", evidence_reference=evidence, branch_id=branch_id,
+        created_by=current_user.id, tax_percent=0, is_tax_included=True,
+        reason=reason, notes=data.get("notes"),
+    )
+    db.add(document)
+    db.flush()
+    total_claim = 0.0
+    total_carrying = 0.0
+    damaged_carrying = 0.0
+    seen_items = set()
+
+    for payload in items:
+        qty = _positive_qty(payload)
+        item = db.query(models.Item).with_for_update().get(payload.get("item_id"))
+        if not item:
+            raise HTTPException(404, "Barang retur tidak ditemukan")
+        if item.id in seen_items:
+            raise HTTPException(400, f"Barang {item.name} dikirim lebih dari sekali")
+        seen_items.add(item.id)
+        try:
+            price = float(payload.get("price"))
+        except (TypeError, ValueError):
+            raise HTTPException(400, f"Harga klaim {item.name} harus berupa angka")
+        if not math.isfinite(price) or price < 0:
+            raise HTTPException(400, f"Harga klaim {item.name} tidak valid")
+
+        source_type = payload.get("damaged_source_type")
+        source_id = payload.get("damaged_source_item_id") or payload.get("trade_in_return_item_id")
+        damaged_source = None
+        carrying = 0.0
+        if source_id:
+            damaged_source = _damaged_source(db, str(source_type or "trade_in"), int(source_id), branch_id, for_update=True)
+            if damaged_source.item_id != item.id:
+                raise HTTPException(400, "Barang rusak tidak sesuai dengan item retur")
+            available = float(damaged_source.qty_open or 0) if source_type == "inventory_quarantine" else float(damaged_source.qty or 0) - float(damaged_source.returned_qty or 0)
+            if qty > available + 1e-9:
+                raise HTTPException(400, f"Qty barang rusak {item.name} tersisa hanya {available}")
+            unit_cost = float(damaged_source.return_price or 0) if source_type == "trade_in" else float(damaged_source.unit_cost or 0) if source_type == "inventory_quarantine" else float(damaged_source.quarantine_unit_cost or 0)
+            carrying = qty * unit_cost
+            if source_type == "inventory_quarantine":
+                from ..services.serials import assert_quarantine_serials
+                from ..services.quarantine_movements import record_quarantine_movement
+                assert_quarantine_serials(
+                    db, quarantine=damaged_source, qty=qty,
+                    serial_values=payload.get("serials", []),
+                )
+                damaged_source.qty_open = available - qty
+                damaged_source.status = "closed" if damaged_source.qty_open <= 1e-9 else "partial"
+                record_quarantine_movement(
+                    db, quarantine=damaged_source, qty=qty,
+                    category="quarantine_supplier_return", date_value=document.date,
+                    reference=number, quarantine_before=available,
+                    quarantine_after=damaged_source.qty_open,
+                    notes=f"Retur supplier tanpa faktur: {evidence}",
+                )
+            else:
+                damaged_source.returned_qty = float(damaged_source.returned_qty or 0) + qty
+            damaged_carrying += carrying
+        else:
+            if not warehouse:
+                raise HTTPException(409, "Gudang aktif diperlukan untuk retur tanpa faktur")
+            from .warehouse import get_warehouse_stock, adjust_warehouse_stock, get_total_branch_stock
+            if get_warehouse_stock(db, warehouse.id, item.id) + 1e-9 < qty:
+                raise HTTPException(400, f"Stok {item.name} tidak cukup untuk retur")
+            before = get_total_branch_stock(db, branch_id, item.id)
+            from ..services.inventory_fifo import consume_fifo
+            allocations = consume_fifo(db, item_id=item.id, warehouse_id=warehouse.id, qty=qty)
+            carrying = sum(float(q) * float(cost) for _batch, q, cost in allocations)
+            adjust_warehouse_stock(db, warehouse.id, item.id, -qty)
+            if branch_id == PUSAT_BRANCH_ID:
+                item.stock = float(item.stock or 0) - qty
+            db.add(models.StockMovement(
+                date=get_local_date(), item_id=item.id, branch_id=branch_id, warehouse_id=warehouse.id,
+                type="out", qty=qty, qty_before=before, qty_after=before-qty,
+                reference=number, notes=f"Retur tanpa faktur: {evidence}",
+            ))
+
+        transition_serials(
+            db, item=item, qty=qty, serial_values=payload.get("serials", []),
+            from_statuses={"quarantine"} if damaged_source else {"in_stock"},
+            to_status="returned_supplier", from_warehouse_id=None if damaged_source else warehouse.id,
+            to_warehouse=None, reference_type="purchase_return", reference_id=document.id,
+            reference_number=number, user_id=current_user.id, event_type="purchase_return_unlinked",
+        )
+        claim = qty * price
+        total_claim += claim
+        total_carrying += carrying
+        db.add(models.PurchaseReturnItem(
+            return_id=document.id, purchase_item_id=None, item_id=item.id, qty=qty,
+            price=price, total=claim, carrying_cost=carrying, quarantine_cost=carrying if damaged_source else 0,
+            trade_in_return_item_id=int(source_id) if source_id and source_type == "trade_in" else None,
+            sale_return_item_id=int(source_id) if source_id and source_type == "sale_return" else None,
+            inventory_quarantine_id=int(source_id) if source_id and source_type == "inventory_quarantine" else None,
+            serials_json=json.dumps(payload.get("serials", []), ensure_ascii=False),
+        ))
+
+    document.total = total_claim
+    document.total_carrying = total_carrying
+    document.selisih = total_claim - total_carrying
+    supplier.deposit_balance = float(supplier.deposit_balance or 0) + total_claim
+    from ..services import journal_service
+    journal_service.create_purchase_return_journal(
+        db, date_val=document.date, number_ref=number, supplier_name=supplier.name,
+        total_inventory=total_claim, total_tax=0, total_carrying=total_carrying,
+        damaged_carrying=damaged_carrying, is_tax_included=True, ppn_dipisah=False,
+        user_id=current_user.id, branch_id=branch_id,
+    )
+    write_audit(db, current_user.id, "CREATE", "purchase_returns", document.id, f"Retur tanpa faktur; bukti {evidence}")
+    db.commit()
+    return {"id": document.id, "number": number, "total": total_claim,
+            "total_carrying": round(total_carrying, 2), "selisih": round(document.selisih, 2),
+            "message": "Retur pembelian tanpa faktur berhasil"}
 
 
 @router.post("/purchases")
@@ -928,10 +1322,15 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
                             current_user: models.User = Depends(get_current_user)):
     purchase_id = data.get("purchase_id")
     branch_id = resolve_active_branch_id(db, current_user)
+    return_mode = str(data.get("return_mode") or ("invoice" if purchase_id else "unlinked")).lower()
+    if return_mode == "unlinked":
+        return _create_unlinked_purchase_return(data, db, current_user, branch_id)
+    if return_mode != "invoice":
+        raise HTTPException(400, "Mode retur pembelian tidak valid")
     purchase = db.query(models.Purchase).filter(
         models.Purchase.id == purchase_id,
         models.Purchase.branch_id == branch_id,
-    ).first()
+    ).with_for_update().first()
     if not purchase: raise HTTPException(404, "Pembelian tidak ditemukan")
     if purchase.status in {"cancelled", "draft", "pending"}:
         raise HTTPException(400, "Pembelian yang belum diterima atau sudah dibatalkan tidak dapat diretur")
@@ -976,6 +1375,8 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
         number=number,
         date=get_local_date(),
         purchase_id=purchase_id,
+        supplier_id=purchase.supplier_id,
+        return_mode="invoice",
         branch_id=branch_id,
         created_by=current_user.id,
         tax_percent=tax_percent,
@@ -1015,8 +1416,11 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
             raise HTTPException(400, f"Baris retur {item.name} dikirim lebih dari sekali")
         seen_purchase_lines.add(pur_item.id)
 
-        total_prev = db.query(func.coalesce(func.sum(models.PurchaseReturnItem.qty), 0.0)).filter(
+        total_prev = db.query(func.coalesce(func.sum(models.PurchaseReturnItem.qty), 0.0)).join(
+            models.PurchaseReturn
+        ).filter(
             models.PurchaseReturnItem.purchase_item_id == pur_item.id,
+            models.PurchaseReturn.status != "cancelled",
         ).scalar() or 0.0
         total_prev += db.query(func.coalesce(func.sum(models.PurchaseReturnItem.qty), 0.0)).join(
             models.PurchaseReturn
@@ -1024,12 +1428,20 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
             models.PurchaseReturn.purchase_id == purchase_id,
             models.PurchaseReturnItem.item_id == it["item_id"],
             models.PurchaseReturnItem.purchase_item_id.is_(None),
+            models.PurchaseReturn.status != "cancelled",
         ).scalar() or 0.0
         if total_prev + qty > float(pur_item.qty or 0) + 1e-9:
             raise HTTPException(
                 400,
                 f"Qty retur {item.name} melebihi qty pembelian ({float(pur_item.qty or 0) - total_prev} tersisa)",
             )
+        _validate_return_serial_origin(
+            db,
+            entered_item=item,
+            source_line=pur_item,
+            serial_values=it.get("serials", []),
+            source_type="purchase",
+        )
         if purchase.from_po_id and gudang_aktif:
             provenance_stock = db.query(func.sum(models.StockBatch.qty_remaining)).filter(
                 models.StockBatch.purchase_item_id == pur_item.id,
@@ -1082,28 +1494,54 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
             )
             if damaged_source.item_id != item.id:
                 raise HTTPException(400, "Barang rusak tidak sesuai dengan item pada faktur")
-            source_available = float(damaged_source.qty or 0) - float(damaged_source.returned_qty or 0)
+            source_available = (
+                float(damaged_source.qty_open or 0)
+                if source_type == "inventory_quarantine"
+                else float(damaged_source.qty or 0) - float(damaged_source.returned_qty or 0)
+            )
             if float(it["qty"]) > source_available + 1e-6:
                 raise HTTPException(400, f"Qty barang rusak tersisa hanya {source_available}")
             unit_cost = (
-                float(damaged_source.return_price or 0)
-                if source_type == "trade_in"
+                float(damaged_source.return_price or 0) if source_type == "trade_in"
+                else float(damaged_source.unit_cost or 0) if source_type == "inventory_quarantine"
                 else float(damaged_source.quarantine_unit_cost or 0)
             )
             source_cost = unit_cost * float(it["qty"])
 
-        db.add(models.PurchaseReturnItem(
+        return_line = models.PurchaseReturnItem(
             return_id=retur.id, purchase_item_id=pur_item.id, item_id=it["item_id"],
             qty=it["qty"], price=actual_price, total=line_inventory + line_tax,
             trade_in_return_item_id=(int(source_item_id) if source_type == "trade_in" else None),
             sale_return_item_id=(int(source_item_id) if source_type == "sale_return" else None),
+            inventory_quarantine_id=(int(source_item_id) if source_type == "inventory_quarantine" else None),
             quarantine_cost=source_cost,
-        ))
+            serials_json=json.dumps(it.get("serials", []), ensure_ascii=False),
+        )
+        db.add(return_line)
 
         if damaged_source:
-            damaged_source.returned_qty = float(damaged_source.returned_qty or 0) + float(it["qty"])
+            if source_type == "inventory_quarantine":
+                from ..services.serials import assert_quarantine_serials
+                from ..services.quarantine_movements import record_quarantine_movement
+                quarantine_before = float(damaged_source.qty_open or 0)
+                assert_quarantine_serials(
+                    db, quarantine=damaged_source, qty=float(it["qty"]),
+                    serial_values=it.get("serials", []),
+                )
+                damaged_source.qty_open = quarantine_before - float(it["qty"])
+                damaged_source.status = "closed" if damaged_source.qty_open <= 1e-9 else "partial"
+                record_quarantine_movement(
+                    db, quarantine=damaged_source, qty=float(it["qty"]),
+                    category="quarantine_supplier_return", date_value=retur.date,
+                    reference=number, quarantine_before=quarantine_before,
+                    quarantine_after=damaged_source.qty_open,
+                    notes=f"Retur Pembelian {purchase.number}",
+                )
+            else:
+                damaged_source.returned_qty = float(damaged_source.returned_qty or 0) + float(it["qty"])
             total_carrying += source_cost
             damaged_carrying += source_cost
+            return_line.carrying_cost = source_cost
             transition_serials(
                 db, item=item, qty=it["qty"], serial_values=it.get("serials", []),
                 from_statuses={"quarantine"}, to_status="returned_supplier",
@@ -1137,7 +1575,7 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
             before = get_total_branch_stock(db, purchase.branch_id, item.id)
         else:
             before = float(item.stock or 0)
-        if purchase.branch_id == PUSAT_BRANCH_ID or not gudang_aktif:
+        if not gudang_aktif:
             item.stock -= it["qty"]
         # Default (mode global / fallback): modal = nilai refund → tanpa selisih.
         line_carrying = line_inventory
@@ -1147,18 +1585,11 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
             # Bila batch itu sudah terjual (FIFO), fungsi ini mundur ke batch terbaru
             # supaya Σ batch == stok tetap terjaga (kasus koreksi biaya/"swap" lintas
             # supplier ditangani terpisah di Fase 3).
-            from ..services.inventory_fifo import reduce_batches_for_reversal
-            cost_consumed, leftover = reduce_batches_for_reversal(
-                db,
-                item_id=item.id,
-                warehouse_id=gudang_aktif.id,
-                qty=it["qty"],
-                prefer_purchase_item_id=pur_item.id,
-            )
-            # Modal nyata = biaya batch yang keluar; porsi leftover (drift) dinilai =
-            # harga retur agar tidak memunculkan selisih palsu pada porsi itu.
-            line_carrying = cost_consumed + leftover * actual_price
+            from ..services.inventory_fifo import consume_fifo
+            allocations = consume_fifo(db, item_id=item.id, warehouse_id=gudang_aktif.id, qty=it["qty"])
+            line_carrying = sum(float(q) * float(cost) for _batch, q, cost in allocations)
         total_carrying += line_carrying
+        return_line.carrying_cost = line_carrying
         db.add(models.StockMovement(
             date=get_local_date(),
             item_id=item.id,
@@ -1221,6 +1652,95 @@ def create_purchase_return(data: dict, db: Session = Depends(get_db),
     }
 
 
+@router.post("/sales/{return_id}/cancel")
+def cancel_sale_return(
+    return_id: int,
+    data: ReturnCancel,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    branch_id = resolve_active_branch_id(db, current_user)
+    document = db.query(models.SaleReturn).filter(
+        models.SaleReturn.id == return_id,
+        models.SaleReturn.branch_id == branch_id,
+    ).with_for_update().first()
+    if not document:
+        raise HTTPException(404, "Retur penjualan tidak ditemukan")
+    if document.status != "posted":
+        raise HTTPException(409, "Retur penjualan sudah dibatalkan")
+    from .accounting import assert_books_open
+    assert_books_open(db, branch_id, get_local_date(), "Pembatalan retur penjualan")
+    warehouse = _default_branch_warehouse(db, branch_id)
+
+    for line in document.items:
+        entered_item = db.query(models.Item).get(line.item_id)
+        stock_item = get_stock_source_item(db, entered_item)
+        required_qty = get_required_stock_qty(entered_item, line.qty)
+        if line.condition == "good":
+            movement_scope = db.query(models.StockMovement.id).filter(
+                models.StockMovement.item_id == stock_item.id,
+                models.StockMovement.created_at > document.created_at,
+                models.StockMovement.reference != document.number,
+            )
+            movement_scope = movement_scope.filter(
+                models.StockMovement.warehouse_id == warehouse.id
+            ) if warehouse else movement_scope.filter(models.StockMovement.branch_id == branch_id)
+            later = movement_scope.first()
+            if later:
+                raise HTTPException(409, f"Stok {stock_item.name} sudah bergerak setelah retur; reversal ditolak")
+            if warehouse:
+                from .warehouse import adjust_warehouse_stock, get_total_branch_stock, get_warehouse_stock
+                if get_warehouse_stock(db, warehouse.id, stock_item.id) + 1e-9 < required_qty:
+                    raise HTTPException(409, f"Stok {stock_item.name} tidak cukup untuk reversal")
+                from ..services.inventory_fifo import reduce_batches_for_reversal
+                cost, _ = reduce_batches_for_reversal(
+                    db, item_id=stock_item.id, warehouse_id=warehouse.id, qty=required_qty
+                )
+                if abs(cost - float(line.carrying_cost or 0)) > 0.01:
+                    raise HTTPException(409, f"Nilai FIFO {stock_item.name} sudah berubah; reversal ditolak")
+                before = get_total_branch_stock(db, branch_id, stock_item.id)
+                adjust_warehouse_stock(db, warehouse.id, stock_item.id, -required_qty)
+            else:
+                before = float(stock_item.stock or 0)
+                if before + 1e-9 < required_qty:
+                    raise HTTPException(409, f"Stok {stock_item.name} tidak cukup untuk reversal")
+                stock_item.stock = before - required_qty
+            db.add(models.StockMovement(
+                date=get_local_date(), item_id=stock_item.id, branch_id=branch_id,
+                warehouse_id=warehouse.id if warehouse else None, type="reversal_out", qty=required_qty,
+                qty_before=before, qty_after=before-required_qty,
+                reference=f"REV-{document.number}", notes=f"Pembatalan {document.number}",
+            ))
+
+    reverse_reference_serials(
+        db, reference_type="sale_return", reference_id=document.id,
+        reversal_reference_number=f"REV-{document.number}", user_id=current_user.id,
+    )
+    if document.sale and document.sale.customer_id:
+        customer = db.query(models.Customer).with_for_update().get(document.sale.customer_id)
+        if not customer or float(customer.deposit_balance or 0) + 0.01 < float(document.total or 0):
+            raise HTTPException(409, "Saldo retur pelanggan sudah digunakan; reversal ditolak")
+        from ..services.customer_deposits import apply_customer_deposit_change
+        apply_customer_deposit_change(
+            db, customer, -float(document.total or 0), event_type="sale_return_reversal",
+            transaction_date=get_local_date(), branch_id=branch_id,
+            source_type="sale_return_reversal", source_id=document.id,
+            reference=f"REV-{document.number}", description=data.reason,
+            created_by=current_user.id,
+        )
+    reversal = _reverse_return_journal(
+        db, reference=document.number, branch_id=branch_id, user_id=current_user.id
+    )
+    document.status = "cancelled"
+    document.cancelled_by = current_user.id
+    document.cancelled_at = datetime.now(WITA)
+    document.cancellation_reason = data.reason.strip()
+    document.reversal_journal_id = reversal.id
+    write_audit(db, current_user.id, "DELETE", "sale_returns", document.id, data.reason.strip())
+    db.commit()
+    return {"message": "Retur penjualan berhasil dibatalkan", "id": document.id}
+
+
 @router.post("/sales/{return_id}/print")
 def print_sale_return(
     return_id: int,
@@ -1234,6 +1754,8 @@ def print_sale_return(
     ).first()
     if not return_doc:
         raise HTTPException(404, "Retur penjualan tidak ditemukan")
+    if return_doc.status == "cancelled":
+        raise HTTPException(409, "Retur yang dibatalkan tidak dapat dicetak sebagai transaksi aktif")
     branch = db.query(models.Branch).filter(models.Branch.id == branch_id).first()
     job = enqueue_print_job(
         db,
@@ -1246,6 +1768,102 @@ def print_sale_return(
     write_audit(db, current_user.id, "PRINT", "sale_returns", return_doc.id, "Antre cetak struk retur")
     db.commit()
     return {"status": "queued", "job_id": job.id, "branch_id": branch_id}
+
+
+@router.post("/purchases/{return_id}/cancel")
+def cancel_purchase_return(
+    return_id: int,
+    data: ReturnCancel,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    branch_id = resolve_active_branch_id(db, current_user)
+    document = db.query(models.PurchaseReturn).filter(
+        models.PurchaseReturn.id == return_id,
+        models.PurchaseReturn.branch_id == branch_id,
+    ).with_for_update().first()
+    if not document:
+        raise HTTPException(404, "Retur pembelian tidak ditemukan")
+    if document.status != "posted":
+        raise HTTPException(409, "Retur pembelian sudah dibatalkan")
+    from .accounting import assert_books_open
+    assert_books_open(db, branch_id, get_local_date(), "Pembatalan retur pembelian")
+    warehouse = _default_branch_warehouse(db, branch_id)
+
+    for line in document.items:
+        if line.trade_in_return_item_id or line.sale_return_item_id or line.inventory_quarantine_id:
+            if line.inventory_quarantine_id:
+                source = db.query(models.InventoryQuarantine).with_for_update().get(line.inventory_quarantine_id)
+                if not source:
+                    raise HTTPException(409, "Sumber karantina tidak dapat dipulihkan")
+                from ..services.quarantine_movements import record_quarantine_movement
+                quarantine_before = float(source.qty_open or 0)
+                source.qty_open = quarantine_before + float(line.qty or 0)
+                source.status = "open" if source.qty_open >= float(source.qty or 0) - 1e-9 else "partial"
+                record_quarantine_movement(
+                    db, quarantine=source, qty=float(line.qty or 0),
+                    category="quarantine_supplier_return_reversal",
+                    date_value=get_local_date(), reference=f"REV-{document.number}",
+                    quarantine_before=quarantine_before,
+                    quarantine_after=source.qty_open,
+                    notes=f"Pembatalan {document.number}: {data.reason.strip()}",
+                )
+                continue
+            source = (
+                db.query(models.TradeInReturnItem).with_for_update().get(line.trade_in_return_item_id)
+                if line.trade_in_return_item_id
+                else db.query(models.SaleReturnItem).with_for_update().get(line.sale_return_item_id)
+            )
+            if not source or float(source.returned_qty or 0) + 1e-9 < float(line.qty or 0):
+                raise HTTPException(409, "Sumber barang karantina tidak dapat dipulihkan")
+            source.returned_qty = float(source.returned_qty or 0) - float(line.qty or 0)
+            continue
+
+        entered_item = db.query(models.Item).get(line.item_id)
+        stock_item = get_stock_source_item(db, entered_item)
+        required_qty = get_required_stock_qty(entered_item, line.qty)
+        if warehouse:
+            from .warehouse import adjust_warehouse_stock, get_total_branch_stock
+            from ..services.inventory_fifo import add_batch
+            before = get_total_branch_stock(db, branch_id, stock_item.id)
+            adjust_warehouse_stock(db, warehouse.id, stock_item.id, required_qty)
+            unit_cost = float(line.carrying_cost or 0) / required_qty if required_qty else 0
+            add_batch(
+                db, item_id=stock_item.id, warehouse_id=warehouse.id, qty=required_qty,
+                unit_cost=unit_cost, received_date=get_local_date(),
+                purchase_item_id=line.purchase_item_id,
+            )
+        else:
+            before = float(stock_item.stock or 0)
+            stock_item.stock = before + required_qty
+        db.add(models.StockMovement(
+            date=get_local_date(), item_id=stock_item.id, branch_id=branch_id,
+            warehouse_id=warehouse.id if warehouse else None, type="reversal_in", qty=required_qty,
+            qty_before=before, qty_after=before+required_qty,
+            reference=f"REV-{document.number}", notes=f"Pembatalan {document.number}",
+        ))
+
+    reverse_reference_serials(
+        db, reference_type="purchase_return", reference_id=document.id,
+        reversal_reference_number=f"REV-{document.number}", user_id=current_user.id,
+    )
+    supplier_id = document.supplier_id or (document.purchase.supplier_id if document.purchase else None)
+    if supplier_id:
+        supplier = db.query(models.Supplier).with_for_update().get(supplier_id)
+        if not supplier or float(supplier.deposit_balance or 0) + 0.01 < float(document.total or 0):
+            raise HTTPException(409, "Deposit supplier dari retur sudah digunakan; reversal ditolak")
+        supplier.deposit_balance = float(supplier.deposit_balance or 0) - float(document.total or 0)
+    reversal = _reverse_return_journal(
+        db, reference=document.number, branch_id=branch_id, user_id=current_user.id
+    )
+    document.status = "cancelled"
+    document.cancelled_by = current_user.id
+    document.cancelled_at = datetime.now(WITA)
+    document.cancellation_reason = data.reason.strip()
+    document.reversal_journal_id = reversal.id
+    write_audit(db, current_user.id, "DELETE", "purchase_returns", document.id, data.reason.strip())
+    db.commit()
+    return {"message": "Retur pembelian berhasil dibatalkan", "id": document.id}
 
 
 @router.post("/purchases/{return_id}/print")
@@ -1261,6 +1879,8 @@ def print_purchase_return(
     ).first()
     if not return_doc:
         raise HTTPException(404, "Retur pembelian tidak ditemukan")
+    if return_doc.status == "cancelled":
+        raise HTTPException(409, "Retur yang dibatalkan tidak dapat dicetak sebagai transaksi aktif")
     branch = db.query(models.Branch).filter(models.Branch.id == branch_id).first()
     job = enqueue_print_job(
         db,
@@ -1379,6 +1999,7 @@ def swap_batch(
     ke to_batch (B), lalu posting jurnal KOREKSI HPP bertanggal di periode penjualan
     asal (boleh sudah tutup buku). Tidak mengubah WarehouseStock — Σ batch == stok
     tetap terjaga. ADMIN-ONLY + audit."""
+    raise HTTPException(410, "Swap batch sudah dinonaktifkan; retur memakai biaya FIFO stok tersedia")
     from .accounting import create_auto_journal, get_books_locked_until
     from ..services.journal_service import ACCOUNT_COGS, ACCOUNT_INVENTORY
 

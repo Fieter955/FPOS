@@ -568,6 +568,8 @@
         if (t.toLowerCase() === "update") loadUpdateInfo();
         if (t.toLowerCase() === "developer") loadCentralLicense();
         if (t.toLowerCase() === "printer") {
+          if (typeof ensureFposLocalDeviceId === "function")
+            ensureFposLocalDeviceId();
           loadPrintSettings();
           loadPrintJobs();
         }
@@ -730,6 +732,8 @@
       }
       async function testPrint() {
         try {
+          if (typeof ensureFposLocalDeviceId === "function")
+            await ensureFposLocalDeviceId();
           const result = await api("POST", "/print/test", {});
           showToast(`Test print masuk antrean (job #${result.job_id})`);
           loadPrintJobs();

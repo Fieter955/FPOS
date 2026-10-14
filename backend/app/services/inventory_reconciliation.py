@@ -66,6 +66,28 @@ def _item_fifo(db: Session, warehouse_id: int, item_id: int) -> tuple[float, flo
     return float(qty or 0), float(value or 0)
 
 
+def _trim_preview_cost(db: Session, warehouse_id: int, item_id: int, qty: float) -> float:
+    """Rata-rata biaya batch terbaru yang akan dikurangi saat FIFO berlebih."""
+    remaining = max(float(qty or 0), 0.0)
+    removed_value = 0.0
+    removed_qty = 0.0
+    batches = db.query(models.StockBatch).filter(
+        models.StockBatch.warehouse_id == warehouse_id,
+        models.StockBatch.item_id == item_id,
+        models.StockBatch.qty_remaining > EPS,
+    ).order_by(models.StockBatch.received_date.desc(), models.StockBatch.id.desc()).all()
+    for batch in batches:
+        take = min(float(batch.qty_remaining or 0), remaining)
+        if take <= EPS:
+            continue
+        removed_qty += take
+        removed_value += take * float(batch.unit_cost or 0)
+        remaining -= take
+        if remaining <= EPS:
+            break
+    return removed_value / removed_qty if removed_qty > EPS else 0.0
+
+
 def _token(db: Session, warehouse: models.Warehouse, gl: float) -> str:
     stock_rows = db.query(
         models.WarehouseStock.item_id, models.WarehouseStock.stock,
@@ -126,6 +148,9 @@ def preview(db: Session, warehouse_id: int, user: models.User) -> dict:
         if abs(gap) <= TOL and abs(cache_gap) <= TOL:
             continue
         suggested_cost, cost_source = suggested_inbound_cost(db, warehouse.id, item)
+        if gap < -TOL:
+            suggested_cost = _trim_preview_cost(db, warehouse.id, item.id, -gap)
+            cost_source = "HPP batch terbaru yang akan dikurangi"
         lines.append({
             "item_id": item.id,
             "code": item.code,

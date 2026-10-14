@@ -264,6 +264,56 @@ def run_migrations():
     add_col("purchase_returns", "selisih", "REAL DEFAULT 0")
     add_col("purchase_returns", "branch_id", "INTEGER")
     add_col("purchase_returns", "created_by", "INTEGER")
+    add_col("purchase_returns", "supplier_id", "INTEGER")
+    add_col("purchase_returns", "return_mode", "TEXT NOT NULL DEFAULT 'invoice'")
+    add_col("purchase_returns", "evidence_reference", "TEXT")
+    c.execute(
+        "UPDATE purchase_returns SET supplier_id = "
+        "(SELECT supplier_id FROM purchases WHERE purchases.id = purchase_returns.purchase_id) "
+        "WHERE supplier_id IS NULL AND purchase_id IS NOT NULL"
+    )
+    # SQLite tidak mendukung ALTER COLUMN. Instalasi desktop lama membuat
+    # purchase_id NOT NULL, jadi tabel perlu dibangun ulang sekali agar retur
+    # di luar transaksi benar-benar dapat disimpan tanpa faktur palsu.
+    purchase_return_info = c.execute("PRAGMA table_info(purchase_returns)").fetchall()
+    purchase_id_info = next((row for row in purchase_return_info if row[1] == "purchase_id"), None)
+    if purchase_id_info and purchase_id_info[3]:
+        import re
+        original_sql_row = c.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='purchase_returns'"
+        ).fetchone()
+        original_sql = original_sql_row[0] if original_sql_row else ""
+        nullable_sql = re.sub(
+            r'(["`\[]?purchase_id["`\]]?\s+INTEGER)\s+NOT\s+NULL',
+            r'\1', original_sql, count=1, flags=re.IGNORECASE,
+        )
+        replacement_sql = re.sub(
+            r'CREATE\s+TABLE\s+["`\[]?purchase_returns["`\]]?',
+            'CREATE TABLE purchase_returns_nullable', nullable_sql,
+            count=1, flags=re.IGNORECASE,
+        )
+        if replacement_sql == original_sql or "purchase_returns_nullable" not in replacement_sql:
+            raise RuntimeError("Gagal menyiapkan migrasi nullable purchase_returns.purchase_id")
+        columns = [row[1] for row in purchase_return_info]
+        quoted_columns = ", ".join(f'"{name}"' for name in columns)
+        conn.commit()
+        c.execute("PRAGMA foreign_keys=OFF")
+        try:
+            c.execute("BEGIN")
+            c.execute(replacement_sql)
+            c.execute(
+                f"INSERT INTO purchase_returns_nullable ({quoted_columns}) "
+                f"SELECT {quoted_columns} FROM purchase_returns"
+            )
+            c.execute("DROP TABLE purchase_returns")
+            c.execute("ALTER TABLE purchase_returns_nullable RENAME TO purchase_returns")
+            conn.commit()
+            print("  OK Migration: purchase_returns.purchase_id sekarang opsional")
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            c.execute("PRAGMA foreign_keys=ON")
     add_col("sale_returns", "branch_id", "INTEGER")
     add_col("sale_returns", "created_by", "INTEGER")
     add_col("trade_ins", "cash_amount", "REAL DEFAULT 0")
@@ -304,6 +354,65 @@ def run_migrations():
     add_col("print_jobs", "completed_at", "TEXT")
     add_col("print_jobs", "last_error", "TEXT")
     add_col("stock_batches", "source_inventory_line_id", "INTEGER")
+    # Fondasi nomor seri, gudang mutasi stok, dan pembatalan transfer
+    add_col("items", "tracks_serial", "INTEGER NOT NULL DEFAULT 0")
+    add_col("purchase_items", "serials_json", "TEXT")
+    add_col("purchase_items", "item_code_snapshot", "TEXT")
+    add_col("purchase_items", "item_name_snapshot", "TEXT")
+    add_col("purchase_items", "unit_snapshot", "TEXT")
+    add_col("purchase_items", "entered_item_id", "INTEGER")
+    add_col("purchase_items", "entered_qty", "REAL")
+    add_col("purchase_items", "conversion_factor", "REAL NOT NULL DEFAULT 1")
+    add_col("purchase_return_items", "inventory_quarantine_id", "INTEGER")
+    add_col("sale_items", "serials_json", "TEXT")
+    add_col("sale_items", "item_code_snapshot", "TEXT")
+    add_col("sale_items", "item_name_snapshot", "TEXT")
+    add_col("sale_items", "unit_snapshot", "TEXT")
+    add_col("sale_return_items", "serials_json", "TEXT")
+    add_col("purchase_return_items", "serials_json", "TEXT")
+    add_col("sale_return_items", "carrying_cost", "REAL NOT NULL DEFAULT 0")
+    add_col("purchase_return_items", "carrying_cost", "REAL NOT NULL DEFAULT 0")
+    for return_table in ("sale_returns", "purchase_returns"):
+        add_col(return_table, "status", "TEXT NOT NULL DEFAULT 'posted'")
+        add_col(return_table, "cancelled_by", "INTEGER")
+        add_col(return_table, "cancelled_at", "DATETIME")
+        add_col(return_table, "cancellation_reason", "TEXT")
+        add_col(return_table, "reversal_journal_id", "INTEGER")
+    add_col("stock_movements", "warehouse_id", "INTEGER")
+    add_col("stock_movements", "counterparty_warehouse_id", "INTEGER")
+    add_col("stock_movements", "event_category", "TEXT")
+    add_col("stock_movements", "direction", "TEXT")
+    add_col("stock_movements", "source_type", "TEXT")
+    add_col("stock_movements", "source_id", "INTEGER")
+    add_col("stock_movements", "warehouse_qty_before", "REAL")
+    add_col("stock_movements", "warehouse_qty_after", "REAL")
+    add_col("stock_movements", "counterparty_qty_before", "REAL")
+    add_col("stock_movements", "counterparty_qty_after", "REAL")
+    add_col("inventory_document_lines", "entered_item_id", "INTEGER")
+    add_col("inventory_document_lines", "entered_qty", "REAL")
+    add_col("inventory_document_lines", "conversion_factor", "REAL NOT NULL DEFAULT 1")
+    add_col("inventory_document_lines", "item_code_snapshot", "TEXT")
+    add_col("inventory_document_lines", "item_name_snapshot", "TEXT")
+    add_col("inventory_document_lines", "unit_snapshot", "TEXT")
+    add_col("warehouse_stocks", "min_stock", "REAL")
+    add_col("warehouse_transfers", "cancelled_at", "DATETIME")
+    add_col("warehouse_transfers", "cancelled_by", "INTEGER")
+    add_col("warehouse_transfers", "cancellation_reason", "TEXT")
+    add_col("warehouse_transfers", "reversal_journal_id", "INTEGER")
+    add_col("warehouse_transfers", "can_cancel", "INTEGER NOT NULL DEFAULT 1")
+    add_col("warehouse_transfers", "shipped_at", "DATETIME")
+    add_col("warehouse_transfers", "received_by", "INTEGER")
+    add_col("warehouse_transfers", "dispute_notes", "TEXT")
+    add_col("warehouse_transfer_items", "entered_item_id", "INTEGER")
+    add_col("warehouse_transfer_items", "entered_qty", "REAL")
+    add_col("warehouse_transfer_items", "conversion_factor", "REAL NOT NULL DEFAULT 1")
+    add_col("warehouse_transfer_items", "serials_json", "TEXT")
+    add_col("warehouse_transfer_items", "qty_damaged", "REAL NOT NULL DEFAULT 0")
+    add_col("warehouse_transfer_items", "qty_missing", "REAL NOT NULL DEFAULT 0")
+    add_col("warehouse_transfer_items", "receipt_notes", "TEXT")
+    add_col("warehouse_transfer_batch_allocations", "qty_received", "REAL NOT NULL DEFAULT 0")
+    add_col("warehouse_transfer_batch_allocations", "qty_damaged", "REAL NOT NULL DEFAULT 0")
+    add_col("warehouse_transfer_batch_allocations", "qty_resolved", "REAL NOT NULL DEFAULT 0")
 
     # Retur lama tidak menyimpan cabang. Turunkan dari dokumen asal tanpa
     # mengarang identitas kasir yang memang tidak tersedia.
@@ -353,8 +462,28 @@ def run_migrations():
             "UPDATE print_jobs SET status = 'pending' "
             "WHERE status = 'processing' AND lease_until IS NULL"
         )
+        # Backfill gudang mutasi stok dari gudang default cabang
+        c.execute(
+            "UPDATE stock_movements SET warehouse_id = ("
+            "SELECT w.id FROM warehouses AS w "
+            "WHERE w.branch_id = stock_movements.branch_id AND w.is_default = 1 "
+            "ORDER BY w.id LIMIT 1"
+            ") WHERE warehouse_id IS NULL"
+        )
+        c.execute(
+            "UPDATE stock_movements SET counterparty_warehouse_id = ("
+            "SELECT CASE "
+            "WHEN stock_movements.warehouse_id = wt.from_warehouse_id THEN wt.to_warehouse_id "
+            "ELSE wt.from_warehouse_id END "
+            "FROM warehouse_transfers AS wt "
+            "WHERE wt.number = stock_movements.reference LIMIT 1"
+            ") WHERE counterparty_warehouse_id IS NULL "
+            "AND reference IN (SELECT number FROM warehouse_transfers)"
+        )
+        if c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='alembic_version'").fetchone():
+            c.execute("UPDATE alembic_version SET version_num = 'd0e1f2a3b4c5'")
     except Exception as e:
-        print(f"  WARNING Skip backfill cabang retur: {e}")
+        print(f"  WARNING Skip backfill cabang retur / mutasi stok: {e}")
 
     # ─── Index performa (idempotent; aman dijalankan berulang) ─────────────────
     # SQLite TIDAK meng-index foreign key otomatis → tanpa ini, filter/join jadi
@@ -390,6 +519,7 @@ def run_migrations():
     add_index("ix_purchase_items_item_id", "purchase_items", "item_id")
     add_index("ix_purchase_items_source_request", "purchase_items", "source_request_item_id")
     add_index("ix_purchase_returns_purchase_id", "purchase_returns", "purchase_id")
+    add_index("ix_purchase_returns_supplier_id", "purchase_returns", "supplier_id")
     add_index("ix_purchase_return_items_return_id", "purchase_return_items", "return_id")
     add_index("ix_purchase_return_items_item_id", "purchase_return_items", "item_id")
     # Item & master
@@ -402,11 +532,15 @@ def run_migrations():
     add_index("ix_item_group_discounts_item_id", "item_group_discounts", "item_id")
     add_index("ix_item_group_discounts_group_id", "item_group_discounts", "group_id")
     add_index("ix_item_supplier_supplier_id", "item_supplier", "supplier_id")
+    add_index("ix_purchase_items_entered_item_id", "purchase_items", "entered_item_id")
+    add_index("ix_purchase_return_items_quarantine", "purchase_return_items", "inventory_quarantine_id")
     add_index("ix_customers_group_id", "customers", "group_id")
     # Persediaan & gudang
     add_index("ix_stock_movements_branch_id", "stock_movements", "branch_id")
     add_index("ix_stock_movements_item_id", "stock_movements", "item_id")
     add_index("ix_stock_movements_item_date", "stock_movements", "item_id, date")
+    add_index("ix_stock_movements_warehouse_id", "stock_movements", "warehouse_id")
+    add_index("ix_stock_movements_event_category", "stock_movements", "event_category")
     add_index("ix_warehouse_stocks_warehouse_id", "warehouse_stocks", "warehouse_id")
     add_index("ix_warehouse_stocks_item_id", "warehouse_stocks", "item_id")
     add_index("ix_warehouse_stocks_wh_item", "warehouse_stocks", "warehouse_id, item_id")
@@ -416,6 +550,15 @@ def run_migrations():
     add_index("ix_transfer_source_purchase", "warehouse_transfers", "source_purchase_id")
     add_index("ix_wh_transfer_items_transfer_id", "warehouse_transfer_items", "transfer_id")
     add_index("ix_wh_transfer_items_item_id", "warehouse_transfer_items", "item_id")
+    add_index("ix_transfer_item_purchase_item", "warehouse_transfer_items", "purchase_item_id")
+    add_index("ix_transfer_item_source_request", "warehouse_transfer_items", "source_request_item_id")
+    add_index("ix_transfer_item_entered_item", "warehouse_transfer_items", "entered_item_id")
+    add_index("ix_inventory_quarantines_branch_status", "inventory_quarantines", "branch_id, status")
+    add_index("ix_inventory_quarantines_item", "inventory_quarantines", "item_id")
+    add_index("ix_item_serials_item_status", "item_serials", "item_id, status")
+    add_index("ix_item_serials_warehouse", "item_serials", "warehouse_id")
+    add_index("ix_item_serial_events_serial_created", "item_serial_events", "serial_id, created_at")
+    add_index("ix_item_serial_events_reference", "item_serial_events", "reference_type, reference_id")
     add_index("ix_stock_batches_source_inventory_line_id", "stock_batches", "source_inventory_line_id")
     # Akuntansi
     add_index("ix_cash_transactions_account_id", "cash_transactions", "account_id")

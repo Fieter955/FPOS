@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Retur - FPOS</title>
     <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/serial-picker.css" />
     <link rel="stylesheet" href="/css/components.css" />
 
     <style>
@@ -19,10 +20,10 @@
 
       .tabs .btn {
         white-space: nowrap;
-        border-radius: 8px;
+        border-radius: .5rem;
         font-weight: 600;
-        font-size: 14px;
-        padding: 8px 16px;
+        font-size: clamp(.8rem,.76rem + .15vw,.9rem);
+        padding: .5em .85em;
       }
       .tabs {
         position: relative;
@@ -34,10 +35,10 @@
       }
 
       .badge {
-        padding: 4px 10px;
-        border-radius: 6px;
+        padding: .3em .65em;
+        border-radius: .4rem;
         font-weight: 700;
-        font-size: 11px;
+        font-size: .72rem;
         text-transform: uppercase;
       }
       .badge-success {
@@ -54,21 +55,21 @@
       }
 
       #mManualReturn {
-        padding: 12px;
+        padding: var(--dense-space-2);
       }
       #mManualReturn .manual-return-modal-box {
         display: flex;
         flex-direction: column;
-        width: calc(100vw - 24px);
+        width: calc(100vw - (2 * var(--dense-space-2)));
         max-width: none;
-        height: calc(100vh - 24px);
+        height: calc(100dvh - (2 * var(--dense-space-2)));
         max-height: none;
-        padding: 24px;
+        padding: var(--dense-card-pad);
         overflow: hidden;
       }
       #mManualReturn .modal-hdr {
         flex: 0 0 auto;
-        margin-bottom: 12px;
+        margin-bottom: var(--dense-space-2);
       }
       #mManualReturn .manual-return-modal-body {
         display: flex;
@@ -79,27 +80,27 @@
       }
       #mManualReturn .manual-return-table-wrap {
         flex: 1 1 auto;
-        min-height: 240px;
+        min-height: min(15rem,35dvh);
         overflow: auto;
       }
       #mManualReturn .manual-return-actions {
         flex: 0 0 auto;
       }
 
-      @media (max-width: 640px) {
+      @media (max-width: 40rem) {
         #mManualReturn {
-          padding: 4px;
+          padding: var(--dense-space-1);
         }
         #mManualReturn .manual-return-modal-box {
-          width: calc(100vw - 8px);
-          height: calc(100vh - 8px);
-          padding: 14px;
-          border-radius: 14px;
+          width: calc(100vw - (2 * var(--dense-space-1)));
+          height: calc(100dvh - (2 * var(--dense-space-1)));
+          padding: var(--dense-space-2);
+          border-radius: .9rem;
         }
       }
     </style>
   </head>
-  <body>
+  <body class="transaction-density keyboard-workflow">
     <div class="app-container">
       <main class="main-content">
         <button
@@ -255,8 +256,10 @@
               class="input-control"
               value="1"
               min="1"
+              oninput="renderReturnSerialButton()"
             />
           </div>
+          <button type="button" id="mReturnSerialBtn" class="btn serial-picker-trigger" style="display:none;width:100%;margin-bottom:12px" onclick="pickReturnSerials()">Serial 0/0</button>
           <div class="input-group" id="mReturnConditionWrap" style="margin-bottom: 12px">
             <label>Kondisi Barang *</label>
             <select id="mReturnCondition" class="input-control">
@@ -322,6 +325,17 @@
               margin-bottom: 16px;
             "
           >
+            <div class="input-group" id="mPurchaseReturnModeGroup">
+              <label>Dasar Retur *</label>
+              <select id="mPurchaseReturnMode" class="input-control" onchange="changePurchaseReturnMode()">
+                <option value="invoice">Berdasarkan Faktur</option>
+                <option value="unlinked">Tanpa Faktur</option>
+              </select>
+            </div>
+            <div class="input-group" id="mEvidenceGroup" style="display:none">
+              <label>Referensi Bukti *</label>
+              <input id="mEvidenceReference" class="input-control" maxlength="255" placeholder="Nomor klaim / surat jalan / bukti persetujuan supplier" />
+            </div>
             <div class="input-group">
               <label id="lblManualEntity">Pilih Supplier *</label>
               <div id="mManualEntityCombo"></div>
@@ -480,16 +494,36 @@
     </div>
 
     <div class="modal-overlay" id="mReturnHistory">
-      <div class="modal-box" style="max-width: 900px; width: 92vw">
+      <div class="modal-box return-history-box">
         <div class="modal-hdr">
           <h2>Riwayat Retur &amp; Cetak Struk</h2>
           <button class="btn-x" onclick="closeModal('mReturnHistory')">×</button>
         </div>
         <div style="overflow:auto;max-height:65vh">
           <table class="tbl" style="width:100%">
-            <thead><tr><th>No. Retur</th><th>Jenis</th><th>Faktur</th><th>Tanggal</th><th>Total</th><th>Aksi</th></tr></thead>
-            <tbody id="returnHistoryBody"><tr><td colspan="6">Memuat...</td></tr></tbody>
+            <thead><tr><th>No. Retur</th><th>Jenis</th><th>Faktur</th><th>Tanggal</th><th>Status</th><th>Total</th><th>Aksi</th></tr></thead>
+            <tbody id="returnHistoryBody"><tr><td colspan="7">Memuat...</td></tr></tbody>
           </table>
+        </div>
+      </div>
+        </div>
+
+    <div class="modal-overlay" id="mCancelReturn">
+      <div class="modal-box compact-dialog">
+        <div class="modal-hdr">
+          <h2>Batalkan Retur</h2>
+          <button class="btn-x" onclick="closeModal('mCancelReturn')" aria-label="Tutup">Ã—</button>
+        </div>
+        <p id="cancelReturnInfo" class="dialog-note"></p>
+        <div class="input-group">
+          <label for="cancelReturnReason">Alasan pembatalan</label>
+          <input id="cancelReturnReason" class="input-control" maxlength="500"
+            placeholder="Contoh: serial yang dipilih salah" autocomplete="off" />
+          <small>Minimal 3 karakter. Stok, serial, saldo, dan jurnal akan direversal bersama-sama.</small>
+        </div>
+        <div class="dialog-actions">
+          <button class="btn" onclick="closeModal('mCancelReturn')">Kembali</button>
+          <button class="btn btn-danger" id="btnConfirmCancelReturn" onclick="confirmCancelReturn()">Batalkan Retur</button>
         </div>
       </div>
     </div>
@@ -513,6 +547,7 @@
     <script src="/js/api.js"></script>
     <script src="/js/theme.js"></script>
     <script src="/js/components.js"></script>
+    <script src="/js/serial-picker.js"></script>
     <script>
       requireAuth();
       const requestedTab = new URLSearchParams(window.location.search).get("tab");
@@ -521,8 +556,12 @@
         : "sales"; // sales or purchase
       let mainFilter = null;
       let activeItem = null;
+      let activeReturnSerials = [];
+      let defaultWarehouseId = null;
       let allSuppliers = [];
       let allCustomers = [];
+      let allItems = [];
+      let mPurchaseReturnMode = "invoice";
 
       let mManualMode = "purchase"; // 'purchase' or 'sales'
       let mManualEntityCombo = null;
@@ -660,7 +699,16 @@
         pendingBrokenItem = null;
         pendingBrokenSuppliers = null;
         mManualMode = "purchase";
+        mPurchaseReturnMode = "invoice";
         openManualReturnModal();
+      }
+
+      function changePurchaseReturnMode() {
+        mPurchaseReturnMode = document.getElementById("mPurchaseReturnMode").value;
+        document.getElementById("mEvidenceGroup").style.display = mPurchaseReturnMode === "unlinked" ? "block" : "none";
+        document.getElementById("mManualGridBody").innerHTML = "";
+        mManualValidItems = [];
+        if (mManualSelectedEntity) onManualEntitySelected(mManualSelectedEntity);
       }
 
       function buatReturPenjualan() {
@@ -676,16 +724,21 @@
       async function openBrokenReturnModal(item) {
         pendingBrokenItem = item;
         mManualMode = "purchase";
+        mPurchaseReturnMode = "invoice";
         showLoading("Mencari supplier yang pernah memasok barang...");
         try {
           pendingBrokenSuppliers = await api(
             "GET",
             `/returns/history/broken/${item.source_type || "trade_in"}/${item.source_item_id || item.trade_in_return_item_id}/suppliers`,
           );
+          if (!pendingBrokenSuppliers.length) {
+            mPurchaseReturnMode = "unlinked";
+            pendingBrokenSuppliers = allSuppliers;
+          }
           hideLoading();
           openManualReturnModal();
-          if (!pendingBrokenSuppliers.length) {
-            showToast("Belum ada faktur pembelian untuk barang ini di cabang aktif.", "warning");
+          if (mPurchaseReturnMode === "unlinked") {
+            showToast("Faktur lama tidak ditemukan. Gunakan retur tanpa faktur dan isi referensi bukti.", "warning");
           } else {
             showToast("Barang sudah dipilih. Silakan pilih supplier dan faktur.", "info");
           }
@@ -714,6 +767,10 @@
         document.getElementById("mManualGridBody").innerHTML = "";
         document.getElementById("mManualGrandTotal").textContent = "Rp 0";
         document.getElementById("mManualPpnInfo").style.display = "none";
+        document.getElementById("mPurchaseReturnModeGroup").style.display = isPurchase ? "block" : "none";
+        document.getElementById("mPurchaseReturnMode").value = mPurchaseReturnMode;
+        document.getElementById("mEvidenceGroup").style.display = isPurchase && mPurchaseReturnMode === "unlinked" ? "block" : "none";
+        document.getElementById("mEvidenceReference").value = "";
 
         mManualSelectedEntity = null;
         mManualValidItems = [];
@@ -784,6 +841,28 @@
         showLoading("Mencari daftar barang...");
         try {
           const isPurchase = mManualMode === "purchase";
+          if (isPurchase && mPurchaseReturnMode === "unlinked") {
+            mManualValidItems = allItems.filter((item) => item.is_active !== false);
+            hideLoading();
+            mManualItemCombo.updateData(mManualValidItems);
+            mManualItemCombo.clear();
+            mManualItemCombo.enable();
+            if (pendingBrokenItem) {
+              const itemMatch = mManualValidItems.find((item) => item.id === pendingBrokenItem.item_id);
+              if (itemMatch) {
+                await addManualReturnRow(itemMatch);
+                const row = document.querySelector(`#mManualGridBody tr[data-item-id="${itemMatch.id}"]`);
+                if (row) {
+                  applyUnlinkedDamagedSource(row, pendingBrokenItem, true);
+                  row.querySelector(".row-qty").value = pendingBrokenItem.qty_available;
+                  calculateManualReturnTotal();
+                }
+                pendingBrokenItem = null;
+                pendingBrokenSuppliers = null;
+              }
+            }
+            return;
+          }
           const entityParam = isPurchase ? "supplier_id" : "customer_id";
           const historyType = isPurchase ? "purchases" : "sales";
           const transactions = await api(
@@ -927,32 +1006,56 @@
 
         const row = document.createElement("tr");
         row.dataset.itemId = item.id;
+        row._item = item;
+        row._serials = [];
         row._returnTransactions = Array.isArray(item.returnTransactions)
           ? item.returnTransactions
           : [];
+        const isUnlinkedPurchase = mManualMode === "purchase" && mPurchaseReturnMode === "unlinked";
+        let unlinkedStockOptions = null;
+        if (isUnlinkedPurchase) {
+          try {
+            unlinkedStockOptions = await api("GET", `/returns/unlinked-stock-options/${item.id}`);
+          } catch (error) {
+            showToast(error.message || "Gagal mengambil sisa stok retur", "error");
+            return;
+          }
+          row._unlinkedStockOptions = unlinkedStockOptions;
+        }
         const invoiceOptions = row._returnTransactions
           .map(
             (transaction, index) =>
               `<option value="${index}">${transaction.number} · ${fmtDate(transaction.date)} · sisa ${toDesimal(transaction.qty_available, { maximumFractionDigits: 4 })}</option>`,
           )
           .join("");
+        const damagedSourceOptions = (unlinkedStockOptions?.damaged_sources || [])
+          .map((source) => {
+            const value = `damaged|${source.source_type}|${source.source_item_id}`;
+            const label = `Rusak · ${source.source_number || "Sumber rusak"} (sisa ${toDesimal(source.qty_available, { maximumFractionDigits: 4 })})`;
+            return `<option value="${escapeReturnText(value)}">${escapeReturnText(label)}</option>`;
+          })
+          .join("");
         row.innerHTML = `
           <td>
             <div style="font-weight:600">${item.name}</div>
             <div style="font-size:11px; color:var(--text-muted)">${item.code}</div>
+            ${SerialPicker.isTracked(item, mManualValidItems) ? '<button type="button" class="btn serial-picker-trigger row-serial-btn invalid" onclick="pickManualReturnSerials(this)">Serial 0/0</button>' : ""}
           </td>
           <td>
+            ${isUnlinkedPurchase ? '<span class="row-factur-info">Tanpa Faktur</span>' : `
             <select class="input-control row-invoice" style="width:100%; box-sizing:border-box; padding:5px; font-size:11px" onchange="selectManualReturnTransaction(this)">
               ${invoiceOptions || '<option value="">Tidak ada faktur</option>'}
             </select>
-            <div class="row-factur-info" style="display:none"></div>
+            <div class="row-factur-info" style="display:none"></div>`}
           </td>
           <td style="text-align: center; font-weight: 700" class="row-avail">-</td>
-          <td><input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0" class="input-control row-qty" value="1" style="text-align: center; width: 100%; box-sizing: border-box;" oninput="calculateManualReturnTotal()" /></td>
+          <td><input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0" class="input-control row-qty" value="1" style="text-align: center; width: 100%; box-sizing: border-box;" oninput="renderManualReturnSerialButton(this.closest('tr'));calculateManualReturnTotal()" /></td>
           <td style="text-align:center">
             ${mManualMode === "sales"
               ? `<select class="input-control row-condition" style="width:100%;padding:5px;font-size:11px"><option value="good">Bagus</option><option value="damaged">Rusak</option></select>`
-              : `<span style="color:var(--text-muted)">—</span><select class="row-condition" hidden><option value="good">Bagus</option><option value="damaged">Rusak</option></select>`}
+              : isUnlinkedPurchase
+                ? `<select class="input-control row-condition" style="width:100%;padding:5px;font-size:11px" onchange="changeUnlinkedReturnCondition(this)"><option value="good">Bagus</option>${damagedSourceOptions}</select>`
+                : `<span style="color:var(--text-muted)">—</span><select class="row-condition" hidden><option value="good">Bagus</option><option value="damaged">Rusak</option></select>`}
           </td>
           <td style="text-align: right">
             <div style="display:flex; align-items:center; gap:4px; justify-content:flex-end; width: 100%;">
@@ -966,7 +1069,13 @@
         `;
         body.appendChild(row);
 
-        if (row._returnTransactions.length > 0) {
+        if (isUnlinkedPurchase) {
+          row.querySelector(".row-price-awal").value = formatRibuan(item.buy_price || 0);
+          row.querySelector(".row-ppn").value = 0;
+          row.querySelector(".row-ppn").readOnly = true;
+          row.dataset.isTaxIncluded = "1";
+          changeUnlinkedReturnCondition(row.querySelector(".row-condition"));
+        } else if (row._returnTransactions.length > 0) {
           applyManualReturnTransaction(row, row._returnTransactions[0]);
         } else {
           // Fallback untuk pemanggilan lama yang belum membawa histori transaksi.
@@ -996,10 +1105,97 @@
         }
 
         calculateManualReturnTotal();
+        renderManualReturnSerialButton(row);
+      }
+
+      function changeUnlinkedReturnCondition(select) {
+        const row = select?.closest("tr");
+        if (!row) return;
+        const [condition, sourceType, sourceId] = String(select.value || "good").split("|");
+        let available = Number(row._unlinkedStockOptions?.good?.qty_available) || 0;
+
+        delete row.dataset.damagedSourceType;
+        delete row.dataset.damagedSourceItemId;
+        if (condition === "damaged") {
+          const source = (row._unlinkedStockOptions?.damaged_sources || []).find(
+            (entry) => entry.source_type === sourceType && String(entry.source_item_id) === String(sourceId),
+          );
+          if (!source) {
+            select.value = "good";
+            showToast("Sumber barang rusak tidak lagi tersedia", "warning");
+          } else {
+            row.dataset.damagedSourceType = source.source_type;
+            row.dataset.damagedSourceItemId = source.source_item_id;
+            available = Number(source.qty_available) || 0;
+          }
+        }
+
+        const qtyInput = row.querySelector(".row-qty");
+        row.querySelector(".row-avail").textContent = toDesimal(available, {
+          maximumFractionDigits: 4,
+        });
+        qtyInput.dataset.max = available;
+        if (parseDesimal(qtyInput) > available) {
+          qtyInput.value = toDesimal(available, { maximumFractionDigits: 4 });
+        }
+        row._serials = [];
+        renderManualReturnSerialButton(row);
+        calculateManualReturnTotal();
+      }
+
+      function applyUnlinkedDamagedSource(row, source, lockCondition = false) {
+        const select = row?.querySelector(".row-condition");
+        if (!select || !source) return;
+        const sourceType = source.source_type || "trade_in";
+        const sourceId = source.source_item_id || source.trade_in_return_item_id;
+        const value = `damaged|${sourceType}|${sourceId}`;
+        if (!(row._unlinkedStockOptions?.damaged_sources || []).some(
+          (entry) => entry.source_type === sourceType && String(entry.source_item_id) === String(sourceId),
+        )) {
+          const entry = {
+            source_type: sourceType,
+            source_item_id: Number(sourceId),
+            source_number: source.source_number || source.trade_in_number || "Sumber rusak",
+            qty_available: Number(source.qty_available) || 0,
+          };
+          row._unlinkedStockOptions = row._unlinkedStockOptions || {
+            good: { qty_available: 0 },
+            damaged_sources: [],
+          };
+          row._unlinkedStockOptions.damaged_sources.push(entry);
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = `Rusak · ${entry.source_number} (sisa ${toDesimal(entry.qty_available, { maximumFractionDigits: 4 })})`;
+          select.appendChild(option);
+        }
+        select.value = value;
+        changeUnlinkedReturnCondition(select);
+        select.disabled = lockCondition;
+      }
+
+      function renderManualReturnSerialButton(row) {
+        const button = row?.querySelector(".row-serial-btn");
+        if (!button) return;
+        const needed = SerialPicker.requiredQuantity(row._item, parseDesimal(row.querySelector(".row-qty")), mManualValidItems);
+        button.textContent = SerialPicker.buttonText(row._serials || [], needed);
+        button.classList.toggle("complete", (row._serials || []).length === Math.round(needed));
+        button.classList.toggle("invalid", (row._serials || []).length !== Math.round(needed));
+      }
+
+      function pickManualReturnSerials(button) {
+        const row = button.closest("tr");
+        const isSales = mManualMode === "sales";
+        const sourceLineId = Number(row.dataset.invoiceItemId || 0);
+        const unlinked = !isSales && mPurchaseReturnMode === "unlinked";
+        if (!sourceLineId && !unlinked) return showToast("Pilih faktur asal sebelum memilih serial", "warning");
+        const warehouseId = isSales || row.dataset.damagedSourceItemId ? null : defaultWarehouseId;
+        const quarantineId = row.dataset.damagedSourceType === "inventory_quarantine" ? Number(row.dataset.damagedSourceItemId) : null;
+        SerialPicker.open({purpose:isSales?"sale_return":unlinked?"purchase_return_unlinked":"purchase_return",item:row._item,itemId:row._item.id,sourceLineId:sourceLineId||null,quarantineId,quantity:parseDesimal(row.querySelector(".row-qty")),warehouseId,initialSerials:row._serials || [],onSave(serials){row._serials=serials;renderManualReturnSerialButton(row);}});
       }
 
       function applyManualReturnTransaction(row, transaction) {
         if (!row || !transaction) return;
+        row._serials = [];
         row.querySelector(".row-price-awal").value = formatRibuan(
           transaction.price,
         );
@@ -1018,6 +1214,7 @@
           qtyInput.value = toDesimal(available, { maximumFractionDigits: 4 });
         }
         calculateManualReturnTotal();
+        renderManualReturnSerialButton(row);
       }
 
       function selectManualReturnTransaction(select) {
@@ -1144,6 +1341,8 @@
           const data = await api("GET", url);
           hideLoading();
           renderTable(data, type);
+          const params=new URLSearchParams(location.search),sourceType=params.get("source_type"),sourceItemId=Number(params.get("source_item_id"));
+          if(type==="broken"&&sourceType&&sourceItemId){const selected=data.find(i=>i.source_type===sourceType&&Number(i.source_item_id)===sourceItemId);if(selected){history.replaceState(null,"",location.pathname+"?tab=broken");await openBrokenReturnModal(selected)}}
         } catch (ex) {
           hideLoading();
           showToast(ex.message, "error");
@@ -1249,6 +1448,7 @@
 
       function openReturnModal(item) {
         activeItem = item;
+        activeReturnSerials = [];
         const isSales = currentTab === "sales";
 
         document.getElementById("mReturnTitle").textContent = isSales
@@ -1266,6 +1466,7 @@
           ? "block"
           : "none";
         document.getElementById("mReturnCondition").value = "good";
+        renderReturnSerialButton();
 
         const entityLabel = isSales ? "Pelanggan" : "Supplier";
         const entityName = isSales
@@ -1291,11 +1492,36 @@
         openModal("mReturn");
       }
 
+      function renderReturnSerialButton() {
+        const button = document.getElementById("mReturnSerialBtn");
+        const item = activeItem?.item;
+        if (!button || !item || !SerialPicker.isTracked(item, [item])) {
+          if (button) button.style.display = "none";
+          return;
+        }
+        const needed = SerialPicker.requiredQuantity(item, parseDesimal(document.getElementById("mReturnQty")), [item]);
+        button.style.display = "inline-flex";
+        button.textContent = SerialPicker.buttonText(activeReturnSerials, needed);
+        button.classList.toggle("complete", activeReturnSerials.length === Math.round(needed));
+        button.classList.toggle("invalid", activeReturnSerials.length !== Math.round(needed));
+      }
+
+      function pickReturnSerials() {
+        const item = activeItem?.item;
+        if (!item) return;
+        const isSales = currentTab === "sales";
+        const sourceLineId = Number(isSales ? activeItem.sale_item_id : activeItem.purchase_item_id);
+        if (!sourceLineId) return showToast("Faktur asal serial tidak dapat dipastikan", "warning");
+        SerialPicker.open({purpose:isSales?"sale_return":"purchase_return",item,itemId:item.id,sourceLineId,quantity:parseDesimal(document.getElementById("mReturnQty")),warehouseId:isSales?null:defaultWarehouseId,initialSerials:activeReturnSerials,onSave(serials){activeReturnSerials=serials;renderReturnSerialButton();}});
+      }
+
       async function prosesRetur() {
         const qty = parseDesimal(document.getElementById("mReturnQty"));
         if (qty <= 0) return showToast("Jumlah retur tidak valid", "error");
         if (qty > activeItem.qty_available)
           return showToast("Jumlah melebihi batas tersisa", "error");
+        const serialError = SerialPicker.validate(activeItem.item, qty, activeReturnSerials, [activeItem.item]);
+        if (serialError) return showToast(serialError, "error");
 
         const reason = document.getElementById("mReturnReason").value;
         const notes = document.getElementById("mReturnNotes").value;
@@ -1320,6 +1546,7 @@
                 : { purchase_item_id: activeItem.purchase_item_id }),
               qty: qty,
               price: basePrice,
+              serials: activeReturnSerials,
               ...(isSales
                 ? { condition: document.getElementById("mReturnCondition").value }
                 : {}),
@@ -1335,12 +1562,12 @@
 
         // FASE 3 — Retur PEMBELIAN: bila batch supplier ini sudah "terjual" menurut
         // FIFO, tawarkan tukar (swap) ke supplier lain dulu sebelum retur diproses.
-        if (type !== "sales") {
+        if (false && type !== "sales") {
           let swapInfo = null;
           try {
             swapInfo = await api(
               "GET",
-              `/returns/swap-candidates?purchase_id=${activeItem.purchase_id}&item_id=${activeItem.item_id}&qty=${qty}`,
+              `/returns/swap-disabled?purchase_id=${activeItem.purchase_id}&item_id=${activeItem.item_id}&qty=${qty}`,
             );
           } catch (e) {
             swapInfo = null; // backend lama / mode global → retur biasa
@@ -1482,10 +1709,13 @@
         );
       }
 
+      let pendingCancelReturn = null;
+      let returnHistoryRows = [];
+
       async function openReturnHistory() {
         openModal("mReturnHistory");
         const body = document.getElementById("returnHistoryBody");
-        body.innerHTML = '<tr><td colspan="6">Memuat...</td></tr>';
+        body.innerHTML = '<tr><td colspan="7">Memuat...</td></tr>';
         try {
           const [sales, purchases] = await Promise.all([
             api("GET", "/returns/sales?limit=100"),
@@ -1495,18 +1725,66 @@
             ...sales.map((r) => ({ ...r, type: "sales", label: "Penjualan", invoice: r.sale_number })),
             ...purchases.map((r) => ({ ...r, type: "purchases", label: "Pembelian", invoice: r.purchase_number })),
           ].sort((a, b) => String(b.created_at || b.date).localeCompare(String(a.created_at || a.date)));
+          returnHistoryRows = rows;
           body.innerHTML = rows.length
-            ? rows.map((r) => `<tr>
+            ? rows.map((r) => {
+              const cancelled = r.status === "cancelled";
+              const status = cancelled
+                ? '<span class="badge badge-danger">Dibatalkan</span>'
+                : '<span class="badge badge-success">Aktif</span>';
+              const actions = cancelled
+                ? `<span class="history-cancel-note" title="${escapeReturnText(r.cancellation_reason || "")}">Reversal tercatat</span>`
+                : `<div class="return-row-actions">
+                    <button class="btn" onclick="queueReturnReceipt('${r.type}', ${r.id}, this)">Cetak</button>
+                    <button class="btn btn-danger" onclick="openCancelReturn('${r.type}', ${r.id})">Batalkan</button>
+                  </div>`;
+              return `<tr>
                 <td style="font-family:monospace;font-weight:700">${escapeReturnText(r.number)}</td>
                 <td>${r.label}</td>
                 <td>${escapeReturnText(r.invoice || "-")}</td>
                 <td>${fmtDate(r.date)}</td>
+                <td>${status}</td>
                 <td style="text-align:right">${fmtRp(r.total || 0)}</td>
-                <td><button class="btn" style="padding:5px 10px" onclick="queueReturnReceipt('${r.type}', ${r.id}, this)">Cetak</button></td>
-              </tr>`).join("")
-            : '<tr><td colspan="6">Belum ada retur.</td></tr>';
+                <td>${actions}</td>
+              </tr>`;
+            }).join("")
+            : '<tr><td colspan="7">Belum ada retur.</td></tr>';
         } catch (e) {
-          body.innerHTML = `<tr><td colspan="6" style="color:#ef4444">${escapeReturnText(e.message)}</td></tr>`;
+          body.innerHTML = `<tr><td colspan="7" style="color:#ef4444">${escapeReturnText(e.message)}</td></tr>`;
+        }
+      }
+
+      function openCancelReturn(type, id) {
+        const row = returnHistoryRows.find((entry) => entry.type === type && entry.id === id);
+        if (!row) return showToast("Data retur tidak ditemukan. Muat ulang riwayat.", "warning");
+        pendingCancelReturn = row;
+        document.getElementById("cancelReturnInfo").innerHTML =
+          `Retur <b>${escapeReturnText(row.number)}</b> dari faktur <b>${escapeReturnText(row.invoice || "-")}</b>.`;
+        document.getElementById("cancelReturnReason").value = "";
+        openModal("mCancelReturn");
+      }
+
+      async function confirmCancelReturn() {
+        if (!pendingCancelReturn) return;
+        const reason = document.getElementById("cancelReturnReason").value.trim();
+        if (reason.length < 3) {
+          showToast("Alasan pembatalan minimal 3 karakter", "warning");
+          document.getElementById("cancelReturnReason").focus();
+          return;
+        }
+        const button = document.getElementById("btnConfirmCancelReturn");
+        button.disabled = true;
+        try {
+          await api("POST", `/returns/${pendingCancelReturn.type}/${pendingCancelReturn.id}/cancel`, { reason });
+          closeModal("mCancelReturn");
+          pendingCancelReturn = null;
+          showToast("Retur berhasil dibatalkan dan seluruh pencatatan sudah direversal");
+          await openReturnHistory();
+          load();
+        } catch (error) {
+          showToast(error.message, "error");
+        } finally {
+          button.disabled = false;
         }
       }
 
@@ -1575,11 +1853,16 @@
       }
 
       async function initFilters() {
-        allSuppliers = await api(
-          "GET",
-          "/suppliers/?limit=5000&active_only=true",
-        );
-        allCustomers = await api("GET", "/customers/?limit=5000");
+        const [suppliers, customers, warehouses, items] = await Promise.all([
+          api("GET", "/suppliers/?limit=5000&active_only=true"),
+          api("GET", "/customers/?limit=5000"),
+          api("GET", "/warehouses/"),
+          api("GET", "/items/?limit=20000&active_only=true"),
+        ]);
+        allSuppliers = suppliers;
+        allCustomers = customers;
+        allItems = items;
+        defaultWarehouseId = (warehouses.find((row) => row.is_default) || warehouses[0] || {}).id || null;
 
         const statusOpts = [
           { label: "Belum Retur", value: "not_returned" },
@@ -1636,6 +1919,14 @@
         if (rows.length === 0)
           return showToast("Tambahkan minimal 1 barang", "error");
 
+        const isUnlinkedPurchase = mManualMode === "purchase" && mPurchaseReturnMode === "unlinked";
+        const reason = document.getElementById("mManualReason").value.trim();
+        const evidenceReference = document.getElementById("mEvidenceReference").value.trim();
+        if (isUnlinkedPurchase && !reason)
+          return showToast("Alasan retur tanpa faktur wajib diisi", "error");
+        if (isUnlinkedPurchase && !evidenceReference)
+          return showToast("Referensi bukti retur tanpa faktur wajib diisi", "error");
+
         // Kelompokkan item berdasarkan purchase_id karena backend memproses per faktur
         const groups = {};
         let hasError = false;
@@ -1648,11 +1939,16 @@
             row.querySelector(".row-price-awal").value,
           );
           const ppn = parseDesimal(row.querySelector(".row-ppn"));
-          const avail =
-            parseFloat(row.querySelector(".row-avail").textContent) || 0;
+          const avail = parseDesimal(
+            row.querySelector(".row-avail").textContent,
+          );
 
-          if (!itemId || qty <= 0) return;
-          if (!pid) {
+          if (!itemId || qty <= 0) {
+            hasError = true;
+            showToast("Qty retur harus lebih dari 0", "error");
+            return;
+          }
+          if (!pid && !isUnlinkedPurchase) {
             hasError = true;
             showToast(
               "Ada barang yang belum dipilih fakturnya (klik icon 📜)",
@@ -1665,16 +1961,24 @@
             qty > avail
           ) {
             hasError = true;
-            showToast("Qty retur melebihi sisa tersedia di faktur", "error");
+            showToast("Qty retur melebihi sisa tersedia", "error");
+            return;
+          }
+          const serialError = SerialPicker.validate(row._item, qty, row._serials || [], mManualValidItems);
+          if (serialError) {
+            hasError = true;
+            showToast(serialError, "error");
             return;
           }
 
-          if (!groups[pid]) groups[pid] = [];
+          const groupKey = isUnlinkedPurchase ? "unlinked" : pid;
+          if (!groups[groupKey]) groups[groupKey] = [];
           const itemData = {
             item_id: parseInt(itemId),
             qty: qty,
             price: priceAwal,
             tax_percent: ppn,
+            serials: row._serials || [],
           };
           if (row.dataset.invoiceItemId) {
             if (mManualMode === "purchase") {
@@ -1692,10 +1996,12 @@
               row.dataset.damagedSourceItemId,
             );
           }
-          groups[pid].push(itemData);
+          groups[groupKey].push(itemData);
         });
 
         if (hasError) return;
+        const duplicateSerial = SerialPicker.validateUnique(rows.map((row) => row._serials || []));
+        if (duplicateSerial) return showToast(duplicateSerial, "error");
 
         showLoading("Memproses retur...");
         try {
@@ -1705,10 +2011,17 @@
           for (const pid in groups) {
             const payload = {
               date: document.getElementById("mManualDate").value,
-              reason: document.getElementById("mManualReason").value,
+              reason,
               items: groups[pid],
             };
-            if (mManualMode === "purchase") payload.purchase_id = parseInt(pid);
+            if (isUnlinkedPurchase) {
+              payload.return_mode = "unlinked";
+              payload.supplier_id = mManualSelectedEntity.id;
+              payload.evidence_reference = evidenceReference;
+            } else if (mManualMode === "purchase") {
+              payload.return_mode = "invoice";
+              payload.purchase_id = parseInt(pid);
+            }
             else payload.sale_id = parseInt(pid);
 
             createdReturns.push(await api("POST", `/returns/${type}`, payload));

@@ -45,6 +45,8 @@ error_log.txt
 node_modules/
 frontend-dist/
 build-manifest.json
+test-results/
+playwright-report/
 
 # ── Paket rilis lokal (GitHub Releases adalah sumber distribusi) ────────────────────
 rilis/generated/

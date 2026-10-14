@@ -7,6 +7,11 @@ const returnsPage = readFileSync(
   "utf8",
 );
 
+test("retur barang rusak menerima sumber karantina persediaan", () => {
+  assert.match(returnsPage, /source_type===sourceType/);
+  assert.match(returnsPage, /openBrokenReturnModal\(selected\)/);
+});
+
 test("pencarian barang retur memakai dropdown terfilter", () => {
   assert.match(returnsPage, /id="mManualItemCombo"/);
   assert.match(
@@ -42,8 +47,8 @@ test("setiap barang menyediakan pilihan seluruh faktur di tabel", () => {
 
 test("popup retur manual memenuhi ruang halaman", () => {
   assert.match(returnsPage, /class="modal-box manual-return-modal-box"/);
-  assert.match(returnsPage, /width: calc\(100vw - 24px\)/);
-  assert.match(returnsPage, /height: calc\(100vh - 24px\)/);
+  assert.match(returnsPage, /width: calc\(100vw - \(2 \* var\(--dense-space-2\)\)\)/);
+  assert.match(returnsPage, /height: calc\(100dvh - \(2 \* var\(--dense-space-2\)\)\)/);
   assert.match(returnsPage, /class="tbl-wrap manual-return-table-wrap"/);
   assert.match(returnsPage, /class="manual-return-actions"/);
 });

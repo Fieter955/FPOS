@@ -83,7 +83,10 @@ class InventoryReconciliationTests(unittest.TestCase):
         self.item.stock = 5
         self.db.commit()
 
-        rec = self.apply_preview(service.preview(self.db, self.warehouse.id, self.user))
+        preview = service.preview(self.db, self.warehouse.id, self.user)
+        self.assertEqual(preview["items"][0]["suggested_cost"], 20)
+        self.assertEqual(preview["items"][0]["cost_source"], "HPP batch terbaru yang akan dikurangi")
+        rec = self.apply_preview(preview)
         self.db.commit()
         self.db.refresh(old)
         self.db.refresh(new)

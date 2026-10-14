@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import date
 import pytz
 from datetime import datetime, date
+import math
+import uuid
 from ..database import get_db
 from .. import models
 from ..auth import get_current_user, get_query 
@@ -15,12 +17,14 @@ from ..schemas import (
     InventoryDocumentLineCreate,
     InventoryReconciliationApply,
 )
-from sqlalchemy import func 
+from sqlalchemy import func, or_, and_
 from ..services.low_stock import get_low_stock_items
 from ..services.virtual_units import get_conversion_factor, get_effective_stock_from_source, get_stock_source_item, is_virtual_variant
 from ..services import inventory_documents as inventory_document_service
 from ..services import inventory_reconciliation as reconciliation_service
+from ..services.stok_gudang import ubah_stok_gudang
 from ..permissions import has_permission
+from .accounting import assert_books_open
 
 router = APIRouter()
 
@@ -97,7 +101,19 @@ def get_movements(
     if item_id: q = q.filter(models.StockMovement.item_id == item_id)
     if start_date: q = q.filter(models.StockMovement.date >= start_date)
     if end_date: q = q.filter(models.StockMovement.date <= end_date)
-    if type: q = q.filter(models.StockMovement.type == type)
+    if type:
+        if type == "sale":
+            q = q.filter(or_(
+                models.StockMovement.event_category == "sale",
+                and_(models.StockMovement.event_category.is_(None),
+                     models.StockMovement.type == "out",
+                     models.StockMovement.notes.ilike("Penjualan%")),
+            ))
+        else:
+            q = q.filter(or_(
+                models.StockMovement.event_category == type,
+                and_(models.StockMovement.event_category.is_(None), models.StockMovement.type == type),
+            ))
     
     # Eager-load item agar tidak N+1 (sebelumnya 1 query per baris mutasi).
     movements = (q.options(joinedload(models.StockMovement.item))
@@ -107,6 +123,22 @@ def get_movements(
     result = []
     for m in movements:
         item = m.item
+        category = m.event_category
+        if not category:
+            if m.type == "out" and (m.notes or "").lower().startswith("penjualan"):
+                category = "sale"
+            elif m.type == "in" and "pembelian" in (m.notes or "").lower():
+                category = "purchase_in"
+            else:
+                category = m.type
+        direction = m.direction
+        if not direction:
+            if category == "internal_transfer":
+                direction = "neutral"
+            elif category in {"in", "purchase_in", "item_in", "opening_stock", "opname_in", "transfer_in", "return", "reversal_in", "transfer_reversal_in"}:
+                direction = "in"
+            else:
+                direction = "out"
         result.append({
             "id": m.id, 
             "date": str(m.date),
@@ -115,20 +147,37 @@ def get_movements(
                 "name": item.name if item else "Item Dihapus",
                 "code": item.code if item else "-"
             },
-            "type": m.type, 
+            "type": m.type,
+            "category": category,
+            "direction": direction,
             "qty": m.qty,
             "qty_before": m.qty_before, 
             "qty_after": m.qty_after,
             "reference": m.reference, 
-            "notes": m.notes
+            "notes": m.notes,
+            "warehouse": {"id": m.warehouse_id, "name": m.warehouse.name} if m.warehouse else None,
+            "counterparty_warehouse": {"id": m.counterparty_warehouse_id, "name": m.counterparty_warehouse.name} if m.counterparty_warehouse else None,
+            "warehouse_qty_before": m.warehouse_qty_before,
+            "warehouse_qty_after": m.warehouse_qty_after,
+            "counterparty_qty_before": m.counterparty_qty_before,
+            "counterparty_qty_after": m.counterparty_qty_after,
         })
     return result
 
 
 # ─── 2. STOK MENIPIS (VERSI MULTI-CABANG) ──────────────────────────────────
 @router.get("/low-stock")
-def get_low_stock(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    return get_low_stock_items(db, current_user.active_branch_id)
+def get_low_stock(warehouse_id: Optional[int] = None, status: Optional[str] = None,
+                  category_id: Optional[int] = None,
+                  db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    if warehouse_id is None:
+        default = db.query(models.Warehouse).filter(
+            models.Warehouse.branch_id == current_user.active_branch_id,
+            models.Warehouse.is_active == True,
+        ).order_by(models.Warehouse.is_default.desc(), models.Warehouse.name).first()
+        warehouse_id = default.id if default else None
+    return get_low_stock_items(db, current_user.active_branch_id, warehouse_id=warehouse_id,
+                               status=status, category_id=category_id, per_warehouse=True)
 
 
 # ─── 3. PENYESUAIAN STOK MANUAL / OPNAME BARU DENGAN JURNAL ─────────────────
@@ -157,6 +206,7 @@ def get_document_warehouses(
 def get_item_snapshot(
     warehouse_id: int,
     item_id: Optional[int] = None,
+    supplier_id: Optional[int] = None,
     search: Optional[str] = None,
     limit: int = 50,
     db: Session = Depends(get_db),
@@ -173,6 +223,17 @@ def get_item_snapshot(
     q = db.query(models.Item).filter(models.Item.is_active == True)
     if item_id:
         q = q.filter(models.Item.id == item_id)
+    if supplier_id:
+        supplier = db.query(models.Supplier).filter(
+            models.Supplier.id == supplier_id,
+            models.Supplier.is_active == True,
+        ).first()
+        if not supplier:
+            raise HTTPException(404, "Supplier tidak ditemukan atau nonaktif")
+        q = q.join(
+            models.ItemSupplier,
+            models.ItemSupplier.item_id == models.Item.id,
+        ).filter(models.ItemSupplier.supplier_id == supplier_id)
     if search:
         pattern = f"%{search.strip()}%"
         q = q.filter(
@@ -187,6 +248,10 @@ def get_item_snapshot(
     result = []
     for item in q.order_by(models.Item.name).limit(min(max(limit, 1), 200)).all():
         source_item = get_stock_source_item(db, item)
+        warehouse_stock_row = db.query(models.WarehouseStock).filter(
+            models.WarehouseStock.warehouse_id == warehouse.id,
+            models.WarehouseStock.item_id == source_item.id,
+        ).first()
         source_qty = inventory_document_service.warehouse_stock(db, warehouse.id, source_item.id)
         qty = get_effective_stock_from_source(item, source_qty)
         source_fifo_qty = inventory_document_service.total_remaining(db, source_item.id, warehouse.id)
@@ -210,6 +275,18 @@ def get_item_snapshot(
             "tracks_serial": bool(source_item.tracks_serial),
             "stock_item_id": source_item.id,
             "conversion_factor": get_conversion_factor(item) if is_virtual_variant(item) else 1.0,
+            "master_min_stock": float(item.min_stock or 0),
+            "warehouse_min_stock": (
+                float(warehouse_stock_row.min_stock)
+                if warehouse_stock_row and warehouse_stock_row.min_stock is not None
+                else None
+            ),
+            "effective_min_stock": float(
+                warehouse_stock_row.min_stock
+                if warehouse_stock_row and warehouse_stock_row.min_stock is not None
+                else item.min_stock or 0
+            ),
+            "uses_master_default": not warehouse_stock_row or warehouse_stock_row.min_stock is None,
             "snapshot_token": inventory_document_service.inventory_state_token(
                 db, warehouse.id, source_item.id, source_qty
             ),
@@ -331,7 +408,10 @@ def list_inventory_documents(
         q = q.filter(models.InventoryDocument.date <= end_date)
     if search:
         pattern = f"%{search.strip()}%"
-        q = q.outerjoin(models.InventoryDocumentLine).outerjoin(models.Item).filter(
+        q = q.outerjoin(models.InventoryDocumentLine).outerjoin(
+            models.Item,
+            models.Item.id == models.InventoryDocumentLine.item_id,
+        ).filter(
             models.InventoryDocument.number.ilike(pattern)
             | models.InventoryDocument.notes.ilike(pattern)
             | models.Item.name.ilike(pattern)
@@ -510,10 +590,10 @@ def stock_adjustment(
         raise HTTPException(400, "Tipe penyesuaian tidak dikenali")
 
     # Terapkan perubahan fisik
-    item.stock += diff
-
     if gudang_aktif:
         adjust_warehouse_stock(db, gudang_aktif.id, item.id, diff)
+    else:
+        item.stock += diff
 
     # 🧱 FIFO: jaga lapisan persediaan agar Σ batch == stok tetap terjaga.
     #   • Surplus (diff>0): buat lapisan baru senilai harga beli (selaras nilai jurnal).
@@ -620,3 +700,330 @@ def stock_adjustment(
     
     new_local_stock = get_warehouse_stock(db, gudang_aktif.id, item.id) if gudang_aktif else item.stock
     return {"success": True, "message": "Opname berhasil dicatat di Mutasi Stok!", "new_stock": new_local_stock}
+
+
+class QuarantineCreate(BaseModel):
+    date: date
+    warehouse_id: int
+    item_id: int
+    qty: float
+    source_type: str = "unknown"
+    source_id: Optional[int] = None
+    supplier_id: Optional[int] = None
+    notes: Optional[str] = None
+    serials: list[str] = Field(default_factory=list)
+
+
+class QuarantineBatchLine(BaseModel):
+    item_id: int
+    qty: float
+    serials: list[str] = Field(default_factory=list)
+
+
+class QuarantineBatchCreate(BaseModel):
+    date: date
+    warehouse_id: int
+    supplier_id: Optional[int] = None
+    notes: Optional[str] = None
+    lines: list[QuarantineBatchLine] = Field(min_length=1, max_length=200)
+
+
+class WarehouseMinimumUpdate(BaseModel):
+    warehouse_id: int
+    item_id: int
+    min_stock: Optional[float] = None
+
+
+@router.put("/low-stock-settings")
+def update_warehouse_minimum(data: WarehouseMinimumUpdate,
+                             db: Session = Depends(get_db),
+                             current_user: models.User = Depends(get_current_user)):
+    if not has_permission(db, current_user, "inventory.item_in", "update"):
+        raise HTTPException(403, "Akses mengubah batas stok ditolak")
+    warehouse = db.query(models.Warehouse).get(data.warehouse_id)
+    item = db.query(models.Item).get(data.item_id)
+    if not warehouse or warehouse.branch_id != current_user.active_branch_id:
+        raise HTTPException(403, "Gudang tidak tersedia pada cabang aktif")
+    if not item:
+        raise HTTPException(404, "Barang tidak ditemukan")
+    if data.min_stock is not None and data.min_stock < 0:
+        raise HTTPException(400, "Stok minimum tidak boleh negatif")
+    source = get_stock_source_item(db, item)
+    row = db.query(models.WarehouseStock).filter_by(
+        warehouse_id=warehouse.id, item_id=source.id).with_for_update().first()
+    if not row:
+        row = models.WarehouseStock(warehouse_id=warehouse.id, item_id=source.id, stock=0)
+        db.add(row)
+    row.min_stock = data.min_stock
+    db.commit()
+    return {"warehouse_id": warehouse.id, "item_id": item.id,
+            "min_stock": row.min_stock, "uses_master_default": row.min_stock is None}
+
+
+class QuarantineResolve(BaseModel):
+    action: str
+    qty: float
+    notes: Optional[str] = None
+    serials: list[str] = Field(default_factory=list)
+
+
+def _serialize_quarantine(row: models.InventoryQuarantine):
+    return {
+        "id": row.id, "number": row.number, "date": str(row.date),
+        "warehouse_id": row.warehouse_id,
+        "warehouse_name": row.warehouse.name if row.warehouse else "-",
+        "item_id": row.item_id, "item_code": row.item.code if row.item else "-",
+        "item_name": row.item.name if row.item else "Item dihapus",
+        "tracks_serial": bool(row.item.tracks_serial) if row.item else False,
+        "unit": row.item.unit.abbreviation if row.item and row.item.unit else None,
+        "qty": row.qty, "qty_open": row.qty_open, "unit_cost": row.unit_cost,
+        "total_cost": row.total_cost, "source_type": row.source_type,
+        "source_id": row.source_id, "supplier_id": row.supplier_id,
+        "supplier_name": row.supplier.name if row.supplier else None,
+        "status": row.status, "notes": row.notes,
+    }
+
+
+@router.get("/quarantines")
+def list_quarantines(status: Optional[str] = "open", db: Session = Depends(get_db),
+                     current_user: models.User = Depends(get_current_user)):
+    if not has_permission(db, current_user, "inventory.item_out", "view"):
+        raise HTTPException(403, "Akses karantina barang ditolak")
+    q = db.query(models.InventoryQuarantine).filter(
+        models.InventoryQuarantine.branch_id == current_user.active_branch_id
+    )
+    if status:
+        q = q.filter(models.InventoryQuarantine.status == status)
+    return [_serialize_quarantine(row) for row in q.order_by(models.InventoryQuarantine.id.desc()).all()]
+
+
+def _quarantine_supplier(db: Session, supplier_id: Optional[int]):
+    if not supplier_id:
+        return None
+    supplier = db.query(models.Supplier).filter(
+        models.Supplier.id == supplier_id,
+        models.Supplier.is_active == True,
+    ).first()
+    if not supplier:
+        raise HTTPException(404, "Supplier tidak ditemukan atau nonaktif")
+    return supplier
+
+
+def _create_quarantine_row(
+    db: Session,
+    *,
+    date_value: date,
+    warehouse: models.Warehouse,
+    item_id: int,
+    qty_value: float,
+    supplier_id: Optional[int],
+    notes: Optional[str],
+    serials: list[str],
+    current_user: models.User,
+    source_type: Optional[str] = None,
+    source_id: Optional[int] = None,
+):
+    if not qty_value or not math.isfinite(float(qty_value)) or qty_value <= 0:
+        raise HTTPException(400, "Jumlah karantina harus lebih dari nol")
+    entered = db.query(models.Item).filter(
+        models.Item.id == item_id,
+        models.Item.is_active == True,
+    ).first()
+    if not entered:
+        raise HTTPException(404, "Barang tidak ditemukan")
+    if supplier_id and not db.query(models.ItemSupplier).filter(
+        models.ItemSupplier.item_id == entered.id,
+        models.ItemSupplier.supplier_id == supplier_id,
+    ).first():
+        raise HTTPException(400, f"{entered.name} tidak terhubung dengan supplier yang dipilih")
+
+    item = get_stock_source_item(db, entered)
+    factor = get_conversion_factor(entered) if is_virtual_variant(entered) else 1.0
+    qty = float(qty_value) * factor
+    before = inventory_document_service.warehouse_stock(db, warehouse.id, item.id)
+    if before + 1e-9 < qty:
+        raise HTTPException(400, f"Stok {entered.name} tidak cukup")
+
+    from ..services.inventory_fifo import consume_fifo
+    from ..services.serials import transition_serials
+    from ..services.journal_service import create_quarantine_journal
+
+    allocations = consume_fifo(db, item_id=item.id, warehouse_id=warehouse.id, qty=qty)
+    total = sum(float(q) * float(cost or 0) for _, q, cost in allocations)
+    number = f"QRT-{date_value:%Y%m%d}-{uuid.uuid4().hex[:6].upper()}"
+    row = models.InventoryQuarantine(
+        number=number, date=date_value, branch_id=warehouse.branch_id,
+        warehouse_id=warehouse.id, item_id=item.id, qty=qty, qty_open=qty,
+        unit_cost=total / qty, total_cost=total,
+        source_type=(source_type or ("supplier" if supplier_id else "unknown")).strip().lower(),
+        source_id=source_id, supplier_id=supplier_id,
+        notes=(notes or "").strip() or None, created_by=current_user.id,
+    )
+    db.add(row)
+    db.flush()
+    perubahan = ubah_stok_gudang(
+        db, warehouse_id=warehouse.id, item_id=item.id, delta=-qty
+    )
+    db.add(models.StockMovement(
+        date=date_value, created_at=get_local_datetime(), item_id=item.id,
+        branch_id=warehouse.branch_id, warehouse_id=warehouse.id,
+        type="quarantine_out", event_category="quarantine_out", direction="out",
+        source_type="inventory_quarantine", source_id=row.id, qty=qty,
+        qty_before=perubahan.cabang_sebelum,
+        qty_after=perubahan.cabang_sesudah,
+        warehouse_qty_before=perubahan.gudang_sebelum,
+        warehouse_qty_after=perubahan.gudang_sesudah,
+        reference=number, notes=row.notes or "Barang ditemukan rusak",
+    ))
+    transition_serials(db, item=item, qty=qty, serial_values=serials,
+        from_statuses={"in_stock"}, to_status="quarantine",
+        from_warehouse_id=warehouse.id, to_warehouse=warehouse,
+        reference_type="inventory_quarantine", reference_id=row.id,
+        reference_number=number, user_id=current_user.id, event_type="quarantined")
+    create_quarantine_journal(db, date_val=date_value, number_ref=number,
+                              total=total, user_id=current_user.id,
+                              branch_id=warehouse.branch_id)
+    return row
+
+
+@router.post("/quarantines")
+def create_quarantine(data: QuarantineCreate, db: Session = Depends(get_db),
+                      current_user: models.User = Depends(get_current_user)):
+    if not has_permission(db, current_user, "inventory.item_out", "create"):
+        raise HTTPException(403, "Akses karantina barang ditolak")
+    warehouse = db.query(models.Warehouse).filter(models.Warehouse.id == data.warehouse_id).first()
+    if not warehouse or warehouse.branch_id != current_user.active_branch_id:
+        raise HTTPException(403, "Gudang tidak tersedia pada cabang aktif")
+    _quarantine_supplier(db, data.supplier_id)
+    assert_books_open(db, warehouse.branch_id, data.date, "Karantina barang")
+    try:
+        row = _create_quarantine_row(
+            db, date_value=data.date, warehouse=warehouse, item_id=data.item_id,
+            qty_value=data.qty, supplier_id=data.supplier_id, notes=data.notes,
+            serials=data.serials, current_user=current_user,
+            source_type=data.source_type, source_id=data.source_id,
+        )
+        db.commit()
+        db.refresh(row)
+        return _serialize_quarantine(row)
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.post("/quarantines/batch")
+def create_quarantine_batch(data: QuarantineBatchCreate, db: Session = Depends(get_db),
+                            current_user: models.User = Depends(get_current_user)):
+    if not has_permission(db, current_user, "inventory.item_out", "create"):
+        raise HTTPException(403, "Akses karantina barang ditolak")
+    item_ids = [line.item_id for line in data.lines]
+    if len(item_ids) != len(set(item_ids)):
+        raise HTTPException(400, "Barang karantina tidak boleh duplikat")
+    warehouse = db.query(models.Warehouse).filter(models.Warehouse.id == data.warehouse_id).first()
+    if not warehouse or warehouse.branch_id != current_user.active_branch_id:
+        raise HTTPException(403, "Gudang tidak tersedia pada cabang aktif")
+    _quarantine_supplier(db, data.supplier_id)
+    assert_books_open(db, warehouse.branch_id, data.date, "Karantina barang")
+    try:
+        rows = [
+            _create_quarantine_row(
+                db, date_value=data.date, warehouse=warehouse, item_id=line.item_id,
+                qty_value=line.qty, supplier_id=data.supplier_id, notes=data.notes,
+                serials=line.serials, current_user=current_user,
+            )
+            for line in data.lines
+        ]
+        db.commit()
+        for row in rows:
+            db.refresh(row)
+        return {"count": len(rows), "items": [_serialize_quarantine(row) for row in rows]}
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.post("/quarantines/{quarantine_id}/resolve")
+def resolve_quarantine(quarantine_id: int, data: QuarantineResolve,
+                       db: Session = Depends(get_db),
+                       current_user: models.User = Depends(get_current_user)):
+    if not has_permission(db, current_user, "inventory.item_out", "update"):
+        raise HTTPException(403, "Akses menyelesaikan karantina ditolak")
+    row = db.query(models.InventoryQuarantine).filter(
+        models.InventoryQuarantine.id == quarantine_id
+    ).with_for_update().first()
+    if not row or row.branch_id != current_user.active_branch_id:
+        raise HTTPException(404, "Karantina tidak ditemukan")
+    action = (data.action or "").strip().lower()
+    if action == "supplier_return":
+        raise HTTPException(409, "Retur supplier wajib dibuat melalui menu Retur")
+    if action not in {"restore", "writeoff"}:
+        raise HTTPException(400, "Tindakan karantina tidak valid")
+    if data.qty <= 0 or data.qty > float(row.qty_open or 0) + 1e-9:
+        raise HTTPException(400, "Jumlah penyelesaian melebihi saldo karantina")
+    today = get_local_date()
+    assert_books_open(db, row.branch_id, today, "Penyelesaian karantina")
+    try:
+        from ..services.inventory_fifo import add_batch
+        from ..services.serials import assert_quarantine_serials, transition_serials
+        from ..services.journal_service import create_quarantine_resolution_journal
+        from ..services.quarantine_movements import record_quarantine_movement
+        qty = float(data.qty)
+        total = qty * float(row.unit_cost or 0)
+        quarantine_before = float(row.qty_open or 0)
+        quarantine_after = quarantine_before - qty
+        assert_quarantine_serials(
+            db, quarantine=row, qty=qty, serial_values=data.serials,
+        )
+        if action == "restore":
+            perubahan = ubah_stok_gudang(
+                db, warehouse_id=row.warehouse_id, item_id=row.item_id, delta=qty
+            )
+            add_batch(db, item_id=row.item_id, warehouse_id=row.warehouse_id,
+                      qty=qty, unit_cost=row.unit_cost, received_date=today,
+                      supplier_id=row.supplier_id)
+            transition_serials(db, item=row.item, qty=qty, serial_values=data.serials,
+                from_statuses={"quarantine"}, to_status="in_stock",
+                from_warehouse_id=row.warehouse_id, to_warehouse=row.warehouse,
+                reference_type="inventory_quarantine", reference_id=row.id,
+                reference_number=f"RES-{row.number}", user_id=current_user.id,
+                event_type="quarantine_restored")
+            db.add(models.StockMovement(
+                date=today, created_at=get_local_datetime(), item_id=row.item_id,
+                branch_id=row.branch_id, warehouse_id=row.warehouse_id,
+                type="quarantine_restore", event_category="quarantine_restore", direction="in",
+                source_type="inventory_quarantine", source_id=row.id, qty=qty,
+                qty_before=perubahan.cabang_sebelum,
+                qty_after=perubahan.cabang_sesudah,
+                warehouse_qty_before=perubahan.gudang_sebelum,
+                warehouse_qty_after=perubahan.gudang_sesudah,
+                reference=f"RES-{row.number}", notes=data.notes,
+            ))
+        else:
+            transition_serials(db, item=row.item, qty=qty, serial_values=data.serials,
+                from_statuses={"quarantine"},
+                to_status="removed",
+                from_warehouse_id=row.warehouse_id, to_warehouse=None,
+                reference_type="inventory_quarantine", reference_id=row.id,
+                reference_number=f"RES-{row.number}", user_id=current_user.id,
+                event_type=action)
+            record_quarantine_movement(
+                db, quarantine=row, qty=qty, category="quarantine_writeoff",
+                date_value=today, reference=f"RES-{row.number}",
+                quarantine_before=quarantine_before, quarantine_after=quarantine_after,
+                notes=data.notes or "Barang karantina dihapuskan",
+            )
+        create_quarantine_resolution_journal(db, date_val=today,
+            number_ref=f"RES-{row.number}", total=total, action=action,
+            user_id=current_user.id, branch_id=row.branch_id)
+        row.qty_open = quarantine_after
+        row.status = "closed" if row.qty_open <= 1e-9 else "partial"
+        if data.notes:
+            row.notes = f"{row.notes or ''}\n{action}: {data.notes}".strip()
+        db.commit()
+        return _serialize_quarantine(row)
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise

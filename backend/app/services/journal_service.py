@@ -229,6 +229,47 @@ def create_branch_receiving_journal(db: Session, *, date_val: date, number_ref: 
     )
 
 
+def create_transfer_receipt_journal(db: Session, *, date_val: date, number_ref: str,
+                                    inventory_total: float, quarantine_total: float,
+                                    user_id: int, branch_id: int,
+                                    credit_code: str = ACCOUNT_TRANSFER_CLEARING):
+    """Recognise only quantities physically accepted by the destination."""
+    total = float(inventory_total or 0) + float(quarantine_total or 0)
+    if total <= 0:
+        return None
+    entries = []
+    if inventory_total > 0:
+        entries.append({"code": ACCOUNT_INVENTORY, "debit": inventory_total, "credit": 0})
+    if quarantine_total > 0:
+        entries.append({"code": "1-1450", "debit": quarantine_total, "credit": 0})
+    entries.append({"code": credit_code, "debit": 0, "credit": total})
+    return _auto_journal(db, date_val, number_ref,
+                         f"Penerimaan transfer {number_ref}", entries, user_id, branch_id)
+
+
+def create_quarantine_journal(db: Session, *, date_val: date, number_ref: str,
+                              total: float, user_id: int, branch_id: int):
+    return _auto_journal(db, date_val, number_ref, f"Karantina barang {number_ref}", [
+        {"code": ACCOUNT_DAMAGED_INVENTORY, "debit": total, "credit": 0},
+        {"code": ACCOUNT_INVENTORY, "debit": 0, "credit": total},
+    ], user_id, branch_id)
+
+
+def create_quarantine_resolution_journal(db: Session, *, date_val: date,
+                                         number_ref: str, total: float,
+                                         action: str, user_id: int, branch_id: int):
+    debit_code = {
+        "restore": ACCOUNT_INVENTORY,
+        "writeoff": ACCOUNT_INVENTORY_VARIANCE,
+        "supplier_return": ACCOUNT_PAYABLE,
+    }[action]
+    return _auto_journal(db, date_val, number_ref,
+                         f"Penyelesaian karantina ({action}) {number_ref}", [
+        {"code": debit_code, "debit": total, "credit": 0},
+        {"code": ACCOUNT_DAMAGED_INVENTORY, "debit": 0, "credit": total},
+    ], user_id, branch_id)
+
+
 def create_branch_return_dispatch_journal(db: Session, *, date_val: date,
                                           number_ref: str, total: float,
                                           user_id: int, branch_id: int):

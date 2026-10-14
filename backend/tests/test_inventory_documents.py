@@ -163,7 +163,7 @@ class InventoryDocumentTests(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 409)
         self.assertIn("Perbaikan Saldo", ctx.exception.detail)
 
-    def test_zero_cost_surplus_requires_explicit_confirmation_and_reason(self):
+    def test_zero_cost_surplus_is_rejected_even_with_legacy_override_fields(self):
         self.item.buy_price = 0
         self.db.commit()
         token = service.inventory_state_token(self.db, self.warehouse.id, self.item.id, 0)
@@ -171,15 +171,31 @@ class InventoryDocumentTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as ctx:
             service.create_document(self.db, payload, self.user)
         self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("Master Barang", ctx.exception.detail)
         self.db.rollback()
 
         payload = self.payload("stock_opname", physical_qty=1, snapshot_token=token)
         payload.lines[0].allow_zero_cost = True
         payload.lines[0].unit_cost = 0
         payload.lines[0].notes = "Barang bonus tanpa modal"
-        service.create_document(self.db, payload, self.user)
+        with self.assertRaises(HTTPException):
+            service.create_document(self.db, payload, self.user)
+        self.db.rollback()
+        self.assertEqual(self.stock(), 0)
+        self.assertEqual(self.db.query(models.StockMovement).count(), 0)
+        self.assertEqual(self.db.query(models.InventoryDocument).count(), 0)
+
+    def test_opname_surplus_ignores_legacy_manual_cost_override(self):
+        token = service.inventory_state_token(self.db, self.warehouse.id, self.item.id, 0)
+        payload = self.payload("stock_opname", physical_qty=2, snapshot_token=token)
+        payload.lines[0].unit_cost = 999
+
+        document = service.create_document(self.db, payload, self.user)
         self.db.commit()
-        self.assertEqual(self.stock(), 1)
+
+        self.assertEqual(document.lines[0].unit_cost, 10)
+        self.assertEqual(document.lines[0].total_cost, 20)
+        self.assertIsNotNone(document.journal_id)
 
     def test_opname_token_changes_when_fifo_composition_changes(self):
         batch = add_batch(

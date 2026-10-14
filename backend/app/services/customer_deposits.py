@@ -69,7 +69,10 @@ def backfill_customer_deposit_movements(db: Session) -> int:
                 amount=-deposit, description="Pemakaian deposit untuk pembelian",
             ))
 
-    for return_doc in db.query(models.SaleReturn).join(models.Sale).filter(models.Sale.customer_id.isnot(None)).all():
+    for return_doc in db.query(models.SaleReturn).join(models.Sale).filter(
+        models.Sale.customer_id.isnot(None),
+        models.SaleReturn.status != "cancelled",
+    ).all():
         sale = return_doc.sale
         pending[sale.customer_id].append(dict(
             branch_id=return_doc.branch_id or sale.branch_id, event_type="sale_return",

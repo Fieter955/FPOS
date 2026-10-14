@@ -252,7 +252,7 @@ class Item(Base):
     prices = relationship("ItemPrice", back_populates="item", cascade="all, delete-orphan")
     group_discounts = relationship("ItemGroupDiscount", back_populates="item", cascade="all, delete-orphan")
     sale_items = relationship("SaleItem", back_populates="item")
-    purchase_items = relationship("PurchaseItem", back_populates="item")
+    purchase_items = relationship("PurchaseItem", back_populates="item", foreign_keys="PurchaseItem.item_id")
     stock_movements = relationship("StockMovement", back_populates="item")
 
     # Relasi detail supplier (dengan harga khusus)
@@ -450,6 +450,9 @@ class PurchaseItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     purchase_id = Column(Integer, ForeignKey("purchases.id"), nullable=False)
     item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    entered_item_id = Column(Integer, ForeignKey("items.id"), nullable=True)
+    entered_qty = Column(Float, nullable=True)
+    conversion_factor = Column(Float, nullable=False, default=1)
     qty = Column(Float, nullable=False) # 👇 Stok yang bertambah (sama dengan qty_received jika sudah diterima)
     qty_ordered = Column(Float, default=0) # 👇 Jumlah pesanan awal
     qty_received = Column(Float, default=0) # 👇 Jumlah yang benar-benar diterima
@@ -465,8 +468,12 @@ class PurchaseItem(Base):
     ppn_percent = Column(Float, nullable=True)
     source_request_item_id = Column(Integer, ForeignKey("purchase_items.id"), nullable=True)
     serials_json = Column(Text, nullable=True)
+    item_code_snapshot = Column(String(50), nullable=True)
+    item_name_snapshot = Column(String(200), nullable=True)
+    unit_snapshot = Column(String(20), nullable=True)
     purchase = relationship("Purchase", back_populates="items")
-    item = relationship("Item", back_populates="purchase_items")
+    item = relationship("Item", back_populates="purchase_items", foreign_keys=[item_id])
+    entered_item = relationship("Item", foreign_keys=[entered_item_id])
 
 
 class PurchaseReturn(Base):
@@ -474,7 +481,10 @@ class PurchaseReturn(Base):
     id = Column(Integer, primary_key=True, index=True)
     number = Column(String(50), unique=True, nullable=False)
     date = Column(Date, nullable=False)
-    purchase_id = Column(Integer, ForeignKey("purchases.id"), nullable=False)
+    purchase_id = Column(Integer, ForeignKey("purchases.id"), nullable=True)
+    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True, index=True)
+    return_mode = Column(String(20), nullable=False, default="invoice")
+    evidence_reference = Column(String(255), nullable=True)
     tax_percent = Column(Float, default=0)
     is_tax_included = Column(Boolean, default=True)
     total = Column(Float, default=0)
@@ -485,7 +495,13 @@ class PurchaseReturn(Base):
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    status = Column(String(20), nullable=False, default="posted")
+    cancelled_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+    cancellation_reason = Column(Text, nullable=True)
+    reversal_journal_id = Column(Integer, ForeignKey("journals.id"), nullable=True)
     purchase = relationship("Purchase", back_populates="returns")
+    supplier = relationship("Supplier", foreign_keys=[supplier_id])
     branch = relationship("Branch")
     creator = relationship("User", foreign_keys=[created_by])
     items = relationship("PurchaseReturnItem", back_populates="return_", cascade="all, delete-orphan")
@@ -502,7 +518,10 @@ class PurchaseReturnItem(Base):
     total = Column(Float, nullable=False)
     trade_in_return_item_id = Column(Integer, ForeignKey("trade_in_return_items.id"), nullable=True)
     sale_return_item_id = Column(Integer, ForeignKey("sale_return_items.id"), nullable=True)
+    inventory_quarantine_id = Column(Integer, ForeignKey("inventory_quarantines.id"), nullable=True)
     quarantine_cost = Column(Float, default=0)
+    carrying_cost = Column(Float, nullable=False, default=0)
+    serials_json = Column(Text, nullable=True)
     return_ = relationship("PurchaseReturn", back_populates="items")
     item = relationship("Item")
 
@@ -563,6 +582,10 @@ class SaleItem(Base):
     discount = Column(Float, default=0)
     ppn_percent = Column(Float, default=0)  # tarif PPN baris ini (%) saat dijual → untuk balik PPN per-baris saat retur
     total = Column(Float, nullable=False)
+    serials_json = Column(Text, nullable=True)
+    item_code_snapshot = Column(String(50), nullable=True)
+    item_name_snapshot = Column(String(200), nullable=True)
+    unit_snapshot = Column(String(20), nullable=True)
     sale = relationship("Sale", back_populates="items")
     item = relationship("Item", back_populates="sale_items")
 
@@ -595,6 +618,11 @@ class SaleReturn(Base):
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    status = Column(String(20), nullable=False, default="posted")
+    cancelled_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+    cancellation_reason = Column(Text, nullable=True)
+    reversal_journal_id = Column(Integer, ForeignKey("journals.id"), nullable=True)
     sale = relationship("Sale", back_populates="returns")
     branch = relationship("Branch")
     creator = relationship("User", foreign_keys=[created_by])
@@ -613,6 +641,8 @@ class SaleReturnItem(Base):
     condition = Column(String(20), nullable=False, default="good")  # good | damaged
     returned_qty = Column(Float, nullable=False, default=0)
     quarantine_unit_cost = Column(Float, nullable=False, default=0)
+    carrying_cost = Column(Float, nullable=False, default=0)
+    serials_json = Column(Text, nullable=True)
     return_ = relationship("SaleReturn", back_populates="items")
     item = relationship("Item")
 
@@ -632,9 +662,19 @@ class StockMovement(Base):
     warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=True)
     counterparty_warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=True)
     type = Column(String(20), nullable=False)
+    # Canonical classification used by filters/UI. ``type`` is retained for
+    # backwards compatibility with older desktop databases.
+    event_category = Column(String(40), nullable=True)
+    direction = Column(String(10), nullable=True)  # in | out | neutral
+    source_type = Column(String(40), nullable=True)
+    source_id = Column(Integer, nullable=True)
     qty = Column(Float, nullable=False)
     qty_before = Column(Float, default=0)
     qty_after = Column(Float, default=0)
+    warehouse_qty_before = Column(Float, nullable=True)
+    warehouse_qty_after = Column(Float, nullable=True)
+    counterparty_qty_before = Column(Float, nullable=True)
+    counterparty_qty_after = Column(Float, nullable=True)
     reference = Column(String(100))
     notes = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -705,6 +745,9 @@ class InventoryDocumentLine(Base):
     unit_cost = Column(Float, nullable=False, default=0)
     total_cost = Column(Float, nullable=False, default=0)
     notes = Column(Text)
+    item_code_snapshot = Column(String(50), nullable=True)
+    item_name_snapshot = Column(String(200), nullable=True)
+    unit_snapshot = Column(String(20), nullable=True)
 
     document = relationship("InventoryDocument", back_populates="lines")
     item = relationship("Item", foreign_keys=[item_id])
@@ -1080,6 +1123,7 @@ class WarehouseStock(Base):
     warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
     item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
     stock = Column(Float, default=0)
+    min_stock = Column(Float, nullable=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     warehouse = relationship("Warehouse", back_populates="stock_items")
@@ -1178,6 +1222,9 @@ class WarehouseTransfer(Base):
     transfer_kind = Column(String(30), default="standard", nullable=False)
     source_purchase_id = Column(Integer, ForeignKey("purchases.id"), nullable=True)
     received_at = Column(DateTime(timezone=True), nullable=True)
+    shipped_at = Column(DateTime(timezone=True), nullable=True)
+    received_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    dispute_notes = Column(Text, nullable=True)
     cancelled_at = Column(DateTime(timezone=True), nullable=True)
     cancelled_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     cancellation_reason = Column(Text, nullable=True)
@@ -1195,6 +1242,7 @@ class WarehouseTransfer(Base):
                          cascade="all, delete-orphan")
     creator = relationship("User", foreign_keys=[created_by])
     canceller = relationship("User", foreign_keys=[cancelled_by])
+    receiver = relationship("User", foreign_keys=[received_by])
     reversal_journal = relationship("Journal", foreign_keys=[reversal_journal_id])
     source_purchase = relationship("Purchase", foreign_keys=[source_purchase_id])
 
@@ -1210,6 +1258,9 @@ class WarehouseTransferItem(Base):
     serials_json = Column(Text, nullable=True)
     qty = Column(Float, nullable=False)
     qty_received = Column(Float, nullable=False, default=0)
+    qty_damaged = Column(Float, nullable=False, default=0)
+    qty_missing = Column(Float, nullable=False, default=0)
+    receipt_notes = Column(Text, nullable=True)
     purchase_item_id = Column(Integer, ForeignKey("purchase_items.id"), nullable=True)
     source_request_item_id = Column(Integer, ForeignKey("purchase_items.id"), nullable=True)
     unit_cost = Column(Float, nullable=False, default=0)
@@ -1227,6 +1278,37 @@ class WarehouseTransferItem(Base):
     )
 
 
+class InventoryQuarantine(Base):
+    """Barang rusak yang masih menjadi aset sampai dipulihkan/retur/write-off."""
+    __tablename__ = "inventory_quarantines"
+    __table_args__ = (
+        Index("ix_inventory_quarantines_branch_status", "branch_id", "status"),
+        Index("ix_inventory_quarantines_item", "item_id"),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    number = Column(String(50), unique=True, nullable=False)
+    date = Column(Date, nullable=False)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    qty = Column(Float, nullable=False)
+    qty_open = Column(Float, nullable=False)
+    unit_cost = Column(Float, nullable=False, default=0)
+    total_cost = Column(Float, nullable=False, default=0)
+    source_type = Column(String(30), nullable=False, default="unknown")
+    source_id = Column(Integer, nullable=True)
+    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
+    status = Column(String(20), nullable=False, default="open")
+    notes = Column(Text)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    warehouse = relationship("Warehouse")
+    item = relationship("Item")
+    supplier = relationship("Supplier")
+    creator = relationship("User")
+
+
 class WarehouseTransferBatchAllocation(Base):
     """Exact FIFO lineage used to safely reverse a warehouse transfer."""
     __tablename__ = "warehouse_transfer_batch_allocations"
@@ -1241,6 +1323,9 @@ class WarehouseTransferBatchAllocation(Base):
     source_batch_id = Column(Integer, ForeignKey("stock_batches.id"), nullable=False)
     destination_batch_id = Column(Integer, ForeignKey("stock_batches.id"), nullable=False)
     qty = Column(Float, nullable=False)
+    qty_received = Column(Float, nullable=False, default=0)
+    qty_damaged = Column(Float, nullable=False, default=0)
+    qty_resolved = Column(Float, nullable=False, default=0)
     unit_cost = Column(Float, nullable=False, default=0)
 
     transfer_item = relationship("WarehouseTransferItem", back_populates="batch_allocations")

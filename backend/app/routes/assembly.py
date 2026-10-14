@@ -335,8 +335,6 @@ def _add_stock_movement(
 ) -> None:
     branch_after = get_total_branch_stock(db, branch_id, item.id)
     before = branch_after - qty if movement_type == "in" else branch_after + qty
-    if branch_id == 1:
-        item.stock = float(item.stock or 0) + qty if movement_type == "in" else float(item.stock or 0) - qty
     db.add(
         models.StockMovement(
             branch_id=branch_id,
@@ -1279,6 +1277,8 @@ def simulate_assembly(
         rows.append({
             "material_id": material.id,
             "material_name": material.name,
+            "serial_item_id": stock_item.id,
+            "tracks_serial": bool(stock_item.tracks_serial),
             "qty_required": required,
             "available": available,
             "enough": enough,

@@ -155,7 +155,8 @@ def request_permission(path: str, method: str) -> tuple[str, str] | None:
     # Item Keluar tidak salah diwajibkan memiliki izin Item Masuk.
     if prefix == "inventory" and (
         tail.startswith("documents")
-        or tail in {"item-snapshot", "document-accounts", "document-warehouses", "adjust"}
+        or tail.startswith("quarantines")
+        or tail in {"item-snapshot", "document-accounts", "document-warehouses", "adjust", "low-stock-settings"}
     ):
         return None
 
@@ -268,6 +269,11 @@ def request_permission(path: str, method: str) -> tuple[str, str] | None:
         key = "purchase.return" if "purchase" in tail else "sales.return"
         if "swap" in tail:
             key, action = "sales.return", "update"
+    elif prefix == "serials" and tail.startswith("options"):
+        # Opsi serial dipakai oleh banyak modul transaksi. Otorisasi purpose-
+        # specific dilakukan di dependency endpoint agar kasir tidak perlu
+        # diberi akses penuh ke menu Serial Management.
+        return None
     elif prefix == "inventory":
         if "movements" in tail:
             key, action = "master.stock_card", "view"

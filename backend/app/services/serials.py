@@ -125,6 +125,35 @@ def transition_serials(
     return records
 
 
+def assert_quarantine_serials(
+    db: Session,
+    *,
+    quarantine: models.InventoryQuarantine,
+    qty: float,
+    serial_values: Iterable[str],
+) -> list[str]:
+    """Ensure selected serials belong to the exact open quarantine lot."""
+    normalized = assert_serial_quantity(quarantine.item, qty, serial_values)
+    for display, key in zip(serial_values, normalized):
+        record = db.query(models.ItemSerial).filter(
+            models.ItemSerial.normalized_serial == key,
+            models.ItemSerial.item_id == quarantine.item_id,
+            models.ItemSerial.status == "quarantine",
+            models.ItemSerial.warehouse_id == quarantine.warehouse_id,
+        ).with_for_update().first()
+        if not record:
+            raise HTTPException(409, f"Serial {display} tidak tersedia pada karantina yang dipilih")
+        belongs = db.query(models.ItemSerialEvent.id).filter(
+            models.ItemSerialEvent.serial_id == record.id,
+            models.ItemSerialEvent.reference_type == "inventory_quarantine",
+            models.ItemSerialEvent.reference_id == quarantine.id,
+            models.ItemSerialEvent.to_status == "quarantine",
+        ).first()
+        if not belongs:
+            raise HTTPException(409, f"Serial {display} berasal dari karantina lain")
+    return normalized
+
+
 def assert_warehouse_serial_balance(db: Session, item: models.Item, warehouse_id: int, stock: float):
     if not item.tracks_serial:
         return

@@ -807,6 +807,9 @@ function createPurchaseSummaryGrid(container, config = {}) {
     // Mode exclude: tulis persentase PPN ke field "Pajak" di ringkasan.
     setPajakRingkasan = null,
     enableEnterNavigation = false,
+    enableSerials = false,
+    serialPurpose = "purchase_receive",
+    serialMode = "new",
     // Beri tahu halaman ketika jumlah baris berisi barang berubah.
     onRowsChanged = null,
   } = config;
@@ -1091,11 +1094,19 @@ function createPurchaseSummaryGrid(container, config = {}) {
       ppn: item?.ppn ?? item?.ppn_percent ?? null,
       ppn_type: item?.ppn_type || "included",
       ppn_percent: item?.ppn_percent ?? null,
+      tracks_serial: Boolean(item?.tracks_serial),
+      is_virtual_variant: Boolean(item?.is_virtual_variant),
+      parent_item_id: item?.parent_item_id || null,
+      conversion_factor_to_parent: item?.conversion_factor_to_parent || 1,
+      serials: Array.isArray(item?.serials) ? [...item.serials] : [],
     };
 
     row.innerHTML = `
             <div class="pg2-no" style="text-align:center; color:var(--text-muted); font-weight:600"></div>
-            <div class="pg2-combo"></div>
+            <div style="min-width:0">
+                <div class="pg2-combo"></div>
+                <button type="button" class="btn serial-picker-trigger pg2-serial" style="display:none; margin-top:5px; width:100%" title="Pilih nomor serial">Serial 0/0</button>
+            </div>
             <div class="pg2-jenis"></div>
             <input type="text" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0" class="combobox-input pg2-qty" value="${toDesimal(row._detail.qty, { minimum: 2, maksimum: 4 })}" style="text-align:center" />
             <div class="pg2-satuan"></div>
@@ -1116,6 +1127,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
     const taxInp = row.querySelector(".pg2-tax");
     const discCell = row.querySelector(".pg2-disc");
     const detailBtn = row.querySelector(".pg2-detail");
+    const serialBtn = row.querySelector(".pg2-serial");
     const delBtn = row.querySelector(".pg2-del");
 
     const fokusJumlah = () => {
@@ -1203,6 +1215,11 @@ function createPurchaseSummaryGrid(container, config = {}) {
           row._detail.buy_price = sel.buy_price || 0;
           row._detail.sell_price = sel.sell_price || 0;
           row._detail.profit_margin = sel.profit_margin || 0;
+          row._detail.tracks_serial = Boolean(sel.tracks_serial);
+          row._detail.is_virtual_variant = Boolean(sel.is_virtual_variant);
+          row._detail.parent_item_id = sel.parent_item_id || null;
+          row._detail.conversion_factor_to_parent = sel.conversion_factor_to_parent || 1;
+          row._detail.serials = [];
           // Validasi tipe & persentase PPN terhadap setelan transaksi.
           // Bila user menolak konversi tipe, barang batal ditambahkan.
           const lanjut = await prosesPpnSaatPilih(row, sel);
@@ -1332,6 +1349,14 @@ function createPurchaseSummaryGrid(container, config = {}) {
       );
       bangunDiskon();
       hitungTotal(row);
+      const tracked = enableSerials && window.SerialPicker && SerialPicker.isTracked(d, currentData);
+      serialBtn.style.display = tracked ? "inline-flex" : "none";
+      if (tracked && window.SerialPicker) {
+        const needed = SerialPicker.requiredQuantity(d, d.qty, currentData);
+        serialBtn.textContent = SerialPicker.buttonText(d.serials || [], needed);
+        serialBtn.classList.toggle("complete", (d.serials || []).length === Math.round(needed));
+        serialBtn.classList.toggle("invalid", (d.serials || []).length !== Math.round(needed));
+      }
     };
     row._isi = isi;
 
@@ -1339,9 +1364,16 @@ function createPurchaseSummaryGrid(container, config = {}) {
     qtyInp.oninput = () => {
       row._detail.qty = parseDesimal(qtyInp);
       hitungTotal(row);
+      if (row._isi) row._isi();
       if (onChange) onChange();
     };
     qtyInp.addEventListener("focus", fokusJumlah);
+
+    serialBtn.onclick = () => {
+      const d = row._detail;
+      if (!d.item_id || !window.SerialPicker) return;
+      SerialPicker.open({purpose:serialPurpose,mode:serialMode,item:d,itemId:d.item_id,quantity:d.qty,initialSerials:d.serials || [],onSave(serials){d.serials=serials;isi();if(onChange)onChange();}});
+    };
 
     // ── Harga Beli (format ribuan saat ketik, simpan ke supplier saat blur) ──
     beliInp.oninput = (e) => {
@@ -1485,6 +1517,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
           // Tarif PPN baris (kolom "PPN Include" mode Included). null → backend mundur
           // ke Item.ppn_percent / tarif toko.
           ppn_percent: d.ppn_percent ?? d.ppn ?? null,
+          serials: d.serials || [],
         };
         const existing = data.find((entry) => entry.item_id === line.item_id);
         if (existing) {
@@ -1492,6 +1525,7 @@ function createPurchaseSummaryGrid(container, config = {}) {
           existing.qty_ordered += line.qty_ordered;
           existing.qty_received += line.qty_received;
           existing.total += line.total;
+          existing.serials = [...(existing.serials || []), ...(line.serials || [])];
         } else {
           data.push(line);
         }
@@ -1501,6 +1535,18 @@ function createPurchaseSummaryGrid(container, config = {}) {
     // snapshot seluruh baris (termasuk state detail) untuk round-trip ke detail_item
     getDetailRows: () =>
       Array.from(body.children).map((row) => ({ ...row._detail })),
+    validateSerials: () => {
+      if (!enableSerials || !window.SerialPicker) return null;
+      const groups = [];
+      for (const row of Array.from(body.children)) {
+        const d = row._detail;
+        if (!d.item_id) continue;
+        const error = SerialPicker.validate(d, d.qty, d.serials || [], currentData);
+        if (error) return error;
+        groups.push(d.serials || []);
+      }
+      return SerialPicker.validateUnique(groups);
+    },
     // pulihkan satu baris (dipakai saat kembali dari detail_item)
     setRowDetail: (index, detail) => {
       const row = body.children[index];

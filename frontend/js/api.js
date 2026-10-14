@@ -1,10 +1,35 @@
 let fposLocalDeviceId = null;
-try {
-  fetch("http://127.0.0.1:19731/device-info")
-    .then(res => res.json())
-    .then(data => { if (data.device_id) fposLocalDeviceId = data.device_id; })
-    .catch(() => {});
-} catch (e) {}
+let fposLocalDeviceInfoPromise = null;
+
+// Agen printer bersifat opsional. Jangan mem-probe port lokal pada setiap
+// halaman/iframe karena browser tetap menulis ERR_CONNECTION_REFUSED ke konsol
+// saat agennya tidak aktif. Alur yang benar-benar membutuhkan printer memanggil
+// fungsi ini sebelum mengirim request ke backend.
+async function ensureFposLocalDeviceId() {
+  if (fposLocalDeviceId) return fposLocalDeviceId;
+  if (fposLocalDeviceInfoPromise) return fposLocalDeviceInfoPromise;
+
+  fposLocalDeviceInfoPromise = (async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1500);
+    try {
+      const response = await fetch("http://127.0.0.1:19731/device-info", {
+        signal: controller.signal,
+        cache: "no-store",
+      });
+      if (!response.ok) return null;
+      const data = await response.json();
+      fposLocalDeviceId = data?.device_id || null;
+      return fposLocalDeviceId;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timeout);
+    }
+  })();
+
+  return fposLocalDeviceInfoPromise;
+}
 
 const API_BASE = "/api";
 const SESSION_EXPIRED_NOTICE_KEY = "fpos_session_expired_notice";
@@ -1401,6 +1426,7 @@ function today() {
 }
 
 const openModalOrder = [];
+const modalReturnFocus = new WeakMap();
 const modalFocusableSelector = [
   "a[href]",
   "button:not([disabled])",
@@ -1475,6 +1501,9 @@ function syncModalScrollLock() {
 function openModal(id) {
   const m = document.getElementById(id);
   if (m) {
+    if (!isVisibleModalElement(m) && document.activeElement instanceof HTMLElement) {
+      modalReturnFocus.set(m, document.activeElement);
+    }
     m.style.display = "flex";
     m.setAttribute("role", "dialog");
     m.setAttribute("aria-modal", "true");
@@ -1504,6 +1533,11 @@ function closeModal(id) {
     const oldIndex = openModalOrder.indexOf(m);
     if (oldIndex !== -1) openModalOrder.splice(oldIndex, 1);
     syncModalScrollLock();
+    const returnTarget = modalReturnFocus.get(m);
+    modalReturnFocus.delete(m);
+    if (returnTarget?.isConnected && !returnTarget.matches(":disabled")) {
+      setTimeout(() => returnTarget.focus({ preventScroll: true }), 0);
+    }
   }
 }
 
@@ -1553,6 +1587,34 @@ document.addEventListener(
   },
   true,
 );
+
+// Alur transaksi keyboard-first. Enter pada input menyelesaikan nilai lalu
+// memindahkan fokus; tombol Simpan tetap harus difokuskan dan ditekan sendiri,
+// sehingga salah tekan dari kolom terakhir tidak langsung memposting dokumen.
+document.addEventListener("keydown", (event) => {
+  if (
+    event.defaultPrevented ||
+    event.key !== "Enter" ||
+    event.altKey || event.ctrlKey || event.metaKey || event.shiftKey ||
+    !document.body.classList.contains("keyboard-workflow")
+  ) return;
+
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  if (target.matches("button, a[href], textarea, [contenteditable='true']")) return;
+  if (!target.matches("input:not([type='button']):not([type='submit']), select")) return;
+
+  const scope = getTopOpenModal() || target.closest("form") || target.closest(".main-content") || document.body;
+  const controls = Array.from(scope.querySelectorAll(modalFocusableSelector)).filter(isVisibleModalElement);
+  const current = controls.indexOf(target);
+  if (current < 0) return;
+  const next = controls.slice(current + 1).find((control) => !control.matches("[data-enter-skip]"));
+  if (!next) return;
+  event.preventDefault();
+  target.blur();
+  next.focus({ preventScroll: true });
+  if (next.matches("input:not([type='date']), textarea")) next.select?.();
+}, false);
 
 // Shared CSS
 (function () {

@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from ..database import get_db, SessionLocal
 from ..auth import get_current_user, require_admin
 from .. import models
+from ..services.low_stock import get_low_stock_items
 
 router = APIRouter()
 
@@ -198,19 +199,23 @@ async def test_notification(cfg_id: int, db: Session = Depends(get_db),
 @router.post("/send-low-stock")
 async def trigger_low_stock(background_tasks: BackgroundTasks,
                              db: Session = Depends(get_db),
-                             _=Depends(get_current_user)):
+                             current_user=Depends(get_current_user)):
     """Cek dan kirim notif stok menipis"""
-    low_items = db.query(models.Item).filter(
-        models.Item.is_active == True,
-        models.Item.stock <= models.Item.min_stock,
-        models.Item.min_stock > 0
-    ).limit(10).all()
+    default_warehouse = db.query(models.Warehouse).filter(
+        models.Warehouse.branch_id == current_user.active_branch_id,
+        models.Warehouse.is_active == True,
+    ).order_by(models.Warehouse.is_default.desc(), models.Warehouse.name).first()
+    low_items = get_low_stock_items(
+        db, current_user.active_branch_id,
+        warehouse_id=default_warehouse.id if default_warehouse else None,
+        per_warehouse=bool(default_warehouse),
+    )[:10]
 
     if not low_items:
         return {"message": "Semua stok aman, tidak ada notifikasi dikirim"}
 
     lines = "\n".join([
-        f"• {i.name}: stok {i.stock} (min {i.min_stock})"
+        f"• {i['name']}: stok {i['stock']} (min {i['min_stock']})"
         for i in low_items
     ])
     msg = f"⚠️ <b>Peringatan Stok Menipis</b>\n\n{lines}\n\nSegera lakukan restock!"
@@ -221,7 +226,7 @@ async def trigger_low_stock(background_tasks: BackgroundTasks,
 @router.post("/send-daily-report")
 async def trigger_daily_report(background_tasks: BackgroundTasks,
                                 db: Session = Depends(get_db),
-                                _=Depends(require_admin)):
+                                current_user=Depends(require_admin)):
     """Kirim laporan harian manual"""
     today = date.today()
     sales = db.query(models.Sale).filter(models.Sale.date == today).all()
@@ -229,10 +234,15 @@ async def trigger_daily_report(background_tasks: BackgroundTasks,
     tx_count = len(sales)
     cash = sum(s.total for s in sales if s.payment_method == "cash")
 
-    low_stock = db.query(func.count(models.Item.id)).filter(
-        models.Item.is_active == True,
-        models.Item.stock <= models.Item.min_stock
-    ).scalar() or 0
+    default_warehouse = db.query(models.Warehouse).filter(
+        models.Warehouse.branch_id == current_user.active_branch_id,
+        models.Warehouse.is_active == True,
+    ).order_by(models.Warehouse.is_default.desc(), models.Warehouse.name).first()
+    low_stock = len(get_low_stock_items(
+        db, current_user.active_branch_id,
+        warehouse_id=default_warehouse.id if default_warehouse else None,
+        per_warehouse=bool(default_warehouse),
+    ))
 
     msg = f"""📊 <b>Laporan Harian iPos 5.0</b>
 📅 {today.strftime('%d %B %Y')}

@@ -161,6 +161,7 @@ class ItemCreate(BaseModel):
     description: Optional[str] = None
     barcode: Optional[str] = None
     is_discountable: bool = False
+    tracks_serial: bool = False
     supplier_ids: Optional[List[int]] = None
     supplier_settings: Optional[List[ItemSupplierCreate]] = []
     prices: Optional[List[ItemPriceCreate]] = []
@@ -180,6 +181,7 @@ class ItemUpdate(BaseModel):
     barcode: Optional[str] = None
     is_active: Optional[bool] = None
     is_discountable: Optional[bool] = None
+    tracks_serial: Optional[bool] = None
     supplier_ids: Optional[List[int]] = None
     supplier_settings: Optional[List[ItemSupplierCreate]] = None
     prices: Optional[List[ItemPriceCreate]] = None
@@ -410,6 +412,9 @@ class PurchaseCreate(BaseModel):
 class PurchaseItemOut(BaseModel):
     id: int
     item_id: int
+    entered_item_id: Optional[int] = None
+    entered_qty: Optional[float] = None
+    conversion_factor: float = 1
     qty: float
     qty_ordered: float = 0
     qty_received: float = 0
@@ -423,6 +428,9 @@ class PurchaseItemOut(BaseModel):
     ppn_percent: Optional[float] = None
     source_request_item_id: Optional[int] = None
     qty_outstanding: Optional[float] = None
+    item_code_snapshot: Optional[str] = None
+    item_name_snapshot: Optional[str] = None
+    unit_snapshot: Optional[str] = None
     item: Optional[ItemOut] = None
     model_config = {"from_attributes": True}
 
@@ -468,7 +476,10 @@ class PurchaseReturnItemCreate(BaseModel):
 class PurchaseReturnCreate(BaseModel):
     number: Optional[str] = None
     date: date
-    purchase_id: int
+    purchase_id: Optional[int] = None
+    supplier_id: Optional[int] = None
+    return_mode: str = "invoice"
+    evidence_reference: Optional[str] = None
     tax_percent: float = 0
     is_tax_included: bool = True
     reason: Optional[str] = None
@@ -487,11 +498,17 @@ class PurchaseReturnOut(BaseModel):
     id: int
     number: str
     date: date
-    purchase_id: int
+    purchase_id: Optional[int] = None
+    supplier_id: Optional[int] = None
+    return_mode: str = "invoice"
+    evidence_reference: Optional[str] = None
     tax_percent: float
     is_tax_included: bool
     total: float
     reason: Optional[str]
+    status: str = "posted"
+    cancelled_at: Optional[datetime] = None
+    cancellation_reason: Optional[str] = None
     items: List[PurchaseReturnItemOut] = []
     model_config = {"from_attributes": True}
 
@@ -528,6 +545,9 @@ class SaleReturnOut(BaseModel):
     is_tax_included: bool
     total: float
     reason: Optional[str]
+    status: str = "posted"
+    cancelled_at: Optional[datetime] = None
+    cancellation_reason: Optional[str] = None
     items: List[SaleReturnItemOut] = []
     model_config = {"from_attributes": True}
 
@@ -617,6 +637,9 @@ class SaleItemOut(BaseModel):
     total: float
     margin_amount: float = 0
     margin_percent: float = 0
+    item_code_snapshot: Optional[str] = None
+    item_name_snapshot: Optional[str] = None
+    unit_snapshot: Optional[str] = None
     item: Optional[ItemOut] = None
     model_config = {"from_attributes": True}
 
@@ -692,10 +715,10 @@ class InventoryDocumentLineCreate(BaseModel):
     entered_item_id: Optional[int] = None
     entered_qty: Optional[float] = None
     conversion_factor: Optional[float] = Field(default=None, gt=0)
-    qty: Optional[float] = None
-    physical_qty: Optional[float] = None
+    qty: Optional[float] = Field(default=None, allow_inf_nan=False)
+    physical_qty: Optional[float] = Field(default=None, allow_inf_nan=False)
     snapshot_token: Optional[str] = None
-    unit_cost: Optional[float] = Field(default=None, ge=0)
+    unit_cost: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     allow_zero_cost: bool = False
     notes: Optional[str] = None
     serials: List[str] = Field(default_factory=list)
@@ -713,12 +736,20 @@ class InventoryDocumentCreate(BaseModel):
 
 
 class InventoryDocumentCancel(BaseModel):
-    reason: str
+    reason: str = Field(min_length=1)
+
+    @field_validator("reason")
+    @classmethod
+    def validate_reason(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Alasan pembatalan wajib diisi")
+        return value
 
 
 class InventoryReconciliationLineApply(BaseModel):
     item_id: int
-    unit_cost: Optional[float] = Field(default=None, ge=0)
+    unit_cost: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     allow_zero_cost: bool = False
 
 
@@ -727,6 +758,14 @@ class InventoryReconciliationApply(BaseModel):
     preview_token: str
     reason: str = Field(min_length=3)
     lines: List[InventoryReconciliationLineApply] = Field(default_factory=list)
+
+    @field_validator("reason")
+    @classmethod
+    def validate_reason(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 3:
+            raise ValueError("Alasan perbaikan minimal 3 karakter")
+        return value
 
 
 # ─── Cash Transaction ─────────────────────────────────────────────────────────

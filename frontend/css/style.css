@@ -768,3 +768,54 @@ body.dark-mode .input-control::placeholder {
     margin: var(--space-sm) 0 0.375rem;
   }
 }
+
+/* Kepadatan transaksi berskala fluida: 14 inci tetap ringkas, monitor lebar
+   memanfaatkan ruang horizontal, dan kontrol mobile tetap mudah disentuh. */
+:root {
+  --dense-space-1: clamp(.25rem, .2rem + .15vw, .4rem);
+  --dense-space-2: clamp(.4rem, .3rem + .2vw, .65rem);
+  --dense-space-3: clamp(.65rem, .5rem + .3vw, 1rem);
+  --dense-page-pad: clamp(.5rem, .25rem + 1vw, 1.25rem);
+  --dense-card-pad: clamp(.55rem, .4rem + .5vw, 1rem);
+  --dense-control: clamp(2.15rem, 2rem + .4vw, 2.6rem);
+  --dense-font: clamp(.82rem, .78rem + .15vw, .95rem);
+}
+:is(.inventory-density,.transaction-density) { font-size:var(--dense-font); }
+:is(.inventory-density,.transaction-density) .main-content { padding:var(--dense-page-pad); }
+:is(.inventory-density,.transaction-density) .pg-header { display:flex; align-items:flex-start; justify-content:space-between; gap:var(--dense-space-2); margin-bottom:var(--dense-space-2); }
+:is(.inventory-density,.transaction-density) .pg-header h1 { margin:0 0 var(--dense-space-1); font-size:clamp(1.25rem,1rem + .8vw,1.9rem); }
+:is(.inventory-density,.transaction-density) .pg-header p { margin:0; line-height:1.3; }
+:is(.inventory-density,.transaction-density) .card { padding:var(--dense-card-pad) !important; border-radius:clamp(.55rem,.4rem + .3vw,.8rem); }
+:is(.inventory-density,.transaction-density) .input-group { margin-bottom:var(--dense-space-2); }
+:is(.inventory-density,.transaction-density) .input-group label { margin-bottom:var(--dense-space-1); }
+:is(.inventory-density,.transaction-density) .input-control { min-height:var(--dense-control); padding:.48em .7em; }
+:is(.inventory-density,.transaction-density) .btn { min-height:var(--dense-control); padding:.5em .85em; }
+:is(.inventory-density,.transaction-density) .filter-bar { gap:var(--dense-space-2) !important; margin-bottom:var(--dense-space-2) !important; padding:var(--dense-space-2) !important; }
+:is(.inventory-density,.transaction-density) :is(.inventory-tabs,.inventory-section-tabs,.tabs) { gap:var(--dense-space-1) !important; margin-bottom:var(--dense-space-2) !important; }
+:is(.inventory-density,.transaction-density) :is(.inventory-tab,.inventory-section-tabs > button,.tab-btn) { padding:.45em .75em !important; }
+:is(.inventory-density,.transaction-density) .tbl-wrap { max-width:100%; overflow:auto; }
+:is(.inventory-density,.transaction-density) .tbl th { padding:.5em .65em; position:sticky; top:0; z-index:2; }
+:is(.inventory-density,.transaction-density) .tbl td { padding:.48em .65em; }
+:is(.inventory-density,.transaction-density) .modal-box { width:min(96vw,70rem); max-height:calc(100dvh - var(--dense-space-3)); padding:var(--dense-card-pad); overflow:auto; }
+:is(.inventory-density,.transaction-density) .modal-hdr { margin-bottom:var(--dense-space-2); position:sticky; top:0; z-index:4; background:var(--card-bg); }
+:is(.inventory-density,.transaction-density) .return-history-box { width:min(94vw,64rem); }
+:is(.inventory-density,.transaction-density) .compact-dialog { width:min(94vw,30rem); }
+:is(.inventory-density,.transaction-density) .dialog-note { margin:0 0 var(--dense-space-2); line-height:1.4; }
+:is(.inventory-density,.transaction-density) .dialog-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--dense-space-2); padding-top:var(--dense-space-2); }
+:is(.inventory-density,.transaction-density) .return-row-actions { display:flex; gap:var(--dense-space-1); flex-wrap:nowrap; }
+:is(.inventory-density,.transaction-density) .return-row-actions .btn { padding:.4em .65em; }
+:is(.inventory-density,.transaction-density) .history-cancel-note { color:var(--text-muted); font-size:.85em; }
+
+@media (max-width:40rem) {
+  :is(.inventory-density,.transaction-density) :is(.inventory-tabs,.inventory-section-tabs,.tabs) { flex-wrap:nowrap !important; overflow-x:auto; scrollbar-width:none; }
+  :is(.inventory-density,.transaction-density) :is(.inventory-tabs,.inventory-section-tabs,.tabs)::-webkit-scrollbar { display:none; }
+  :is(.inventory-density,.transaction-density) :is(.inventory-tab,.inventory-section-tabs > button,.tab-btn) { flex:0 0 auto; min-height:2.75rem; }
+  :is(.inventory-density,.transaction-density) .btn { min-height:2.75rem; }
+  :is(.inventory-density,.transaction-density) .modal-overlay { padding:var(--dense-space-1); align-items:flex-end; }
+  :is(.inventory-density,.transaction-density) .modal-box { width:100% !important; max-width:none !important; max-height:calc(100dvh - var(--dense-space-2)); border-radius:1rem 1rem 0 0; }
+}
+
+@media (min-width:90rem) {
+  :is(.inventory-density,.transaction-density) .main-content { max-width:none; }
+  :is(.inventory-density,.transaction-density) .doc-layout { grid-template-columns:minmax(0,2fr) minmax(22rem,1fr); }
+}

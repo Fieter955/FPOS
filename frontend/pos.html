@@ -15,6 +15,7 @@
   <link rel="apple-touch-icon" href="/icons/icon-192.png" />
   <title>Kasir - iPos 5.0</title>
   <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/serial-picker.css" />
   <style>
     * {
       -webkit-tap-highlight-color: transparent;
@@ -1456,7 +1457,7 @@
   </style>
 </head>
 
-<body>
+<body class="transaction-density keyboard-workflow">
   <div class="ipos-screen">
     <!-- Banner TOTAL -->
     <div class="ipos-total-banner">
@@ -1492,7 +1493,7 @@
     <!-- Search + dropdown hasil pencarian (muncul hanya saat mengetik) -->
     <div class="ipos-search">
       <input type="text" id="searchInp" class="search-inp"
-        placeholder="🔍 Scan / ketik kode atau nama barang…  (Tekan F8/Insert untuk Bayar)" autofocus autocomplete="off"
+        placeholder="🔍 Scan / ketik kode atau nama barang, lalu Enter" autofocus autocomplete="off"
         oninput="filterItems()" />
       <div class="search-results" id="searchResults"></div>
     </div>
@@ -1532,7 +1533,7 @@
         </div>
 
         <div>
-          Pintasan: <b>End</b> Bayar · <b>Esc</b> Batal · <b>↑↓</b> Pilih hasil
+          Keyboard: <b>Tab</b> Pindah · <b>Enter</b> Pilih/Konfirmasi · <b>↑↓</b> Pilih hasil
           · <b>Enter</b> Tambah
         </div>
         <div>
@@ -1880,6 +1881,7 @@
   <script src="/js/api.js"></script>
   <script src="/js/theme.js"></script>
   <script src="/js/components.js"></script>
+  <script src="/js/serial-picker.js"></script>
   <script>
     requireAuth();
 
@@ -1890,6 +1892,7 @@
       cart = [],
       allCusts = [],
       allGroups = [],
+      posWarehouseId = null,
       payMethod = "cash",
       activeCat = "";
     let currentFilteredItems = [];
@@ -2016,11 +2019,7 @@
         }
 
         // B. SHORTCUT TOMBOL BAYAR (F8 / INSERT)
-        if (e.key === "F8" || e.key === "Insert" || e.key === "End") {
-          e.preventDefault();
-          openPayModal();
-          return;
-        }
+        /* Pembayaran dibuka lewat tombol Bayar dengan Tab lalu Enter. */
 
         // C. NAVIGASI PANAH DI DROPDOWN HASIL PENCARIAN (↑/↓)
         if (["ArrowDown", "ArrowUp"].includes(e.key)) {
@@ -2267,15 +2266,17 @@
 
     async function init() {
       try {
-        const [items, cats, custs, groups] = await Promise.all([
+        const [items, cats, custs, groups, warehouses] = await Promise.all([
           api("GET", "/items/?limit=20000"), // Limit dibesarkan agar tidak gaib
           api("GET", "/items/categories"),
           api("GET", "/customers/?limit=500"),
           api("GET", "/customers/groups"),
+          api("GET", "/warehouses/"),
         ]);
         allItems = items;
         allCusts = custs;
         allGroups = groups;
+        posWarehouseId = (warehouses.find((row) => row.is_default) || warehouses[0] || {}).id || null;
         try {
           const st = await api("GET", "/accounting/pkp-status");
           PKP.is_pkp = !!st.is_pkp;
@@ -2829,6 +2830,7 @@
           disc3: def.disc3,
           disc4: def.disc4,
           pot_manual: false, // true bila kasir ubah Pot manual (jangan ditimpa default grup)
+          serials: [],
         };
         hitungBarisKeranjang(baris);
         cart.push(baris);
@@ -2918,6 +2920,13 @@
 
     function openPayModal() {
       if (cart.length === 0) return showToast("Keranjang kosong!", "warning");
+      for (const line of cart) {
+        const item = allItems.find((row) => row.id === line.id);
+        const error = SerialPicker.validate(item, line.qty, line.serials || [], allItems);
+        if (error) return showToast(error, "error");
+      }
+      const duplicateSerial = SerialPicker.validateUnique(cart.map((line) => line.serials || []));
+      if (duplicateSerial) return showToast(duplicateSerial, "error");
       const total =
         cart.reduce((s, c) => s + c.price * c.qty, 0) + getBiayaLain();
       document.getElementById("payTotalDisplay").textContent = fmtRp(total);
@@ -3157,7 +3166,7 @@
           <tr style="cursor:pointer" title="Klik baris ini untuk lihat Detail (histori beli/jual) barang" onclick="pilihBarangDariKeranjang(${c.id})">
             <td class="ctr">${i + 1}</td>
             <td class="col-code">${code}</td>
-            <td>${c.name}<span style="color:var(--text-muted);font-size:0.72rem"> / ${c.unit || "pcs"}</span></td>
+            <td>${c.name}<span style="color:var(--text-muted);font-size:0.72rem"> / ${c.unit || "pcs"}</span>${SerialPicker.isTracked(src, allItems) ? `<br><button type="button" class="btn serial-picker-trigger ${(c.serials || []).length === Math.round(SerialPicker.requiredQuantity(src, c.qty, allItems)) ? "complete" : "invalid"}" onclick="event.stopPropagation();pickSaleSerials(${i})">${SerialPicker.buttonText(c.serials || [], SerialPicker.requiredQuantity(src, c.qty, allItems))}</button>` : ""}</td>
             <td class="ctr">
               <div class="qty-ctrl" style="justify-content:center">
                 <button class="qty-btn" onclick="changeQty(${i},-1)">−</button>
@@ -3204,6 +3213,12 @@
       renderCart();
       recalc();
       warnRugi();
+    }
+    function pickSaleSerials(i) {
+      const line = cart[i];
+      const item = allItems.find((row) => row.id === line?.id);
+      if (!line || !item) return;
+      SerialPicker.open({purpose:"sale",item,itemId:item.id,quantity:line.qty,warehouseId:posWarehouseId,initialSerials:line.serials || [],onSave(serials){line.serials=serials;renderCart();}});
     }
     function removeCart(i) {
       if (!cart[i]) return;
@@ -3467,6 +3482,13 @@
     // API TRANSAKSI
     // =======================================================================
     async function prosesBayar(autoPrint = false) {
+      for (const line of cart) {
+        const item = allItems.find((row) => row.id === line.id);
+        const error = SerialPicker.validate(item, line.qty, line.serials || [], allItems);
+        if (error) return showToast(error, "error");
+      }
+      const duplicateSerial = SerialPicker.validateUnique(cart.map((line) => line.serials || []));
+      if (duplicateSerial) return showToast(duplicateSerial, "error");
       const total =
         cart.reduce((s, c) => s + c.price * c.qty, 0) - getDiskonFaktur() + getBiayaLain();
 
@@ -3512,6 +3534,8 @@
 
       try {
         if (typeof showLoading === "function") showLoading("Memproses...");
+        if (autoPrint && typeof ensureFposLocalDeviceId === "function")
+          await ensureFposLocalDeviceId();
         const sale = await api("POST", "/sales/", {
           date: today(), // Menggunakan tanggal WITA
           customer_id: custId || null,
@@ -3532,6 +3556,7 @@
             sell_price: c.price,
             discount: 0,
             ppn_percent: c.ppn_percent, // tarif PPN baris (null → server pakai tarif barang/toko)
+            serials: c.serials || [],
           })),
         });
         if (typeof hideLoading === "function") hideLoading();
@@ -3599,6 +3624,8 @@
       const button = document.getElementById("btnRcptCetak");
       try {
         if (button) button.disabled = true;
+        if (typeof ensureFposLocalDeviceId === "function")
+          await ensureFposLocalDeviceId();
         const result = await api("POST", `/sales/print/${saleData.id}`, {});
         showToast(`Struk masuk antrean printer (job #${result.job_id})`);
         if (button) button.textContent = "✓ Diantrekan";

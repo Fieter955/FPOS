@@ -9,6 +9,8 @@ Konsep:
 from __future__ import annotations
 
 from typing import List, Optional
+import hashlib
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -38,6 +40,18 @@ class VirtualVariantPayload(BaseModel):
     child_code: Optional[str] = None
     barcode: Optional[str] = None
     prices: List[schemas.ItemPriceCreate] = []
+
+
+class RebasePayload(BaseModel):
+    source_item_id: int
+    base_unit_id: int
+    units_per_source: float = Field(..., gt=0)
+    base_name: Optional[str] = None
+    base_code: Optional[str] = None
+    base_barcode: Optional[str] = None
+    base_sell_price: Optional[float] = Field(default=None, ge=0)
+    prices: Optional[List[schemas.ItemPriceCreate]] = None
+    snapshot_token: Optional[str] = None
 
 
 def _normalize_text(value: Optional[str]) -> str:
@@ -195,6 +209,243 @@ def _ensure_child_unit(db: Session, unit_id: int) -> models.Unit:
     if not unit:
         raise HTTPException(404, "Satuan turunan tidak ditemukan")
     return unit
+
+
+def _rebase_snapshot(db: Session, source_item: models.Item) -> str:
+    stocks = db.query(models.WarehouseStock).filter(
+        models.WarehouseStock.item_id == source_item.id
+    ).order_by(models.WarehouseStock.id).all()
+    batches = db.query(models.StockBatch).filter(
+        models.StockBatch.item_id == source_item.id
+    ).order_by(models.StockBatch.id).all()
+    state = {
+        "item": [source_item.id, float(source_item.stock or 0), source_item.updated_at.isoformat() if source_item.updated_at else None],
+        "stocks": [[row.id, row.warehouse_id, float(row.stock or 0)] for row in stocks],
+        "batches": [[row.id, float(row.qty_received or 0), float(row.qty_remaining or 0), float(row.unit_cost or 0)] for row in batches],
+    }
+    return hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
+
+
+def _find_base_candidate(db: Session, source_item: models.Item, base_unit_id: int):
+    return db.query(models.Item).filter(
+        models.Item.parent_item_id == source_item.id,
+        models.Item.unit_id == base_unit_id,
+        models.Item.is_virtual_variant == True,
+        models.Item.is_active == True,
+    ).first()
+
+
+def _sync_rebased_master_data(
+    db: Session,
+    source: models.Item,
+    base: models.Item,
+    factor: float,
+    prices: Optional[List[schemas.ItemPriceCreate]],
+) -> None:
+    """Copy unit-independent master data and scale unit-dependent prices."""
+    base.category_id = source.category_id
+    base.brand_id = source.brand_id
+    base.description = source.description
+    base.image_path = source.image_path
+    base.ppn_percent = source.ppn_percent
+    base.is_discountable = source.is_discountable
+    base.min_stock = float(source.min_stock or 0) * factor
+    base.profit_margin = (
+        ((float(base.sell_price or 0) - float(base.buy_price or 0)) /
+         float(base.buy_price or 0)) * 100
+        if float(base.buy_price or 0) > 0
+        else 0
+    )
+
+    db.query(models.ItemSupplier).filter(
+        models.ItemSupplier.item_id == base.id
+    ).delete(synchronize_session=False)
+    for detail in source.supplier_details:
+        db.add(models.ItemSupplier(
+            item_id=base.id,
+            supplier_id=detail.supplier_id,
+            buy_price=float(detail.buy_price or 0) / factor,
+            barcode=None,
+            ppn_type=detail.ppn_type,
+            ppn_percent=detail.ppn_percent,
+        ))
+
+    db.query(models.ItemGroupDiscount).filter(
+        models.ItemGroupDiscount.item_id == base.id
+    ).delete(synchronize_session=False)
+    for discount in source.group_discounts:
+        db.add(models.ItemGroupDiscount(
+            item_id=base.id,
+            group_id=discount.group_id,
+            disc1=discount.disc1,
+            disc2=discount.disc2,
+            disc3=discount.disc3,
+            disc4=discount.disc4,
+        ))
+
+    if prices is not None:
+        db.query(models.ItemPrice).filter(
+            models.ItemPrice.item_id == base.id
+        ).delete(synchronize_session=False)
+        for price in prices:
+            db.add(models.ItemPrice(item_id=base.id, **price.model_dump()))
+    elif not base.prices:
+        for price in source.prices:
+            db.add(models.ItemPrice(
+                item_id=base.id,
+                name=price.name,
+                price=float(price.price or 0) / factor,
+                min_qty=(
+                    float(price.min_qty or 0) * factor
+                    if price.name.lower() == "grosir"
+                    else price.min_qty
+                ),
+            ))
+
+
+def _build_rebase_preview(db: Session, data: RebasePayload, current_user: models.User):
+    source = _ensure_source_item(db, data.source_item_id)
+    base_unit = _ensure_child_unit(db, data.base_unit_id)
+    if source.unit_id == base_unit.id:
+        raise HTTPException(400, "Satuan dasar baru harus berbeda dari satuan barang lama")
+    if source.tracks_serial:
+        raise HTTPException(400, "Barang berserial belum dapat diubah satuan dasarnya")
+    factor = float(data.units_per_source)
+    candidate = _find_base_candidate(db, source, base_unit.id)
+    stocks = db.query(models.WarehouseStock, models.Warehouse).join(
+        models.Warehouse, models.Warehouse.id == models.WarehouseStock.warehouse_id
+    ).filter(models.WarehouseStock.item_id == source.id).all()
+    return {
+        "source_item": _serialize_source_item(db, source, current_user),
+        "base_unit": {"id": base_unit.id, "name": base_unit.name, "abbreviation": base_unit.abbreviation},
+        "units_per_source": factor,
+        "base_item": {
+            "existing_item_id": candidate.id if candidate else None,
+            "name": data.base_name or (candidate.name if candidate else f"{source.name} {base_unit.abbreviation or base_unit.name}"),
+            "code": data.base_code or (candidate.code if candidate else f"{source.code}-{(base_unit.abbreviation or 'BASE').upper()}"),
+            "barcode": data.base_barcode if data.base_barcode is not None else (candidate.barcode if candidate else None),
+            "buy_price": round(float(source.buy_price or 0) / factor, 4),
+            "sell_price": round(float(data.base_sell_price) if data.base_sell_price is not None else float(source.sell_price or 0) / factor, 2),
+        },
+        "warehouses": [{
+            "warehouse_id": warehouse.id,
+            "warehouse_name": warehouse.name,
+            "before": round(float(stock.stock or 0), 4),
+            "after": round(float(stock.stock or 0) * factor, 4),
+        } for stock, warehouse in stocks],
+        "total_before": round(float(source.stock or 0), 4),
+        "total_after": round(float(source.stock or 0) * factor, 4),
+        "inventory_value_before": round(sum(float(b.qty_remaining or 0) * float(b.unit_cost or 0) for b in db.query(models.StockBatch).filter(models.StockBatch.item_id == source.id)), 2),
+        "snapshot_token": _rebase_snapshot(db, source),
+    }
+
+
+@router.post("/rebase/preview")
+def preview_rebase(data: RebasePayload, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    return _build_rebase_preview(db, data, current_user)
+
+
+@router.post("/rebase/confirm")
+def confirm_rebase(data: RebasePayload, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    preview = _build_rebase_preview(db, data, current_user)
+    if not data.snapshot_token or data.snapshot_token != preview["snapshot_token"]:
+        raise HTTPException(409, "Stok berubah sejak pratinjau. Muat ulang pratinjau sebelum menyimpan.")
+
+    source = db.query(models.Item).filter(models.Item.id == data.source_item_id).with_for_update().one()
+    factor = float(data.units_per_source)
+    base_unit = db.query(models.Unit).get(data.base_unit_id)
+    base = _find_base_candidate(db, source, base_unit.id)
+    if base:
+        old_base_conversion = db.query(models.UnitConversion).filter(
+            models.UnitConversion.item_id == source.id,
+            models.UnitConversion.child_item_id == base.id,
+            models.UnitConversion.is_active == True,
+        ).first()
+        if old_base_conversion:
+            old_base_conversion.is_active = False
+        base.parent_item_id = None
+        base.is_virtual_variant = False
+        base.conversion_factor_to_parent = 1
+    else:
+        code = _generate_unique_child_code(db, source, base_unit, data.base_code)
+        base = models.Item(
+            code=code,
+            name=data.base_name or f"{source.name} {base_unit.abbreviation or base_unit.name}",
+            category_id=source.category_id,
+            brand_id=source.brand_id,
+            unit_id=base_unit.id,
+            buy_price=float(source.buy_price or 0) / factor,
+            sell_price=float(data.base_sell_price) if data.base_sell_price is not None else float(source.sell_price or 0) / factor,
+            stock=0,
+            min_stock=float(source.min_stock or 0) * factor,
+            description=source.description,
+            barcode=_normalize_text(data.base_barcode) or None,
+            is_virtual_variant=False,
+            is_active=True,
+            tracks_serial=False,
+        )
+        db.add(base)
+        db.flush()
+        _sync_child_barcode(db, base)
+        ensure_item_in_all_warehouses(db, base.id)
+        # Session produksi memakai autoflush=False. Pastikan baris stok nol yang
+        # baru didaftarkan terlihat oleh query pemindahan saldo di bawah agar
+        # pasangan gudang-item tidak dibuat untuk kedua kalinya.
+        db.flush()
+
+    if data.base_name:
+        base.name = _normalize_text(data.base_name)
+    if data.base_barcode is not None:
+        base.barcode = _normalize_text(data.base_barcode) or None
+    if data.base_sell_price is not None:
+        base.sell_price = float(data.base_sell_price)
+    base.buy_price = float(source.buy_price or 0) / factor
+    _sync_rebased_master_data(db, source, base, factor, data.prices)
+
+    source_stock = float(source.stock or 0)
+    base.stock = float(base.stock or 0) + source_stock * factor
+    source.stock = 0
+    for old_stock in db.query(models.WarehouseStock).filter(models.WarehouseStock.item_id == source.id).all():
+        target = db.query(models.WarehouseStock).filter_by(warehouse_id=old_stock.warehouse_id, item_id=base.id).first()
+        if not target:
+            target = models.WarehouseStock(warehouse_id=old_stock.warehouse_id, item_id=base.id, stock=0)
+            db.add(target)
+        target.stock = float(target.stock or 0) + float(old_stock.stock or 0) * factor
+        old_stock.stock = 0
+    for batch in db.query(models.StockBatch).filter(models.StockBatch.item_id == source.id).all():
+        batch.item_id = base.id
+        batch.qty_received = float(batch.qty_received or 0) * factor
+        batch.qty_remaining = float(batch.qty_remaining or 0) * factor
+        batch.unit_cost = float(batch.unit_cost or 0) / factor
+
+    old_conversions = db.query(models.UnitConversion).filter(
+        models.UnitConversion.item_id == source.id,
+        models.UnitConversion.is_active == True,
+    ).all()
+    for conv in old_conversions:
+        child = db.query(models.Item).get(conv.child_item_id) if conv.child_item_id else None
+        conv.item_id = base.id
+        conv.unit_id = base.unit_id
+        conv.conversion_factor = float(conv.conversion_factor or 0) * factor
+        if child:
+            child.parent_item_id = base.id
+            child.conversion_factor_to_parent = conv.conversion_factor
+            child.buy_price = float(base.buy_price or 0) * conv.conversion_factor
+
+    source.parent_item_id = base.id
+    source.conversion_factor_to_parent = factor
+    source.is_virtual_variant = True
+    source_conv = models.UnitConversion(
+        item_id=base.id, child_item_id=source.id, unit_id=base.unit_id,
+        base_unit_id=source.unit_id, conversion_factor=factor,
+        buy_price=source.buy_price, sell_price=source.sell_price, is_active=True,
+    )
+    db.add(source_conv)
+    db.flush()
+    write_audit(db, current_user.id, "UPDATE", "unit_conversions", source_conv.id,
+                f"Satuan dasar {source.name} diubah menjadi {base_unit.name}; 1 {source.unit.name if source.unit else ''} = {factor:g} {base_unit.name}")
+    db.commit()
+    return {"message": "Satuan dasar berhasil diubah", "base_item_id": base.id, "source_variant_id": source.id}
 
 
 def _sync_child_barcode(db: Session, child_item: models.Item):

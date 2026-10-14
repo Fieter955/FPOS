@@ -106,7 +106,7 @@
       }
     </style>
   </head>
-  <body>
+  <body class="inventory-density">
     <div class="app-container">
       <main class="main-content">
         <div class="pg-header">
@@ -198,6 +198,7 @@
               <option value="processing">Sedang Diproses</option>
               <option value="shipping">Dalam Pengiriman</option>
               <option value="partially_received">Diterima Sebagian</option>
+              <option value="disputed">Berselisih</option>
               <option value="completed">Sudah Diproses (Beli)</option>
               <option value="cancelled">Dibatalkan/Ditolak</option>
               <option value="all">Semua Permintaan</option>
@@ -387,6 +388,7 @@
               <option value="processing">Sedang Diproses</option>
               <option value="shipping">Dalam Pengiriman</option>
               <option value="partially_received">Diterima Sebagian</option>
+              <option value="disputed">Berselisih</option>
               <option value="completed">Disetujui Pusat</option>
               <option value="cancelled">Dibatalkan/Ditolak</option>
             </select>
@@ -798,16 +800,28 @@
       }
 
       async function receiveGoods(id) {
-        if (
-          !confirm(
-            "Apakah barang fisik sudah sampai dan sesuai dengan pesanan? Stok akan bertambah setelah Anda melakukan ACC.",
-          )
-        )
-          return;
-
         try {
+          const shipment = await api("GET", `/purchases/${id}`);
+          const items = [];
+          for (const line of shipment.items || []) {
+            const sent = Number(line.qty_received || line.qty || 0);
+            const goodRaw = prompt(`Jumlah BAGUS ${line.item?.name || "Barang"} (dikirim ${sent}):`, String(sent));
+            if (goodRaw === null) return;
+            const good = Number(String(goodRaw).replace(",", "."));
+            const damagedRaw = prompt(`Jumlah RUSAK ${line.item?.name || "Barang"}:`, "0");
+            if (damagedRaw === null) return;
+            const damaged = Number(String(damagedRaw).replace(",", "."));
+            const missing = sent - good - damaged;
+            if (good < 0 || damaged < 0 || missing < 0) throw new Error(`Jumlah penerimaan ${line.item?.name || "barang"} tidak valid`);
+            items.push({item_id:line.item_id, good_qty:good, damaged_qty:damaged,
+              missing_qty:missing, notes:missing||damaged?"Selisih saat penerimaan":null,
+              good_serials:[], damaged_serials:[]});
+          }
+          const hasDifference = items.some(item => item.damaged_qty > 0 || item.missing_qty > 0);
+          const notes = hasDifference ? (prompt("Catatan selisih kiriman:", "Perlu tindak lanjut toko pusat") || "") : "";
+          if (!confirm("Simpan hasil pemeriksaan fisik ini? Stok hanya bertambah sebanyak barang bagus.")) return;
           showLoading("Memproses Penerimaan Barang...");
-          const res = await api("POST", `/purchases/${id}/receive-branch`);
+          const res = await api("POST", `/purchases/${id}/receive-branch`, {items, notes});
           hideLoading();
           showToast(res.message);
           setTimeout(() => location.reload(), 1500);

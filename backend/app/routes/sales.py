@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional
 from datetime import datetime, date
+import json
 import pytz
 
 from ..database import get_db
@@ -409,7 +410,11 @@ def create_sale(
             sell_price=it.sell_price,
             discount=it.discount,
             ppn_percent=line_rates[idx],   # tarif PPN baris ini → dipakai saat retur per-baris
-            total=line_total
+            total=line_total,
+            serials_json=json.dumps(getattr(it, "serials", []), ensure_ascii=False),
+            item_code_snapshot=item.code,
+            item_name_snapshot=item.name,
+            unit_snapshot=item.unit.abbreviation if item.unit else None,
         )
         db.add(sale_item)
         db.flush()
@@ -427,7 +432,7 @@ def create_sale(
             before = get_total_branch_stock(db, current_user.active_branch_id, stock_item.id) + required_qty
         else:
             before = float(stock_item.stock or 0)
-        if current_user.active_branch_id == PUSAT_BRANCH_ID or not gudang_aktif:
+        if not gudang_aktif:
             stock_item.stock -= required_qty
 
         db.add(models.StockMovement(
@@ -437,6 +442,10 @@ def create_sale(
             branch_id=current_user.active_branch_id,
             warehouse_id=gudang_aktif.id if gudang_aktif else None,
             type="out",
+            event_category="sale",
+            direction="out",
+            source_type="sale",
+            source_id=sale.id,
             qty=required_qty,
             qty_before=before,
             qty_after=before - required_qty,
@@ -648,7 +657,7 @@ def cancel_sale(
                 before = get_total_branch_stock(db, obj.branch_id, stock_item.id)
             else:
                 before = float(stock_item.stock or 0)
-            if obj.branch_id == PUSAT_BRANCH_ID or not gudang_aktif:
+            if not gudang_aktif:
                 stock_item.stock += required_qty
 
             if gudang_aktif:
@@ -665,6 +674,10 @@ def cancel_sale(
                 branch_id=obj.branch_id,
                 warehouse_id=gudang_aktif.id if gudang_aktif else None,
                 type="in",
+                event_category="sale_reversal",
+                direction="in",
+                source_type="sale",
+                source_id=obj.id,
                 qty=required_qty,
                 qty_before=before,
                 qty_after=before + required_qty,

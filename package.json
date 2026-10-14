@@ -10,9 +10,11 @@
     "test:master-data": "node --test tests/master-data-loading.test.mjs",
     "test:purchase-draft": "node --test tests/purchase-draft.test.mjs",
     "test:dashboard": "node --test tests/dashboard-categories.test.mjs",
+    "test:inventory-e2e": "playwright test e2e/inventory.spec.mjs",
     "watch": "node build.mjs --watch"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "esbuild": "^0.25.0",
     "html-minifier-terser": "^7.2.0"
   }

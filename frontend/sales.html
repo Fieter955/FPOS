@@ -197,6 +197,8 @@
 
       async function cetakNota(id) {
         try {
+          if (typeof ensureFposLocalDeviceId === "function")
+            await ensureFposLocalDeviceId();
           const result = await api("POST", `/sales/print/${id}`, {});
           showToast(`Struk masuk antrean printer (job #${result.job_id})`);
         } catch (e) {

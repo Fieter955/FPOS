@@ -13,8 +13,8 @@ from pathlib import Path
 
 from ..database import get_db
 from .. import models, schemas
-from ..auth import get_current_user
-from ..permissions import has_permission
+from ..auth import get_current_user, write_audit
+from ..permissions import has_permission, has_role
 from ..services.virtual_units import (
     get_conversion_factor,
     get_effective_buy_price,
@@ -373,6 +373,24 @@ def get_item(item_id: int, db: Session = Depends(get_db), current_user: models.U
 def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     import uuid
 
+    if not item.unit_id:
+        raise HTTPException(400, "Satuan dasar barang wajib dipilih")
+    if abs(float(item.stock or 0)) > 1e-9:
+        raise HTTPException(
+            400,
+            "Stok awal tidak boleh diisi dari Master Barang. Gunakan menu Saldo Awal "
+            "atau impor persediaan agar stok gudang, FIFO, dan jurnal tetap seimbang.",
+        )
+
+    if item.tracks_serial:
+        if not has_role(current_user, "admin"):
+            raise HTTPException(403, "Tipe serial hanya dapat diaktifkan oleh admin")
+        if abs(float(item.stock or 0)) > 1e-9:
+            raise HTTPException(
+                400,
+                "Barang serial baru harus disimpan dengan stok nol. Masukkan stok beserta serial melalui transaksi persediaan.",
+            )
+
     # Ambil data form, kecuali prices dan supplier_ids
     item_data = item.model_dump(exclude={"prices", "supplier_ids", "supplier_settings", "group_discounts"})
 
@@ -466,6 +484,44 @@ def update_item(item_id: int, item: schemas.ItemUpdate, db: Session = Depends(ge
     
     data = item.model_dump(exclude_unset=True, exclude={"prices", "supplier_ids", "supplier_settings", "group_discounts"})
 
+    effective_unit_id = data.get("unit_id", obj.unit_id)
+    if not effective_unit_id:
+        raise HTTPException(400, "Satuan dasar barang wajib dipilih")
+    if "unit_id" in data and data["unit_id"] != obj.unit_id:
+        has_history = db.query(models.StockMovement.id).filter(
+            models.StockMovement.item_id == obj.id
+        ).first()
+        if has_history:
+            raise HTTPException(
+                409,
+                "Barang sudah memiliki riwayat stok. Tambahkan satuan baru beserta rasio melalui menu Multi Satuan agar FIFO dan dokumen lama tetap benar.",
+            )
+
+    requested_serial = data.get("tracks_serial")
+    if requested_serial is not None and bool(requested_serial) != bool(obj.tracks_serial):
+        if not has_role(current_user, "admin"):
+            raise HTTPException(403, "Tipe serial hanya dapat diubah oleh admin")
+        if requested_serial:
+            has_stock = db.query(models.WarehouseStock.id).filter(
+                models.WarehouseStock.item_id == obj.id,
+                func.abs(models.WarehouseStock.stock) > 1e-9,
+            ).first()
+            if has_stock:
+                raise HTTPException(
+                    409,
+                    "Barang sudah memiliki stok. Aktifkan serial melalui wizard Master Barang agar seluruh serial gudang dicatat.",
+                )
+        else:
+            active_serial = db.query(models.ItemSerial.id).filter(
+                models.ItemSerial.item_id == obj.id,
+                models.ItemSerial.status.in_({"in_stock", "quarantine", "in_transit"}),
+            ).first()
+            if active_serial:
+                raise HTTPException(
+                    409,
+                    "Serial masih berada dalam stok/transit; keluarkan seluruh stok dahulu",
+                )
+
     need_barcode_gen = False
     if data.get("barcode") == "AUTO":
         need_barcode_gen = True
@@ -494,6 +550,8 @@ def update_item(item_id: int, item: schemas.ItemUpdate, db: Session = Depends(ge
                 changed_by=current_user.id
             ))
 
+    old_name = obj.name
+    old_unit_id = obj.unit_id
     for k, v in data.items(): 
         setattr(obj, k, v)
         
@@ -542,6 +600,11 @@ def update_item(item_id: int, item: schemas.ItemUpdate, db: Session = Depends(ge
         for gd in item.group_discounts:
             db.add(models.ItemGroupDiscount(item_id=item_id, **gd.model_dump()))
 
+    if old_name != obj.name or old_unit_id != obj.unit_id:
+        write_audit(
+            db, current_user.id, "UPDATE", "items", obj.id,
+            f"nama: {old_name} -> {obj.name}; unit_id: {old_unit_id} -> {obj.unit_id}",
+        )
     db.commit()
     db.refresh(obj)
     return obj

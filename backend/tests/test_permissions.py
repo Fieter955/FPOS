@@ -137,6 +137,14 @@ class PermissionServiceTests(unittest.TestCase):
             ("purchase.payable", "update"),
         )
         self.assertEqual(
+            request_permission("/api/returns/sales/5/cancel", "POST"),
+            ("sales.return", "delete"),
+        )
+        self.assertEqual(
+            request_permission("/api/returns/purchases/5/cancel", "POST"),
+            ("purchase.return", "delete"),
+        )
+        self.assertEqual(
             request_permission("/api/employees/roles", "GET"),
             ("settings.user_management", "access"),
         )
@@ -172,6 +180,7 @@ class PermissionServiceTests(unittest.TestCase):
         self.assertIsNone(request_permission("/api/print/agent/claim", "POST"))
         self.assertIsNone(request_permission("/api/inventory/documents", "POST"))
         self.assertIsNone(request_permission("/api/inventory/documents/1/cancel", "POST"))
+        self.assertIsNone(request_permission("/api/serials/options", "GET"))
         self.assertEqual(
             request_permission("/api/license/developer/kill-switch", "POST"),
             ("__admin__", "access"),

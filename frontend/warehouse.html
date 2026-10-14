@@ -5,11 +5,12 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Multi Gudang - FPOS</title>
     <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/serial-picker.css" />
     <style>
       /* Styling khusus baris transfer multi-barang */
       .tf-row {
         display: grid;
-        grid-template-columns: 2fr 1fr 40px;
+        grid-template-columns: minmax(0, 2fr) minmax(110px, 1fr) auto 40px;
         gap: 10px;
         align-items: end;
         margin-bottom: 10px;
@@ -24,9 +25,13 @@
         margin-bottom: 4px;
         color: var(--text-muted);
       }
+      @media (max-width: 640px) {
+        .tf-row { grid-template-columns: minmax(0, 1fr) 90px; }
+        .tf-row .tf-serial-btn { grid-column: 1 / -1; min-height: 44px; }
+      }
     </style>
   </head>
-  <body>
+  <body class="inventory-density keyboard-workflow">
     <div class="app-container">
       <main class="main-content">
         <button
@@ -65,7 +70,7 @@
           </div>
         </div>
 
-        <div
+        <div class="inventory-section-tabs"
           style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap"
         >
           <button
@@ -179,6 +184,7 @@
                   <th>Ke</th>
                   <th>Jml Item</th>
                   <th>Status</th>
+                  <th>Aksi</th>
                 </tr>
               </thead>
               <tbody id="tblTransfer"></tbody>
@@ -543,8 +549,22 @@
       </div>
     </div>
 
+    <div class="modal-overlay" id="mCancelTransfer">
+      <div class="modal-box" style="max-width:480px">
+        <div class="modal-hdr"><h2>Batalkan Transfer</h2><button class="btn-x" onclick="closeModal('mCancelTransfer')">×</button></div>
+        <p id="cancelTransferInfo" style="margin:0 0 12px;color:var(--text-muted)"></p>
+        <div class="input-group"><label>Alasan pembatalan *</label><textarea id="cancelTransferReason" class="input-control" rows="3" placeholder="Minimal 3 karakter"></textarea></div>
+        <div class="row2" style="margin-top:12px"><button class="btn" onclick="closeModal('mCancelTransfer')">Kembali</button><button class="btn" style="background:#dc2626;color:#fff" onclick="confirmCancelTransfer()">Batalkan Transfer</button></div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="mTransferDetail">
+      <div class="modal-box wide" style="max-width:900px"><div class="modal-hdr"><h2 id="transferDetailTitle">Detail Transfer</h2><button class="btn-x" onclick="closeModal('mTransferDetail')">×</button></div><div id="transferDetailBody"></div><div id="transferReceiptActions" style="margin-top:14px"></div></div>
+    </div>
+
     <script src="/js/api.js"></script>
     <script src="/js/theme.js"></script>
+    <script src="/js/serial-picker.js"></script>
     <script>
       requireAuth();
       let allGudang = [],
@@ -552,6 +572,8 @@
         allBranches = [];
       let tfRowCounter = 0;
       let currentFromStock = [];
+      let pendingCancelTransfer = null;
+      let transferHistory = [];
 
       const ON =
         "padding:8px 20px;border-radius:100px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;cursor:pointer;font-family:inherit";
@@ -561,6 +583,7 @@
       function formatNum(n) {
         return new Intl.NumberFormat("id-ID").format(n || 0);
       }
+      function formatRp(n){return new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0}).format(Number(n)||0)}
 
       // 👇 FITUR BARU: MENCEGAH INPUT BARANG GANDA 👇
       function cegahBarangGanda(selectElement) {
@@ -702,7 +725,7 @@
       async function init() {
         try {
           // Mengambil semua data gudang lintas cabang untuk keperluan filter mutasi dan transfer
-          allGudang = await api("GET", "/warehouses/?all_branches=true");
+        allGudang = await api("GET", "/warehouses/?all_branches=true");
 
           // Menggunakan data yang sama untuk dropdown transfer agar tidak melakukan fetch ulang
           const gudangUntukTransfer = allGudang;
@@ -720,16 +743,11 @@
           selTo.innerHTML =
             '<option value="">-- Pilih Gudang Tujuan --</option>';
 
-          gudangUntukTransfer.forEach((g) => {
-            selFrom.insertAdjacentHTML(
-              "beforeend",
-              `<option value="${g.id}">${g.name} (${g.branch_name})</option>`,
-            );
-            selTo.insertAdjacentHTML(
-              "beforeend",
-              `<option value="${g.id}">${g.name} (${g.branch_name})</option>`,
-            );
-          });
+          const activeBranchId = Number(localStorage.getItem("active_branch_id") || 0);
+          const ordered = [...gudangUntukTransfer].sort((a,b)=>(a.branch_id===activeBranchId?0:1)-(b.branch_id===activeBranchId?0:1)||(b.is_default?1:0)-(a.is_default?1:0)||String(a.branch_name).localeCompare(String(b.branch_name))||String(a.name).localeCompare(String(b.name)));
+          const groupedOptions = (rows) => Object.values(rows.reduce((groups,g)=>{(groups[g.branch_id] ||= {name:g.branch_name,rows:[]}).rows.push(g);return groups},{})).map(group=>`<optgroup label="${escapeHtml(group.name)}">${group.rows.map(g=>`<option value="${g.id}">${g.is_default?"Etalase · ":""}${escapeHtml(g.name)}</option>`).join("")}</optgroup>`).join("");
+          selFrom.innerHTML='<option value="">-- Pilih Gudang Asal --</option>'+groupedOptions(ordered.filter(g=>g.branch_id===activeBranchId));
+          selTo.innerHTML='<option value="">-- Pilih Gudang Tujuan --</option>'+groupedOptions(ordered);
 
           // Inisialisasi dropdown Filter Stok per Gudang
           const selFilter = document.getElementById("filterGudang");
@@ -896,6 +914,10 @@
 
       async function onFromWarehouseChange() {
         const fromId = document.getElementById("tfFrom").value;
+        document.querySelectorAll(".tf-row").forEach((row) => {
+          row._serials = [];
+          updateTransferSerialButton(row);
+        });
         if (!fromId) {
           currentFromStock = [];
           rebuildAllDropdowns();
@@ -970,17 +992,18 @@
         const html = `
     <div class="tf-row" id="tfRow_${rowId}">
       <div>
-        <label>Nama Barang</label>
-        <select class="input-control tf-item-select" onchange="cegahBarangGanda(this); updateStokInfoRowLocal(${rowId})" ${isDisabled}>
+        <label>Nama Barang</label><input class="input-control tf-item-filter" style="margin-bottom:5px" placeholder="Ketik untuk menyaring barang..." oninput="filterTransferOptions(this)">
+        <select class="input-control tf-item-select" onchange="cegahBarangGanda(this); resetTransferSerials(${rowId}); updateStokInfoRowLocal(${rowId})" ${isDisabled}>
           ${optionsHtml}
         </select>
         <div class="tf-stok-info" style="font-size:12px;color:var(--text-muted);margin-top:4px;height:16px;"></div>
       </div>
       <div>
         <label>Jumlah Transfer</label>
-        <input type="text" class="input-control tf-item-qty" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" value="1" ${isDisabled}>
+        <input type="text" class="input-control tf-item-qty" inputmode="decimal" data-input-desimal data-desimal-maks="4" data-min="0.0001" value="1" oninput="updateTransferSerialButton(${rowId})" ${isDisabled}>
         <div style="height:16px; margin-top:4px;"></div>
       </div>
+      <button type="button" class="btn tf-serial-btn" style="display:none" onclick="pickTransferSerials(${rowId})">Serial 0/0</button>
       <button class="btn" style="background:rgba(239,68,68,0.15);color:#ef4444;height:42px;padding:0;border:none;font-weight:bold;margin-bottom:20px;" onclick="removeTransferRow(${rowId})">✕</button>
     </div>
   `;
@@ -992,6 +1015,37 @@
       function removeTransferRow(rowId) {
         const row = document.getElementById(`tfRow_${rowId}`);
         if (row) row.remove();
+      }
+
+      function filterTransferOptions(input){const row=input.closest(".tf-row"),select=row.querySelector(".tf-item-select"),q=input.value.trim().toLowerCase();[...select.options].forEach((option,index)=>{if(index===0)return;option.hidden=q&&!option.textContent.toLowerCase().includes(q)});if(q){const first=[...select.options].find((option,index)=>index>0&&!option.hidden&&!option.disabled);if(first){select.value=first.value;select.dispatchEvent(new Event("change"))}}}
+
+      function resetTransferSerials(rowId) {
+        const row = document.getElementById(`tfRow_${rowId}`);
+        if (row) row._serials = [];
+      }
+
+      function updateTransferSerialButton(rowId) {
+        const row = rowId instanceof Element ? rowId : document.getElementById(`tfRow_${rowId}`);
+        if (!row) return;
+        const item = allItems.find((value) => value.id == row.querySelector(".tf-item-select").value);
+        const button = row.querySelector(".tf-serial-btn");
+        if (!item || !SerialPicker.isTracked(item, allItems)) {
+          row._serials = [];
+          button.style.display = "none";
+          return;
+        }
+        const needed = SerialPicker.requiredQuantity(item, parseDesimal(row.querySelector(".tf-item-qty")), allItems);
+        button.style.display = "inline-flex";
+        button.textContent = SerialPicker.buttonText(row._serials || [], needed);
+        button.classList.toggle("complete", (row._serials || []).length === Math.round(needed));
+        button.classList.toggle("invalid", (row._serials || []).length !== Math.round(needed));
+      }
+
+      function pickTransferSerials(rowId) {
+        const row = document.getElementById(`tfRow_${rowId}`);
+        const item = allItems.find((value) => value.id == row?.querySelector(".tf-item-select").value);
+        if (!row || !item) return showToast("Pilih barang terlebih dahulu", "error");
+        SerialPicker.open({purpose:"warehouse_transfer", item, itemId:item.id, quantity:parseDesimal(row.querySelector(".tf-item-qty")), warehouseId:Number(document.getElementById("tfFrom").value), initialSerials:row._serials || [], onSave(serials){row._serials=serials;updateTransferSerialButton(rowId);}});
       }
 
       function updateStokInfoRowLocal(rowId) {
@@ -1041,6 +1095,7 @@
 
         infoEl.textContent = `Tersedia di Rak: ${formatNum(stokTersedia)}`;
         infoEl.style.color = stokTersedia == 0 ? "#ef4444" : "#10b981";
+        updateTransferSerialButton(rowId);
       }
 
       async function doTransfer() {
@@ -1061,7 +1116,10 @@
           const item_id = parseInt(row.querySelector(".tf-item-select").value);
           const qty = parseDesimal(row.querySelector(".tf-item-qty"));
           if (item_id && qty > 0) {
-            transferItems.push({ item_id: item_id, qty: qty });
+            const item = allItems.find((value) => value.id === item_id);
+            const serialError = SerialPicker.validate(item, qty, row._serials || [], allItems);
+            if (serialError) return showToast(serialError, "error");
+            transferItems.push({ item_id: item_id, qty: qty, serials: row._serials || [] });
           }
         }
 
@@ -1072,6 +1130,8 @@
           );
           return;
         }
+        const duplicateSerial = SerialPicker.validateUnique(transferItems.map((item) => item.serials));
+        if (duplicateSerial) return showToast(duplicateSerial, "error");
         const d = new Date();
         const localDate =
           d.getFullYear() +
@@ -1103,6 +1163,7 @@
       async function loadTransfer() {
         try {
           const d = await api("GET", "/warehouses/transfers/all");
+          transferHistory = d;
           document.getElementById("tblTransfer").innerHTML = d.length
             ? d
                 .map(
@@ -1112,14 +1173,40 @@
       <td style="color:var(--text-muted)">${t.from_warehouse || "-"}</td>
       <td style="color:var(--text-muted)">${t.to_warehouse || "-"}</td>
       <td style="font-size:16px;font-weight:800">${formatNum(t.items_count)} Jenis</td>
-      <td><span class="bl" style="background:rgba(16,185,129,0.15);color:#10b981;padding:4px 8px;border-radius:6px;font-weight:bold;font-size:12px">✓ Selesai</span></td>
+      <td>${t.status === "cancelled" ? '<span class="badge bd">Dibatalkan</span>' : '<span class="badge bg">✓ Selesai</span>'}${t.cancellation_reason ? `<br><small title="${escapeHtml(t.cancellation_reason)}">${escapeHtml(t.cancellation_reason)}</small>` : ""}</td>
+      <td>${t.can_cancel ? `<button class="btn" style="padding:5px 9px;color:#dc2626" onclick="openCancelTransfer(${t.id})">Batalkan</button>` : "—"}</td>
     </tr>`,
                 )
                 .join("")
-            : '<tr><td colspan=\"6\" style=\"text-align:center;padding:24px;color:var(--text-muted)\">Belum ada riwayat transfer</td></tr>';
+            : '<tr><td colspan=\"7\" style=\"text-align:center;padding:24px;color:var(--text-muted)\">Belum ada riwayat transfer</td></tr>';
         } catch (ex) {
           showToast(ex.message, "error");
         }
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[char]);
+      }
+
+      function openCancelTransfer(id) {
+        pendingCancelTransfer = transferHistory.find((row) => row.id === id);
+        if (!pendingCancelTransfer) return;
+        document.getElementById("cancelTransferInfo").textContent = `${pendingCancelTransfer.number}: ${pendingCancelTransfer.from_warehouse} → ${pendingCancelTransfer.to_warehouse}`;
+        document.getElementById("cancelTransferReason").value = "";
+        openModal("mCancelTransfer");
+      }
+
+      async function confirmCancelTransfer() {
+        const reason = document.getElementById("cancelTransferReason").value.trim();
+        if (!pendingCancelTransfer || reason.length < 3) return showToast("Alasan pembatalan minimal 3 karakter", "error");
+        if (!(await showConfirm(`Batalkan transfer ${pendingCancelTransfer.number}? Stok dan jurnal akan dibalik.`))) return;
+        try {
+          showLoading("Membatalkan transfer...");
+          await api("POST", `/warehouses/transfers/${pendingCancelTransfer.id}/cancel`, {reason});
+          hideLoading(); closeModal("mCancelTransfer"); pendingCancelTransfer = null;
+          await Promise.all([loadTransfer(), loadInventorySummary(), document.getElementById("filterGudang").value ? loadStokGudang() : Promise.resolve()]);
+          showToast("Transfer berhasil dibatalkan ✓");
+        } catch (error) { hideLoading(); showToast(error.message, "error"); }
       }
 
       async function loadStokGudang() {
@@ -1170,6 +1257,15 @@
           showToast(e.message, "error");
         }
       }
+
+      function transferStatusBadge(status){const labels={completed:"SELESAI",confirmed:"SELESAI",shipping:"DIKIRIM",partially_received:"DITERIMA SEBAGIAN",disputed:"BERSELISIH",received:"DITERIMA",cancelled:"DIBATALKAN"};const cls=status==="cancelled"?"bd":status==="received"||status==="completed"||status==="confirmed"?"bg":"bo";return `<span class="badge ${cls}">${labels[status]||String(status).toUpperCase()}</span>`}
+
+      async function loadTransfer(){try{const d=await api("GET","/warehouses/transfers/all");transferHistory=d;document.getElementById("tblTransfer").innerHTML=d.length?d.map(t=>`<tr><td style="font-family:monospace;color:var(--primary)">${escapeHtml(t.number||"-")}</td><td>${escapeHtml(t.date)}</td><td><b>${escapeHtml(t.from_branch||"")}</b><br><small>${escapeHtml(t.from_warehouse||"-")}</small></td><td><b>${escapeHtml(t.to_branch||"")}</b><br><small>${escapeHtml(t.to_warehouse||"-")}</small></td><td>${formatNum(t.items_count)} Jenis</td><td>${transferStatusBadge(t.status)}${t.cancellation_reason?`<br><small>${escapeHtml(t.cancellation_reason)}</small>`:""}</td><td><button class="btn" onclick="openTransferDetail(${t.id})">Detail</button>${t.can_cancel?` <button class="btn" style="color:#dc2626" onclick="openCancelTransfer(${t.id})">Batalkan</button>`:""}</td></tr>`).join(""):'<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada riwayat transfer</td></tr>'}catch(ex){showToast(ex.message,"error")}}
+
+      let activeTransferDetail=null;
+      async function openTransferDetail(id){try{activeTransferDetail=await api("GET",`/warehouses/transfers/${id}`);const t=activeTransferDetail;document.getElementById("transferDetailTitle").textContent=t.number;document.getElementById("transferDetailBody").innerHTML=`<div class="hint-box"><b>${escapeHtml(t.from_branch)} · ${escapeHtml(t.from_warehouse)}</b> → <b>${escapeHtml(t.to_branch)} · ${escapeHtml(t.to_warehouse)}</b><br>${transferStatusBadge(t.status)} · ${escapeHtml(t.date)}<br>${escapeHtml(t.notes||"Tanpa keterangan")}${t.dispute_notes?`<br><b>Catatan selisih:</b> ${escapeHtml(t.dispute_notes)}`:""}</div><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Barang</th><th>Dikirim</th><th>Bagus</th><th>Rusak</th><th>Kurang</th><th>Nilai</th></tr></thead><tbody>${t.items.map(i=>`<tr><td><b>${escapeHtml(i.name)}</b><br><small>${escapeHtml(i.code)}</small></td><td>${formatNum(i.qty_sent)} ${escapeHtml(i.unit||"")}</td><td>${formatNum(i.qty_received)}</td><td>${formatNum(i.qty_damaged)}</td><td>${formatNum(i.qty_missing)}</td><td>${formatRp(i.total_cost)}</td></tr>`).join("")}</tbody></table></div>`;document.getElementById("transferReceiptActions").innerHTML=t.can_receive?'<button class="btn btn-primary" onclick="receiveTransferDetail()">Catat Hasil Penerimaan</button>':"";openModal("mTransferDetail")}catch(e){showToast(e.message,"error")}}
+
+      async function receiveTransferDetail(){const t=activeTransferDetail,items=[];for(const line of t.items){const remaining=line.qty_sent-line.qty_received-line.qty_damaged;const goodRaw=prompt(`Jumlah BAGUS ${line.name} (sisa kiriman ${formatNum(remaining)}):`,String(Math.max(0,remaining-line.qty_missing)));if(goodRaw===null)return;const good=Number(goodRaw.replace(",","."));const damagedRaw=prompt(`Jumlah RUSAK ${line.name}:`,"0");if(damagedRaw===null)return;const damaged=Number(damagedRaw.replace(",","."));const missing=remaining-good-damaged;if(good<0||damaged<0||missing<0)return showToast(`Jumlah ${line.name} tidak valid`,"error");items.push({item_id:line.item_id,good_qty:good,damaged_qty:damaged,missing_qty:missing,notes:missing||damaged?"Selisih saat penerimaan":null,good_serials:[],damaged_serials:[]})}const notes=items.some(i=>i.missing_qty||i.damaged_qty)?prompt("Catatan selisih kiriman:","Perlu tindak lanjut pengirim")||"":"";try{await api("POST",`/warehouses/transfers/${t.id}/receive`,{items,notes});showToast("Hasil penerimaan berhasil dicatat","success");closeModal("mTransferDetail");loadTransfer()}catch(e){showToast(e.message,"error")}}
 
       init().then(() =>
         setupRoutedTabs({

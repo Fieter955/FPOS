@@ -222,6 +222,9 @@
               <button class="btn btn-primary" onclick="addDraftRow()">
                 Tambah Baris
               </button>
+              <button class="btn" id="btnOpenRebase" onclick="toggleRebasePanel()" disabled>
+                Ubah Satuan Dasar
+              </button>
             </div>
             <div class="summary-grid" id="sourceSummaryGrid">
               <div class="summary-box">
@@ -236,6 +239,29 @@
               3. isi satuan turunan di tabel,
               4. harga HPP dan stok turunan dihitung otomatis dari induk,
               5. penjualan barang turunan akan memotong stok induk secara realtime.
+            </div>
+            <div id="rebasePanel" class="hint-strip" style="display:none; margin-top:12px">
+              <strong>Ubah satuan stok ke satuan terkecil</strong>
+              <div class="row2" style="margin-top:10px">
+                <div class="input-group">
+                  <label>Satuan dasar baru</label>
+                  <select id="rebaseUnit" class="input-control" onchange="syncRebaseSuggestion()"></select>
+                </div>
+                <div class="input-group">
+                  <label id="rebaseFactorLabel">Isi per satuan lama</label>
+                  <input id="rebaseFactor" class="input-control" type="number" min="0.0001" step="any" value="1" />
+                </div>
+              </div>
+              <div class="row2">
+                <div class="input-group"><label>Nama SKU dasar</label><input id="rebaseName" class="input-control" /></div>
+                <div class="input-group"><label>Kode SKU dasar</label><input id="rebaseCode" class="input-control" /></div>
+              </div>
+              <div class="row2">
+                <div class="input-group"><label>Barcode SKU dasar (opsional)</label><input id="rebaseBarcode" class="input-control" /></div>
+                <div class="input-group"><label>Harga jual satuan dasar</label><input id="rebaseSell" class="input-control" type="number" min="0" step="any" /></div>
+              </div>
+              <button class="btn btn-primary" onclick="previewRebase()">Pratinjau Perubahan</button>
+              <div id="rebasePreview" style="display:none; margin-top:12px"></div>
             </div>
           </section>
 
@@ -294,6 +320,7 @@
       let searchResults = [];
       let searchIndex = -1;
       let rowSeq = 0;
+      let rebaseSnapshot = null;
 
       function roundNum(val, digits = 4) {
         const factor = 10 ** digits;
@@ -430,6 +457,8 @@
           return;
         }
 
+        document.getElementById("btnOpenRebase").disabled = false;
+
         title.textContent = `${sourceItem.name} | ${sourceItem.code}`;
         status.textContent = `${sourceItem.name} (${sourceItem.unit_abbreviation || sourceItem.unit_name || "-"})`;
         grid.innerHTML = `
@@ -454,6 +483,71 @@
             <div class="v">${fmtMoney(sourceItem.sell_price)}</div>
           </div>
         `;
+      }
+
+      function toggleRebasePanel() {
+        const panel = document.getElementById("rebasePanel");
+        panel.style.display = panel.style.display === "none" ? "block" : "none";
+        if (panel.style.display === "block") {
+          const select = document.getElementById("rebaseUnit");
+          select.innerHTML = `<option value="">Pilih satuan dasar</option>` + units
+            .filter((unit) => unit.id !== sourceItem.unit_id)
+            .map((unit) => `<option value="${unit.id}">${esc(getUnitLabel(unit.id))}</option>`).join("");
+          rebaseSnapshot = null;
+          document.getElementById("rebasePreview").style.display = "none";
+        }
+      }
+
+      function syncRebaseSuggestion() {
+        const unit = getUnit(document.getElementById("rebaseUnit").value);
+        if (!unit || !sourceItem) return;
+        const suffix = unit.abbreviation || unit.name;
+        document.getElementById("rebaseName").value = `${sourceItem.name} ${suffix}`;
+        document.getElementById("rebaseCode").value = `${sourceItem.code}-${String(suffix).toUpperCase()}`;
+        document.getElementById("rebaseFactorLabel").textContent = `Jumlah ${suffix} dalam 1 ${sourceItem.unit_abbreviation || sourceItem.unit_name}`;
+      }
+
+      function rebasePayload(withSnapshot = false) {
+        const factor = Number(document.getElementById("rebaseFactor").value || 0);
+        const sellText = document.getElementById("rebaseSell").value;
+        return {
+          source_item_id: sourceItem.id,
+          base_unit_id: Number(document.getElementById("rebaseUnit").value || 0),
+          units_per_source: factor,
+          base_name: document.getElementById("rebaseName").value.trim() || null,
+          base_code: document.getElementById("rebaseCode").value.trim() || null,
+          base_barcode: document.getElementById("rebaseBarcode").value.trim() || null,
+          base_sell_price: sellText === "" ? null : Number(sellText),
+          snapshot_token: withSnapshot ? rebaseSnapshot : null,
+        };
+      }
+
+      async function previewRebase() {
+        const payload = rebasePayload(false);
+        if (!payload.base_unit_id || payload.units_per_source <= 0) return showToast("Pilih satuan dasar dan isi konversi yang benar.", "error");
+        try {
+          const data = await api("POST", "/unit-conversion/rebase/preview", payload);
+          rebaseSnapshot = data.snapshot_token;
+          document.getElementById("rebaseSell").value = data.base_item.sell_price;
+          const rowsHtml = (data.warehouses || []).map((row) => `<tr><td>${esc(row.warehouse_name)}</td><td>${fmtQty(row.before)} ${esc(sourceItem.unit_abbreviation)}</td><td>${fmtQty(row.after)} ${esc(data.base_unit.abbreviation || data.base_unit.name)}</td></tr>`).join("");
+          const wrap = document.getElementById("rebasePreview");
+          wrap.style.display = "block";
+          wrap.innerHTML = `<div><b>1 ${esc(sourceItem.unit_abbreviation || sourceItem.unit_name)} = ${fmtQty(data.units_per_source)} ${esc(data.base_unit.abbreviation || data.base_unit.name)}</b></div>
+            <div style="margin:6px 0">HPP dasar: ${fmtMoney(data.base_item.buy_price)} · Nilai persediaan tetap ${fmtMoney(data.inventory_value_before)}</div>
+            <table class="tbl"><thead><tr><th>Gudang</th><th>Sebelum</th><th>Sesudah</th></tr></thead><tbody>${rowsHtml || '<tr><td colspan="3">Belum ada saldo gudang</td></tr>'}</tbody></table>
+            <button class="btn btn-primary" style="margin-top:10px" onclick="confirmRebase()">Konfirmasi dan Ubah</button>`;
+        } catch (err) { showToast(err.message, "error"); }
+      }
+
+      async function confirmRebase() {
+        if (!rebaseSnapshot) return showToast("Buat pratinjau terlebih dahulu.", "error");
+        if (!(await showConfirm("Ubah satuan dasar dan konversi seluruh saldo aktif sesuai pratinjau?"))) return;
+        try {
+          const result = await api("POST", "/unit-conversion/rebase/confirm", rebasePayload(true));
+          showToast(result.message, "success");
+          await selectSourceItem(result.base_item_id);
+          document.getElementById("rebasePanel").style.display = "none";
+        } catch (err) { showToast(err.message, "error"); }
       }
 
       function renderSearchResults() {

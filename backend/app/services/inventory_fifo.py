@@ -328,6 +328,7 @@ def transfer_batches_with_lineage(
     from_warehouse_id: int,
     to_warehouse_id: int,
     qty: float,
+    destination_available: bool = True,
 ):
     """Transfer FIFO and return (source batch, destination batch, qty, cost)."""
     allocs = consume_fifo(db, item_id=item_id, warehouse_id=from_warehouse_id, qty=qty)
@@ -337,13 +338,16 @@ def transfer_batches_with_lineage(
             db,
             item_id=item_id,
             warehouse_id=to_warehouse_id,
-            qty=moved_qty,
+            qty=moved_qty if destination_available else 0,
             unit_cost=cost,
             received_date=source.received_date,
             supplier_id=source.supplier_id,
             purchase_item_id=source.purchase_item_id,
             source_inventory_line_id=source.source_inventory_line_id,
         )
+        # qty_received describes the original layer; qty_remaining is the part
+        # physically available at destination. During shipping it stays zero.
+        destination.qty_received = float(moved_qty)
         db.flush()
         result.append((source, destination, float(moved_qty), float(cost or 0)))
     return result

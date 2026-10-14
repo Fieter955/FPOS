@@ -93,7 +93,15 @@ def get_dashboard_data(db: Session = Depends(get_db), current_user: models.User 
 
     # Satu sumber data dengan tab Persediaan > Stok Menipis agar jumlah dan
     # rincian barang yang terlihat pengguna selalu konsisten.
-    low_stock_items = get_low_stock_items(db, current_user.active_branch_id)
+    default_warehouse = db.query(models.Warehouse).filter(
+        models.Warehouse.branch_id == current_user.active_branch_id,
+        models.Warehouse.is_active == True,
+    ).order_by(models.Warehouse.is_default.desc(), models.Warehouse.name).first()
+    low_stock_items = get_low_stock_items(
+        db, current_user.active_branch_id,
+        warehouse_id=default_warehouse.id if default_warehouse else None,
+        per_warehouse=bool(default_warehouse),
+    )
 
     # Top 5 Produk Terlaris Bulan Ini (Filter Cabang)
     top_items_raw = get_query(db, models.Sale, current_user).join(

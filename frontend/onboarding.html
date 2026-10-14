@@ -451,29 +451,6 @@
               Buat Standar
             </button>
           </div>
-          <div class="onboard-card">
-            <h3 style="margin: 0 0 10px">🎮 Coba-coba (Demo)</h3>
-            <p
-              style="
-                color: var(--text-muted);
-                font-size: 13px;
-                margin-bottom: 16px;
-              "
-            >
-              Isi aplikasi dengan data contoh untuk sekadar tes fitur.
-            </p>
-            <button
-              onclick="buatDemo()"
-              class="btn"
-              style="
-                width: 100%;
-                background: var(--bg-color);
-                border: 1px solid var(--border-color);
-              "
-            >
-              Generate Data Demo
-            </button>
-          </div>
         </div>
 
         <div style="text-align: right; margin-top: 30px">
@@ -1294,25 +1271,6 @@
         } catch (e) {
           hideLoading();
           showToast(e.message, "error");
-        }
-      }
-
-      async function buatDemo() {
-        if (
-          !(await showConfirm(
-            "Buat data demo?\n\nData barang dan transaksi contoh akan ditambahkan ke sistem.",
-          ))
-        )
-          return;
-        try {
-          showLoading("Menyusun data demo...");
-          await api("POST", "/onboarding/create-demo");
-          hideLoading();
-          showToast("Data demo berhasil dibuat ✓");
-          goToStep(2);
-        } catch (ex) {
-          hideLoading();
-          showToast(ex.message, "error");
         }
       }
 

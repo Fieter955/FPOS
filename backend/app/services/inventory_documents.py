@@ -24,6 +24,7 @@ from ..routes.accounting import (
 from .inventory_fifo import EPS, add_batch, consume_fifo, total_remaining
 from .virtual_units import get_conversion_factor, get_stock_source_item, is_virtual_variant
 from .serials import receive_serials, reverse_reference_serials, transition_serials
+from .stok_gudang import ubah_stok_gudang
 
 WITA = pytz.timezone("Asia/Makassar")
 PUSAT_BRANCH_ID = 1
@@ -94,14 +95,14 @@ def suggested_inbound_cost(db: Session, warehouse_id: int, item: models.Item) ->
         models.InventoryReconciliationBatchAction.id.is_(None),
     ).order_by(models.StockBatch.received_date.desc(), models.StockBatch.id.desc()).first()
     if batch:
-        return float(batch.unit_cost or 0), "batch_transaksi_terakhir"
+        return float(batch.unit_cost or 0), "Biaya penerimaan terbaru"
     batch = db.query(models.StockBatch).filter(
         models.StockBatch.warehouse_id == warehouse_id,
         models.StockBatch.item_id == item.id,
     ).order_by(models.StockBatch.received_date.desc(), models.StockBatch.id.desc()).first()
     if batch:
-        return float(batch.unit_cost or 0), "batch_rekonsiliasi_terakhir"
-    return float(item.buy_price or 0), "harga_master_fallback"
+        return float(batch.unit_cost or 0), "Biaya rekonsiliasi terbaru"
+    return float(item.buy_price or 0), "Harga modal master (cadangan)"
 
 
 def _warehouse_stock_row(db: Session, warehouse_id: int, item_id: int):
@@ -135,15 +136,9 @@ def branch_stock(db: Session, branch_id: int, item_id: int) -> float:
 
 
 def _change_stock(db: Session, warehouse_id: int, item: models.Item, delta: float) -> None:
-    row = _warehouse_stock_row(db, warehouse_id, item.id)
-    if not row:
-        row = models.WarehouseStock(warehouse_id=warehouse_id, item_id=item.id, stock=0)
-        db.add(row)
-        db.flush()
-    row.stock = float(row.stock or 0) + float(delta)
-    warehouse = db.query(models.Warehouse).get(warehouse_id)
-    if not warehouse or warehouse.branch_id == PUSAT_BRANCH_ID:
-        item.stock = float(item.stock or 0) + float(delta)
+    ubah_stok_gudang(
+        db, warehouse_id=warehouse_id, item_id=item.id, delta=delta
+    )
 
 
 def _next_number(db: Session, doc_type: str, branch_id: int, tx_date: date) -> str:
@@ -316,19 +311,12 @@ def create_document(
         if data.type == "stock_opname":
             suggested_cost, _cost_source = suggested_inbound_cost(db, warehouse.id, item)
         selected_cost = suggested_cost
-        requested_cost = getattr(payload, "unit_cost", None)
-        if data.type == "stock_opname" and delta > EPS and requested_cost is not None:
-            selected_cost = float(requested_cost)
-            if abs(selected_cost - suggested_cost) > 0.005 and not has_permission(
-                db, user, "inventory.account_override", "view"
-            ):
-                raise HTTPException(403, "Anda tidak memiliki izin mengubah harga modal opname")
         if data.type == "stock_opname" and delta > EPS and selected_cost <= EPS:
-            if not getattr(payload, "allow_zero_cost", False) or not (payload.notes or data.notes or "").strip():
-                raise HTTPException(
-                    400,
-                    f"Harga modal {item.name} nol; konfirmasi modal nol dan isi alasan",
-                )
+            raise HTTPException(
+                400,
+                f"Harga modal {item.name} masih nol. Isi Harga Modal pada Master Barang "
+                "atau catat penerimaan melalui Pembelian/Item Masuk sebelum stok opname.",
+            )
 
         line = models.InventoryDocumentLine(
             document_id=document.id,
@@ -342,6 +330,9 @@ def create_document(
             unit_cost=selected_cost,
             total_cost=0,
             notes=(payload.notes or "").strip() or None,
+            item_code_snapshot=item.code,
+            item_name_snapshot=item.name,
+            unit_snapshot=(entered_item.unit.abbreviation if entered_item.unit else None),
         )
         db.add(line)
         db.flush()
@@ -390,9 +381,20 @@ def create_document(
                     "opening_stock": "opening_stock",
                     "stock_opname": "opname_in" if delta > 0 else "opname_out",
                 }[data.type],
+                event_category={
+                    "item_in": "item_in",
+                    "item_out": "item_out",
+                    "opening_stock": "opening_stock",
+                    "stock_opname": "opname_in" if delta > 0 else "opname_out",
+                }[data.type],
+                direction="in" if delta > 0 else "out",
+                source_type="inventory_document",
+                source_id=document.id,
                 qty=abs(delta),
                 qty_before=before_branch,
                 qty_after=before_branch + delta,
+                warehouse_qty_before=current,
+                warehouse_qty_after=current + delta,
                 reference=document.number,
                 notes=line.notes or document.notes,
             ))
@@ -577,6 +579,7 @@ def serialize_document(db: Session, document: models.InventoryDocument, user: mo
         "reversal_journal_id": document.reversal_journal_id,
         "line_count": len(document.lines),
         "total_value": sum(float(line.total_cost or 0) for line in document.lines) if show_cost else None,
+        "show_cost": show_cost,
         "can_cancel": document.status == "posted" and has_permission(db, user, TYPE_PERMISSION[document.type], "delete"),
     }
     if detail:
@@ -584,8 +587,9 @@ def serialize_document(db: Session, document: models.InventoryDocument, user: mo
             {
                 "id": line.id,
                 "item_id": line.item_id,
-                "item_code": line.item.code if line.item else "-",
-                "item_name": line.item.name if line.item else "Item dihapus",
+                "item_code": line.item_code_snapshot or (line.item.code if line.item else "-"),
+                "item_name": line.item_name_snapshot or (line.item.name if line.item else "Item dihapus"),
+                "unit": line.unit_snapshot or (line.entered_item.unit.abbreviation if line.entered_item and line.entered_item.unit else None),
                 "entered_item_id": line.entered_item_id,
                 "entered_qty": line.entered_qty,
                 "conversion_factor": line.conversion_factor,

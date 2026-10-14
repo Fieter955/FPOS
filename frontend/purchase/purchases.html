@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Pembelian - FPOS</title>
   <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/serial-picker.css" />
   <link rel="stylesheet" href="/css/components.css?v=potongan4" />
 
   <style>
@@ -436,7 +437,7 @@
   </style>
 </head>
 
-<body>
+<body class="transaction-density keyboard-workflow">
   <div class="app-container">
     <main class="main-content">
       <button class="btn" style="
@@ -867,6 +868,7 @@
   <script src="/js/theme.js"></script>
   <script src="/js/purchase-draft.js"></script>
   <script src="/js/components.js?v=potongan4"></script>
+  <script src="/js/serial-picker.js"></script>
   <script src="/js/print.js"></script>
   <script>
     requireAuth();
@@ -1454,6 +1456,7 @@
           onDetail: bukaDetailItem,
           getSupplierId: ambilSupplierIdTerpilih,
           enableEnterNavigation: currentFormMode === "purchase",
+          enableSerials: currentFormMode === "purchase",
           ...konfigPpnGrid(),
         });
       } else {
@@ -1463,6 +1466,7 @@
           onDetail: bukaDetailItem,
           getSupplierId: ambilSupplierIdTerpilih,
           enableEnterNavigation: currentFormMode === "purchase",
+          enableSerials: currentFormMode === "purchase",
           ...konfigPpnGrid(),
         });
       }
@@ -1606,6 +1610,8 @@
       const items = formGrid.getData();
       if (!items.length)
         return showToast("Tambahkan minimal 1 barang", "error");
+      const serialError = formGrid.validateSerials?.();
+      if (serialError) return showToast(serialError, "error");
       try {
         showLoading();
         const taxValue = parseDesimal(document.getElementById("bTax"));
@@ -1954,6 +1960,8 @@
             const rowCount = Math.ceil(
               payload.data_produk.length / payload.jumlah_kolom,
             );
+            if (typeof ensureFposLocalDeviceId === "function")
+              await ensureFposLocalDeviceId();
             const printResult = await api("POST", "/print/", {
               content: JSON.stringify({
                 image_base64: imageBase64,

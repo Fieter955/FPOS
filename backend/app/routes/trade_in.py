@@ -334,8 +334,6 @@ def create_trade_in(
             required_qty = get_required_stock_qty(item, ri.qty)
             before = get_total_branch_stock(db, b_id, stock_item.id)
             adjust_warehouse_stock(db, warehouse.id, stock_item.id, required_qty)
-            if b_id == PUSAT_BRANCH_ID:
-                stock_item.stock = float(stock_item.stock or 0) + required_qty
             unit_cost = total / required_qty if required_qty > 0 else 0.0
             batch = add_batch(
                 db, item_id=stock_item.id, warehouse_id=warehouse.id,
@@ -396,8 +394,6 @@ def create_trade_in(
                 qty=allocated_qty, unit_cost=cost,
             ))
         adjust_warehouse_stock(db, warehouse.id, stock_item.id, -required_qty)
-        if b_id == PUSAT_BRANCH_ID:
-            stock_item.stock = float(stock_item.stock or 0) - required_qty
         db.add(models.StockMovement(
             branch_id=b_id,
             warehouse_id=warehouse.id,
@@ -505,8 +501,6 @@ def delete_trade_in(
                     db, item_id=stock_item.id, warehouse_id=warehouse.id, qty=required_qty,
                 )
             adjust_warehouse_stock(db, warehouse.id, stock_item.id, -required_qty)
-            if branch_id == PUSAT_BRANCH_ID:
-                stock_item.stock = float(stock_item.stock or 0) - required_qty
             db.add(models.StockMovement(
                 branch_id=branch_id, date=date.today(), item_id=stock_item.id,
                 warehouse_id=warehouse.id,
@@ -538,8 +532,6 @@ def delete_trade_in(
                     unit_cost=float(item.buy_price or 0), received_date=t.date,
                 )
             adjust_warehouse_stock(db, warehouse.id, stock_item.id, required_qty)
-            if branch_id == PUSAT_BRANCH_ID:
-                stock_item.stock = float(stock_item.stock or 0) + required_qty
             db.add(models.StockMovement(
                 branch_id=branch_id, date=date.today(), item_id=stock_item.id,
                 warehouse_id=warehouse.id,

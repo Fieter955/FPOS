@@ -559,7 +559,10 @@ def build_anomaly_context(db) -> str:
     else:
         lines.append("  Tidak ada")
 
-    retur = db.query(models.SaleReturn).filter(models.SaleReturn.date >= last_30).all()
+    retur = db.query(models.SaleReturn).filter(
+        models.SaleReturn.date >= last_30,
+        models.SaleReturn.status != "cancelled",
+    ).all()
     total_retur = sum(r.total for r in retur)
     total_sales_val = sum(s.total for s in db.query(models.Sale).filter(
         models.Sale.date >= last_30).all())

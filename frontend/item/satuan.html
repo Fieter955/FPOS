@@ -1,4 +1,8 @@
 <div class="tbl-wrap">
+  <div
+    id="virtualBaseControls"
+    style="margin-bottom:14px;padding:12px;border:1px solid var(--border-color);border-radius:10px;background:var(--bg-color)"
+  ></div>
   <div style="margin-bottom: 16px; display: flex; align-items: center">
     <label style="font-weight: bold; min-width: 120px">Harga Satuan</label>
     <select
@@ -50,6 +54,10 @@
   }
   #satuanGridTable tr.base-row {
     background: rgba(var(--primary-rgb), 0.05);
+  }
+  #satuanGridTable tr.new-base-row {
+    background: rgba(16, 185, 129, 0.1);
+    outline: 1px solid rgba(16, 185, 129, 0.35);
   }
   #satuanGridTable tr.empty-row td {
     color: var(--text-muted);

@@ -1,13 +1,15 @@
 from datetime import date
 from typing import Optional
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..auth import get_current_user, get_query
 from ..database import get_db
-from ..services.journal_service import create_purchase_payment_journal, create_branch_receiving_journal
+from ..services.journal_service import create_purchase_payment_journal, create_branch_receiving_journal, create_transfer_receipt_journal
 from ..services.purchase_flow import (
     PUSAT_BRANCH_ID,
     cancel_purchase_flow,
@@ -22,6 +24,21 @@ from ..services.purchase_flow import (
 )
 
 router = APIRouter()
+
+
+class BranchReceiptLine(BaseModel):
+    item_id: int
+    good_qty: float = Field(ge=0)
+    damaged_qty: float = Field(default=0, ge=0)
+    missing_qty: float = Field(default=0, ge=0)
+    notes: Optional[str] = None
+    good_serials: list[str] = Field(default_factory=list)
+    damaged_serials: list[str] = Field(default_factory=list)
+
+
+class BranchReceiptPayload(BaseModel):
+    items: list[BranchReceiptLine] = Field(default_factory=list)
+    notes: Optional[str] = None
 
 
 def _next_number(db: Session, prefix: str, model, current_user: models.User) -> str:
@@ -101,20 +118,14 @@ def get_items_for_purchase(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    from ..services.virtual_units import is_virtual_variant
+    from ..services.virtual_units import get_conversion_factor, get_effective_buy_price, is_virtual_variant
     from sqlalchemy.orm import joinedload
 
     query = db.query(models.Item).options(
         joinedload(models.Item.suppliers),
         joinedload(models.Item.category),
         joinedload(models.Item.unit),
-    ).filter(
-        models.Item.is_active == True,
-        (models.Item.is_virtual_variant == False) | (models.Item.is_virtual_variant == None),
-    )
-
-    if supplier_id:
-        query = query.join(models.ItemSupplier).filter(models.ItemSupplier.supplier_id == supplier_id)
+    ).filter(models.Item.is_active == True)
 
     supplier_default_ppn = 0.0
     if supplier_id:
@@ -123,19 +134,26 @@ def get_items_for_purchase(
 
     results = []
     for item in query.all():
-        if is_virtual_variant(item):
+        virtual = is_virtual_variant(item)
+        parent = db.get(models.Item, item.parent_item_id) if virtual else None
+        supplier_details = item.supplier_details or (parent.supplier_details if parent else [])
+        visible_suppliers = item.suppliers or (parent.suppliers if parent else [])
+        if supplier_id and not any(detail.supplier_id == supplier_id for detail in supplier_details):
             continue
         item_data = {
             "id": item.id,
             "code": item.code,
             "barcode": item.barcode,
             "name": item.name,
-            "buy_price": item.buy_price,
+            "buy_price": get_effective_buy_price(db, item) if virtual else item.buy_price,
             "sell_price": item.sell_price,
             "profit_margin": item.profit_margin,
+            "tracks_serial": bool(item.tracks_serial),
+            "is_virtual_variant": virtual,
+            "conversion_factor_to_parent": get_conversion_factor(item) if virtual else 1,
             "unit_name": item.unit.name if item.unit else "pcs",
             "category_name": item.category.name if item.category else "-",
-            "suppliers": [{"id": s.id, "name": s.name} for s in item.suppliers],
+            "suppliers": [{"id": s.id, "name": s.name} for s in visible_suppliers],
             "supplier_details": [
                 {
                     "supplier_id": s.supplier_id,
@@ -143,7 +161,7 @@ def get_items_for_purchase(
                     "ppn_type": s.ppn_type or "included",
                     "ppn_percent": s.ppn_percent or 0,
                 }
-                for s in item.supplier_details
+                for s in supplier_details
             ],
             # Default PPN (dipakai grid bila supplier difilter & punya setelan khusus)
             "ppn_type": "included",
@@ -151,7 +169,7 @@ def get_items_for_purchase(
         }
 
         if supplier_id:
-            spec = next((s for s in item.supplier_details if s.supplier_id == supplier_id), None)
+            spec = next((s for s in supplier_details if s.supplier_id == supplier_id), None)
             if spec:
                 # buy_price 0/None pada baris supplier dianggap "belum di-set" → tetap pakai
                 # harga beli umum item, jangan ditimpa 0 (banyak baris lama berisi 0).
@@ -498,6 +516,7 @@ def split_fulfill_request(
 @router.post("/{pid}/receive-branch")
 def receive_branch_request(
     pid: int,
+    data: Optional[BranchReceiptPayload] = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -511,44 +530,101 @@ def receive_branch_request(
         raise HTTPException(403, "Hanya cabang peminta yang dapat melakukan ACC penerimaan barang")
     if purchase.fulfillment_status == "received" or purchase.is_received_by_branch:
         raise HTTPException(409, "Kiriman ini sudah pernah di-ACC")
-    if purchase.fulfillment_status != "shipping":
+    if purchase.fulfillment_status not in {"shipping", "disputed"}:
         raise HTTPException(400, f"Status kiriman saat ini '{purchase.fulfillment_status}'")
     transfer = db.query(models.WarehouseTransfer).filter(
         models.WarehouseTransfer.source_purchase_id == purchase.id,
         models.WarehouseTransfer.transfer_kind == "po_fulfillment",
     ).with_for_update().first()
-    if not transfer or transfer.status != "shipping":
+    if not transfer or transfer.status not in {"shipping", "disputed"}:
         raise HTTPException(409, "Dokumen mutasi kiriman tidak tersedia atau sudah diterima")
     
-    # 2. Add Stock for Branch
+    # 2. Add only physically good stock for Branch. Backwards-compatible
+    # clients without a body still accept the whole shipment as good.
     # Menggunakan source items karena cabang mungkin telah melakukan clone barang atau mengubah qty
     local_datetime = get_local_datetime()
     local_date = get_local_date()
     
-    receive_branch_stock(db, purchase=purchase, target_branch_id=source.branch_id, local_datetime=local_datetime, local_date=local_date)
-    
-    # Kalkulasi nilai penerimaan berdasarkan item yang sudah terupdate
-    total_received_value = float(purchase.total or 0)
+    supplied = {row.item_id: row for row in (data.items if data else [])}
+    if len(supplied) != len(data.items if data else []):
+        raise HTTPException(400, "Barang penerimaan tidak boleh ganda")
+    originals = []
+    inventory_value = quarantine_value = 0.0
+    any_missing = False
+    for transfer_line in transfer.items:
+        receipt = supplied.get(transfer_line.item_id) if supplied else None
+        remaining = float(transfer_line.qty or 0) - float(transfer_line.qty_received or 0) - float(transfer_line.qty_damaged or 0)
+        good = float(receipt.good_qty if receipt else remaining)
+        damaged = float(receipt.damaged_qty if receipt else 0)
+        missing = float(receipt.missing_qty if receipt else 0)
+        if abs(good + damaged + missing - remaining) > 1e-6:
+            raise HTTPException(400, f"Total kondisi {transfer_line.item.name} harus {remaining:g}")
+        purchase_line = transfer_line.purchase_item
+        originals.append((purchase_line, purchase_line.qty, purchase_line.serials_json))
+        purchase_line.qty = good
+        if receipt and receipt.good_serials:
+            import json
+            purchase_line.serials_json = json.dumps(receipt.good_serials)
+        transfer_line.qty_received = float(transfer_line.qty_received or 0) + good
+        transfer_line.qty_damaged = float(transfer_line.qty_damaged or 0) + damaged
+        transfer_line.qty_missing = missing
+        transfer_line.receipt_notes = receipt.notes if receipt else None
+        inventory_value += good * float(transfer_line.unit_cost or 0)
+        quarantine_value += damaged * float(transfer_line.unit_cost or 0)
+        any_missing = any_missing or missing > 1e-9 or damaged > 1e-9
+    try:
+        receive_branch_stock(db, purchase=purchase, target_branch_id=source.branch_id,
+                             local_datetime=local_datetime, local_date=local_date)
+    finally:
+        for purchase_line, qty, serials_json in originals:
+            purchase_line.qty = qty
+            purchase_line.serials_json = serials_json
+    if quarantine_value > 0:
+        from ..services.purchase_flow import get_or_create_default_warehouse
+        from ..services.serials import receive_serials, transition_serials
+        warehouse = get_or_create_default_warehouse(db, source.branch_id)
+        for transfer_line in transfer.items:
+            receipt = supplied.get(transfer_line.item_id) if supplied else None
+            damaged_now = float(receipt.damaged_qty if receipt else 0)
+            if damaged_now <= 0:
+                continue
+            qrow = models.InventoryQuarantine(
+                number=f"QRT-{transfer.number}-{transfer_line.id}-{uuid.uuid4().hex[:4].upper()}", date=local_date,
+                branch_id=source.branch_id, warehouse_id=warehouse.id,
+                item_id=transfer_line.item_id, qty=damaged_now,
+                qty_open=damaged_now, unit_cost=transfer_line.unit_cost,
+                total_cost=damaged_now * transfer_line.unit_cost,
+                source_type="po_fulfillment", source_id=purchase.id,
+                supplier_id=purchase.supplier_id, status="open",
+                notes=receipt.notes, created_by=current_user.id,
+            )
+            db.add(qrow)
+            db.flush()
+            receive_serials(db, item=transfer_line.item, qty=damaged_now,
+                serial_values=receipt.damaged_serials, warehouse=warehouse,
+                reference_type="inventory_quarantine", reference_id=qrow.id,
+                reference_number=qrow.number, user_id=current_user.id)
+            transition_serials(db, item=transfer_line.item, qty=damaged_now,
+                serial_values=receipt.damaged_serials, from_statuses={"in_stock"},
+                to_status="quarantine", from_warehouse_id=warehouse.id,
+                to_warehouse=warehouse, reference_type="inventory_quarantine",
+                reference_id=qrow.id, reference_number=qrow.number,
+                user_id=current_user.id, event_type="quarantined")
 
-    # 3. Create Branch Journal (Debit: Persediaan, Credit: Transfer dari Pusat)
-    create_branch_receiving_journal(
-        db,
-        date_val=local_date,
-        number_ref=transfer.number,
-        total=total_received_value,
-        user_id=current_user.id,
-        target_branch_id=source.branch_id
-    )
+    create_transfer_receipt_journal(db, date_val=local_date, number_ref=transfer.number,
+        inventory_total=inventory_value, quarantine_total=quarantine_value,
+        user_id=current_user.id, branch_id=source.branch_id, credit_code="3-2100")
 
-    for line in transfer.items:
-        line.qty_received = line.qty
-    transfer.status = "confirmed"
+    transfer.status = "confirmed" if data is None else ("disputed" if any_missing else "received")
     transfer.received_at = local_datetime
-    purchase.fulfillment_status = "received"
-    purchase.is_received_by_branch = True
+    transfer.received_by = current_user.id
+    transfer.dispute_notes = (data.notes if data else None) if any_missing else None
+    purchase.fulfillment_status = "disputed" if any_missing else "received"
+    purchase.is_received_by_branch = not any_missing
     refresh_source_request_status(db, source)
     db.commit()
-    return {"message": "Kiriman berhasil di-ACC; stok, mutasi, dan jurnal memakai jumlah aktual.", "status": source.status}
+    return {"message": "Penerimaan dicatat sesuai kondisi aktual.",
+            "status": source.status, "fulfillment_status": purchase.fulfillment_status}
 
 
 # Mencatat pembayaran cicilan atau pelunasan hutang supplier (Account Payable)

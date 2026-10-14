@@ -108,6 +108,11 @@ def load_demo_data(db: Session = Depends(get_db),
     """
     Load demo data untuk testing / presentasi ke calon klien.
     """
+    raise HTTPException(
+        410,
+        "Generator data demo lama dinonaktifkan karena tidak memakai ledger gudang dan FIFO. "
+        "Gunakan impor barang dan menu Saldo Awal.",
+    )
     # Cek apakah sudah ada data
     if db.query(models.Item).count() > 5:
         raise HTTPException(400, "Sudah ada data cukup banyak. Demo data hanya untuk instalasi baru.")
